@@ -137,6 +137,9 @@ export const resolveStorageReadUrl = async (value: unknown, userId: string): Pro
     return null
   }
 
+  const proxiedUrl = toWasabiProxyUrl(key, { bucket })
+  if (proxiedUrl) return proxiedUrl
+
   return await getCachedSignedReadUrl(key, userId)
 }
 

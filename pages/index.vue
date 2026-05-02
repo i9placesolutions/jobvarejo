@@ -5,6 +5,7 @@ import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, F
 	import FilterDropdown from '~/components/ui/FilterDropdown.vue'
 import type { Folder as FolderModel } from '~/types/folder'
 import { useResponsive } from '~/composables/useResponsive'
+import { getProjectPreviewSource } from '~/utils/dashboardProjectPreview'
 
 const { isMobile: dashMobile, isTablet: dashTablet } = useResponsive()
 const showMobileDrawer = ref(false)
@@ -167,8 +168,6 @@ const loadData = async () => {
     if (profile) user.value = profile as any
     projects.value = (Array.isArray(projectsData) ? projectsData : []).map((p: any) => {
       if (p && typeof p === 'object') {
-        // reset image error state if we previously failed with a non-proxied URL
-        p._thumbError = false
         // Pre-parse dates once to avoid repeated new Date() calls in computed properties
         p._lastViewedMs = p.last_viewed ? new Date(p.last_viewed).getTime() : 0
         p._updatedAtMs = p.updated_at ? new Date(p.updated_at).getTime() : 0
@@ -1286,56 +1285,8 @@ const formatUserName = (fullName: string | null | undefined): string => {
   return `${names[0]} ${names[1]}`
 }
 
-const THUMB_FALLBACK_GRADIENTS = [
-  'linear-gradient(135deg, #1d4ed8 0%, #312e81 100%)',
-  'linear-gradient(135deg, #0f766e 0%, #14532d 100%)',
-  'linear-gradient(135deg, #b45309 0%, #7c2d12 100%)',
-  'linear-gradient(135deg, #6d28d9 0%, #7e22ce 100%)',
-  'linear-gradient(135deg, #0f172a 0%, #1f2937 100%)',
-  'linear-gradient(135deg, #9f1239 0%, #831843 100%)',
-]
-
-const hashText = (input: string): number => {
-  let hash = 0
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) - hash) + input.charCodeAt(i)
-    hash |= 0
-  }
-  return Math.abs(hash)
-}
-
-const getProjectInitials = (project: any): string => {
-  const name = String(project?.name || '').trim()
-  if (!name) return 'JV'
-  const words = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-  const initials = words.map(w => (w[0] || '').toUpperCase()).join('')
-  return initials || 'JV'
-}
-
-const getProjectThumbStyle = (project: any) => {
-  const seed = `${String(project?.id || '')}:${String(project?.name || '')}`
-  const idx = hashText(seed) % THUMB_FALLBACK_GRADIENTS.length
-  return {
-    background: THUMB_FALLBACK_GRADIENTS[idx] || THUMB_FALLBACK_GRADIENTS[0]
-  }
-}
-
-const isUsableThumbnailUrl = (url: unknown): boolean => {
-  if (typeof url !== 'string') return false
-  const value = url.trim()
-  if (!value) return false
-  const lower = value.toLowerCase()
-  if (lower === 'data:,' || lower === 'about:blank') return false
-  if (lower.startsWith('blob:null')) return false
-  if (lower.startsWith('javascript:')) return false
-  return true
-}
-
 const hasUsableProjectPreview = (project: any): boolean => {
-  return isUsableThumbnailUrl(project?.preview_url)
+  return !!getProjectPreviewSource(project)
 }
 
 const {
@@ -1349,7 +1300,7 @@ const {
 } = useProgressivePreviewLoader<any>({
   getItems: () => filteredProjects.value,
   getId: (project: any) => String(project?.id || ''),
-  getSrc: (project: any) => hasUsableProjectPreview(project) ? String(project?.preview_url || '').trim() : '',
+  getSrc: (project: any) => getProjectPreviewSource(project),
   enabled: () => !isLoadingProjects.value,
   immediateCount: () => viewMode.value === 'list' ? 6 : 12,
   batchSize: () => viewMode.value === 'list' ? 4 : 6,
@@ -1365,15 +1316,7 @@ watch(projectGridViewportEl, (value) => {
 })
 
 const isProjectPreviewDeferred = (project: any, index: number): boolean => {
-  return hasUsableProjectPreview(project) && !project._thumbError && !shouldShowProjectPreview(project, index)
-}
-
-const handleProjectThumbLoad = (project: any, event: Event) => {
-  const img = event?.target as HTMLImageElement | null
-  if (!img) return
-  if ((img.naturalWidth || 0) < 2 || (img.naturalHeight || 0) < 2) {
-    project._thumbError = true
-  }
+  return hasUsableProjectPreview(project) && !shouldShowProjectPreview(project, index)
 }
 
 // Handle sign out
@@ -1821,27 +1764,16 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 >
                   <!-- Grid mode -->
                   <template v-if="viewMode === 'grid'">
-                    <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden rounded-t-[10px]">
-                      <div v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" class="absolute inset-0 flex items-center justify-center">
-                        <img
-                          :src="getProjectPreviewSrc(project, projectIndex)"
-                          class="project-thumb-media w-full h-full object-contain"
-                          :alt="project.name"
-                          draggable="false"
-                          :loading="projectIndex < 8 ? 'eager' : 'lazy'"
-                          decoding="async"
-                          :fetchpriority="projectIndex < 4 ? 'high' : (visibleProjectPreviewIds[String(project.id || '')] ? 'auto' : 'low')"
-                          @dragstart.prevent
-                          @load="handleProjectThumbLoad(project, $event)"
-                          @error="project._thumbError = true"
-                        />
-                      </div>
-                      <div v-if="!hasUsableProjectPreview(project) || project._thumbError" class="absolute inset-0 p-3">
-                        <div class="w-full h-full rounded-xl border border-slate-200 relative overflow-hidden flex flex-col justify-end p-4" :style="getProjectThumbStyle(project)">
-                          <div class="absolute inset-0 opacity-12 pointer-events-none" style="background:radial-gradient(circle at 25% 25%,rgba(255,255,255,0.5) 0%,transparent 45%)"></div>
-                          <div class="relative z-1 text-white font-black text-4xl leading-none tracking-tighter drop-shadow-lg">{{ getProjectInitials(project) }}</div>
-                        </div>
-                      </div>
+                    <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden rounded-t-[10px] dash-project-preview-frame">
+                      <DashboardProjectPreview
+                        class="absolute inset-0"
+                        :project="project"
+                        :src="shouldShowProjectPreview(project, projectIndex) ? getProjectPreviewSrc(project, projectIndex) : ''"
+                        image-class="project-thumb-media"
+                        fallback-class="items-end justify-start rounded-xl border border-slate-200 p-4 text-4xl font-black tracking-tighter"
+                        :loading="projectIndex < 8 ? 'eager' : 'lazy'"
+                        :fetchpriority="projectIndex < 4 ? 'high' : (visibleProjectPreviewIds[String(project.id || '')] ? 'auto' : 'low')"
+                      />
                       <!-- Overlay de acoes no hover -->
                       <div class="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-all pointer-events-none"></div>
                       <button
@@ -1875,9 +1807,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   <!-- List mode -->
                   <template v-else>
                     <div class="flex items-center gap-4 px-4 py-3">
-                      <div class="w-16 h-20 rounded-lg overflow-hidden bg-slate-50 shrink-0 border border-slate-200">
-                        <img v-if="hasUsableProjectPreview(project) && !project._thumbError && shouldShowProjectPreview(project, projectIndex)" :src="getProjectPreviewSrc(project, projectIndex)" class="w-full h-full object-contain" draggable="false" :loading="projectIndex < 4 ? 'eager' : 'lazy'" @dragstart.prevent @load="handleProjectThumbLoad(project, $event)" @error="project._thumbError = true" />
-                        <div v-else class="w-full h-full flex items-center justify-center font-black text-base text-white rounded-lg" :style="getProjectThumbStyle(project)">{{ getProjectInitials(project) }}</div>
+                      <div class="w-16 h-20 rounded-lg overflow-hidden bg-slate-50 shrink-0 border border-slate-200 dash-project-preview-frame">
+                        <DashboardProjectPreview
+                          :project="project"
+                          :src="shouldShowProjectPreview(project, projectIndex) ? getProjectPreviewSrc(project, projectIndex) : ''"
+                          fallback-class="items-center justify-center rounded-lg text-base font-black"
+                          :loading="projectIndex < 4 ? 'eager' : 'lazy'"
+                        />
                       </div>
                       <div class="flex-1 min-w-0">
                         <div v-if="renamingProjectId === project.id" @click.stop>
