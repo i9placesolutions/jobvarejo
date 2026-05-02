@@ -338,7 +338,8 @@ import {
     remapOrClearBindingsRecursive,
     applyZoneScaleToRect,
     normalizeZoneScale,
-    restoreCardPriceGroup
+    restoreCardPriceGroup,
+    applyCardFrameBinding as applyCardFrameBindingHelper
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -34109,30 +34110,10 @@ const getResolvedZoneFrameId = (zone: any): string | undefined => {
     return frameId;
 }
 
-const applyCardFrameBinding = (card: any, frameId?: string) => {
-    if (!card || card.excludeFromExport || card.isFrame) return;
-    const isCardLike = !!(card.isSmartObject || card.isProductCard || isLikelyProductCard(card));
-    if (!isCardLike) return;
-
-    const nextFrameId = String(frameId || '').trim() || undefined;
-    if ((card as any).parentFrameId !== nextFrameId) {
-        (card as any).parentFrameId = nextFrameId;
-        invalidateFrameRuntimeCache();
-    }
-
-    // Product cards are never clipped by frame clipPath.
-    const hadClip = !!card.clipPath || !!(card as any)._frameClipOwner;
-    if (card.clipPath) {
-        card.set?.('clipPath', null);
-    }
-    if ((card as any)._frameClipOwner) {
-        delete (card as any)._frameClipOwner;
-    }
-    if (hadClip) {
-        card.set?.('dirty', true);
-        card.setCoords?.();
-    }
-}
+// applyCardFrameBinding extraido para utils/fabricObjectOps.ts.
+// Wrapper local injeta invalidateFrameRuntimeCache.
+const applyCardFrameBinding = (card: any, frameId?: string) =>
+    applyCardFrameBindingHelper(card, frameId, invalidateFrameRuntimeCache)
 
 const syncZoneCardFrameBindings = (zone: any, cards?: any[]) => {
     if (!zone) return;

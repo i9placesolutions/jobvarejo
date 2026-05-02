@@ -838,3 +838,42 @@ export const restoreCardPriceGroup = (
     card.setCoords?.()
     return true
 }
+
+/**
+ * Aplica `parentFrameId` em um card de produto + remove qualquer
+ * clipPath de frame (cards nunca sao clippados por frame).
+ *
+ * Skip se:
+ *  - card invalido / excludeFromExport / isFrame
+ *  - nao e' card-like (isSmartObject/isProductCard/isLikelyProductCard)
+ *
+ * `onFrameRuntimeCacheInvalidate` injetado — chamado quando parentFrameId
+ * muda (caller invalida cache de frame).
+ */
+export const applyCardFrameBinding = (
+    card: any,
+    frameId: string | undefined,
+    onFrameRuntimeCacheInvalidate: () => void
+): void => {
+    if (!card || card.excludeFromExport || card.isFrame) return
+    const isCardLike = !!(card.isSmartObject || card.isProductCard || isLikelyProductCard(card))
+    if (!isCardLike) return
+
+    const nextFrameId = String(frameId || '').trim() || undefined
+    if ((card as any).parentFrameId !== nextFrameId) {
+        (card as any).parentFrameId = nextFrameId
+        onFrameRuntimeCacheInvalidate()
+    }
+
+    const hadClip = !!card.clipPath || !!(card as any)._frameClipOwner
+    if (card.clipPath) {
+        card.set?.('clipPath', null)
+    }
+    if ((card as any)._frameClipOwner) {
+        delete (card as any)._frameClipOwner
+    }
+    if (hadClip) {
+        card.set?.('dirty', true)
+        card.setCoords?.()
+    }
+}
