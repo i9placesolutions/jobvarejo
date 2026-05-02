@@ -49,7 +49,8 @@ import {
     isValidClipPath,
     isAuthLookupError,
     isUsableFabricObjectClone,
-    clearCanvasForPageSwitch
+    clearCanvasForPageSwitch,
+    findObjectByCustomId as findObjectByCustomIdHelper
 } from '~/utils/canvasValidation'
 import {
     getPreferredProductImageFromGroup,
@@ -22278,27 +22279,10 @@ const insertElementToCanvas = (element: { type: string; data: any }) => {
     }
 };
 
-const findObjectByCustomId = (id: string): { obj: any; parent: any | null } | null => {
-    if (!canvas.value || !id) return null;
-    const walk = (node: any, parent: any | null): { obj: any; parent: any | null } | null => {
-        if (!node) return null;
-        if ((node as any)._customId === id) return { obj: node, parent };
-        const t = String(node.type || '').toLowerCase();
-        if (t === 'group' || t === 'activeselection') {
-            const list = typeof node.getObjects === 'function' ? node.getObjects() : [];
-            for (const child of (list || [])) {
-                const found = walk(child, node);
-                if (found) return found;
-            }
-        }
-        return null;
-    };
-    for (const top of canvas.value.getObjects()) {
-        const found = walk(top, null);
-        if (found) return found;
-    }
-    return null;
-};
+// findObjectByCustomId extraido para utils/canvasValidation.ts.
+// Wrapper local injeta canvas.value.
+const findObjectByCustomId = (id: string): { obj: any; parent: any | null } | null =>
+    findObjectByCustomIdHelper(canvas.value, id)
 
 const findProductCardByCustomId = (id: string): any | null => {
     const found = findObjectByCustomId(id);

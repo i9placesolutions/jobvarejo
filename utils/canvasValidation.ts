@@ -154,3 +154,37 @@ export const clearCanvasForPageSwitch = (canvasInstance: any): void => {
         console.error('❌ Falha ao limpar canvas no page switch:', manualErr)
     }
 }
+
+/**
+ * Walk recursivo em todos os objetos de uma canvas instance procurando
+ * por `_customId === id`. Desce em groups e activeselections.
+ *
+ * Retorna `{ obj, parent }` onde `parent` e o group que contem o obj
+ * encontrado (ou null se for top-level no canvas).
+ *
+ * Caller passa `canvasInstance` (com getObjects()).
+ */
+export const findObjectByCustomId = (
+    canvasInstance: any,
+    id: string
+): { obj: any; parent: any | null } | null => {
+    if (!canvasInstance || !id) return null
+    const walk = (node: any, parent: any | null): { obj: any; parent: any | null } | null => {
+        if (!node) return null
+        if ((node as any)._customId === id) return { obj: node, parent }
+        const t = String(node.type || '').toLowerCase()
+        if (t === 'group' || t === 'activeselection') {
+            const list = typeof node.getObjects === 'function' ? node.getObjects() : []
+            for (const child of (list || [])) {
+                const found = walk(child, node)
+                if (found) return found
+            }
+        }
+        return null
+    }
+    for (const top of canvasInstance.getObjects()) {
+        const found = walk(top, null)
+        if (found) return found
+    }
+    return null
+}
