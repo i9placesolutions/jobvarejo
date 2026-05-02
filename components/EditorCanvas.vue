@@ -65,7 +65,8 @@ import {
 } from '~/utils/fabricImageHelpers'
 import {
     isUserGuideObject,
-    getUserGuideAxisAndPos
+    getUserGuideAxisAndPos,
+    makeUserGuideId as makeUserGuideIdHelper
 } from '~/utils/userGuideHelpers'
 import {
     isBlockedObjectForScopedExport,
@@ -14873,10 +14874,8 @@ const applyUserGuidesVisibility = () => {
     refreshUserGuidesIndex()
 }
 
-const makeUserGuideId = (axis: 'x' | 'y') => {
-    const rand = makeId()
-    return axis === 'x' ? `guide-user-v-${rand}` : `guide-user-h-${rand}`
-}
+// makeUserGuideId extraido para utils/userGuideHelpers.ts.
+const makeUserGuideId = (axis: 'x' | 'y') => makeUserGuideIdHelper(axis, makeId)
 
 const handleCreateUserGuide = ({ axis, pos }: { axis: 'x' | 'y'; pos: number }) => {
     if (!canvas.value || !fabric) return

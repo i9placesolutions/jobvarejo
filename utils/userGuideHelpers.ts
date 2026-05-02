@@ -43,3 +43,18 @@ export const getUserGuideAxisAndPos = (o: any): { axis: 'x' | 'y'; pos: number }
     if (!Number.isFinite(pos)) return null
     return { axis, pos }
 }
+
+/**
+ * Gera um id estavel para uma user guide. Usa o prefixo
+ * `guide-user-v-` (vertical, axis=x) ou `guide-user-h-` (horizontal,
+ * axis=y) seguido de um id randomico.
+ *
+ * Caller injeta `makeRandomId` (tipicamente `makeId()`).
+ */
+export const makeUserGuideId = (
+    axis: 'x' | 'y',
+    makeRandomId: () => string
+): string => {
+    const rand = makeRandomId()
+    return axis === 'x' ? `guide-user-v-${rand}` : `guide-user-h-${rand}`
+}
