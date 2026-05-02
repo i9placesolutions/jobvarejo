@@ -143,3 +143,71 @@ export const resolveSelectedProductCardContext = (
 
     return { card: null, image: null }
 }
+
+/**
+ * Normaliza identidade de um card produto: garante que `productId`,
+ * `productInstanceId` e `zoneInstanceId` estao consistentes entre
+ * `card.*` e `card._productData.*`.
+ *
+ * Comportamento:
+ *  - Se `forceNewInstance=true` ou nao havia previousInstanceId, gera novo
+ *    via `makeNewInstanceId()` (DI).
+ *  - Senao mantem o instanceId existente.
+ *  - Aplica zoneInstanceId de opts.zoneInstanceId, parentZoneId ou
+ *    previousData.zoneInstanceId.
+ *
+ * Mutates o card. Retorna `{ productId, previousProductInstanceId,
+ * productInstanceId, zoneInstanceId }` ou null se card invalido.
+ */
+export const normalizeProductCardIdentity = (
+    card: any,
+    cloneMetadata: (data: any) => any,
+    makeNewInstanceId: () => string,
+    opts: { zoneInstanceId?: string | null; forceNewInstance?: boolean } = {}
+): {
+    productId: string
+    previousProductInstanceId: string | null
+    productInstanceId: string
+    zoneInstanceId: string | null
+} | null => {
+    if (!card || typeof card !== 'object') return null
+
+    const previousData = (card as any)._productData && typeof (card as any)._productData === 'object'
+        ? cloneMetadata((card as any)._productData)
+        : {}
+    const previousInstanceId = String(previousData.productInstanceId || (card as any).productInstanceId || '').trim()
+    const productId = String(
+        previousData.productId ||
+        previousData.product_id ||
+        previousData.id ||
+        (card as any).productId ||
+        (card as any).id ||
+        ''
+    ).trim()
+    const nextInstanceId = opts.forceNewInstance || !previousInstanceId
+        ? makeNewInstanceId()
+        : previousInstanceId
+    const zoneInstanceId = String(opts.zoneInstanceId || (card as any).parentZoneId || previousData.zoneInstanceId || '').trim()
+
+    const nextProductData = {
+        ...previousData,
+        ...(productId ? { productId } : {}),
+        productInstanceId: nextInstanceId,
+        ...(zoneInstanceId ? { zoneInstanceId } : {})
+    }
+
+    ;(card as any)._productData = nextProductData
+    ;(card as any).productInstanceId = nextInstanceId
+    if (productId) (card as any).productId = productId
+    else delete (card as any).productId
+    if (zoneInstanceId) (card as any).zoneInstanceId = zoneInstanceId
+    else delete (card as any).zoneInstanceId
+    if (opts.forceNewInstance) (card as any).__productIdentityFresh = true
+
+    return {
+        productId,
+        previousProductInstanceId: previousInstanceId || null,
+        productInstanceId: nextInstanceId,
+        zoneInstanceId: zoneInstanceId || null
+    }
+}

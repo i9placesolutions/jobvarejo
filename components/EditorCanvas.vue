@@ -251,7 +251,8 @@ import {
     getCardBackgroundRect,
     getCardTitleText,
     getCardLimitText,
-    resolveSelectedProductCardContext as resolveSelectedProductCardContextHelper
+    resolveSelectedProductCardContext as resolveSelectedProductCardContextHelper,
+    normalizeProductCardIdentity as normalizeProductCardIdentityHelper
 } from '~/utils/productCardLookup'
 import { buildCardRecoverySearchPayload } from '~/utils/cardRecoveryPayload'
 import {
@@ -7094,62 +7095,25 @@ const makeProductInstanceId = () => `item_${makeId()}`;
 
 // clonePlainMetadata extraido para utils/canvasJsonClassifiers.ts.
 
+// normalizeProductCardIdentity extraido para utils/productCardLookup.ts.
+// Wrapper local injeta clonePlainMetadata + makeProductInstanceId e adiciona log dev.
 const normalizeProductCardIdentity = (
     card: any,
     opts: { zoneInstanceId?: string | null; forceNewInstance?: boolean; reason?: string } = {}
 ) => {
-    if (!card || typeof card !== 'object') return null;
-
-    const previousData = (card as any)._productData && typeof (card as any)._productData === 'object'
-        ? clonePlainMetadata((card as any)._productData)
-        : {};
-    const previousInstanceId = String(previousData.productInstanceId || (card as any).productInstanceId || '').trim();
-    const productId = String(
-        previousData.productId ||
-        previousData.product_id ||
-        previousData.id ||
-        (card as any).productId ||
-        (card as any).id ||
-        ''
-    ).trim();
-    const nextInstanceId = opts.forceNewInstance || !previousInstanceId
-        ? makeProductInstanceId()
-        : previousInstanceId;
-    const zoneInstanceId = String(opts.zoneInstanceId || (card as any).parentZoneId || previousData.zoneInstanceId || '').trim();
-
-    const nextProductData = {
-        ...previousData,
-        ...(productId ? { productId } : {}),
-        productInstanceId: nextInstanceId,
-        ...(zoneInstanceId ? { zoneInstanceId } : {})
-    };
-
-    (card as any)._productData = nextProductData;
-    (card as any).productInstanceId = nextInstanceId;
-    if (productId) (card as any).productId = productId;
-    else delete (card as any).productId;
-    if (zoneInstanceId) (card as any).zoneInstanceId = zoneInstanceId;
-    else delete (card as any).zoneInstanceId;
-    if (opts.forceNewInstance) (card as any).__productIdentityFresh = true;
-
-    if (import.meta.dev && opts.reason) {
+    const result = normalizeProductCardIdentityHelper(card, clonePlainMetadata, makeProductInstanceId, opts)
+    if (result && import.meta.dev && opts.reason) {
         console.debug('[product-zone:identity]', {
             reason: opts.reason,
-            cardObjectId: String((card as any)._customId || '').trim(),
-            productId,
-            previousProductInstanceId: previousInstanceId || null,
-            productInstanceId: nextInstanceId,
-            zoneInstanceId: zoneInstanceId || null
-        });
+            cardObjectId: String((card as any)?._customId || '').trim(),
+            productId: result.productId,
+            previousProductInstanceId: result.previousProductInstanceId,
+            productInstanceId: result.productInstanceId,
+            zoneInstanceId: result.zoneInstanceId
+        })
     }
-
-    return {
-        productId,
-        previousProductInstanceId: previousInstanceId || null,
-        productInstanceId: nextInstanceId,
-        zoneInstanceId: zoneInstanceId || null
-    };
-};
+    return result
+}
 
 // isControlLikeObject extraido para utils/controlObjectClassifiers.ts.
 
