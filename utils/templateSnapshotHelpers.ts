@@ -160,3 +160,35 @@ export const restoreMissingManualTemplateFlags = (
 
     return changed
 }
+
+/**
+ * Aplica `restoreMissingManualTemplateFlags` em todos os priceGroups
+ * de um canvas (recursivo). Usa `isPriceGroupCheck` injetado para
+ * detectar candidatos.
+ *
+ * Mutates os objetos. Retorna numero de groups que tiveram flags
+ * restauradas.
+ */
+export const restoreMissingManualTemplateFlagsInCanvas = (
+    canvasInstance: any,
+    isPriceGroupCheck: (obj: any) => boolean,
+    shouldPreserveCheck: (g: any) => boolean
+): number => {
+    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return 0
+
+    const roots = canvasInstance.getObjects() || []
+    const stack = [...roots]
+    let restored = 0
+    while (stack.length) {
+        const obj = stack.pop()
+        if (!obj) continue
+        if (isPriceGroupCheck(obj) && restoreMissingManualTemplateFlags(obj, shouldPreserveCheck)) {
+            restored += 1
+        }
+        if (typeof obj.getObjects === 'function') {
+            (obj.getObjects() || []).forEach((child: any) => stack.push(child))
+        }
+    }
+
+    return restored
+}

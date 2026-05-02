@@ -229,7 +229,8 @@ import {
     shouldForceCanonicalAtacForTemplateJson,
     shouldUseAtacVariantSnapshotsForTemplate,
     shouldPreserveManualTemplateVisual as shouldPreserveManualTemplateVisualHelper,
-    restoreMissingManualTemplateFlags as restoreMissingManualTemplateFlagsHelper
+    restoreMissingManualTemplateFlags as restoreMissingManualTemplateFlagsHelper,
+    restoreMissingManualTemplateFlagsInCanvas as restoreMissingManualTemplateFlagsInCanvasHelper
 } from '~/utils/templateSnapshotHelpers'
 import {
     getSpecialConditionFromProduct,
@@ -30081,28 +30082,19 @@ const shouldPreserveManualTemplateVisual = (priceGroup: any): boolean =>
 const restoreMissingManualTemplateFlags = (priceGroup: any): boolean =>
     restoreMissingManualTemplateFlagsHelper(priceGroup, shouldPreserveManualTemplateVisual)
 
+// restoreMissingManualTemplateFlagsInCanvas extraido para utils/templateSnapshotHelpers.ts.
+// Wrapper local injeta classifiers + log.
 const restoreMissingManualTemplateFlagsInCanvas = (canvasInstance: any, reason: string = 'unknown') => {
-    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return 0;
-
-    const roots = canvasInstance.getObjects() || [];
-    const stack = [...roots];
-    let restored = 0;
-    while (stack.length) {
-        const obj = stack.pop();
-        if (!obj) continue;
-        if (isLikelyPriceGroupObject(obj) && restoreMissingManualTemplateFlags(obj)) {
-            restored += 1;
-        }
-        if (typeof obj.getObjects === 'function') {
-            (obj.getObjects() || []).forEach((child: any) => stack.push(child));
-        }
-    }
-
+    const restored = restoreMissingManualTemplateFlagsInCanvasHelper(
+        canvasInstance,
+        isLikelyPriceGroupObject,
+        shouldPreserveManualTemplateVisual
+    )
     if (restored > 0) {
-        console.log(`[price-template] Restauradas flags de template manual em ${restored} etiqueta(s) (${reason})`);
+        console.log(`[price-template] Restauradas flags de template manual em ${restored} etiqueta(s) (${reason})`)
     }
-    return restored;
-};
+    return restored
+}
 
 function tuneRedBurstPriceGroupLayout(priceGroup: any) {
     if (!isRedBurstPriceGroup(priceGroup)) return false;
