@@ -449,3 +449,120 @@ export const getPriceGroupPlacementSnapshotFromCard = (
         cardH
     }
 }
+
+/**
+ * Normaliza a placement de um priceGroup dentro de um card:
+ *  - Calcula scale clamp para evitar overflow (96% width, 48% height,
+ *    ou 62% se template e' atacarejo)
+ *  - Aplica scale na priceGroup
+ *  - Calcula left/top baseado em placement (leftRatio, topRatio,
+ *    bottomGapRatio do donor) ou fallback para left/top atuais
+ *  - Clamp final para nao deixar conteudo fora dos bounds do card
+ *
+ * Mutates priceGroup. Retorna true se aplicou, false se invalido.
+ *
+ * Caller injeta `hasAtacStructure` (templateSnapshotHasAtacStructure)
+ * para diferenciar limites de altura entre templates atacarejo e single.
+ */
+export type PriceGroupPlacement = {
+    left?: number
+    top?: number
+    leftRatio?: number
+    topRatio?: number
+    bottomGapRatio?: number | null
+    originX?: string
+    originY?: string
+    angle?: number
+    cardW?: number
+    cardH?: number
+}
+
+export const normalizePriceGroupPlacementInCard = (
+    priceGroup: any,
+    cardW: number,
+    cardH: number,
+    placement: PriceGroupPlacement | null | undefined,
+    hasAtacStructure: (pg: any) => boolean
+): boolean => {
+    if (!priceGroup || cardW <= 0 || cardH <= 0) return false
+
+    const maxWidthRatio = 0.96
+    const maxHeightRatio = hasAtacStructure(priceGroup) ? 0.62 : 0.48
+    const halfCardW = cardW / 2
+    const halfCardH = cardH / 2
+    const safeAngle = Number.isFinite(Number(placement?.angle)) ? Number(placement?.angle) : Number(priceGroup.angle ?? 0) || 0
+    const localBounds = resolvePriceGroupVisibleBoundsLocal(priceGroup)
+    if (!localBounds) return false
+
+    const maxAllowedW = Math.max(24, cardW * maxWidthRatio)
+    const maxAllowedH = Math.max(24, cardH * maxHeightRatio)
+    const requestedScaleX = Math.max(0.0001, Math.abs(Number(priceGroup.scaleX ?? 1)) || 1)
+    const requestedScaleY = Math.max(0.0001, Math.abs(Number(priceGroup.scaleY ?? 1)) || 1)
+    const signedScaleX = Number(priceGroup.scaleX ?? 1) < 0 ? -1 : 1
+    const signedScaleY = Number(priceGroup.scaleY ?? 1) < 0 ? -1 : 1
+    const fitScale = Math.min(
+        1,
+        localBounds.width > 0 ? (maxAllowedW / (localBounds.width * requestedScaleX)) : 1,
+        localBounds.height > 0 ? (maxAllowedH / (localBounds.height * requestedScaleY)) : 1
+    )
+    const scaleClamp = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 1
+    const nextScaleX = requestedScaleX * scaleClamp
+    const nextScaleY = requestedScaleY * scaleClamp
+
+    priceGroup.set({
+        scaleX: nextScaleX * signedScaleX,
+        scaleY: nextScaleY * signedScaleY
+    })
+
+    const bounds = {
+        left: Number(localBounds.left) * nextScaleX,
+        right: Number(localBounds.right) * nextScaleX,
+        top: Number(localBounds.top) * nextScaleY,
+        bottom: Number(localBounds.bottom) * nextScaleY,
+        width: Number(localBounds.width) * nextScaleX,
+        height: Number(localBounds.height) * nextScaleY
+    }
+
+    let nextLeft = Number(priceGroup.left ?? 0) || 0
+    let nextTop = Number(priceGroup.top ?? 0) || 0
+
+    if (placement && typeof placement === 'object') {
+        const ratioBaseW = Math.abs(Number(placement.cardW || 0)) || cardW
+        const ratioBaseH = Math.abs(Number(placement.cardH || 0)) || cardH
+        const halfBaseW = ratioBaseW / 2
+        const halfBaseH = ratioBaseH / 2
+
+        if (Number.isFinite(Number(placement.leftRatio)) && halfBaseW > 0) {
+            nextLeft = Math.max(-halfCardW, Math.min(halfCardW, Number(placement.leftRatio) * halfCardW))
+        } else if (Number.isFinite(Number(placement.left))) {
+            const donorLeft = Number(placement.left)
+            nextLeft = ratioBaseW > 0 ? donorLeft * (cardW / ratioBaseW) : donorLeft
+        }
+
+        if (Number.isFinite(Number(placement.bottomGapRatio))) {
+            const gap = Math.max(0, Number(placement.bottomGapRatio) * cardH)
+            nextTop = halfCardH - gap - bounds.bottom
+        } else if (Number.isFinite(Number(placement.topRatio)) && halfBaseH > 0) {
+            nextTop = Number(placement.topRatio) * halfCardH
+        } else if (Number.isFinite(Number(placement.top))) {
+            const donorTop = Number(placement.top)
+            nextTop = ratioBaseH > 0 ? donorTop * (cardH / ratioBaseH) : donorTop
+        }
+    }
+
+    const minLeft = -halfCardW - bounds.left
+    const maxLeft = halfCardW - bounds.right
+    const minTop = -halfCardH - bounds.top
+    const maxTop = halfCardH - bounds.bottom
+
+    priceGroup.set({
+        originX: 'center',
+        originY: 'center',
+        angle: safeAngle,
+        left: Math.min(maxLeft, Math.max(minLeft, nextLeft)),
+        top: Math.min(maxTop, Math.max(minTop, nextTop))
+    })
+    priceGroup.dirty = true
+    priceGroup.setCoords?.()
+    return true
+}
