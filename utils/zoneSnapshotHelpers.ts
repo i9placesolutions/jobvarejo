@@ -307,3 +307,37 @@ export const buildLabelTemplateFromZoneSnapshot = (
         group: clonePlainForZoneSnapshot(zoneTemplate)
     }
 }
+
+/**
+ * Extrai um payload diagnostico de um zone com seus cards. Capture
+ * para cada card: id, name, imageUrl, status, error, e dados de preco.
+ *
+ * Caller pode passar `zoneCardsOverride` se ja tem os cards calculados,
+ * caso contrario usa `getZoneChildren` injetado.
+ */
+export const getZoneCardDiagnosticsPayload = (
+    zone: any,
+    getCards: (z: any) => any[],
+    zoneCardsOverride?: any[]
+): any[] => {
+    const zoneCards = Array.isArray(zoneCardsOverride) ? zoneCardsOverride : getCards(zone)
+    return zoneCards.map((card: any) => {
+        const productData = (card as any)?._productData && typeof (card as any)._productData === 'object'
+            ? (card as any)._productData
+            : {}
+        return {
+            id: String((card as any)?._customId || '').trim(),
+            name: String(productData?.name || (card as any)?.productName || '').trim(),
+            imageUrl: (card as any)?.imageUrl || productData?.imageUrl || productData?.image || null,
+            status: productData?.status || null,
+            imageReviewReason: productData?.imageReviewReason || productData?.imageDecisionReason || null,
+            error: productData?.error || null,
+            priceMode: productData?.priceMode || productData?.price_mode || null,
+            pricePack: productData?.pricePack ?? null,
+            priceUnit: productData?.priceUnit ?? null,
+            priceSpecial: productData?.priceSpecial ?? null,
+            priceSpecialUnit: productData?.priceSpecialUnit ?? null,
+            specialCondition: productData?.specialCondition || null
+        }
+    })
+}

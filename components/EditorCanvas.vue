@@ -234,7 +234,8 @@ import {
     buildZoneStateSnapshot as buildZoneStateSnapshotHelper,
     getZoneSnapshotCards,
     buildProductFromZoneSnapshotCard,
-    buildLabelTemplateFromZoneSnapshot as buildLabelTemplateFromZoneSnapshotHelper
+    buildLabelTemplateFromZoneSnapshot as buildLabelTemplateFromZoneSnapshotHelper,
+    getZoneCardDiagnosticsPayload as getZoneCardDiagnosticsPayloadHelper
 } from '~/utils/zoneSnapshotHelpers'
 import {
     templateSnapshotHasAtacStructure,
@@ -25343,28 +25344,9 @@ const getCurrentZoneObject = () => {
     return null;
 }
 
-const getZoneCardDiagnosticsPayload = (zone: any, zoneCardsOverride?: any[]) => {
-    const zoneCards = Array.isArray(zoneCardsOverride) ? zoneCardsOverride : getZoneChildren(zone);
-    return zoneCards.map((card: any) => {
-        const productData = (card as any)?._productData && typeof (card as any)._productData === 'object'
-            ? (card as any)._productData
-            : {};
-        return {
-            id: String((card as any)?._customId || '').trim(),
-            name: String(productData?.name || (card as any)?.productName || '').trim(),
-            imageUrl: (card as any)?.imageUrl || productData?.imageUrl || productData?.image || null,
-            status: productData?.status || null,
-            imageReviewReason: productData?.imageReviewReason || productData?.imageDecisionReason || null,
-            error: productData?.error || null,
-            priceMode: productData?.priceMode || productData?.price_mode || null,
-            pricePack: productData?.pricePack ?? null,
-            priceUnit: productData?.priceUnit ?? null,
-            priceSpecial: productData?.priceSpecial ?? null,
-            priceSpecialUnit: productData?.priceSpecialUnit ?? null,
-            specialCondition: productData?.specialCondition || null
-        };
-    });
-}
+// getZoneCardDiagnosticsPayload extraido para utils/zoneSnapshotHelpers.ts.
+const getZoneCardDiagnosticsPayload = (zone: any, zoneCardsOverride?: any[]) =>
+    getZoneCardDiagnosticsPayloadHelper(zone, getZoneChildren, zoneCardsOverride)
 
 // clonePlainForZoneSnapshot, finiteZoneSnapshotNumber e firstDefinedZoneSnapshotValue
 // extraidos para utils/zoneSnapshotHelpers.ts.
