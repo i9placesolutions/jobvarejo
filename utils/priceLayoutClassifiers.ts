@@ -658,3 +658,138 @@ export const getSinglePriceCurrencyCircleCandidate = (
 
     return candidates[0]?.obj || null
 }
+
+/**
+ * Captura snapshot do layout de um priceGroup: dimensoes do grupo +
+ * left/top/scale/originX/originY/visible/fontSize/text/fill/stroke de
+ * cada price layout node. Usa `makePriceLayoutKeyBuilder` para gerar
+ * keys estaveis.
+ *
+ * Salva em `group.__priceLayoutSnapshot` + `group.__priceLayoutSnapshotAt`.
+ *
+ * Skip se:
+ *  - group invalido / sem getObjects
+ *  - nao e' priceGroup-like (via `isPriceGroupCheck`)
+ *  - layout corrompido (via `hasCorruptedCheck`)
+ *  - sem nodes price layout
+ *
+ * Caller injeta `isPriceGroupCheck` (isLikelyPriceGroupObject runtime).
+ */
+export const rememberPriceLayoutSnapshot = (
+    group: any,
+    isPriceGroupCheck: (g: any) => boolean
+): boolean => {
+    if (!group || typeof group.getObjects !== 'function') return false
+    if (!isPriceGroupCheck(group)) return false
+    if (hasCorruptedPriceLayout(group)) return false
+
+    const nodes = collectObjectsDeep(group).filter((o: any) => isPriceLayoutNode(o))
+    if (!nodes.length) return false
+
+    const makeKey = makePriceLayoutKeyBuilder()
+    const snapshot = {
+        version: 1,
+        group: {
+            width: Number(group?.width || 0),
+            height: Number(group?.height || 0),
+            scaleX: Number(group?.scaleX || 1),
+            scaleY: Number(group?.scaleY || 1)
+        },
+        nodes: nodes.map((node: any) => ({
+            key: makeKey(node),
+            name: String(node?.name || ''),
+            left: Number(node?.left || 0),
+            top: Number(node?.top || 0),
+            scaleX: Number(node?.scaleX || 1),
+            scaleY: Number(node?.scaleY || 1),
+            originX: String(node?.originX || 'left'),
+            originY: String(node?.originY || 'top'),
+            visible: node?.visible !== false,
+            fontSize: Number(node?.fontSize || 0),
+            width: Number(node?.width || 0),
+            height: Number(node?.height || 0),
+            text: typeof node?.text === 'string' ? node.text : undefined,
+            fill: typeof node?.fill === 'string' ? node.fill : undefined,
+            stroke: typeof node?.stroke === 'string' ? node.stroke : undefined
+        }))
+    }
+
+    ;(group as any).__priceLayoutSnapshot = snapshot
+    ;(group as any).__priceLayoutSnapshotAt = Date.now()
+    return true
+}
+
+/**
+ * Restaura layout de um priceGroup a partir de seu `__priceLayoutSnapshot`.
+ * Aplica em cada node: left/top/scale/origin/visible + fontSize/text/fill/stroke
+ * (este ultimo so se nao for transparent). Ajusta dimensoes do group tambem.
+ *
+ * Mutates os nodes. Retorna `true` se restaurou pelo menos 1 node.
+ *
+ * Skip se:
+ *  - group invalido
+ *  - sem __priceLayoutSnapshot
+ *  - sem nodes price layout no group atual
+ */
+export const restorePriceLayoutSnapshot = (group: any): boolean => {
+    if (!group || typeof group.getObjects !== 'function') return false
+    const snapshot = (group as any).__priceLayoutSnapshot
+    if (!snapshot || !Array.isArray(snapshot?.nodes)) return false
+
+    const nodes = collectObjectsDeep(group).filter((o: any) => isPriceLayoutNode(o))
+    if (!nodes.length) return false
+
+    const makeKey = makePriceLayoutKeyBuilder()
+    const nodeByKey = new Map<string, any>()
+    nodes.forEach((node: any) => nodeByKey.set(makeKey(node), node))
+
+    let restoredAny = false
+    snapshot.nodes.forEach((snap: any) => {
+        const node = nodeByKey.get(String(snap?.key || ''))
+        if (!node) return
+        if (!isFiniteLayoutNumber(snap?.left) || !isFiniteLayoutNumber(snap?.top)) return
+
+        node.set?.({
+            left: Number(snap.left),
+            top: Number(snap.top),
+            scaleX: isFiniteLayoutNumber(snap?.scaleX) ? Number(snap.scaleX) : 1,
+            scaleY: isFiniteLayoutNumber(snap?.scaleY) ? Number(snap.scaleY) : 1,
+            originX: String(snap?.originX || node.originX || 'left'),
+            originY: String(snap?.originY || node.originY || 'top'),
+            visible: snap?.visible !== false
+        })
+
+        if (typeof snap?.fill === 'string' && snap.fill !== 'transparent') node.set?.('fill', snap.fill)
+        if (typeof snap?.stroke === 'string') node.set?.('stroke', snap.stroke)
+
+        const tt = String(node?.type || '').toLowerCase()
+        const isText = tt === 'text' || tt === 'i-text' || tt === 'itext' || tt === 'textbox'
+        if (isText) {
+            if (isFiniteLayoutNumber(snap?.fontSize) && Number(snap.fontSize) > 0) node.set?.('fontSize', Number(snap.fontSize))
+            if (typeof snap?.text === 'string' && typeof node?.text === 'string') node.set?.('text', snap.text)
+            node.initDimensions?.()
+        }
+        node.setCoords?.()
+        restoredAny = true
+    })
+
+    if (snapshot?.group && typeof snapshot.group === 'object') {
+        const nextW = Number(snapshot.group.width || 0)
+        const nextH = Number(snapshot.group.height || 0)
+        const nextScaleX = Number(snapshot.group.scaleX || 1)
+        const nextScaleY = Number(snapshot.group.scaleY || 1)
+        if (nextW > 0 && nextH > 0) {
+            group.set?.({ width: nextW, height: nextH })
+        }
+        if (Number.isFinite(nextScaleX) && Number.isFinite(nextScaleY)) {
+            group.set?.({ scaleX: nextScaleX, scaleY: nextScaleY })
+        }
+    }
+
+    if (restoredAny) {
+        group.dirty = true
+        group.setCoords?.()
+    }
+
+    return restoredAny
+}
