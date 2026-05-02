@@ -807,3 +807,34 @@ export const normalizeZoneScale = (zone: any): void => {
     if (zone.scaleX === 1 && zone.scaleY === 1) return
     applyZoneScaleToRect(zone)
 }
+
+/**
+ * Substitui o priceGroup atual de um card pelo `rollbackPriceGroup`
+ * (para reverter quando aplicacao de template falha). Tambem restaura
+ * as dimensoes nominais do card via `_cardWidth/_cardHeight`.
+ *
+ * Usa `safeAddWithUpdate(card, rollbackPriceGroup)` (ja exportado neste
+ * modulo) para preservar bounds.
+ *
+ * Mutates o card. Retorna `true` se restaurou, `false` em caso de
+ * card invalido / sem rollback.
+ */
+export const restoreCardPriceGroup = (
+    card: any,
+    currentPriceGroup: any,
+    rollbackPriceGroup: any
+): boolean => {
+    if (!card || typeof card.getObjects !== 'function' || !rollbackPriceGroup) return false
+    try {
+        if (currentPriceGroup) card.remove(currentPriceGroup)
+    } catch {
+        // ignore
+    }
+    safeAddWithUpdate(card, rollbackPriceGroup)
+    const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0
+    const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0
+    if (cardW && cardH) card.set({ width: cardW, height: cardH })
+    card.dirty = true
+    card.setCoords?.()
+    return true
+}

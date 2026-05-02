@@ -337,7 +337,8 @@ import {
     regenerateCustomIdsRecursive as regenerateCustomIdsRecursiveHelper,
     remapOrClearBindingsRecursive,
     applyZoneScaleToRect,
-    normalizeZoneScale
+    normalizeZoneScale,
+    restoreCardPriceGroup
 } from '~/utils/fabricObjectOps'
 import {
     isRectObject,
@@ -32442,21 +32443,7 @@ const clonePriceGroupForRollback = async (priceGroup: any) => {
     return restored;
 };
 
-const restoreCardPriceGroup = (card: any, currentPriceGroup: any, rollbackPriceGroup: any) => {
-    if (!card || typeof card.getObjects !== 'function' || !rollbackPriceGroup) return false;
-    try {
-        if (currentPriceGroup) card.remove(currentPriceGroup);
-    } catch {
-        // ignore
-    }
-    safeAddWithUpdate(card, rollbackPriceGroup);
-    const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0;
-    const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0;
-    if (cardW && cardH) card.set({ width: cardW, height: cardH });
-    card.dirty = true;
-    card.setCoords?.();
-    return true;
-};
+// restoreCardPriceGroup extraido para utils/fabricObjectOps.ts.
 
 type ApplyLabelTemplateToZoneOptions = {
     applyToExisting?: boolean;
