@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed, nextTick, defineAsyncComponent, provide } from 'vue'
 import { useRuntimeConfig } from '#imports'
-import ContextMenu from './ui/ContextMenu.vue'
-import CanvasRulers from './ui/CanvasRulers.vue'
 import { useResponsive } from '~/composables/useResponsive'
 import { useFigmaCrop } from '~/composables/useFigmaCrop'
 import { useProductZone } from '~/composables/useProductZone'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
 import { useEditorSnapping, type EditorSnappingApi } from '~/composables/useEditorSnapping'
 import { useEditorAltDragDuplicate, type EditorAltDragDuplicateApi } from '~/composables/useEditorAltDragDuplicate'
+import { useEditorPerfMetrics } from '~/composables/useEditorPerfMetrics'
+import { useEditorViewportCulling } from '~/composables/useEditorViewportCulling'
+import { useEditorViewSettings } from '~/composables/useEditorViewSettings'
+import { useEditorPeriodicSave } from '~/composables/useEditorPeriodicSave'
+import { useEditorLifecyclePersistence } from '~/composables/useEditorLifecyclePersistence'
+import { useEditorFullscreen } from '~/composables/useEditorFullscreen'
+import { useEditorPageRecovery } from '~/composables/useEditorPageRecovery'
 import { toWasabiDirectUrl, toWasabiProxyUrl } from '~/utils/storageProxy'
 import { finalizeSerializedCanvasJson } from '~/utils/editorCanvasSerialize'
 import { prepareCanvasForSerialization } from '~/utils/editorCanvasPreSerialize'
@@ -49,7 +54,6 @@ import {
     isCanvasContextError,
     isValidFabricCanvasObject,
     isValidClipPath,
-    isAuthLookupError,
     isUsableFabricObjectClone,
     clearCanvasForPageSwitch,
     findObjectByCustomId as findObjectByCustomIdHelper,
@@ -71,9 +75,7 @@ import {
     makeUserGuideId as makeUserGuideIdHelper
 } from '~/utils/userGuideHelpers'
 import {
-    isBlockedObjectForScopedExport,
-    isExportableSelectionObject,
-    getSelectedObjectExportFileBaseName
+    isExportableSelectionObject
 } from '~/utils/exportSelectionHelpers'
 import {
     normalizeClipboardPoint,
@@ -112,29 +114,14 @@ import {
     extractWasabiBucketAndKey,
     extractWasabiKey as extractWasabiKeyHelper,
     extractContaboBucketAndKey as extractContaboBucketAndKeyHelper,
-    convertPresignedToPermanentUrl as convertPresignedToPermanentUrlHelper,
-    normalizeRecoveryImageUrl as normalizeRecoveryImageUrlHelper
+    convertPresignedToPermanentUrl as convertPresignedToPermanentUrlHelper
 } from '~/utils/storageUrlHelpers'
 import {
-    isObjectIntersectingCullRect,
-    shouldSkipViewportCullObject,
-    computeViewportCullRect,
     VIEWPORT_CULL_PADDING,
-    VIEWPORT_CULL_MIN_OBJECTS,
-    VIEWPORT_CULL_INTERVAL_MS,
     restoreViewportCulledObjects
 } from '~/utils/viewportCulling'
-import {
-    getEditorPerfNow,
-    roundEditorPerf,
-    parseEditorPerfPreference,
-    serializeEditorPerfPreference,
-    EDITOR_PERF_STORAGE_KEY,
-    EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS
-} from '~/utils/perfHelpers'
-import { parseViewSettings, serializeViewSettings, VIEW_SETTINGS_STORAGE_KEY } from '~/utils/viewSettings'
+import { getEditorPerfNow } from '~/utils/perfHelpers'
 import { isCollaboratorsCacheValid } from '~/utils/collaboratorsCache'
-import { splitTextIntoChunks } from '~/utils/textChunking'
 import { reviveRedBurstObjectNode, sanitizeRedBurstTemplateGroupJson, isRedBurstPriceGroup } from '~/utils/redBurstTemplateRevive'
 import { normalizeGlobalStyles as normalizeGlobalStylesHelper } from '~/utils/globalStylesNormalize'
 import { repairLivePriceGroupBackgrounds as repairLivePriceGroupBackgroundsHelper } from '~/utils/livePriceGroupRepair'
@@ -159,13 +146,8 @@ import {
     getFrameLabelUpdateIntervalMs as getFrameLabelUpdateIntervalMsHelper,
     CANVAS_OBJECTS_REFRESH_MIN_INTERVAL_MS
 } from '~/utils/refreshThrottle'
-import {
-    getHistoryRestoreKey,
-    historyItemIsLatest as historyItemIsLatestHelper,
-    getActiveProjectPageId as getActiveProjectPageIdHelper
-} from '~/utils/pageHistoryHelpers'
+import { getActiveProjectPageId as getActiveProjectPageIdHelper } from '~/utils/pageHistoryHelpers'
 import { getColorFromString, getInitial } from '~/utils/avatarHelpers'
-import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import {
     stripAccents,
     normalizeLimitText,
@@ -181,8 +163,7 @@ import {
     getPasteHttpStatus,
     getPasteRetryAfterMs,
     isPasteRateLimitError,
-    isTransientPasteError,
-    isTransientParseError
+    isTransientPasteError
 } from '~/utils/pasteListErrorHelpers'
 import {
     DEBOUNCED_GLOBAL_STYLE_PROPS,
@@ -210,24 +191,6 @@ import {
     resolveScalarUpdatePayload
 } from '~/utils/zoneUpdatesPayload'
 import {
-    computeExportPreflightCounts,
-    buildExportPreflightWarnings
-} from '~/utils/exportPreflightChecks'
-import {
-    MISSING_PRODUCT_IMAGE_RECOVERY_MIN_BATCH,
-    MISSING_PRODUCT_IMAGE_RECOVERY_MAX_BATCH,
-    compareMissingProductImageRecoveryCandidates,
-    getMissingProductImageRecoveryBatchLimit,
-    measureMissingProductImageRecoveryPriority,
-    computeMissingProductImageRecoveryViewportRect,
-    type RecoveryLookupResult,
-    type MissingProductImageRecoveryViewportRect,
-    type MissingProductImageRecoveryPriority,
-    type MissingProductImageRecoveryCandidate
-} from '~/utils/missingProductImageRecovery'
-import {
-    DEFAULT_PASTE_IMAGE_MATCH_MODE,
-    resolveImageMatchMode,
     type ImageMatchMode
 } from '~/utils/imageMatchMode'
 import {
@@ -267,7 +230,6 @@ import {
     resolveSelectedProductCardContext as resolveSelectedProductCardContextHelper,
     normalizeProductCardIdentity as normalizeProductCardIdentityHelper
 } from '~/utils/productCardLookup'
-import { buildCardRecoverySearchPayload } from '~/utils/cardRecoveryPayload'
 import {
     mapCardToZoneReviewProduct,
     sortCardsByZoneOrder,
@@ -452,6 +414,8 @@ import {
     sanitizeCanvasJsonBeforeLoad as sanitizeCanvasJsonBeforeLoadHelper
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
+import { layoutManualTemplateGroup as layoutManualTemplateGroupHelper } from '~/utils/priceManualTemplateLayout'
+import { layoutCustomPriceGroup as layoutCustomPriceGroupHelper } from '~/utils/priceCustomTemplateLayout'
 import { appendHistoryEntry } from '~/utils/editorHistoryState'
 import { registerHistorySaveListeners } from '~/utils/editorHistoryListeners'
 import { applyHistoryStateToCanvas } from '~/utils/editorHistoryApply'
@@ -463,32 +427,14 @@ import { findPageIndexById } from '~/utils/editorPageLookup'
 import { persistSerializedPageState } from '~/utils/editorPagePersistence'
 import { generateThumbnailFromCanvasJson } from '~/utils/editorThumbnail'
 import {
-    downloadFile,
-    downloadBlob,
-    downloadMultipleFiles,
-    shareFileFromDataUrl
-} from '~/utils/editorFileTransfer'
-import {
-    buildPdfBlob,
-    buildZipBlob,
-    exportFrameAsBlob,
-    exportObjectAsBlob,
     formatExportTimestampToken,
-    getRequestedMultiplier,
-    getSafeMultiplier,
     sanitizeExportFileToken,
-    normalizeExportImageFormat,
-    normalizeExportQualityPreset,
     HIGH_RES_EXPORT_SCALE,
     HIGH_RES_EXPORT_QUALITY,
-    EXPORT_COLOR_SATURATION,
-    EXPORT_COLOR_CONTRAST,
-    EXPORT_COLOR_BRIGHTNESS,
     DEFAULT_EXPORT_QUALITY_PRESET,
     DEFAULT_MULTI_FILE_MODE,
-    type ExportImageFormat,
     type ExportQualityPreset
-} from '~/utils/editorExportPipeline'
+} from '~/utils/editorExportConfig'
 import {
     computeCanvasFingerprint,
     getSavedViewportTransform,
@@ -505,8 +451,7 @@ import {
     shouldRunHeavySanitizeForReason,
     shouldSkipAutoSave,
     shouldSkipByFingerprint,
-    shouldSkipLifecycleSave,
-    PERIODIC_SAVE_INTERVAL_MS
+    shouldSkipLifecycleSave
 } from '~/utils/editorSavePolicy'
 import {
     createRenderScheduler,
@@ -546,7 +491,6 @@ import {
     resolveZoneForProductImport as resolveZoneForProductImportHelper
 } from '~/utils/product-zone-target'
 import type { LabelTemplate } from '~/types/label-template'
-import { applyAiToPage } from '~/src/ai/aiApplyToProject'
 
 const LayersPanel = defineAsyncComponent(() => import('./LayersPanel.vue'))
 const ProjectManager = defineAsyncComponent(() => import('./ProjectManager.vue'))
@@ -556,9 +500,16 @@ const CanvasFloatingToolbar = defineAsyncComponent(() => import('./CanvasFloatin
 const PenContextualToolbar = defineAsyncComponent(() => import('./PenContextualToolbar.vue'))
 const FrameLabelsOverlay = defineAsyncComponent(() => import('./FrameLabelsOverlay.vue'))
 const EditorModalsHost = defineAsyncComponent(() => import('./EditorModalsHost.vue'))
+const EditorPageHistoryModal = defineAsyncComponent(() => import('./EditorPageHistoryModal.vue'))
 const EditorRightSidebar = defineAsyncComponent(() => import('./EditorRightSidebar.vue'))
 const ZoneQuickActions = defineAsyncComponent(() => import('./ZoneQuickActions.vue'))
 const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
+const PageNavigator = defineAsyncComponent(() => import('./PageNavigator.vue'))
+const ContextMenu = defineAsyncComponent(() => import('./ui/ContextMenu.vue'))
+const CanvasRulers = defineAsyncComponent(() => import('./ui/CanvasRulers.vue'))
+const EditorMobilePagesCarousel = defineAsyncComponent(() => import('./EditorMobilePagesCarousel.vue'))
+const EditorMobileNav = defineAsyncComponent(() => import('./EditorMobileNav.vue'))
+const EditorMobilePanels = defineAsyncComponent(() => import('./EditorMobilePanels.vue'))
 import {
   Undo,
   Redo,
@@ -3589,8 +3540,6 @@ const updateNodePosition = (e: any) => {
     }
 }
 
-// ... (existing code)
-import { parseProductList } from '~/lib/utils'
 import {
     calculateGridLayout,
     getAspectRatioValue,
@@ -3747,6 +3696,101 @@ const { isMobile, isTablet } = useResponsive()
 type MobilePanel = 'tools' | 'layers' | 'properties' | 'pages' | 'uploads' | 'more'
 const mobilePanel = ref<MobilePanel | null>(null)
 const mobileNavRef = ref<InstanceType<typeof import('./EditorMobileNav.vue').default> | null>(null)
+const closeMobilePanel = () => {
+    mobilePanel.value = null
+    mobileNavRef.value?.clearActive()
+}
+const getMobilePanelTitle = (panel: MobilePanel | null): string => (
+    panel === 'tools' ? 'Ferramentas'
+        : panel === 'layers' ? 'Camadas'
+            : panel === 'properties' ? 'Propriedades'
+                : panel === 'pages' ? 'Páginas'
+                    : panel === 'uploads' ? 'Imagens'
+                        : 'Mais'
+)
+const handleMobilePanelCommand = (name: string, payload?: any) => {
+    const closeAfter = () => closeMobilePanel()
+    switch (name) {
+        case 'add-frame':
+            addFrame()
+            closeAfter()
+            break
+        case 'add-shape':
+            addShape(payload?.type, payload?.options)
+            closeAfter()
+            break
+        case 'add-text':
+            addText()
+            closeAfter()
+            break
+        case 'add-heading':
+            addText('heading')
+            closeAfter()
+            break
+        case 'toggle-pen':
+            togglePenMode()
+            closeAfter()
+            break
+        case 'toggle-drawing':
+            toggleDrawing()
+            closeAfter()
+            break
+        case 'add-grid-zone':
+            addGridZone()
+            closeAfter()
+            break
+        case 'open-ai-generate':
+            openAiGenerationModal()
+            closeAfter()
+            break
+        case 'zoom-50':
+            handleZoom50()
+            break
+        case 'zoom-100':
+            handleZoom100()
+            break
+        case 'zoom-200':
+            handleZoom200()
+            break
+        case 'zoom-fit':
+            zoomToFit()
+            closeAfter()
+            break
+        case 'export':
+            exportDesign()
+            closeAfter()
+            break
+        case 'presentation':
+            startPresentation()
+            closeAfter()
+            break
+        case 'share':
+            shareDesign()
+            closeAfter()
+            break
+        case 'toggle-grid':
+            toggleGrid()
+            break
+        case 'toggle-rulers':
+            toggleRulers()
+            break
+        case 'toggle-guides':
+            toggleGuides()
+            break
+        case 'toggle-snap-objects':
+            toggleSnapObjects()
+            break
+        case 'toggle-snap-guides':
+            toggleSnapGuides()
+            break
+        case 'toggle-snap-grid':
+            toggleSnapGrid()
+            break
+        case 'sidebar-action':
+            handleAction(payload)
+            break
+    }
+}
 const isMobilePanel = (value: unknown): value is MobilePanel => (
     value === 'tools' ||
     value === 'layers' ||
@@ -3767,46 +3811,33 @@ const triggerPasteShortcut = () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true }))
 }
 const currentPageId = computed(() => project.pages?.[project.activePageIndex]?.id || '')
+const showDeletePageModal = ref(false)
+const getPageActionsContext = () => ({
+    project,
+    showDeletePageModal,
+    makeId,
+    deletePage
+});
+const loadPageActionsController = () => import('~/utils/editorPageActionsController');
 const switchToPage = (pageId: string) => {
-    const idx = project.pages?.findIndex((p: any) => p.id === pageId)
-    if (idx >= 0 && idx !== project.activePageIndex) {
-        project.activePageIndex = idx
-    }
+    void loadPageActionsController().then(controller =>
+        controller.switchToPage(getPageActionsContext(), pageId)
+    );
 }
 const addNewPage = () => {
-    const newPage: any = {
-        id: makeId(),
-        name: `Página ${(project.pages?.length || 0) + 1}`,
-        width: 1080,
-        height: 1080,
-        type: 'FREE_DESIGN',
-        canvasData: null,
-        dirty: true
-    }
-    if (!project.pages) project.pages = []
-    project.pages.push(newPage)
-    project.activePageIndex = project.pages.length - 1
+    void loadPageActionsController().then(controller =>
+        controller.addNewPage(getPageActionsContext())
+    );
 }
 const duplicatePage = (pageId: string) => {
-    const idx = project.pages?.findIndex((p: any) => p.id === pageId)
-    if (idx == null || idx < 0) return
-    const src = project.pages[idx]
-    if (!src) return
-    const dup = {
-        ...JSON.parse(JSON.stringify(src)),
-        id: makeId(),
-        name: `${src.name || 'Página'} (cópia)`,
-        dirty: true
-    }
-    project.pages.splice(idx + 1, 0, dup)
-    project.activePageIndex = idx + 1
+    void loadPageActionsController().then(controller =>
+        controller.duplicatePage(getPageActionsContext(), pageId)
+    );
 }
 const reorderPages = (orderedIds: string[]) => {
-    if (!orderedIds || !project.pages) return
-    const map = new Map(project.pages.map((p: any) => [p.id, p]))
-    const reordered = orderedIds.map((id: string) => map.get(id)).filter(Boolean) as any[]
-    const remaining = project.pages.filter((p: any) => !orderedIds.includes(p.id))
-    project.pages = [...reordered, ...remaining]
+    void loadPageActionsController().then(controller =>
+        controller.reorderPages(getPageActionsContext(), orderedIds)
+    );
 }
 
 // canvas / canvasEl / wrapperEl declarados no topo do setup (ver acima).
@@ -4061,166 +4092,39 @@ const showDesignLoaderOverlay = computed(() => {
     return false
 })
 
-const showStorageDegradedBanner = computed(() => storageDegraded.value && !showDesignLoaderOverlay.value)
+// Wrapper local que injeta project.pages e activePageIndex no helper puro.
+const getActiveProjectPageId = (): string =>
+    getActiveProjectPageIdHelper(project.pages, project.activePageIndex)
 
-const retryStorageReload = () => {
-    storageDegraded.value = false
-    storageDegradedHint.value = ''
-    storageDegradedFailedCount.value = null
-    // Force re-run of the page loader watch even if the page id didn't change.
-    lastLoadedPageKey = null
-    pageReloadToken.value++
-}
-
-const canRecoverLatestNonEmpty = computed(() => {
-    const pid = String(project.id || '').trim()
-    const pageId = String(activePage.value?.id || '').trim()
-    return !!pid && !pid.startsWith('proj_') && !!pageId
+const {
+    showStorageDegradedBanner,
+    retryStorageReload,
+    canRecoverLatestNonEmpty,
+    isRecoveringLatestNonEmpty,
+    recoverLatestNonEmptyForActivePage,
+    showHistoryModal,
+    historyLoading,
+    historyError,
+    historyItems,
+    restoringHistoryKey,
+    openHistoryModal,
+    restoreFromHistoryItem,
+    handleOpenPageHistoryEvent
+} = useEditorPageRecovery({
+    project,
+    activePage,
+    showDesignLoaderOverlay,
+    storageDegraded,
+    storageDegradedHint,
+    storageDegradedFailedCount,
+    pageReloadToken,
+    getApiAuthHeaders,
+    updatePageData,
+    getActiveProjectPageId,
+    resetLoadedPageCache: () => {
+        lastLoadedPageKey = null
+    }
 })
-
-const isRecoveringLatestNonEmpty = ref(false)
-const recoverLatestNonEmptyForActivePage = async () => {
-    if (!canRecoverLatestNonEmpty.value || isRecoveringLatestNonEmpty.value) return
-    const pid = String(project.id || '').trim()
-    const pageId = String(activePage.value?.id || '').trim()
-    if (!pid || !pageId) return
-    const capturedPageId = pageId
-
-    const ok = typeof window !== 'undefined'
-        ? window.confirm('Recuperar a ultima versao nao-vazia desta pagina? Isso pode desfazer alteracoes recentes.')
-        : true
-    if (!ok) return
-
-    isRecoveringLatestNonEmpty.value = true
-    try {
-        const headers = await getApiAuthHeaders()
-        const result: any = await $fetch('/api/storage/recover-latest-non-empty', {
-            method: 'POST',
-            headers,
-            body: { projectId: pid, pageId }
-        })
-	        if (result?.json) {
-	            // Sync the specific page that initiated the recovery (avoid overwriting a different
-	            // page if the user switched tabs/pages while this request was in-flight).
-		            const idx = findPageIndexById(project.pages, capturedPageId, project.activePageIndex)
-	            if (idx >= 0) {
-	                updatePageData(idx, result.json, { source: 'system', markUnsaved: false })
-	                const page = project.pages?.[idx]
-	                if (page) page.canvasDataPath = String(result.key || page.canvasDataPath || '')
-	            }
-	            // Only force-reload the Fabric canvas if we're still on the same page.
-	            if (getActiveProjectPageId() === capturedPageId) {
-	                retryStorageReload()
-	            }
-	        }
-    } catch (e: any) {
-        console.warn('[recovery] Falha ao recuperar versao nao-vazia:', e?.message || e)
-        storageDegraded.value = true
-        storageDegradedHint.value = 'Falha ao recuperar versao nao-vazia.'
-    } finally {
-        isRecoveringLatestNonEmpty.value = false
-    }
-}
-
-// type PageHistoryItem extraido para utils/pageHistoryHelpers.ts.
-type PageHistoryItem = import('~/utils/pageHistoryHelpers').PageHistoryItem;
-
-const showHistoryModal = ref(false)
-const historyLoading = ref(false)
-const historyError = ref<string>('')
-const historyItems = ref<PageHistoryItem[]>([])
-// formatHistoryDateTime e formatHistoryRelative extraidos para utils/dateTimeFormat.ts.
-// Wrapper local que injeta historyItems.value no helper puro.
-const historyItemIsLatest = (idx: number) =>
-    historyItemIsLatestHelper(idx, historyItems.value)
-
-const openHistoryModal = async () => {
-    if (!canRecoverLatestNonEmpty.value) return
-    const pid = String(project.id || '').trim()
-    const pageId = String(activePage.value?.id || '').trim()
-    if (!pid || !pageId) return
-
-    showHistoryModal.value = true
-    historyLoading.value = true
-    historyError.value = ''
-    historyItems.value = []
-
-    try {
-        const headers = await getApiAuthHeaders()
-        const res: any = await $fetch('/api/storage/history', {
-            method: 'GET',
-            headers,
-            query: { projectId: pid, pageId }
-        })
-        historyItems.value = Array.isArray(res?.items) ? res.items : []
-    } catch (e: any) {
-        historyError.value = String(e?.statusMessage || e?.message || 'Falha ao carregar histórico')
-    } finally {
-        historyLoading.value = false
-    }
-}
-
-const restoringHistoryKey = ref<string>('')
-const restoreFromHistoryItem = async (item: PageHistoryItem) => {
-    if (!item?.key || restoringHistoryKey.value) return
-    if (!canRecoverLatestNonEmpty.value) return
-
-    const ok = typeof window !== 'undefined'
-        ? window.confirm('Restaurar esta versao? Isso vai substituir o conteudo atual desta pagina.')
-        : true
-    if (!ok) return
-
-    restoringHistoryKey.value = `${item.source}:${item.key}:${item.versionId || ''}`
-    try {
-        const pid = String(project.id || '').trim()
-        const pageId = String(activePage.value?.id || '').trim()
-        const headers = await getApiAuthHeaders()
-        const result: any = await $fetch('/api/storage/restore', {
-            method: 'POST',
-            headers,
-            body: {
-                projectId: pid,
-                pageId,
-                source: {
-                    kind: item.source,
-                    key: item.key,
-                    versionId: item.source === 'version' ? (item.versionId || null) : null
-                }
-            }
-        })
-        if (result?.ok) {
-            // Force the page loader to fetch fresh data from S3/DB instead of
-            // reusing the stale in-memory canvasData.
-            const idx = findPageIndexById(project.pages, pageId, project.activePageIndex)
-            if (idx >= 0 && project.pages[idx]) {
-                project.pages[idx].canvasData = null
-                project.pages[idx].lastSavedFingerprint = undefined
-                project.pages[idx].lastLoadedFingerprint = undefined
-                project.pages[idx].dirty = false
-                // Update canvasDataPath to the restored target key so the loader
-                // fetches from the correct S3 object.
-                if (result.targetKey) {
-                    project.pages[idx].canvasDataPath = result.targetKey
-                }
-                // Clear local draft so it doesn't override the restored version.
-                try { localStorage.removeItem(`jobvarejo:draft:page:${project.id}:${pageId}`) } catch (err) {
-                    console.warn('[history-restore] falha ao remover draft local:', err)
-                }
-            }
-            showHistoryModal.value = false
-            retryStorageReload()
-        }
-    } catch (e: any) {
-        historyError.value = String(e?.statusMessage || e?.message || 'Falha ao restaurar')
-    } finally {
-        restoringHistoryKey.value = ''
-    }
-}
-// getHistoryRestoreKey extraido para utils/pageHistoryHelpers.ts.
-const handleOpenPageHistoryEvent = () => {
-    if (!canRecoverLatestNonEmpty.value) return
-    void openHistoryModal()
-}
 
 // countCanvasJsonObjectsAndImages extraido para utils/canvasJsonClassifiers.ts.
 // countFabricObjectsAndImages extraido para utils/fabricObjectClassifiers.ts.
@@ -4292,10 +4196,6 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
         stopImageLoadTracking(sessionId)
     }
 }
-
-// Wrapper local que injeta project.pages e activePageIndex no helper puro.
-const getActiveProjectPageId = (): string =>
-    getActiveProjectPageIdHelper(project.pages, project.activePageIndex)
 
 const scheduleIdleStatePersistence = (opts: any, timeoutMs = 2200) => {
     const scheduledForPageId = getActiveProjectPageId()
@@ -4780,334 +4680,24 @@ const updateScrollbars = () => {
 // utils/viewportCulling.ts. VIEWPORT_CULL_PADDING ja extraido.
 // EDITOR_PERF_STORAGE_KEY, EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS extraidos
 // para utils/perfHelpers.ts.
-const editorPerfMetricsEnabled = ref(true)
-const editorPerfMetrics = shallowRef({
-    enabled: true,
-    cullRuns: 0,
-    cullReason: 'idle',
-    objectCount: 0,
-    visibleObjects: 0,
-    culledObjects: 0,
-    changedObjects: 0,
-    restoredObjects: 0,
-    cullDurationMs: 0,
-    cullAvgMs: 0,
-    cullMaxMs: 0,
-    fps: 0,
-    fpsAvg: 0,
-    fpsMin: 0,
-    fpsMax: 0,
-    renderFrames: 0,
-    updatedAt: 0
+const {
+    enabled: editorPerfMetricsEnabled,
+    handleAfterRenderPerf,
+    updateViewportCullPerf
+} = useEditorPerfMetrics()
+
+const {
+    applyViewportCulling,
+    scheduleViewportCulling,
+    resetViewportCullSignature
+} = useEditorViewportCulling({
+    canvas,
+    isCanvasDestroyed,
+    metricsEnabled: editorPerfMetricsEnabled,
+    updateViewportCullPerf,
+    safeRequestRenderAll,
+    refreshCanvasObjects: () => refreshCanvasObjects()
 })
-let viewportCullRafId: number | null = null
-let viewportCullTimer: ReturnType<typeof setTimeout> | null = null
-let lastViewportCullAt = 0
-let lastViewportCullSignature = ''
-let editorPerfLastRenderAt = 0
-let editorPerfLastRenderCommitAt = 0
-let editorPerfRenderFrames = 0
-let editorPerfFpsAvg = 0
-let editorPerfFpsMin = Number.POSITIVE_INFINITY
-let editorPerfFpsMax = 0
-
-// getEditorPerfNow e roundEditorPerf extraidos para utils/perfHelpers.ts.
-
-// Wrapper local que injeta storage no helper puro.
-const persistEditorPerfPreference = (enabled: boolean) => {
-    if (!import.meta.client) return
-    try {
-        localStorage.setItem(EDITOR_PERF_STORAGE_KEY, serializeEditorPerfPreference(enabled))
-    } catch { /* ignore */ }
-}
-
-const resetEditorRenderPerfCounters = () => {
-    editorPerfLastRenderAt = 0
-    editorPerfLastRenderCommitAt = 0
-    editorPerfRenderFrames = 0
-    editorPerfFpsAvg = 0
-    editorPerfFpsMin = Number.POSITIVE_INFINITY
-    editorPerfFpsMax = 0
-}
-
-const setEditorPerfMetricsEnabled = (enabled: boolean) => {
-    const normalized = !!enabled
-    editorPerfMetricsEnabled.value = normalized
-    persistEditorPerfPreference(normalized)
-    resetEditorRenderPerfCounters()
-    editorPerfMetrics.value = {
-        ...editorPerfMetrics.value,
-        enabled: normalized,
-        updatedAt: Date.now()
-    }
-}
-
-// Wrapper local que injeta storage no parse puro.
-const loadEditorPerfPreference = () => {
-    if (!import.meta.client) return
-    try {
-        const raw = localStorage.getItem(EDITOR_PERF_STORAGE_KEY)
-        setEditorPerfMetricsEnabled(parseEditorPerfPreference(raw))
-    } catch {
-        setEditorPerfMetricsEnabled(true)
-    }
-}
-
-const publishEditorPerfBridge = () => {
-    if (typeof window === 'undefined') return
-    ;(window as any).__editorPerf = {
-        __owner: 'EditorCanvas',
-        get snapshot() {
-            return editorPerfMetrics.value
-        },
-        enable: () => setEditorPerfMetricsEnabled(true),
-        disable: () => setEditorPerfMetricsEnabled(false),
-        toggle: () => setEditorPerfMetricsEnabled(!editorPerfMetricsEnabled.value),
-        print: () => console.table(editorPerfMetrics.value)
-    }
-}
-
-const clearEditorPerfBridge = () => {
-    if (typeof window === 'undefined') return
-    const bridge = (window as any).__editorPerf
-    if (bridge && bridge.__owner === 'EditorCanvas') {
-        delete (window as any).__editorPerf
-    }
-}
-
-const updateViewportCullPerf = (
-    reason: string,
-    objects: any[],
-    changedObjects: number,
-    restoredObjects: number,
-    durationMs: number
-) => {
-    if (!editorPerfMetricsEnabled.value) return
-    let visibleObjects = 0
-    let culledObjects = 0
-    for (const obj of objects) {
-        if (!obj || typeof obj !== 'object') continue
-        if (obj.visible !== false) visibleObjects++
-        if ((obj as any).__viewportCulled) culledObjects++
-    }
-
-    const prev = editorPerfMetrics.value
-    const cullRuns = Number(prev.cullRuns || 0) + 1
-    const cullAvgMs = cullRuns <= 1
-        ? durationMs
-        : (((Number(prev.cullAvgMs || 0) * (cullRuns - 1)) + durationMs) / cullRuns)
-    const cullMaxMs = Math.max(Number(prev.cullMaxMs || 0), durationMs)
-
-    editorPerfMetrics.value = {
-        ...prev,
-        enabled: true,
-        cullReason: reason,
-        cullRuns,
-        objectCount: objects.length,
-        visibleObjects,
-        culledObjects,
-        changedObjects,
-        restoredObjects,
-        cullDurationMs: roundEditorPerf(durationMs),
-        cullAvgMs: roundEditorPerf(cullAvgMs),
-        cullMaxMs: roundEditorPerf(cullMaxMs),
-        updatedAt: Date.now()
-    }
-}
-
-const handleAfterRenderPerf = () => {
-    if (!editorPerfMetricsEnabled.value) return
-    const now = getEditorPerfNow()
-    if (editorPerfLastRenderAt <= 0) {
-        editorPerfLastRenderAt = now
-        return
-    }
-
-    const delta = now - editorPerfLastRenderAt
-    editorPerfLastRenderAt = now
-    if (delta <= 0 || delta > 2200) return
-
-    const fps = 1000 / delta
-    editorPerfRenderFrames += 1
-    editorPerfFpsAvg = editorPerfRenderFrames <= 1
-        ? fps
-        : (((editorPerfFpsAvg * (editorPerfRenderFrames - 1)) + fps) / editorPerfRenderFrames)
-    editorPerfFpsMin = Math.min(editorPerfFpsMin, fps)
-    editorPerfFpsMax = Math.max(editorPerfFpsMax, fps)
-
-    const shouldCommit = (now - editorPerfLastRenderCommitAt) >= EDITOR_PERF_RENDER_COMMIT_INTERVAL_MS
-    if (!shouldCommit) return
-
-    editorPerfLastRenderCommitAt = now
-    const prev = editorPerfMetrics.value
-    editorPerfMetrics.value = {
-        ...prev,
-        enabled: true,
-        fps: roundEditorPerf(fps),
-        fpsAvg: roundEditorPerf(editorPerfFpsAvg),
-        fpsMin: roundEditorPerf(editorPerfFpsMin === Number.POSITIVE_INFINITY ? fps : editorPerfFpsMin),
-        fpsMax: roundEditorPerf(editorPerfFpsMax),
-        renderFrames: editorPerfRenderFrames,
-        updatedAt: Date.now()
-    }
-}
-
-onMounted(() => {
-    loadEditorPerfPreference()
-    publishEditorPerfBridge()
-})
-
-onUnmounted(() => {
-    clearEditorPerfBridge()
-    resetEditorRenderPerfCounters()
-})
-
-// Wrapper local que injeta dados do canvas.value no helper puro
-// computeViewportCullRect (utils/viewportCulling.ts).
-const getViewportCullRect = () => {
-    if (!canvas.value) return null
-    const c = canvas.value
-    return computeViewportCullRect({
-        viewportTransform: c.viewportTransform || [1, 0, 0, 1, 0, 0],
-        zoom: Number(c.getZoom?.() || 1) || 1,
-        width: Number(c.getWidth?.() || 0),
-        height: Number(c.getHeight?.() || 0)
-    })
-}
-
-// isObjectIntersectingCullRect e shouldSkipViewportCullObject extraidos
-// para utils/viewportCulling.ts.
-
-// restoreViewportCulledObjects extraido para utils/viewportCulling.ts.
-
-const applyViewportCulling = (reason: string = 'unknown') => {
-    if (!canvas.value || isCanvasDestroyed.value) return
-    const c = canvas.value
-    const objects = c.getObjects?.() || []
-    const startedAt = editorPerfMetricsEnabled.value ? getEditorPerfNow() : 0
-
-    if (objects.length < VIEWPORT_CULL_MIN_OBJECTS) {
-        const restored = restoreViewportCulledObjects(objects)
-        if (restored > 0) {
-            safeRequestRenderAll(c)
-            refreshCanvasObjects()
-        }
-        if (startedAt > 0) {
-            updateViewportCullPerf(reason, objects, restored, restored, getEditorPerfNow() - startedAt)
-        }
-        return
-    }
-
-    const rect = getViewportCullRect()
-    if (!rect) return
-
-    const vpt = c.viewportTransform || [1, 0, 0, 1, 0, 0]
-    const zoom = Number(c.getZoom?.() || 1) || 1
-    const signature = [
-        Number(vpt[4] || 0).toFixed(1),
-        Number(vpt[5] || 0).toFixed(1),
-        zoom.toFixed(4),
-        String(objects.length)
-    ].join('|')
-
-    const allowSignatureShortCircuit = reason === 'scrollbars'
-    if (allowSignatureShortCircuit && signature === lastViewportCullSignature) return
-    lastViewportCullSignature = signature
-
-    const activeObjects = c.getActiveObjects?.() || []
-    const activeSet = new Set<any>(activeObjects)
-    const singleActive = c.getActiveObject?.()
-    if (singleActive) activeSet.add(singleActive)
-
-    let changed = 0
-    let restored = 0
-    objects.forEach((obj: any) => {
-        if (shouldSkipViewportCullObject(obj, activeSet)) return
-        const inView = isObjectIntersectingCullRect(obj, rect)
-        const wasCulled = !!(obj as any).__viewportCulled
-
-        if (!inView) {
-            if (!wasCulled) {
-                ;(obj as any).__viewportCulled = true
-                ;(obj as any).__viewportCullPrevVisible = obj.visible
-                ;(obj as any).__viewportCullPrevEvented = obj.evented
-                ;(obj as any).__viewportCullPrevSelectable = obj.selectable
-            }
-            if (obj.visible !== false) {
-                obj.set?.('visible', false)
-                obj.visible = false
-                changed++
-            }
-            if (obj.evented !== false) {
-                obj.set?.('evented', false)
-                obj.evented = false
-            }
-            if (obj.selectable !== false) {
-                obj.set?.('selectable', false)
-                obj.selectable = false
-            }
-            obj.dirty = true
-            return
-        }
-
-        if (!wasCulled) return
-        const prevVisible = (obj as any).__viewportCullPrevVisible
-        const prevEvented = (obj as any).__viewportCullPrevEvented
-        const prevSelectable = (obj as any).__viewportCullPrevSelectable
-        obj.set?.('visible', prevVisible === undefined ? true : prevVisible)
-        obj.set?.('evented', prevEvented === undefined ? true : prevEvented)
-        obj.set?.('selectable', prevSelectable === undefined ? true : prevSelectable)
-        obj.visible = prevVisible === undefined ? true : prevVisible
-        obj.evented = prevEvented === undefined ? true : prevEvented
-        obj.selectable = prevSelectable === undefined ? true : prevSelectable
-        obj.dirty = true
-        delete (obj as any).__viewportCullPrevVisible
-        delete (obj as any).__viewportCullPrevEvented
-        delete (obj as any).__viewportCullPrevSelectable
-        delete (obj as any).__viewportCulled
-        changed++
-        restored++
-    })
-
-    if (changed > 0) {
-        safeRequestRenderAll(c)
-        refreshCanvasObjects()
-    }
-
-    if (startedAt > 0) {
-        updateViewportCullPerf(reason, objects, changed, restored, getEditorPerfNow() - startedAt)
-    }
-}
-
-const scheduleViewportCulling = (reason: string = 'unknown') => {
-    if (!canvas.value || isCanvasDestroyed.value) return
-    if (typeof window === 'undefined') {
-        applyViewportCulling(reason)
-        return
-    }
-
-    const run = () => {
-        if (viewportCullRafId !== null) return
-        viewportCullRafId = requestAnimationFrame(() => {
-            viewportCullRafId = null
-            lastViewportCullAt = performance.now()
-            applyViewportCulling(reason)
-        })
-    }
-
-    const now = performance.now()
-    const elapsed = now - lastViewportCullAt
-    if (elapsed >= VIEWPORT_CULL_INTERVAL_MS) {
-        run()
-        return
-    }
-
-    if (viewportCullTimer) return
-    viewportCullTimer = setTimeout(() => {
-        viewportCullTimer = null
-        run()
-    }, Math.max(0, VIEWPORT_CULL_INTERVAL_MS - elapsed))
-}
 
 // Scrollbar drag handlers
 const handleVerticalScrollbarDrag = (e: MouseEvent) => {
@@ -5312,24 +4902,11 @@ onUnmounted(() => {
     }
 })
 
-// Periodic save: upload to Wasabi every PERIODIC_SAVE_INTERVAL_MS if there
-// are unsaved changes. Canvas events only update in-memory state + undo
-// history (no upload). PERIODIC_SAVE_INTERVAL_MS extraido para
-// utils/editorSavePolicy.ts.
-let periodicSaveIntervalId: ReturnType<typeof setInterval> | null = null
-onMounted(() => {
-    periodicSaveIntervalId = setInterval(() => {
-        if (isCanvasDestroyed.value) return
-        if (!project.id || project.id.startsWith('proj_')) return
-        if (!hasUnsavedChanges.value && !project.pages.some((p: any) => !!p?.dirty)) return
-        void flushAutoSave().catch(() => { /* ignore periodic save errors */ })
-    }, PERIODIC_SAVE_INTERVAL_MS)
-})
-onUnmounted(() => {
-    if (periodicSaveIntervalId) {
-        clearInterval(periodicSaveIntervalId)
-        periodicSaveIntervalId = null
-    }
+useEditorPeriodicSave({
+    isCanvasDestroyed,
+    project,
+    hasUnsavedChanges,
+    flushAutoSave
 })
 
 const handleZoomIn = () => {
@@ -5720,49 +5297,15 @@ const flushPersistenceNow = async (reason: string, opts: { force?: boolean } = {
 provide('editorFlushPersistence', flushPersistenceNow);
 defineExpose({ flushPersistenceNow });
 
-const emergencyBeaconSave = () => {
-    try {
-        if (!hasUnsavedChanges.value && !project.pages.some((p: any) => !!p?.dirty)) return;
-        emergencySnapshotDirtyPages();
-        console.log('🚨 [beacon] Snapshot local de emergencia atualizado; persistencia inline no banco desabilitada.');
-    } catch (err) {
-        console.warn('[beacon] Erro no emergency save:', err);
-    }
-};
-
-const handleEditorBeforeUnload = (e: BeforeUnloadEvent) => {
-    flushPersistenceNow('beforeunload');
-    emergencyBeaconSave();
-    // Aviso ao usuário se ainda há mudanças não salvas no Wasabi
-    if (hasUnsavedChanges.value || project.pages.some((p: any) => !!p?.dirty)) {
-        e.preventDefault();
-        e.returnValue = '';
-    }
-};
-
-const handleEditorPageHide = () => {
-    flushPersistenceNow('pagehide');
-    emergencyBeaconSave();
-};
-
-const handleEditorVisibilityChange = () => {
-    if (document.visibilityState === 'hidden') {
-        flushPersistenceNow('visibility-hidden');
-    }
-};
-
-onMounted(() => {
-    window.addEventListener('beforeunload', handleEditorBeforeUnload);
-    window.addEventListener('pagehide', handleEditorPageHide);
-    window.addEventListener('editor:open-page-history', handleOpenPageHistoryEvent as EventListener);
-    document.addEventListener('visibilitychange', handleEditorVisibilityChange);
-});
+useEditorLifecyclePersistence({
+    project,
+    hasUnsavedChanges,
+    flushPersistenceNow,
+    emergencySnapshotDirtyPages,
+    handleOpenPageHistoryEvent
+})
 
 onUnmounted(() => {
-    window.removeEventListener('beforeunload', handleEditorBeforeUnload);
-    window.removeEventListener('pagehide', handleEditorPageHide);
-    window.removeEventListener('editor:open-page-history', handleOpenPageHistoryEvent as EventListener);
-    document.removeEventListener('visibilitychange', handleEditorVisibilityChange);
     renderScheduler.dispose();
     if (propertySaveTimer) {
         clearTimeout(propertySaveTimer);
@@ -5780,47 +5323,15 @@ canSaveLabelTemplateFromSelectionComputed = computed(() => {
 });
 
 const showProjectManager = ref(false)
-const viewShowGrid = ref(false)
-const viewShowRulers = ref(true)
-const viewShowGuides = ref(true)
-const snapToObjects = ref(true)
-const snapToGuides = ref(true)
-const snapToGrid = ref(false)
-const gridSize = ref(20)
-
-// VIEW_SETTINGS_STORAGE_KEY extraido para utils/viewSettings.ts.
-let viewSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
-
-// Wrappers locais que aplicam parse/serialize do helper puro
-// (utils/viewSettings.ts) na storage e refs reativas.
-const loadViewSettings = () => {
-    if (!import.meta.client) return
-    try {
-        const parsed = parseViewSettings(localStorage.getItem(VIEW_SETTINGS_STORAGE_KEY))
-        if (parsed.viewShowGrid !== undefined) viewShowGrid.value = parsed.viewShowGrid
-        if (parsed.viewShowRulers !== undefined) viewShowRulers.value = parsed.viewShowRulers
-        if (parsed.viewShowGuides !== undefined) viewShowGuides.value = parsed.viewShowGuides
-        if (parsed.snapToObjects !== undefined) snapToObjects.value = parsed.snapToObjects
-        if (parsed.snapToGuides !== undefined) snapToGuides.value = parsed.snapToGuides
-        if (parsed.snapToGrid !== undefined) snapToGrid.value = parsed.snapToGrid
-        if (parsed.gridSize !== undefined) gridSize.value = parsed.gridSize
-    } catch { /* ignore */ }
-}
-
-const persistViewSettings = () => {
-    if (!import.meta.client) return
-    try {
-        localStorage.setItem(VIEW_SETTINGS_STORAGE_KEY, serializeViewSettings({
-            viewShowGrid: viewShowGrid.value,
-            viewShowRulers: viewShowRulers.value,
-            viewShowGuides: viewShowGuides.value,
-            snapToObjects: snapToObjects.value,
-            snapToGuides: snapToGuides.value,
-            snapToGrid: snapToGrid.value,
-            gridSize: gridSize.value
-        }))
-    } catch { /* ignore */ }
-}
+const {
+    viewShowGrid,
+    viewShowRulers,
+    viewShowGuides,
+    snapToObjects,
+    snapToGuides,
+    snapToGrid,
+    gridSize
+} = useEditorViewSettings()
 
 const toggleGrid = () => {
     viewShowGrid.value = !viewShowGrid.value
@@ -5869,7 +5380,10 @@ const applyGridBackground = () => {
     }
 }
 
-const isFullscreen = ref(false)
+const {
+    isFullscreen,
+    toggleFullscreen
+} = useEditorFullscreen()
 
 const toggleRulers = () => {
     viewShowRulers.value = !viewShowRulers.value
@@ -5889,57 +5403,12 @@ const setGridSize = (size: number) => {
     if (viewShowGrid.value) applyGridBackground()
 }
 
-const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().then(() => {
-            isFullscreen.value = true
-        }).catch(err => {
-            console.error('Erro ao entrar em tela cheia:', err)
-        })
-    } else {
-        document.exitFullscreen().then(() => {
-            isFullscreen.value = false
-        }).catch(err => {
-            console.error('Erro ao sair de tela cheia:', err)
-        })
-    }
-}
-
-// Listen to fullscreen changes
-const handleFullscreenChange = () => {
-    isFullscreen.value = !!document.fullscreenElement
-}
-
-onMounted(() => {
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
-})
-
-onMounted(() => {
-    loadViewSettings()
-})
-
-watch(
-    [viewShowGrid, viewShowRulers, viewShowGuides, snapToObjects, snapToGuides, snapToGrid, gridSize],
-    () => {
-        if (viewSettingsSaveTimer) clearTimeout(viewSettingsSaveTimer)
-        viewSettingsSaveTimer = setTimeout(() => persistViewSettings(), 200)
-    },
-    { deep: false }
-)
-
 watch(viewShowGrid, () => applyGridBackground())
 watch(gridSize, () => { if (viewShowGrid.value) applyGridBackground() })
 watch(() => canvas.value, () => {
     // When canvas becomes ready (or is swapped), apply view settings.
     applyGridBackground()
     applyUserGuidesVisibility()
-})
-
-onUnmounted(() => {
-    if (viewSettingsSaveTimer) {
-        clearTimeout(viewSettingsSaveTimer)
-        viewSettingsSaveTimer = null
-    }
 })
 
 // Modals State
@@ -6254,86 +5723,26 @@ const showPresentationModal = ref(false)
 const presentationImage = ref('')
 const presentationHotspots = ref<any[]>([])
 
+const getPresentationContext = () => ({
+    canvas: canvas.value,
+    project,
+    showPresentationModal,
+    presentationImage,
+    presentationHotspots,
+    safeRequestRenderAll,
+    sanitizeAllClipPaths,
+    removeAllClipPaths
+});
+
 const startPresentation = async (pageIndex = -1) => {
-    if (!canvas.value) return;
-    
-    // Determine page to show (default to current active)
-    const targetIndex = pageIndex >= 0 ? pageIndex : project.activePageIndex;
-    
-    // If target is different, we need to load it temporarily to render?
-    // Optimization: We assume the user starts from CURRENT page for now. 
-    // If navigating, we might need to load JSON data in background or switch context.
-    
-    // For this "Lite" prototype, we will handle navigation by ACTUALLY switching the active page in the background
-    // but keeping the modal open.
-    
-    if (targetIndex !== project.activePageIndex) {
-        // Switch page logic (re-using useProject)
-        // This triggers the watcher, which re-renders canvas.
-        // We need to wait for render, then grab image.
-        project.activePageIndex = targetIndex;
-        // Wait for Vue watch and Canvas render
-        await new Promise(r => setTimeout(r, 200)); 
-    }
-
-    canvas.value.discardActiveObject();
-    safeRequestRenderAll();
-
-    // 1. Sanitize clipPaths before generating image
-    sanitizeAllClipPaths();
-
-    // 2. Generate Image
-    try {
-        presentationImage.value = canvas.value.toDataURL({
-            format: 'png',
-            multiplier: 2
-        });
-    } catch (err) {
-        console.error('[Prototype] Erro ao gerar imagem:', err);
-        // Nuclear option: clear all clipPaths
-        removeAllClipPaths();
-        try {
-            safeRequestRenderAll();
-            await new Promise(resolve => setTimeout(resolve, 10));
-            presentationImage.value = canvas.value.toDataURL({
-                format: 'png',
-                multiplier: 2
-            });
-        } catch (err2) {
-            console.error('[Prototype] Falha definitiva ao gerar imagem:', err2);
-            presentationImage.value = '';
-        }
-    }
-    
-    // 2. Generate Hotspots
-    // We need to map object coordinates to the image percentages to be responsive in modal
-    const vWidth = canvas.value.getWidth();
-    const vHeight = canvas.value.getHeight();
-    const objects = canvas.value.getObjects();
-    
-    presentationHotspots.value = objects
-        .filter((o: any) => o.interactionDestination !== undefined && o.interactionDestination !== '')
-        .map((o: any) => {
-            const boundingRect = o.getBoundingRect();
-            return {
-                top: (boundingRect.top / vHeight) * 100 + '%',
-                left: (boundingRect.left / vWidth) * 100 + '%',
-                width: (boundingRect.width / vWidth) * 100 + '%',
-                height: (boundingRect.height / vHeight) * 100 + '%',
-                target: o.interactionDestination
-            };
-        });
-    
-    showPresentationModal.value = true;
+    const { startPresentation } = await import('~/utils/editorPresentationController');
+    await startPresentation(getPresentationContext(), pageIndex);
 }
 
 const handleHotspotClick = (targetIndex: any) => {
     // Navigate to target page
     startPresentation(Number(targetIndex));
 }
-
-// HIGH_RES_EXPORT_*, EXPORT_COLOR_*, DEFAULT_EXPORT_QUALITY_PRESET,
-// DEFAULT_MULTI_FILE_MODE extraidos para utils/editorExportPipeline.ts.
 
 const exportSettings = ref({
     format: 'png',
@@ -6511,16 +5920,16 @@ const normalizeProductCardIdentity = (
 // utils/fabricObjectOps.ts.
 // isTransientCanvasObject extraido para utils/controlObjectClassifiers.ts.
 
-const showDeletePageModal = ref(false)
-
 const handleDeleteCurrentPage = () => {
-    if (project.pages.length <= 1) return;
-    showDeletePageModal.value = true;
+    void loadPageActionsController().then(controller =>
+        controller.handleDeleteCurrentPage(getPageActionsContext())
+    );
 }
 
 const confirmDeletePage = () => {
-    deletePage(project.activePageIndex);
-    showDeletePageModal.value = false;
+    void loadPageActionsController().then(controller =>
+        controller.confirmDeletePage(getPageActionsContext())
+    );
 }
 
 let fabric: any = null;
@@ -8729,14 +8138,6 @@ onUnmounted(() => {
     canvasObjectsRefreshRafId = null;
   }
   canvasObjectsRefreshPendingSource = null;
-  if (viewportCullTimer) {
-    clearTimeout(viewportCullTimer);
-    viewportCullTimer = null;
-  }
-  if (viewportCullRafId !== null && typeof window !== 'undefined') {
-    cancelAnimationFrame(viewportCullRafId);
-    viewportCullRafId = null;
-  }
   if (frameLabelUpdateTimer) {
     clearTimeout(frameLabelUpdateTimer);
     frameLabelUpdateTimer = null;
@@ -8769,7 +8170,6 @@ onUnmounted(() => {
   }
   cancelAutoSave();
   isCanvasDestroyed.value = true;
-  document.removeEventListener('fullscreenchange', handleFullscreenChange)
   window.removeEventListener('resize', resizeCanvas);
   window.removeEventListener('keydown', handleKeyDown);
   if (globalEscKeyHandler) {
@@ -19400,8 +18800,7 @@ const exportDesign = () => {
     showExportModal.value = true;
 }
 
-// isBlockedObjectForScopedExport e isExportableSelectionObject extraidos
-// para utils/exportSelectionHelpers.ts.
+// isExportableSelectionObject extraido para utils/exportSelectionHelpers.ts.
 
 const resolveExportableSelectedObject = (preferred?: any): any | null => {
     const candidates: any[] = [];
@@ -19420,597 +18819,42 @@ const resolveExportableSelectedObject = (preferred?: any): any | null => {
     return null;
 };
 
-// getSelectedObjectExportFileBaseName extraido para utils/exportSelectionHelpers.ts.
-
 const hasExportableSelectedObject = computed(() => !!resolveExportableSelectedObject());
+
+const getExportShareContext = () => ({
+    canvas,
+    exportSettings,
+    shareSettings,
+    showExportModal,
+    showShareModal,
+    isExportDownloadInProgress,
+    getAllFrames,
+    getFrameById,
+    isLikelyProductZone,
+    resolveExportableSelectedObject,
+    sanitizeAllClipPaths,
+    safeRequestRenderAll,
+    makeExportBatchBaseName,
+    startExportDownloadFeedback,
+    stopExportDownloadFeedback,
+    notifyEditorInfo,
+    notifyEditorError
+})
+
+const loadExportShareController = () => import('~/utils/editorExportShareController')
 
 const exportSelectedObject = async (
     format: 'png' | 'svg' | 'jpg' = 'png',
     targetObject?: any,
     options: { download?: boolean } = {}
 ): Promise<{ dataURL: string; fileName: string; format: 'png' | 'jpg' } | null> => {
-    if (!canvas.value) return null;
-    const active = resolveExportableSelectedObject(targetObject);
-    if (!active) {
-        notifyEditorInfo('Selecione um objeto válido para exportar.');
-        return null;
-    }
-
-    const fileName = `objeto-${getSelectedObjectExportFileBaseName(active)}-${Date.now()}`;
-    const shouldDownload = options.download !== false;
-
-    if (format === 'svg') {
-        const svgContent = active.toSVG();
-        const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        if (shouldDownload) downloadFile(url, `${fileName}.svg`);
-        return null;
-    }
-
-    if (active.clipPath && !isValidClipPath(active.clipPath)) {
-        console.warn('[Export Selected] Limpando clipPath inválido do objeto selecionado');
-        active.set('clipPath', null);
-    }
-
-    const activeBounds = typeof active.getBoundingRect === 'function'
-        ? active.getBoundingRect(true, true)
-        : null
-    const activeWidth = Math.max(1, Number(activeBounds?.width || active?.width || 1))
-    const activeHeight = Math.max(1, Number(activeBounds?.height || active?.height || 1))
-    const exportMultiplier = getSafeMultiplier(activeWidth, activeHeight, HIGH_RES_EXPORT_SCALE)
-
-    let dataURL = '';
-    try {
-        dataURL = await runWithNeutralViewport(async () => (
-            active.toDataURL({
-                format,
-                quality: 1,
-                multiplier: exportMultiplier
-            })
-        ));
-    } catch (exportErr) {
-        console.error('[Export Selected] Erro ao exportar objeto:', exportErr);
-        try {
-            active.set('clipPath', null);
-            dataURL = await runWithNeutralViewport(async () => (
-                active.toDataURL({
-                    format,
-                    quality: 1,
-                    multiplier: exportMultiplier
-                })
-            ));
-        } catch (fallbackErr) {
-            console.error('[Export Selected] Falha definitiva:', fallbackErr);
-            notifyEditorError('Erro ao exportar objeto. Tente novamente.');
-            return null;
-        }
-    }
-
-    dataURL = await makeExportColorsVivid(
-        dataURL,
-        format === 'jpg' ? 'jpg' : 'png',
-        HIGH_RES_EXPORT_QUALITY
-    );
-
-    if (shouldDownload) {
-        downloadFile(dataURL, `${fileName}.${format}`);
-    }
-
-    return { dataURL, fileName, format };
-}
-
-const makeExportColorsVivid = async (
-    dataUrl: string,
-    format: 'png' | 'jpg' | 'jpeg',
-    quality = HIGH_RES_EXPORT_QUALITY
-): Promise<string> => {
-    if (!dataUrl || typeof window === 'undefined') return dataUrl;
-
-    return await new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-            try {
-                const width = Math.max(1, Number(img.naturalWidth || img.width || 1));
-                const height = Math.max(1, Number(img.naturalHeight || img.height || 1));
-                const out = document.createElement('canvas');
-                out.width = width;
-                out.height = height;
-                const ctx = out.getContext('2d');
-                if (!ctx) {
-                    resolve(dataUrl);
-                    return;
-                }
-
-                ctx.imageSmoothingEnabled = true;
-                (ctx as any).imageSmoothingQuality = 'high';
-                ctx.filter = `saturate(${EXPORT_COLOR_SATURATION}) contrast(${EXPORT_COLOR_CONTRAST}) brightness(${EXPORT_COLOR_BRIGHTNESS})`;
-                ctx.drawImage(img, 0, 0, width, height);
-                ctx.filter = 'none';
-
-                const normalizedFormat = format === 'jpg' ? 'jpeg' : format;
-                const mime = normalizedFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
-                const normalizedQuality = Math.max(0.9, Math.min(1, Number(quality) || 1));
-                resolve(out.toDataURL(mime, normalizedQuality));
-            } catch {
-                resolve(dataUrl);
-            }
-        };
-        img.onerror = () => resolve(dataUrl);
-        img.src = dataUrl;
-    });
-};
-
-const runWithNeutralViewport = async <T>(action: () => Promise<T> | T): Promise<T> => {
-    if (!canvas.value) return await action();
-
-    const c: any = canvas.value;
-    const prevVpt = Array.isArray(c.viewportTransform) ? [...c.viewportTransform] : [1, 0, 0, 1, 0, 0];
-    const prevRenderOnAddRemove = c.renderOnAddRemove;
-    const prevSkipOffscreen = c.skipOffscreen;
-    const cacheSnapshot = (c.getObjects?.() || []).map((obj: any) => ({
-        obj,
-        objectCaching: obj?.objectCaching,
-        noScaleCache: obj?.noScaleCache,
-        statefullCache: obj?.statefullCache
-    }));
-
-    try {
-        c.renderOnAddRemove = false;
-        c.skipOffscreen = false;
-        cacheSnapshot.forEach((state: any) => {
-            const obj = state?.obj;
-            if (!obj) return;
-            obj.objectCaching = false;
-            obj.noScaleCache = false;
-            obj.statefullCache = false;
-            obj.dirty = true;
-            obj.setCoords?.();
-        });
-        c.setViewportTransform([1, 0, 0, 1, 0, 0]);
-        c.calcOffset?.();
-        c.requestRenderAll?.();
-        await new Promise(resolve => setTimeout(resolve, 0));
-        return await action();
-    } finally {
-        c.setViewportTransform(prevVpt);
-        c.renderOnAddRemove = prevRenderOnAddRemove;
-        c.skipOffscreen = prevSkipOffscreen;
-        cacheSnapshot.forEach((state: any) => {
-            const obj = state?.obj;
-            if (!obj) return;
-            obj.objectCaching = state.objectCaching;
-            obj.noScaleCache = state.noScaleCache;
-            obj.statefullCache = state.statefullCache;
-            obj.dirty = true;
-            obj.setCoords?.();
-        });
-        c.calcOffset?.();
-        c.requestRenderAll?.();
-    }
-};
-
-const withProductZonesHiddenForOutput = async <T>(action: () => Promise<T> | T): Promise<T> => {
-    if (!canvas.value) return await action();
-
-    const allObjects = canvas.value.getObjects() || [];
-    // Oculta apenas as molduras tracejadas das zonas (guias visuais).
-    // Os cards de produtos (parentZoneId) são conteúdo real e DEVEM
-    // aparecer na imagem exportada.
-    const zones = allObjects.filter((o: any) => isLikelyProductZone(o));
-
-    if (!zones.length) return await action();
-
-    const targetsToHide = zones;
-    const prevVisibility = targetsToHide.map((obj: any) => ({
-        obj,
-        visible: obj?.visible !== false
-    }));
-
-    targetsToHide.forEach((obj: any) => {
-        obj?.set?.('visible', false);
-        obj?.setCoords?.();
-    });
-    safeRequestRenderAll();
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    try {
-        return await action();
-    } finally {
-        prevVisibility.forEach(({ obj, visible }: any) => {
-            obj?.set?.('visible', visible);
-            obj?.setCoords?.();
-        });
-        safeRequestRenderAll();
-        await new Promise(resolve => setTimeout(resolve, 0));
-    }
-};
-
-// --- Frame Export Functions ---
-
-// Export a single frame as an image
-const exportSingleFrame = async (frame: any, format: 'png' | 'jpg' = 'png', scale: number = 1, quality: number = 0.9) => {
-    if (!canvas.value || !frame) return null;
-
-    const frameName = getFrameDisplayNameForExport(frame, 0).replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'frame';
-    const fileName = `frame-${frameName}-${Date.now()}`;
-
-    const bounds = getFrameBounds(frame);
-    if (!bounds) return null;
-    const frameMultiplier = getSafeMultiplier(Number(bounds.width || 1), Number(bounds.height || 1), Math.max(1, Number(scale) || 1))
-
-    // Create a data URL for the frame area
-    let dataURL = '';
-    try {
-        dataURL = await withProductZonesHiddenForOutput(async () => (
-            await runWithNeutralViewport(async () => {
-                sanitizeAllClipPaths();
-                const options: any = {
-                    format: format,
-                    quality: quality,
-                    multiplier: frameMultiplier,
-                    left: bounds.left,
-                    top: bounds.top,
-                    width: Math.max(1, bounds.width),
-                    height: Math.max(1, bounds.height),
-                    ...(format === 'jpg' ? { backgroundColor: '#ffffff' } : {})
-                };
-                return canvas.value.toDataURL(options);
-            })
-        ));
-    } catch (err) {
-        console.warn('[Export Frame] Primeira tentativa falhou, tentando fallback:', err);
-        try {
-            dataURL = await withProductZonesHiddenForOutput(async () => (
-                await runWithNeutralViewport(async () => {
-                    return canvas.value.toDataURL({
-                        format: format,
-                        quality: quality,
-                        multiplier: frameMultiplier,
-                        left: bounds.left,
-                        top: bounds.top,
-                        width: Math.max(1, bounds.width),
-                        height: Math.max(1, bounds.height),
-                        ...(format === 'jpg' ? { backgroundColor: '#ffffff' } : {})
-                    });
-                })
-            ));
-        } catch (fallbackErr) {
-            console.error('[Export Frame] Error:', fallbackErr);
-            return null;
-        }
-    }
-
-    dataURL = await makeExportColorsVivid(dataURL, format, quality);
-
-    return { dataURL, fileName };
-}
-
-// Export all frames as separate files
-const exportAllFrames = async (format: 'png' | 'jpg' = 'png', scale: number = 1, quality: number = 0.9) => {
-    const frames = getAllFrames();
-    if (!frames.length) {
-        notifyEditorInfo('Nenhum frame encontrado para exportar.');
-        return [];
-    }
-
-    const exports: { dataURL: string; fileName: string }[] = [];
-
-    for (const frame of frames) {
-        const result = await exportSingleFrame(frame, format, scale, quality);
-        if (result) {
-            exports.push(result);
-        }
-    }
-
-    return exports;
-}
-
-// normalizeExportImageFormat e normalizeExportQualityPreset extraidos para
-// utils/editorExportPipeline.ts (versao pura, recebe `any`).
-
-type ScopedBlobExport = {
-    blob: Blob
-    fileName: string
-    format: ExportImageFormat
-    baseWidth: number
-    baseHeight: number
-    reducedFromRequested: boolean
-}
-
-const exportSelectedObjectBlob = async (
-    format: ExportImageFormat,
-    qualityPreset: ExportQualityPreset,
-    targetObject?: any
-): Promise<ScopedBlobExport | null> => {
-    if (!canvas.value) return null
-    const active = resolveExportableSelectedObject(targetObject)
-    if (!active) return null
-
-    if (active.clipPath && !isValidClipPath(active.clipPath)) {
-        active.set('clipPath', null)
-    }
-
-    const activeBounds = typeof active.getBoundingRect === 'function'
-        ? active.getBoundingRect(true, true)
-        : null
-    const baseWidth = Math.max(1, Number(activeBounds?.width || active?.width || 1))
-    const baseHeight = Math.max(1, Number(activeBounds?.height || active?.height || 1))
-    const fileName = `objeto-${getSelectedObjectExportFileBaseName(active)}-${Date.now()}`
-
-    const result = await exportObjectAsBlob({
-        width: baseWidth,
-        height: baseHeight,
-        qualityPreset,
-        format,
-        renderDataUrlAtMultiplier: async (multiplier: number) => {
-            try {
-                return await runWithNeutralViewport(async () => (
-                    active.toDataURL({
-                        format,
-                        quality: HIGH_RES_EXPORT_QUALITY,
-                        multiplier
-                    })
-                ))
-            } catch {
-                active.set('clipPath', null)
-                return await runWithNeutralViewport(async () => (
-                    active.toDataURL({
-                        format,
-                        quality: HIGH_RES_EXPORT_QUALITY,
-                        multiplier
-                    })
-                ))
-            }
-        },
-        postProcessDataUrl: async (dataUrl) => await makeExportColorsVivid(dataUrl, format, HIGH_RES_EXPORT_QUALITY)
-    })
-
-    return {
-        blob: result.blob,
-        fileName,
-        format,
-        baseWidth,
-        baseHeight,
-        reducedFromRequested: result.reducedFromRequested
-    }
-}
-
-const exportSingleFrameBlob = async (
-    frame: any,
-    format: ExportImageFormat,
-    qualityPreset: ExportQualityPreset,
-    index = 0
-): Promise<ScopedBlobExport | null> => {
-    if (!canvas.value || !frame) return null
-
-    const bounds = getFrameBounds(frame)
-    if (!bounds) return null
-
-    const baseWidth = Math.max(1, Number(bounds.width || 1))
-    const baseHeight = Math.max(1, Number(bounds.height || 1))
-    const frameName = getFrameDisplayNameForExport(frame, index).replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'frame'
-    const fileName = `frame-${frameName}-${index + 1}-${Date.now()}`
-
-    const result = await exportFrameAsBlob({
-        width: baseWidth,
-        height: baseHeight,
-        qualityPreset,
-        format,
-        renderDataUrlAtMultiplier: async (multiplier: number) => {
-            try {
-                return await withProductZonesHiddenForOutput(async () => (
-                    await runWithNeutralViewport(async () => {
-                        sanitizeAllClipPaths()
-                        return canvas.value.toDataURL({
-                            format,
-                            quality: HIGH_RES_EXPORT_QUALITY,
-                            multiplier,
-                            left: bounds.left,
-                            top: bounds.top,
-                            width: baseWidth,
-                            height: baseHeight,
-                            ...(format === 'jpg' ? { backgroundColor: '#ffffff' } : {})
-                        })
-                    })
-                ))
-            } catch {
-                return await withProductZonesHiddenForOutput(async () => (
-                    await runWithNeutralViewport(async () => (
-                        canvas.value.toDataURL({
-                            format,
-                            quality: HIGH_RES_EXPORT_QUALITY,
-                            multiplier,
-                            left: bounds.left,
-                            top: bounds.top,
-                            width: baseWidth,
-                            height: baseHeight,
-                            ...(format === 'jpg' ? { backgroundColor: '#ffffff' } : {})
-                        })
-                    ))
-                ))
-            }
-        },
-        postProcessDataUrl: async (dataUrl) => await makeExportColorsVivid(dataUrl, format, HIGH_RES_EXPORT_QUALITY)
-    })
-
-    return {
-        blob: result.blob,
-        fileName,
-        format,
-        baseWidth,
-        baseHeight,
-        reducedFromRequested: result.reducedFromRequested
-    }
-}
-
-const maybeWarnLargeBatchExport = (frames: any[], qualityPreset: ExportQualityPreset) => {
-    const estimatedBytes = (frames || []).reduce((sum: number, frame: any) => {
-        const bounds = getFrameBounds(frame)
-        if (!bounds) return sum
-        const width = Math.max(1, Number(bounds.width || 1))
-        const height = Math.max(1, Number(bounds.height || 1))
-        const requested = getRequestedMultiplier(qualityPreset, width, height)
-        const safeMultiplier = getSafeMultiplier(width, height, requested)
-        const rawBytes = width * height * safeMultiplier * safeMultiplier * 4
-        return sum + (rawBytes * 0.55)
-    }, 0)
-
-    const estimatedMb = estimatedBytes / (1024 * 1024)
-    if (estimatedMb >= 250) {
-        notifyEditorInfo(`Exportação pesada (~${Math.round(estimatedMb)}MB). Pode levar mais tempo.`)
-    }
-}
-
-// Preflight bloqueante de export: detecta problemas comerciais/visuais obvios
-// antes de gerar o arquivo final. Retorna lista de avisos (vazia = tudo OK).
-// Pode ser estendido com mais validacoes conforme novas regras aparecerem.
-// Wrapper local: injeta canvas.value.getObjects() + isLikelyProductZone.
-const runExportPreflightChecks = (): string[] => {
-    if (!canvas.value) return []
-    const counts = computeExportPreflightCounts({
-        objects: canvas.value.getObjects?.() || [],
-        isLikelyProductZone
-    })
-    return buildExportPreflightWarnings(counts)
+    const controller = await loadExportShareController()
+    return await controller.exportSelectedObject(getExportShareContext(), format, targetObject, options)
 }
 
 const performExport = async () => {
-    if (!canvas.value) return
-    if (isExportDownloadInProgress.value) return
-
-    // Preflight bloqueante: se houver avisos, confirmar com o usuario antes de exportar.
-    // Exportar um encarte com imagem ausente ou zona vazia e um risco comercial real.
-    const preflightWarnings = runExportPreflightChecks()
-    if (preflightWarnings.length > 0 && typeof window !== 'undefined') {
-        const message = `Encontramos ${preflightWarnings.length} problema(s) antes da exportacao:\n\n` +
-            preflightWarnings.map((w) => `• ${w}`).join('\n') +
-            '\n\nDeseja exportar mesmo assim?'
-        if (!window.confirm(message)) {
-            return
-        }
-    }
-
-    const feedbackToken = startExportDownloadFeedback('Preparando exportação...')
-    showExportModal.value = false
-
-    let reducedBySafety = false
-
-    try {
-        const activeBeforeExport = canvas.value.getActiveObject?.()
-        canvas.value.discardActiveObject()
-        safeRequestRenderAll()
-
-        const { format, exportScope, selectedFrameId } = exportSettings.value
-        const qualityPreset = normalizeExportQualityPreset(String(exportSettings.value.qualityPreset || DEFAULT_EXPORT_QUALITY_PRESET))
-        const multiFileMode = exportSettings.value.multiFileMode === 'separate' ? 'separate' : 'zip'
-        const isPdf = format === 'pdf'
-        const imageFormat: ExportImageFormat = normalizeExportImageFormat(String(format || 'png'))
-
-        if (exportScope === 'selected-object') {
-            const objectExport = await exportSelectedObjectBlob(isPdf ? 'png' : imageFormat, qualityPreset, activeBeforeExport)
-            if (!objectExport) {
-                notifyEditorInfo('Selecione um objeto válido para exportar.')
-                return
-            }
-            reducedBySafety = reducedBySafety || objectExport.reducedFromRequested
-
-            if (isPdf) {
-                const pdfBlob = await buildPdfBlob([{
-                    imageBlob: objectExport.blob,
-                    pageWidthPx: objectExport.baseWidth,
-                    pageHeightPx: objectExport.baseHeight
-                }])
-                downloadBlob(pdfBlob, `${objectExport.fileName}.pdf`)
-            } else {
-                downloadBlob(objectExport.blob, `${objectExport.fileName}.${imageFormat}`)
-            }
-        } else if (exportScope === 'selected-frame') {
-            if (!selectedFrameId) {
-                notifyEditorInfo('Selecione um frame para exportar.')
-                return
-            }
-            const frame = getFrameById(selectedFrameId)
-            if (!frame) {
-                notifyEditorInfo('Frame selecionado não encontrado no canvas.')
-                return
-            }
-
-            const frameExport = await exportSingleFrameBlob(frame, isPdf ? 'png' : imageFormat, qualityPreset)
-            if (!frameExport) {
-                notifyEditorError('Falha ao exportar o frame selecionado.')
-                return
-            }
-            reducedBySafety = reducedBySafety || frameExport.reducedFromRequested
-
-            if (isPdf) {
-                const pdfBlob = await buildPdfBlob([{
-                    imageBlob: frameExport.blob,
-                    pageWidthPx: frameExport.baseWidth,
-                    pageHeightPx: frameExport.baseHeight
-                }])
-                downloadBlob(pdfBlob, `${frameExport.fileName}.pdf`)
-            } else {
-                downloadBlob(frameExport.blob, `${frameExport.fileName}.${imageFormat}`)
-            }
-        } else if (exportScope === 'all-frames') {
-            const frames = getAllFrames()
-            if (!frames.length) {
-                notifyEditorInfo('Nenhum frame encontrado no canvas.')
-                return
-            }
-
-            maybeWarnLargeBatchExport(frames, qualityPreset)
-            const results: ScopedBlobExport[] = []
-            for (let i = 0; i < frames.length; i++) {
-                const frame = frames[i]
-                const result = await exportSingleFrameBlob(frame, isPdf ? 'png' : imageFormat, qualityPreset, i)
-                if (result) {
-                    reducedBySafety = reducedBySafety || result.reducedFromRequested
-                    results.push(result)
-                }
-            }
-
-            if (!results.length) {
-                notifyEditorError('Nenhum frame foi exportado com sucesso.')
-                return
-            }
-
-            if (isPdf) {
-                const pages = results.map((result) => ({
-                    imageBlob: result.blob,
-                    pageWidthPx: result.baseWidth,
-                    pageHeightPx: result.baseHeight
-                }))
-                const pdfBlob = await buildPdfBlob(pages)
-                downloadBlob(pdfBlob, `${makeExportBatchBaseName()}.pdf`)
-            } else if (multiFileMode === 'zip') {
-                const zipEntries = results.map((result) => ({
-                    fileName: `${result.fileName}.${imageFormat}`,
-                    blob: result.blob
-                }))
-                const zipBlob = await buildZipBlob(zipEntries)
-                downloadBlob(zipBlob, `${makeExportBatchBaseName()}.zip`)
-            } else {
-                await downloadMultipleFiles(results.map((result) => ({
-                    blob: result.blob,
-                    fileName: result.fileName,
-                    format: imageFormat
-                })))
-            }
-        } else {
-            notifyEditorInfo('Selecione: objeto, frame ou todos os frames para exportar.')
-            return
-        }
-
-        if (reducedBySafety) {
-            notifyEditorInfo('Parte do export foi ajustada para escala segura por limite do navegador.')
-        }
-    } catch (err) {
-        console.error('[Export] Falha ao exportar:', err)
-        notifyEditorError('Falha ao exportar. Tente novamente ou reduza a qualidade.')
-    } finally {
-        await stopExportDownloadFeedback(feedbackToken)
-    }
+    const controller = await loadExportShareController()
+    await controller.performExport(getExportShareContext())
 }
 
 // --- Share Modal Functions ---
@@ -20097,107 +18941,8 @@ const selectAllFrames = () => {
 }
 
 const performShare = async () => {
-    if (!canvas.value) return;
-    if (isExportDownloadInProgress.value) return;
-    const feedbackToken = startExportDownloadFeedback('Baixando arquivo...')
-    showShareModal.value = false;
-
-    try {
-        const activeBeforeShare = canvas.value.getActiveObject?.();
-        // Deselect for clean export
-        canvas.value.discardActiveObject();
-        safeRequestRenderAll();
-
-        const { format, shareScope } = shareSettings.value;
-        const scale = HIGH_RES_EXPORT_SCALE;
-        const quality = HIGH_RES_EXPORT_QUALITY;
-        const imgFormat: 'png' | 'jpg' = (format === 'jpeg' || format === 'jpg') ? 'jpg' : 'png';
-        const frameFormat: 'png' | 'jpg' = imgFormat === 'jpg' ? 'jpg' : 'png';
-
-        if (shareScope === 'selected-object') {
-            const objectResult = await exportSelectedObject(frameFormat, activeBeforeShare, { download: false });
-            if (!objectResult) {
-                notifyEditorInfo('Selecione um objeto válido para exportar.');
-                return;
-            }
-            const extension = objectResult.format === 'jpg' ? 'jpg' : 'png';
-            const finalName = `${objectResult.fileName}.${extension}`;
-            const shared = await shareFileFromDataUrl(objectResult.dataURL, finalName, 'Objeto selecionado');
-            if (!shared) {
-                downloadFile(objectResult.dataURL, finalName);
-            }
-        }
-        else if (shareScope === 'selected-frame') {
-            const frameIds = shareSettings.value.selectedFrameIds;
-            if (!frameIds.length) {
-                notifyEditorInfo('Selecione ao menos um frame para compartilhar.');
-                return;
-            }
-            if (frameIds.length === 1) {
-                const frame = getFrameById(frameIds[0] as string);
-                if (!frame) {
-                    notifyEditorInfo('Frame selecionado não encontrado no canvas.');
-                    return;
-                }
-                const result = await exportSingleFrame(frame, frameFormat, scale, quality);
-                if (result) {
-                    const shared = await shareFileFromDataUrl(result.dataURL, `${result.fileName}.${frameFormat}`, (frame.layerName || frame.name || 'Frame'));
-                    if (!shared) {
-                        downloadFile(result.dataURL, `${result.fileName}.${frameFormat}`);
-                    }
-                }
-            } else {
-                // Multiple frames selected - download all
-                const results = [];
-                for (const fid of frameIds) {
-                    const frame = getFrameById(fid);
-                    if (frame) {
-                        const result = await exportSingleFrame(frame, frameFormat, scale, quality);
-                        if (result) results.push({ dataURL: result.dataURL, fileName: result.fileName, format: frameFormat });
-                    }
-                }
-                if (results.length > 0) {
-                    await downloadMultipleFiles(results);
-                } else {
-                    notifyEditorInfo('Nenhum frame selecionado foi encontrado no canvas.');
-                }
-            }
-        }
-        else if (shareScope === 'all-frames') {
-            const frames = getAllFrames();
-            if (frames.length > 0) {
-                if (frames.length === 1) {
-                    const result = await exportSingleFrame(frames[0], frameFormat, scale, quality);
-                    if (result) {
-                        const shared = await shareFileFromDataUrl(result.dataURL, `${result.fileName}.${frameFormat}`, 'All Frames');
-                        if (!shared) {
-                            downloadFile(result.dataURL, `${result.fileName}.${frameFormat}`);
-                        }
-                    }
-                } else {
-                    // For multiple files, we need to download them (Web Share API only supports single file)
-                    notifyEditorInfo('Compartilhamento nativo suporta apenas um arquivo por vez. Os arquivos serão baixados.');
-                    const frameExports = await exportAllFrames(frameFormat, scale, quality);
-                    const filesToDownload = frameExports.map(e => ({
-                        dataURL: e.dataURL,
-                        fileName: e.fileName,
-                        format: frameFormat
-                    }));
-                    await downloadMultipleFiles(filesToDownload);
-                }
-            } else {
-                notifyEditorInfo('Nenhum frame encontrado no canvas.');
-            }
-        }
-        else {
-            notifyEditorInfo('Selecione: objeto, frame ou todos os frames para exportar.');
-        }
-    } catch (err) {
-        console.error('[Share] Falha ao compartilhar:', err)
-        notifyEditorError('Falha ao compartilhar. Tente novamente ou reduza a qualidade.')
-    } finally {
-        await stopExportDownloadFeedback(feedbackToken)
-    }
+    const controller = await loadExportShareController()
+    await controller.performShare(getExportShareContext())
 }
 
 // --- Project Manager Helpers ---
@@ -20372,6 +19117,23 @@ const loadCanvasData = async (data: any) => {
     saveCurrentState({ reason: 'legacy-import-load', source: 'system', skipIfUnchanged: true });
 }
 
+const getEditorAiGenerationContext = () => ({
+    project,
+    activePage,
+    aiPrompt,
+    aiReferenceImageDataUrl,
+    aiApplyMode,
+    aiPageType,
+    aiPageWidth,
+    aiPageHeight,
+    isProcessing,
+    showAIModal,
+    pageReloadToken,
+    pushAiToast,
+    updatePageData,
+    saveProjectDB
+});
+
 const generateFlyerWithAI = async (payload: {
     mode: 'replace' | 'newPage'
     pageType: 'RETAIL_OFFER' | 'FREE_DESIGN'
@@ -20380,48 +19142,8 @@ const generateFlyerWithAI = async (payload: {
     referenceImageDataUrl?: string | null
     cloneStrength?: number
 }) => {
-    const prompt = String(aiPrompt.value || '').trim()
-    const referenceImageDataUrl = String(
-        payload?.referenceImageDataUrl || aiReferenceImageDataUrl.value || ''
-    ).trim()
-    if (!prompt && !referenceImageDataUrl) {
-        pushAiToast('error', 'Informe o tema/estilo ou envie uma imagem para clonar.')
-        return
-    }
-
-    const width = Math.max(64, Math.round(Number(payload?.pageWidth || aiPageWidth.value || 1080)))
-    const height = Math.max(64, Math.round(Number(payload?.pageHeight || aiPageHeight.value || 1920)))
-    const mode = payload?.mode || aiApplyMode.value
-    const pageType = payload?.pageType || aiPageType.value
-
-    isProcessing.value = true
-    try {
-        const result = await applyAiToPage({
-            projectId: String(project.id || ''),
-            pageId: mode === 'replace' ? String(activePage.value?.id || '') : null,
-            mode,
-            prompt,
-            options: {
-                pageType,
-                size: { width, height },
-                referenceImageDataUrl: referenceImageDataUrl || null,
-                cloneStrength: referenceImageDataUrl ? Math.max(0, Math.min(100, Number(payload?.cloneStrength ?? 100))) : undefined
-            }
-        })
-
-        // Force reload when replacing the current page object reference.
-        pageReloadToken.value++
-        showAIModal.value = false
-        aiReferenceImageDataUrl.value = null
-        pushAiToast('success', mode === 'newPage' ? 'Página com IA criada com sucesso.' : 'Página atual atualizada com IA.')
-        console.log('[ai] Página gerada:', result)
-    } catch (err: any) {
-        console.error('[ai] Falha ao gerar página:', err)
-        const message = String(err?.data?.statusMessage || err?.statusMessage || err?.message || 'Erro ao gerar página com IA.')
-        pushAiToast('error', message)
-    } finally {
-        isProcessing.value = false
-    }
+    const { generateFlyerWithAI } = await import('~/utils/editorAiGenerationController');
+    await generateFlyerWithAI(getEditorAiGenerationContext(), payload);
 }
 
 // ========================================
@@ -20434,71 +19156,8 @@ const handleGenerateInstitutional = async (payload: {
     subtitle: string
     tagFilter: string
 }) => {
-    if (!payload.prompt.trim()) {
-        pushAiToast('error', 'Informe o que deseja criar.')
-        return
-    }
-
-    isProcessing.value = true
-    try {
-        const result = await $fetch<{
-            success: boolean
-            imageUrl: string
-            imageKey: string
-            canvasData: any
-            styleNotesUsed: string | null
-            inspirationsUsed: number
-        }>('/api/ai/institutional/generate', {
-            method: 'POST',
-            body: payload
-        })
-
-        if (!result?.canvasData) {
-            pushAiToast('error', 'A geração não retornou dados válidos.')
-            return
-        }
-
-        // Apply to current page
-        // Nao chamar useProject() de novo aqui: ja esta no setup acima.
-        // Chamar duas vezes registra watch(storageSaveStatus) em duplicidade.
-        const pageIndex = project.activePageIndex
-
-        updatePageData(pageIndex, result.canvasData, {
-            source: 'user',
-            markUnsaved: true,
-            reason: 'institutional-ai-generate'
-        })
-
-        // Force canvas to reload the new data
-        pageReloadToken.value++
-
-        const inspirationMsg = result.inspirationsUsed > 0
-            ? ` (baseado em ${result.inspirationsUsed} inspiracao(oes))`
-            : ''
-        pushAiToast('success', `Arte institucional gerada com sucesso${inspirationMsg}. Edite textos e elementos a vontade.`)
-
-        // Auto-save
-        // FIX: Previously swallowed all save errors silently. If saveProjectDB fails here,
-        // the generated art exists only in memory and will be lost on reload.
-        try {
-            await saveProjectDB()
-        } catch (saveErr) {
-            console.error('[ai:institutional] Falha ao salvar projeto após geração de arte:', saveErr)
-            pushAiToast('error', 'Arte gerada mas falha ao salvar. Tente salvar manualmente.')
-        }
-
-        console.log('[ai:institutional] Arte gerada:', {
-            imageKey: result.imageKey,
-            styleNotes: result.styleNotesUsed,
-            inspirations: result.inspirationsUsed
-        })
-    } catch (err: any) {
-        console.error('[ai:institutional] Falha:', err)
-        const message = String(err?.data?.statusMessage || err?.statusMessage || err?.message || 'Erro ao gerar arte institucional.')
-        pushAiToast('error', message)
-    } finally {
-        isProcessing.value = false
-    }
+    const { handleGenerateInstitutional } = await import('~/utils/editorAiGenerationController');
+    await handleGenerateInstitutional(getEditorAiGenerationContext(), payload);
 }
 
 // Wrapper local: usa o helper puro computeViewportCenterInWorld.
@@ -20821,278 +19480,29 @@ const replaceImageByCustomId = async (
 };
 
 let missingProductImageRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
-let isRecoveringMissingProductImages = false;
 
-// isLikelyPlaceholderImageSrc extraido para utils/canvasJsonClassifiers.ts.
+const getMissingProductImageRecoveryContext = () => ({
+    canvas: canvas.value,
+    isCanvasDestroyed,
+    getActiveProjectPageId,
+    getApiAuthHeaders,
+    collectObjectsDeep,
+    isLikelyProductCard,
+    isProductCardContainer,
+    getPreferredProductImageFromGroup,
+    resolveSelectedProductCardContext,
+    findProductCardParentGroup,
+    replaceImageByCustomId,
+    addImageToProductCardByUrl,
+    refreshCanvasObjects,
+    safeRequestRenderAll,
+    saveCurrentState,
+    makeCanvasObjectId
+});
 
-// getImageSourceFromObject extraido para utils/fabricImageHelpers.ts.
-
-// Wrapper local: injeta toWasabiProxyUrl + extractContaboBucketAndKey no helper puro.
-const normalizeRecoveryImageUrl = (src: string): string =>
-    normalizeRecoveryImageUrlHelper(src, toWasabiProxyUrl, extractContaboBucketAndKey);
-
-// buildCardRecoverySearchPayload extraido para utils/cardRecoveryPayload.ts.
-
-// Tipos RecoveryLookupResult, MissingProductImageRecoveryViewportRect,
-// MissingProductImageRecoveryPriority e MissingProductImageRecoveryCandidate
-// + constantes MIN_BATCH/MAX_BATCH extraidas para utils/missingProductImageRecovery.ts.
-// DEFAULT_PASTE_IMAGE_MATCH_MODE e resolveImageMatchMode extraidos para
-// utils/imageMatchMode.ts.
-
-// isAuthLookupError extraido para utils/canvasValidation.ts.
-
-const fetchRecoveryImageUrlForCard = async (
-    card: any,
-    options: {
-        matchMode?: ImageMatchMode
-    } = {}
-): Promise<RecoveryLookupResult> => {
-    const payload = buildCardRecoverySearchPayload(card);
-    if (!payload?.term) return { status: 'empty', url: null };
-    const matchMode = resolveImageMatchMode(options.matchMode);
-
-    try {
-        const headers = await getApiAuthHeaders();
-        const result = await $fetch<{ url?: string }>('/api/process-product-image', {
-            method: 'POST',
-            headers,
-            // For product cards we want the API to return the cached bg-removed variant when possible.
-            body: {
-                ...payload,
-                bgPolicy: 'always',
-                matchMode,
-                strictMode: matchMode === 'precise'
-            }
-        });
-        const url = String(result?.url || '').trim();
-        if (url) return { status: 'ok', url };
-        return { status: 'empty', url: null };
-    } catch (err) {
-        if (isAuthLookupError(err)) {
-            return { status: 'auth', url: null };
-        }
-        console.warn('[recover-missing-product-images] Falha ao buscar imagem por termo:', err);
-        return { status: 'error', url: null };
-    }
-};
-
-const fetchRecoveryImageUrlFromAssets = async (term: string): Promise<RecoveryLookupResult> => {
-    const query = String(term || '').trim();
-    if (!query) return { status: 'empty', url: null };
-    try {
-        const headers = await getApiAuthHeaders();
-        const result = await $fetch<any>('/api/assets', {
-            headers,
-            query: {
-                q: query,
-                limit: 1
-            }
-        });
-        if (Array.isArray(result) && result[0]?.url) {
-            return { status: 'ok', url: String(result[0].url || '').trim() || null };
-        }
-        if (result && Array.isArray(result.items) && result.items[0]?.url) {
-            return { status: 'ok', url: String(result.items[0].url || '').trim() || null };
-        }
-        return { status: 'empty', url: null };
-    } catch (err) {
-        console.warn('[recover-missing-product-images] Falha no fallback /api/assets:', err);
-        return { status: 'error', url: null };
-    }
-};
-
-// Wrapper local: usa o helper puro computeMissingProductImageRecoveryViewportRect.
-const getMissingProductImageRecoveryViewportRect = (): MissingProductImageRecoveryViewportRect | null => {
-    const c = canvas.value;
-    if (!c) return null;
-    return computeMissingProductImageRecoveryViewportRect(
-        c.viewportTransform,
-        c.getWidth?.() || 0,
-        c.getHeight?.() || 0,
-        c.getZoom?.() || 1
-    );
-};
-
-const getMissingProductImageRecoveryActiveCard = (): any | null => {
-    const active = canvas.value?.getActiveObject?.();
-    if (!active) return null;
-    const ctx = resolveSelectedProductCardContext(active);
-    if (ctx?.card) return ctx.card;
-    if (isLikelyProductCard(active) || isProductCardContainer(active)) return active;
-    return findProductCardParentGroup(active);
-};
-
-// measureMissingProductImageRecoveryPriority extraido para utils/missingProductImageRecovery.ts.
-
-// compareMissingProductImageRecoveryCandidates e getMissingProductImageRecoveryBatchLimit
-// extraidos para utils/missingProductImageRecovery.ts.
-
-const recoverMissingProductCardImages = async (
-    opts: { expectedPageId?: string | null } = {}
-): Promise<{ recoveredCount: number; pendingCount: number }> => {
-    const expectedPageId = String(opts.expectedPageId || getActiveProjectPageId()).trim();
-    const isExpectedPageStillActive = () => !expectedPageId || getActiveProjectPageId() === expectedPageId;
-    if (!canvas.value || isCanvasDestroyed.value || isRecoveringMissingProductImages || !isExpectedPageStillActive()) {
-        return { recoveredCount: 0, pendingCount: 0 };
-    }
-    isRecoveringMissingProductImages = true;
-    try {
-        if (!isExpectedPageStillActive()) {
-            return { recoveredCount: 0, pendingCount: 0 };
-        }
-        const viewportRect = getMissingProductImageRecoveryViewportRect();
-        const activeCard = getMissingProductImageRecoveryActiveCard();
-        const cards = collectObjectsDeep(canvas.value)
-            .filter((obj: any) => !!(obj?.type === 'group' && (obj?.isSmartObject || obj?.isProductCard || isLikelyProductCard(obj))));
-
-        const candidates: MissingProductImageRecoveryCandidate[] = [];
-        for (const card of cards) {
-            if (!isExpectedPageStillActive() || isCanvasDestroyed.value) break;
-            const imageObj = getPreferredProductImageFromGroup(card);
-            const hasImageObject = !!imageObj;
-
-            let needsRecovery = !hasImageObject;
-            if (imageObj) {
-                const currentSrc = getImageSourceFromObject(imageObj);
-                const hasBrokenSource = isLikelyPlaceholderImageSrc(currentSrc);
-                const hasInvalidGeometry = !Number.isFinite(Number(imageObj.width)) || Number(imageObj.width) <= 0 || !Number.isFinite(Number(imageObj.height)) || Number(imageObj.height) <= 0;
-                const imageEl: any = (imageObj as any)?._originalElement || (imageObj as any)?._element || null;
-                const naturalW = Number(imageEl?.naturalWidth ?? imageEl?.width ?? 0);
-                const naturalH = Number(imageEl?.naturalHeight ?? imageEl?.height ?? 0);
-                const hasLikelyBrokenElement = Number.isFinite(naturalW) && Number.isFinite(naturalH) && naturalW <= 1 && naturalH <= 1;
-                needsRecovery = hasBrokenSource || hasInvalidGeometry || hasLikelyBrokenElement;
-            }
-            if (!needsRecovery) continue;
-
-            const triedMap = (((card as any).__missingImageRecoveryTried && typeof (card as any).__missingImageRecoveryTried === 'object')
-                ? (card as any).__missingImageRecoveryTried
-                : {}) as Record<string, true>;
-            (card as any).__missingImageRecoveryTried = triedMap;
-
-            const rawCandidates = [
-                String((card as any)?.imageUrl || '').trim(),
-                String((card as any)?._productData?.imageUrl || '').trim(),
-                String((card as any)?._productData?.image || '').trim(),
-                String((imageObj as any)?.__originalSrc || '').trim(),
-                String((imageObj as any)?.src || '').trim(),
-                String((imageObj as any)?._element?.src || '').trim(),
-                String((imageObj as any)?._originalElement?.src || '').trim(),
-                String((imageObj as any)?._fallbackSrc || '').trim()
-            ].filter(Boolean);
-            const normalizedCandidates = Array.from(new Set(rawCandidates))
-                .map((src) => normalizeRecoveryImageUrl(src))
-                .filter((src) => !!src && !isLikelyPlaceholderImageSrc(src));
-
-            candidates.push({
-                card,
-                imageObj,
-                hasImageObject,
-                triedMap,
-                normalizedCandidates,
-                needsRemoteLookup: !(card as any).__missingImageRemoteLookupDone,
-                priority: measureMissingProductImageRecoveryPriority(card, viewportRect, activeCard)
-            });
-        }
-
-        if (!candidates.length) {
-            return { recoveredCount: 0, pendingCount: 0 };
-        }
-
-        candidates.sort(compareMissingProductImageRecoveryCandidates);
-        const batchLimit = getMissingProductImageRecoveryBatchLimit(candidates);
-        const candidatesToProcess = candidates.slice(0, batchLimit);
-
-        if (import.meta.dev && candidates.length > candidatesToProcess.length) {
-            console.log('[recover-missing-product-images] Processing prioritized batch:', {
-                totalCandidates: candidates.length,
-                batchLimit,
-                visibleFirst: candidatesToProcess.filter((candidate) => candidate.priority.selected || candidate.priority.inView).length
-            });
-        }
-
-        let recoveredCount = 0;
-        let pendingCount = candidates.length;
-        let remoteLookupsLeft = 30;
-        for (const candidate of candidatesToProcess) {
-            if (!isExpectedPageStillActive() || isCanvasDestroyed.value) break;
-            const { card, imageObj, hasImageObject, triedMap, normalizedCandidates, needsRemoteLookup } = candidate;
-
-            const tryApplyImageUrl = async (url: string): Promise<boolean> => {
-                if (!url) return false;
-                if (triedMap[url]) return false;
-                triedMap[url] = true;
-
-                if (hasImageObject) {
-                    if (!(imageObj as any)._customId) {
-                        (imageObj as any)._customId = makeCanvasObjectId();
-                    }
-                    return await replaceImageByCustomId(String((imageObj as any)._customId), url, {
-                        save: false,
-                        setActive: false
-                    });
-                }
-                return await addImageToProductCardByUrl(card, url, {
-                    save: false,
-                    setActive: false
-                });
-            };
-
-            let restored = false;
-            for (const candidate of normalizedCandidates) {
-                restored = await tryApplyImageUrl(candidate);
-                if (restored) break;
-            }
-
-            if (!restored && remoteLookupsLeft > 0 && needsRemoteLookup) {
-                remoteLookupsLeft -= 1;
-                const fetchedResult = await fetchRecoveryImageUrlForCard(card, { matchMode: 'precise' });
-                if (fetchedResult.url) {
-                    const normalizedFetched = normalizeRecoveryImageUrl(fetchedResult.url);
-                    restored = await tryApplyImageUrl(normalizedFetched);
-                }
-                const payload = buildCardRecoverySearchPayload(card);
-                const assetsResult = !restored
-                    ? await fetchRecoveryImageUrlFromAssets(String(payload?.term || ''))
-                    : { status: 'empty', url: null as string | null };
-                if (!restored) {
-                    if (assetsResult.url) {
-                        const normalizedAssetsUrl = normalizeRecoveryImageUrl(assetsResult.url);
-                        restored = await tryApplyImageUrl(normalizedAssetsUrl);
-                    }
-                }
-
-                // Só "congela" lookup remoto quando foi uma resposta determinística.
-                // Em erro de auth/rede, mantém aberto para novo retry após sessão estabilizar.
-                const retryableError =
-                    fetchedResult.status === 'auth' ||
-                    fetchedResult.status === 'error' ||
-                    assetsResult.status === 'error';
-                if (!retryableError) {
-                    (card as any).__missingImageRemoteLookupDone = true;
-                } else {
-                    delete (card as any).__missingImageRemoteLookupDone;
-                }
-            }
-
-            if (restored) {
-                recoveredCount += 1;
-                pendingCount = Math.max(0, pendingCount - 1);
-            }
-        }
-
-        if (recoveredCount > 0 && canvas.value && isExpectedPageStillActive()) {
-            refreshCanvasObjects();
-            safeRequestRenderAll();
-            saveCurrentState({
-                reason: 'recover-missing-product-images',
-                source: 'system',
-                skipIfUnchanged: true
-            });
-        }
-        return { recoveredCount, pendingCount };
-    } finally {
-        isRecoveringMissingProductImages = false;
-    }
+const recoverMissingProductCardImages = async (opts: { expectedPageId?: string | null } = {}) => {
+    const { recoverMissingProductCardImages } = await import('~/utils/editorMissingProductImageRecoveryController');
+    return recoverMissingProductCardImages(getMissingProductImageRecoveryContext(), opts);
 };
 
 const scheduleMissingProductImageRecovery = (delayMs = 140, retries = 6, expectedPageId = getActiveProjectPageId()) => {
@@ -21117,196 +19527,77 @@ const scheduleMissingProductImageRecovery = (delayMs = 140, retries = 6, expecte
     }, Math.max(0, Number(delayMs) || 0));
 };
 
+const getProductImageActionsContext = () => ({
+    canvas,
+    fabric,
+    fileInput,
+    aiStudio,
+    productImagePickerMode,
+    productImagePickerSearch,
+    productImagePickerTargetImageId,
+    productImagePickerTargetCardId,
+    pendingImageReplaceTargetId,
+    pendingImageAddCardId,
+    pendingLocalImageActionMode,
+    showProductImageUploadPicker,
+    refreshAiStudioUploads,
+    replaceImageByCustomId,
+    insertAssetToCanvas,
+    findProductCardByCustomId,
+    addImageToProductCardByUrl,
+    uploadFile,
+    getCenterOfView,
+    makeCanvasObjectId,
+    makeId,
+    toWasabiProxyUrl,
+    isLikelyProductCard,
+    groupLocalToCanvasPoint,
+    safeAddWithUpdate,
+    safeRequestRenderAll,
+    refreshCanvasObjects,
+    saveCurrentState,
+    notifyEditorError
+});
+
+const loadProductImageActionsController = () => import('~/utils/editorProductImageActionsController');
+
 const handleAiStudioCreated = async (asset: { id: string; name: string; url: string }) => {
-    if (!asset?.url) return;
-    await refreshAiStudioUploads();
-
-    const opts = aiStudio.options.value || {};
-    if (opts.applyMode === 'replace' && opts.replaceTargetId) {
-        await replaceImageByCustomId(String(opts.replaceTargetId), asset.url);
-    } else {
-        await insertAssetToCanvas(asset);
-    }
-
-    aiStudio.handleCreated(asset);
-    aiStudio.open.value = false;
+    const controller = await loadProductImageActionsController();
+    await controller.handleAiStudioCreated(getProductImageActionsContext(), asset);
 };
 
 const clearPendingProductImageOperation = () => {
-    pendingLocalImageActionMode.value = null;
-    pendingImageReplaceTargetId.value = null;
-    pendingImageAddCardId.value = null;
-    productImagePickerTargetImageId.value = null;
-    productImagePickerTargetCardId.value = null;
+    pendingLocalImageActionMode.value = null
+    pendingImageReplaceTargetId.value = null
+    pendingImageAddCardId.value = null
+    productImagePickerTargetImageId.value = null
+    productImagePickerTargetCardId.value = null
 };
 
-const openLocalProductImagePicker = (mode: 'replace' | 'add', opts: { imageId?: string | null; cardId?: string | null } = {}) => {
-    pendingLocalImageActionMode.value = mode;
-    pendingImageReplaceTargetId.value = mode === 'replace' ? (opts.imageId || null) : null;
-    pendingImageAddCardId.value = mode === 'add' ? (opts.cardId || null) : null;
-    if (fileInput.value) {
-        fileInput.value.value = '';
-        fileInput.value.click();
-    }
+const openLocalProductImagePicker = async (mode: 'replace' | 'add', opts: { imageId?: string | null; cardId?: string | null } = {}) => {
+    const controller = await loadProductImageActionsController();
+    controller.openLocalProductImagePicker(getProductImageActionsContext(), mode, opts);
 };
 
 const openProductImageUploadPickerModal = async (
     mode: 'replace' | 'add',
     opts: { imageId?: string | null; cardId?: string | null } = {}
 ) => {
-    productImagePickerMode.value = mode;
-    productImagePickerTargetImageId.value = mode === 'replace' ? (opts.imageId || null) : null;
-    productImagePickerTargetCardId.value = mode === 'add' ? (opts.cardId || null) : null;
-    productImagePickerSearch.value = '';
-    showProductImageUploadPicker.value = true;
-    await refreshAiStudioUploads();
+    const controller = await loadProductImageActionsController();
+    await controller.openProductImageUploadPickerModal(getProductImageActionsContext(), mode, opts);
 };
 
 const applyProductImageFromUploadPicker = async (asset: { id?: string; name?: string; url: string }) => {
-    if (!asset?.url) return;
-
-    try {
-        if (productImagePickerMode.value === 'replace' && productImagePickerTargetImageId.value) {
-            await replaceImageByCustomId(productImagePickerTargetImageId.value, asset.url);
-        } else if (productImagePickerMode.value === 'add' && productImagePickerTargetCardId.value) {
-            const targetCard = findProductCardByCustomId(productImagePickerTargetCardId.value);
-            if (!targetCard) {
-                notifyEditorError('Card de produto não encontrado.');
-                return;
-            }
-            await addImageToProductCardByUrl(targetCard, asset.url);
-        }
-    } finally {
-        showProductImageUploadPicker.value = false;
-        clearPendingProductImageOperation();
-    }
+    const controller = await loadProductImageActionsController();
+    await controller.applyProductImageFromUploadPicker(getProductImageActionsContext(), asset);
 };
 
 const handlePaste = async (e: ClipboardEvent) => {
     if (!e.clipboardData || !canvas.value) return;
-    const items = e.clipboardData.items;
-
-    for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (!item) continue;
-        
-        if (item.type.indexOf('image') !== -1) {
-            e.preventDefault(); 
-            const file = item.getAsFile();
-            if (file) {
-                 try {
-                     const result = await uploadFile(file);
-                     if (result.success) {
-                         const pasteProxyUrl = toWasabiProxyUrl(result.url) || result.url;
-                         const img = await fabric.Image.fromURL(pasteProxyUrl, { crossOrigin: 'anonymous' });
-                         if (img) {
-                             // Scale down if huge
-                             if (img.width > 500) {
-                                 img.scaleToWidth(500);
-                             }
-                             
-                             (img as any)._customId = makeId();
-                             
-                             // Check if there's a product card group selected to paste INTO
-                             const activeObj = canvas.value.getActiveObject();
-                             let targetProductCard = null;
-                             
-                             // Check if active object is a product card
-                             if (activeObj && activeObj.type === 'group' && 
-                                 (activeObj.isSmartObject || activeObj.isProductCard || isLikelyProductCard(activeObj))) {
-                                 targetProductCard = activeObj;
-                             }
-                             // Check if active object is an image inside a product card
-                             else if (activeObj && String(activeObj.type || '').toLowerCase() === 'image') {
-                                 const allObjects = canvas.value.getObjects();
-                                 for (const obj of allObjects) {
-                                     if (obj.type === 'group' && (obj.isSmartObject || obj.isProductCard || isLikelyProductCard(obj))) {
-                                         if (typeof obj.getObjects === 'function') {
-                                             const children = obj.getObjects();
-                                             const containsImage = children.some((child: any) => 
-                                                 child === activeObj || child._customId === activeObj._customId
-                                             );
-                                             if (containsImage) {
-                                                 targetProductCard = obj;
-                                                 break;
-                                             }
-                                         }
-                                     }
-                                 }
-                             }
-                             // Check via .group property
-                             else if (activeObj && (activeObj as any).group) {
-                                 const parentGroup = (activeObj as any).group;
-                                 if (parentGroup.isSmartObject || parentGroup.isProductCard || isLikelyProductCard(parentGroup)) {
-                                     targetProductCard = parentGroup;
-                                 }
-                             }
-                             
-                             if (targetProductCard) {
-                                 // Paste inside the product card
-                                 console.log('📦 [handlePaste] Pasting image into product card:', targetProductCard._customId || targetProductCard.name);
-                                 
-                                 // Find existing product image to position relative to it
-                                 const groupChildren = typeof targetProductCard.getObjects === 'function' 
-                                     ? targetProductCard.getObjects() 
-                                     : [];
-                                 
-                                 const existingProductImage = groupChildren.find((child: any) => 
-                                     String(child.type || '').toLowerCase() === 'image' &&
-                                     (child.name === 'smart_image' || child.name === 'product_image' || child.name === 'productImage')
-                                 ) || groupChildren.find((child: any) => String(child.type || '').toLowerCase() === 'image');
-                                 
-                                 // Position at same place as existing image (with small offset)
-                                 let targetLeft = existingProductImage ? (Number(existingProductImage.left) || 0) + 10 : 0;
-                                 let targetTop = existingProductImage ? (Number(existingProductImage.top) || 0) + 10 : 0;
-                                 
-                                 const targetCanvas = groupLocalToCanvasPoint(targetProductCard, targetLeft, targetTop);
-                                 img.set({
-                                     left: targetCanvas.x,
-                                     top: targetCanvas.y,
-                                     originX: 'center',
-                                     originY: 'center',
-                                     selectable: true,
-                                     evented: true,
-                                     hasControls: true,
-                                     hasBorders: true,
-                                 });
-
-                                 // CRITICAL: Add via safeAddWithUpdate so the image enters the group coordinate system.
-                                 safeAddWithUpdate(targetProductCard, img);
-                                 
-                                 // Ensure deep-select mode is active
-                                 targetProductCard.set({ subTargetCheck: true, interactive: true });
-                                 targetProductCard.setCoords?.();
-                                 targetProductCard.dirty = true;
-                                 
-                                 canvas.value.setActiveObject(img);
-                                 safeRequestRenderAll();
-                                 refreshCanvasObjects();
-                                 saveCurrentState();
-                             } else {
-                                 // Regular paste to canvas center
-                                 const center = getCenterOfView();
-                                 img.set({
-                                     left: center.x,
-                                     top: center.y,
-                                     originX: 'center',
-                                     originY: 'center'
-                                 });
-                                 
-                                 canvas.value.add(img);
-                                 canvas.value.setActiveObject(img);
-                                 safeRequestRenderAll();
-                                 saveCurrentState();
-                             }
-                         }
-                     }
-                 } catch (err) {
-                     console.error("Paste upload failed", err);
-                 }
-            }
-        }
-    }
+    const hasImage = Array.from(e.clipboardData.items || []).some((item) => item?.type?.includes('image'));
+    if (!hasImage) return;
+    const controller = await loadProductImageActionsController();
+    await controller.handleClipboardImagePaste(getProductImageActionsContext(), e);
 }
 
 onMounted(() => {
@@ -21916,266 +20207,56 @@ const createSmartObject = async (
     return group;
 }
 
-// Handler para abrir o modal de importação de lista, salvando a referência da zona
-const handleImportProductList = () => {
-    if (!canvas.value) return;
-
-    const active = canvas.value.getActiveObject();
-    if (active && isLikelyProductZone(active)) {
-        openProductReviewForZone(active, {
-            mode: 'replace'
-        });
-        return;
-    }
-
-    // Se o ativo é um card/elemento dentro de uma zona (ex.: usuario clicou
-    // num card da zona duplicada e mandou "Importar lista"), resolvemos a
-    // zona dona desse card via parentZoneId e abrimos o review nela. Sem
-    // esse passo, targetGridZone ficava stale e a importação caía na zona
-    // do último import bem-sucedido (geralmente o frame original).
-    const zoneFromActive = active ? resolveZoneForProductImport(active) : null;
-    if (zoneFromActive && isLikelyProductZone(zoneFromActive)) {
-        openProductReviewForZone(zoneFromActive, {
-            mode: 'replace'
-        });
-        return;
-    }
-
-    // Sem zona resolvível: limpa o targetGridZone para que o resolver decida
-    // a partir do canvas atual (evita herdar referência stale do import anterior).
-    targetGridZone.value = null;
-    targetGridZones.value = [];
-    productReviewInitialImportMode.value = 'replace';
-    showProductReviewModal.value = true;
-}
-
 // normalizeImageSearchText, normalizeImageSearchKey, dedupeImageSearchTokens
 // e uniqueImageSearchHints extraidos para utils/productTextNormalize.ts.
 
 // Paste List Handlers — shared helpers extraidos para utils/pasteListErrorHelpers.ts.
 
-const openReviewModalWithProducts = (productsWithImages: any[]) => {
-    reviewProducts.value = productsWithImages;
+const getProductImportContext = () => ({
+    canvas,
+    showPasteListModal,
+    pasteListText,
+    activePasteTab,
+    pastedImage,
+    isParsingProducts,
+    isProcessing,
+    reviewProducts,
+    targetGridZone,
+    targetGridZones,
+    activeProductZoneId,
+    productImportExistingCount,
+    productReviewInitialImportMode,
+    showProductReviewModal,
+    getApiAuthHeaders,
+    notifyEditorInfo,
+    notifyEditorError,
+    isLikelyProductZone,
+    resolveZoneForProductImport,
+    resolveImportTargetZone,
+    resolveRelatedImportZones,
+    setActiveProductZone,
+    getImportTargetZones,
+    getImportZonesExistingCount,
+    openProductReviewForZone
+})
 
-    // Antes de abrir o modal precisamos resolver qual zona vai receber os
-    // produtos. O fluxo de paste-list/arquivo NÃO passa pelo
-    // openProductReviewForZone, então sem este passo `targetGridZone` ficava
-    // herdado do import anterior — depois de duplicar um frame, isso fazia os
-    // produtos caírem na zona do frame original em vez da zona selecionada.
-    if (canvas.value) {
-        const active = canvas.value.getActiveObject?.() ?? null;
-        let resolvedZone: any = active && isLikelyProductZone(active) ? active : null;
-        if (!resolvedZone && active) {
-            resolvedZone = resolveZoneForProductImport(active);
-        }
-        if (!resolvedZone) {
-            resolvedZone = resolveImportTargetZone();
-        }
+const loadProductImportController = () => import('~/utils/editorProductImportController')
 
-        if (resolvedZone && isLikelyProductZone(resolvedZone)) {
-            targetGridZone.value = resolvedZone;
-            targetGridZones.value = resolveRelatedImportZones(resolvedZone);
-            setActiveProductZone(resolvedZone);
-        } else {
-            targetGridZone.value = null;
-            targetGridZones.value = [];
-            activeProductZoneId.value = null;
-        }
-    }
-
-    try {
-        const zones = getImportTargetZones();
-        productImportExistingCount.value = zones.length > 0 ? getImportZonesExistingCount(zones) : 0;
-    } catch {
-        productImportExistingCount.value = 0;
-    }
-    showProductReviewModal.value = true;
-};
-
-// _isTransientParseError extraido para utils/pasteListErrorHelpers.ts
-// (renomeado para isTransientParseError, sem prefixo de "private").
-const _isTransientParseError = isTransientParseError;
-
-const _fetchParseWithRetry = async <T = any>(body: any, maxAttempts = 2): Promise<T> => {
-    const headers = await getApiAuthHeaders();
-    let lastErr: any = null;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        try {
-            return await $fetch<T>('/api/parse-products', {
-                method: 'POST',
-                headers,
-                body,
-                timeout: 70_000
-            });
-        } catch (err: any) {
-            lastErr = err;
-            if (!_isTransientParseError(err) || attempt === maxAttempts - 1) throw err;
-            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-        }
-    }
-    throw lastErr || new Error('Falha ao processar produtos');
-};
-
-const _mapParsedProduct = (p: any, i: number) => ({
-    id: `prod_${Date.now()}_${i}`,
-    name: p.name || 'Produto sem nome',
-    brand: p.brand || '',
-    productCode: p.productCode || null,
-    weight: p.weight || '',
-    price: p.price || '',
-    pricePack: p.pricePack ?? '',
-    priceUnit: p.priceUnit ?? '',
-    priceSpecial: p.priceSpecial ?? '',
-    priceSpecialUnit: p.priceSpecialUnit ?? '',
-    specialCondition: p.specialCondition ?? '',
-    priceWholesale: p.priceWholesale ?? '',
-    wholesaleTrigger: p.wholesaleTrigger ?? null,
-    wholesaleTriggerUnit: p.wholesaleTriggerUnit ?? '',
-    packQuantity: p.packQuantity ?? null,
-    packUnit: p.packUnit ?? '',
-    packageLabel: p.packageLabel ?? '',
-    price_mode: p.price_mode || 'retail',
-    limit: p.limit || '',
-    flavor: p.flavor || '',
-    imageUrl: null,
-    image: null,
-    status: 'pending',
-    unit: 'UN',
-    color: '#ffffff'
-});
-
-// CHUNK_CHAR_LIMIT + splitTextIntoChunks extraidos para utils/textChunking.ts.
-
-const parseTextWithAI = async (text: string): Promise<any[]> => {
-    const chunks = splitTextIntoChunks(text);
-    if (chunks.length <= 1) {
-        const result = await _fetchParseWithRetry<{ products?: any[] }>({ text });
-        if (!result?.products || !Array.isArray(result.products)) return [];
-        return result.products.map(_mapParsedProduct);
-    }
-    // Process chunks sequentially to avoid rate limiting
-    const allProducts: any[] = [];
-    for (const chunk of chunks) {
-        try {
-            const result = await _fetchParseWithRetry<{ products?: any[] }>({ text: chunk });
-            if (result?.products && Array.isArray(result.products)) {
-                allProducts.push(...result.products);
-            }
-        } catch (err: any) {
-            console.warn('[parseTextWithAI] Chunk parse failed, continuing with remaining chunks:', err?.message);
-        }
-    }
-    return allProducts.map(_mapParsedProduct);
-};
-
-const parseFileWithAI = async (file: File): Promise<any[]> => {
-    const form = new FormData();
-    form.append('file', file);
-    const result = await _fetchParseWithRetry<{ products?: any[] }>(form);
-    if (!result?.products || !Array.isArray(result.products)) return [];
-    return result.products.map(_mapParsedProduct);
-};
+// Handler para abrir o modal de importação de lista, salvando a referência da zona
+const handleImportProductList = async () => {
+    const controller = await loadProductImportController()
+    controller.handleImportProductList(getProductImportContext())
+}
 
 const handlePasteList = async () => {
-    showPasteListModal.value = false;
-
-    if (!pasteListText.value && activePasteTab.value === 'text') {
-        return;
-    }
-
-    // Reset stuck state from previous attempts
-    if (isParsingProducts.value) {
-        console.warn('[handlePasteList] isParsingProducts was stuck true, resetting');
-        isParsingProducts.value = false;
-        isProcessing.value = false;
-    }
-
-    isParsingProducts.value = true;
-    isProcessing.value = true;
-
-    let data: any[] = [];
-    try {
-        if (activePasteTab.value === 'text' && pasteListText.value) {
-            // Use AI parser for richer product extraction (brand, weight, flavor, etc.)
-            data = await parseTextWithAI(pasteListText.value);
-            // Fallback to basic parser if AI returns nothing
-            if (data.length === 0) {
-                data = parseProductList(pasteListText.value);
-            }
-        }
-    } catch (err: any) {
-        const msg = String(err?.data?.statusMessage || err?.statusMessage || err?.message || '').toLowerCase();
-        const isTimeout = msg.includes('timeout') || msg.includes('504') || msg.includes('gateway') || String(err?.status || err?.statusCode || '') === '504';
-        if (isTimeout) {
-            console.warn('[handlePasteList] AI parse timeout (504), falling back to basic parser');
-            notifyEditorInfo('A IA demorou demais. Usando parser básico. Tente uma lista menor se necessário.');
-        } else {
-            console.warn('[handlePasteList] AI parse failed, falling back to basic parser:', err?.message);
-        }
-        data = parseProductList(pasteListText.value);
-    } finally {
-        isParsingProducts.value = false;
-    }
-
-    isProcessing.value = false;
-
-    if (data.length === 0) {
-        pasteListText.value = '';
-        pastedImage.value = null;
-        return;
-    }
-
-    // Open review modal directly — image processing happens inside ProductReviewModal
-    openReviewModalWithProducts(data);
-
-    // Reset paste input
-    pasteListText.value = '';
-    pastedImage.value = null;
-};
+    const controller = await loadProductImportController()
+    await controller.handlePasteList(getProductImportContext())
+}
 
 const handlePasteFile = async (file: File) => {
-    showPasteListModal.value = false;
-
-    // Reset stuck state from previous attempts
-    if (isParsingProducts.value) {
-        console.warn('[handlePasteFile] isParsingProducts was stuck true, resetting');
-        isParsingProducts.value = false;
-        isProcessing.value = false;
-    }
-
-    isParsingProducts.value = true;
-    isProcessing.value = true;
-
-    let data: any[] = [];
-    try {
-        data = await parseFileWithAI(file);
-    } catch (err: any) {
-        const msg = String(err?.data?.statusMessage || err?.statusMessage || err?.message || '').toLowerCase();
-        const isTimeout = msg.includes('timeout') || msg.includes('504') || msg.includes('gateway') || String(err?.status || err?.statusCode || '') === '504';
-        if (isTimeout) {
-            notifyEditorInfo('A IA demorou demais ao processar o arquivo. Tente um arquivo menor.');
-        } else {
-            console.error('[handlePasteFile] File parse failed:', err);
-            notifyEditorError('Erro ao processar o arquivo. Tente novamente.');
-        }
-        isParsingProducts.value = false;
-        isProcessing.value = false;
-        return;
-    } finally {
-        isParsingProducts.value = false;
-    }
-
-    isProcessing.value = false;
-
-    if (data.length === 0) {
-        notifyEditorInfo('Nenhum produto encontrado no arquivo. Verifique o formato.');
-        return;
-    }
-
-    openReviewModalWithProducts(data);
-    pasteListText.value = '';
-    pastedImage.value = null;
-};
+    const controller = await loadProductImportController()
+    await controller.handlePasteFile(getProductImportContext(), file)
+}
 
 const resolveOrCreateZoneForFrame = (frame: any): any | null => {
     if (!canvas.value || !fabric || !frame) return null
@@ -22577,67 +20658,8 @@ const handleProductReviewModalVisibility = (value: boolean) => {
 }
 
 const handleFileUpload = async (e: any) => {
-    const input = e?.target as HTMLInputElement | null;
-    const files = Array.from(input?.files || []).filter(Boolean) as File[];
-    if (input) input.value = '';
-    if (!files.length) {
-        clearPendingProductImageOperation();
-        return;
-    }
-
-    try {
-        const mode = pendingLocalImageActionMode.value;
-
-        // Replace mode: only first file is meaningful.
-        if (mode === 'replace' && pendingImageReplaceTargetId.value) {
-            const file = files[0];
-            if (!file) {
-                clearPendingProductImageOperation();
-                return;
-            }
-            const uploaded = await uploadFile(file);
-            if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou');
-            await replaceImageByCustomId(pendingImageReplaceTargetId.value, uploaded.url);
-            return;
-        }
-
-        // Add to card: allow multiple files (they'll stack; user can reposition).
-        if (mode === 'add' && pendingImageAddCardId.value) {
-            const card = findProductCardByCustomId(pendingImageAddCardId.value);
-            if (!card) throw new Error('Card de produto não encontrado.');
-
-            for (const file of files) {
-                const uploaded = await uploadFile(file);
-                if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou');
-                const added = await addImageToProductCardByUrl(card, uploaded.url);
-                if (!added) throw new Error('Não foi possível adicionar imagem ao card.');
-            }
-            return;
-        }
-
-        // Default: insert all files into the canvas (spread to avoid overlap).
-        const base = getCenterOfView();
-        const cols = Math.max(1, Math.ceil(Math.sqrt(files.length)));
-        const gap = 34;
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i]!;
-            const uploaded = await uploadFile(file);
-            if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou');
-            const row = Math.floor(i / cols);
-            const col = i % cols;
-            const pos = { x: base.x + (col * gap), y: base.y + (row * gap) };
-            await insertAssetToCanvas({
-                id: makeCanvasObjectId(),
-                name: file.name || 'Imagem',
-                url: uploaded.url
-            }, { pos });
-        }
-    } catch (err: any) {
-        console.error('❌ [upload] Erro ao processar imagem:', err);
-        notifyEditorError('Erro ao enviar imagem: ' + (err?.message || 'Erro desconhecido'));
-    } finally {
-        clearPendingProductImageOperation();
-    }
+    const controller = await loadProductImageActionsController();
+    await controller.handleFileUpload(getProductImageActionsContext(), e);
 }
 
 const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
@@ -24346,7 +22368,7 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
             }
         }
         if (restoredViewportObjects > 0) {
-            lastViewportCullSignature = '';
+            resetViewportCullSignature();
         }
 
         // Mark zone dirty and update coords (lightweight alternative to full addWithUpdate/triggerLayout)
@@ -26202,8 +24224,8 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
         // Manual templates (Mini Editor) must preserve the authored size hierarchy:
         // we don't shrink the integer alone here; if needed we uniformly scale the whole chain below.
         gapPx: intDecGap,
-        minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
-	        maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
+        minGapPx: intDecGap,
+	        maxGapPx: intDecGap
 	    });
 	    applyUnitHorizontalAnchor();
 
@@ -26713,8 +24735,8 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
             // Manual templates (Mini Editor): keep authored hierarchy and avoid "integer-only shrink".
             // If values overflow, we uniformly scale the whole chain afterwards.
             gapPx: variant.intDecimalGap,
-            minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
-            maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
+            minGapPx: variant.intDecimalGap,
+            maxGapPx: variant.intDecimalGap
         });
 
         const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[];
@@ -27518,7 +25540,7 @@ function tuneRedBurstPriceGroupLayout(priceGroup: any) {
     }
 
     if (preserveManualPriceGeometry) {
-        readSingleManualPriceAnchors(priceGroup, { force: true });
+        readSingleManualPriceAnchors(priceGroup) || readSingleManualPriceAnchors(priceGroup, { force: true });
         fitManualSinglePriceValuesIntoTemplate(priceGroup);
         const allParts = priceGroup.getObjects?.() || [];
         allParts.forEach((obj: any) => obj?.setCoords?.());
@@ -27609,209 +25631,13 @@ function tuneRedBurstPriceGroupLayout(priceGroup: any) {
  * scales the entire template proportionally without reflowing text blocks.
  */
 const layoutManualTemplateGroup = (priceGroup: any, cardW: number, cardH: number) => {
-    if (!priceGroup) return null;
-
-    const all = collectObjectsDeep(priceGroup);
-    if (isRedBurstPriceGroup(priceGroup)) {
-        tuneRedBurstPriceGroupLayout(priceGroup);
-    }
-    // Keep the exact Mini Editor geometry. We only apply a UNIFORM scale to fit card bounds.
-    // Never recalculate child text/object positions here.
-    let baseW = Number((priceGroup as any).__manualTemplateBaseW);
-    let baseH = Number((priceGroup as any).__manualTemplateBaseH);
-    const sx = Math.abs(toFinite(priceGroup.scaleX, 1)) || 1;
-    const sy = Math.abs(toFinite(priceGroup.scaleY, 1)) || 1;
-    const rawW = toFinite(priceGroup.width, 0);
-    const rawH = toFinite(priceGroup.height, 0);
-    const scaledW = toFinite(priceGroup.getScaledWidth?.(), rawW * sx);
-    const scaledH = toFinite(priceGroup.getScaledHeight?.(), rawH * sy);
-    const inferredBaseW = rawW > 0 ? rawW : (scaledW > 0 ? scaledW / sx : 1);
-    const inferredBaseH = rawH > 0 ? rawH : (scaledH > 0 ? scaledH / sy : 1);
-    const shouldRefreshBase =
-        !Number.isFinite(baseW) || baseW <= 0 ||
-        !Number.isFinite(baseH) || baseH <= 0 ||
-        inferredBaseW > (baseW * 1.001) ||
-        inferredBaseH > (baseH * 1.001);
-    if (shouldRefreshBase) {
-        baseW = inferredBaseW;
-        baseH = inferredBaseH;
-        baseW = Math.max(1, baseW);
-        baseH = Math.max(1, baseH);
-        (priceGroup as any).__manualTemplateBaseW = baseW;
-        (priceGroup as any).__manualTemplateBaseH = baseH;
-    }
-
-    const getSize = (obj: any, axis: 'x' | 'y') => {
-        if (!obj) return 0;
-        const fallback = axis === 'x'
-            ? (Number(obj.width || 0) * Math.abs(Number(obj.scaleX ?? 1) || 1))
-            : (Number(obj.height || 0) * Math.abs(Number(obj.scaleY ?? 1) || 1));
-        const measured = axis === 'x'
-            ? Number(obj.getScaledWidth?.() || 0)
-            : Number(obj.getScaledHeight?.() || 0);
-        const size = Number.isFinite(measured) && measured > 0 ? measured : fallback;
-        return Number.isFinite(size) && size > 0 ? size : 0;
-    };
-    const edgeX = (obj: any) => {
-        if (!obj) return null;
-        const w = getSize(obj, 'x');
-        if (!w) return null;
-        const x = Number(obj.left || 0);
-        const ox = String(obj.originX || 'left');
-        if (ox === 'center') return { min: x - (w / 2), max: x + (w / 2) };
-        if (ox === 'right') return { min: x - w, max: x };
-        return { min: x, max: x + w };
-    };
-    const edgeY = (obj: any) => {
-        if (!obj) return null;
-        const h = getSize(obj, 'y');
-        if (!h) return null;
-        const y = Number(obj.top || 0);
-        const oy = String(obj.originY || 'top');
-        if (oy === 'center') return { min: y - (h / 2), max: y + (h / 2) };
-        if (oy === 'bottom') return { min: y - h, max: y };
-        return { min: y, max: y + h };
-    };
-    const isShown = (obj: any) => !!(obj && obj.visible !== false && Number(obj.scaleX ?? 1) !== 0 && Number(obj.scaleY ?? 1) !== 0);
-    const visibleBounds = (objects: any[]) => {
-        const xs: Array<{ min: number; max: number }> = [];
-        const ys: Array<{ min: number; max: number }> = [];
-        (objects || []).forEach((obj: any) => {
-            if (!isShown(obj)) return;
-            if (isTextLikeObject(obj) && typeof obj.initDimensions === 'function') obj.initDimensions();
-            const ex = edgeX(obj);
-            const ey = edgeY(obj);
-            if (ex) xs.push(ex);
-            if (ey) ys.push(ey);
-        });
-        if (!xs.length || !ys.length) return null;
-        const minX = Math.min(...xs.map((e) => e.min));
-        const maxX = Math.max(...xs.map((e) => e.max));
-        const minY = Math.min(...ys.map((e) => e.min));
-        const maxY = Math.max(...ys.map((e) => e.max));
-        return {
-            minX,
-            maxX,
-            minY,
-            maxY,
-            width: Math.max(1, maxX - minX),
-            height: Math.max(1, maxY - minY),
-            centerX: (minX + maxX) / 2,
-            centerY: (minY + maxY) / 2
-        };
-    };
-
-    // Reserve enough space for Atacarejo manual templates so the visual hierarchy is preserved,
-    // but collapse unused vertical tiers when only one price is present.
-    const hasAtacarejoStructure = !!findByName(all, 'atac_retail_bg');
-    const directChildren = typeof priceGroup.getObjects === 'function' ? (priceGroup.getObjects() || []) : [];
-    const findNamedTarget = (name: string) => {
-        const direct = directChildren.find((obj: any) => String(obj?.name || '') === name);
-        return direct || findByName(all, name);
-    };
-    const atacAnchors = [
-        findNamedTarget('atac_retail_bg'),
-        findNamedTarget('atac_banner_bg'),
-        findNamedTarget('atac_wholesale_bg')
-    ].filter((obj: any) => isShown(obj));
-    const singleAnchors = [
-        findNamedTarget('price_bg'),
-        findNamedTarget('price_bg_image'),
-        findNamedTarget('splash_image')
-    ].filter((obj: any) => isShown(obj));
-    const fitTargets = atacAnchors.length > 0
-        ? atacAnchors
-        : (singleAnchors.length > 0 ? singleAnchors : directChildren);
-    const directChildrenVisibleBounds = visibleBounds(directChildren);
-    const hasSaneBounds = (bounds: any, referenceBounds?: any) => {
-        if (!bounds) return false;
-        if (!Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) return false;
-        if (bounds.width <= 0 || bounds.height <= 0) return false;
-        if (bounds.width < 14 || bounds.height < 10) return false;
-        if (bounds.width > 10000 || bounds.height > 10000) return false;
-        if (referenceBounds && Number.isFinite(referenceBounds.width) && referenceBounds.width > 0) {
-            if (bounds.width < (referenceBounds.width * 0.45)) return false;
-        }
-        if (referenceBounds && Number.isFinite(referenceBounds.height) && referenceBounds.height > 0) {
-            if (bounds.height < (referenceBounds.height * 0.45)) return false;
-        }
-        return true;
-    };
-    const shouldUseVisibleBoundsFallback = (bounds: any, referenceBounds?: any) => {
-        if (!hasSaneBounds(bounds, referenceBounds)) return false;
-        if (!Number.isFinite(baseW) || !Number.isFinite(baseH) || baseW <= 0 || baseH <= 0) return true;
-        const ratioW = baseW / Math.max(1, bounds.width);
-        const ratioH = baseH / Math.max(1, bounds.height);
-        // Legacy/corrupted templates may persist oversized base dimensions, shrinking the card label.
-        return ratioW > 1.35 || ratioW < 0.62 || ratioH > 1.35 || ratioH < 0.62;
-    };
-
-    let effectiveW = baseW;
-    let effectiveH = baseH;
-    if (hasAtacarejoStructure) {
-        // Centralizar children se necessário.
-        let centerBounds = visibleBounds(directChildren);
-        if (centerBounds && (Math.abs(centerBounds.centerX) > 0.001 || Math.abs(centerBounds.centerY) > 0.001)) {
-            directChildren.forEach((obj: any) => {
-                if (!obj || typeof obj.set !== 'function') return;
-                obj.set({
-                    left: Number(obj.left || 0) - centerBounds!.centerX,
-                    top: Number(obj.top || 0) - centerBounds!.centerY
-                });
-                obj.setCoords?.();
-            });
-        }
-        // Usar bounds dos BACKGROUNDS (não texto) para calcular o fit.
-        // Isso evita que splashTextScale altere o fitScale indiretamente.
-        const fitAnchors = atacAnchors.length > 0 ? atacAnchors : directChildren;
-        let bounds = visibleBounds(fitAnchors);
-        if (!bounds || !hasSaneBounds(bounds, directChildrenVisibleBounds)) {
-            bounds = visibleBounds(directChildren);
-        }
-        if (bounds && hasSaneBounds(bounds, directChildrenVisibleBounds)) {
-            effectiveW = Math.max(1, bounds.width);
-            effectiveH = Math.max(1, bounds.height);
-        }
-    } else {
-        let bounds = visibleBounds(fitTargets);
-        if (!bounds && fitTargets !== directChildren) bounds = directChildrenVisibleBounds;
-        if (!hasSaneBounds(bounds, directChildrenVisibleBounds) && hasSaneBounds(directChildrenVisibleBounds, directChildrenVisibleBounds)) {
-            bounds = directChildrenVisibleBounds;
-        }
-        if (bounds && shouldUseVisibleBoundsFallback(bounds, directChildrenVisibleBounds)) {
-            effectiveW = Math.max(1, Number(bounds.width || baseW || 1));
-            effectiveH = Math.max(1, Number(bounds.height || baseH || 1));
-            // Self-heal the template metadata so future card renders stay consistent.
-            (priceGroup as any).__manualTemplateBaseW = effectiveW;
-            (priceGroup as any).__manualTemplateBaseH = effectiveH;
-        }
-    }
-
-    const wholesaleBg = findByName(all, 'atac_wholesale_bg');
-    const bannerBg = findByName(all, 'atac_banner_bg');
-    const bannerText = findByName(all, 'wholesale_banner_text');
-    const atacHeightRatio = hasAtacarejoStructure
-        ? (isShown(wholesaleBg) ? 0.62 : ((isShown(bannerBg) && isShown(bannerText)) ? 0.5 : 0.44))
-        : 0.44;
-    const maxW = Math.max(120, cardW * 0.98);
-    const maxH = Math.max(42, cardH * atacHeightRatio);
-    const fitScale = clamp(Math.min(maxW / Math.max(1, effectiveW), maxH / Math.max(1, effectiveH)), 0.2, 4);
-
-    priceGroup.set({
-        originX: 'center',
-        originY: 'center',
-        left: 0,
-        top: 0,
-        angle: 0,
-        width: Math.max(1, effectiveW),
-        height: Math.max(1, effectiveH),
-        scaleX: fitScale,
-        scaleY: fitScale
+    return layoutManualTemplateGroupHelper(priceGroup, cardW, cardH, {
+        collectObjectsDeep,
+        findByName,
+        isTextLikeObject,
+        isRedBurstPriceGroup,
+        tuneRedBurstPriceGroupLayout
     });
-
-    priceGroup.dirty = true;
-    priceGroup.setCoords?.();
-    return { pillW: Math.max(1, effectiveW) * fitScale, pillH: Math.max(1, effectiveH) * fitScale };
 };
 
 
@@ -27820,319 +25646,13 @@ const layoutManualTemplateGroup = (priceGroup: any, cardW: number, cardH: number
  * Preserves the original proportions and scales everything proportionally.
  */
 function layoutCustomPriceGroup(priceGroup: any, cardW: number, cardH: number) {
-    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
-
-    const all = priceGroup.getObjects();
-    const priceBg = all.find((o: any) => o.name === 'price_bg');
-    const priceBgImage = all.find((o: any) => o.name === 'price_bg_image' || o.name === 'splash_image');
-
-
-    // Get original template dimensions from priceBg metadata
-    const originalW = typeof (priceBg as any)?.__originalWidth === 'number'
-        ? (priceBg as any).__originalWidth
-        : (priceBg?.width || 200);
-    const originalH = typeof (priceBg as any)?.__originalHeight === 'number'
-        ? (priceBg as any).__originalHeight
-        : (priceBg?.height || 46);
-
-    // Calculate target size based on card dimensions
-    const maxPillW = cardW * 0.96;
-    const maxPillH = cardH * 0.28;
-    const minPillH = Math.max(36, cardH * 0.12);
-
-    // Calculate scale factors to fit within bounds
-    const scaleByWidth = maxPillW / originalW;
-    const scaleByHeight = maxPillH / originalH;
-    let scale = Math.min(scaleByWidth, scaleByHeight);
-
-    // Ensure minimum height
-    const scaledH = originalH * scale;
-    if (scaledH < minPillH) {
-        scale = minPillH / originalH;
-    }
-
-    // Clamp scale to reasonable limits
-    scale = clamp(scale, 0.3, 3);
-
-    // Apply scale to priceBg
-    const newW = originalW * scale;
-    const newH = originalH * scale;
-
-    // Get roundness from metadata or default to 1 (fully rounded)
-    const roundness = clamp(
-        typeof (priceBg as any)?.__roundness === 'number' ? (priceBg as any).__roundness : 1,
-        0,
-        1
-    );
-    const radius = (newH / 2) * roundness;
-
-    priceBg.set({
-        width: newW,
-        height: newH,
-        rx: radius,
-        ry: radius,
-        originX: 'center',
-        originY: 'center',
-        left: 0,
-        top: 0
+    return layoutCustomPriceGroupHelper(priceGroup, cardW, cardH, {
+        fabric,
+        getSinglePriceCurrencyTextCandidate,
+        ensureSinglePriceCurrencyCircleAnchor,
+        isTextLikeObject,
+        constrainSinglePriceTextInsideBackground
     });
-
-    // Escalar cantos individuais proporcionalmente (usa valor original como referência)
-    const cornerKeys = ['__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR'] as const;
-    cornerKeys.forEach(key => {
-        const origKey = `__original${key.slice(2)}` as string; // ex: __originalCornerTL
-        const origVal = typeof (priceBg as any)[origKey] === 'number' ? (priceBg as any)[origKey] : -1;
-        const curVal = typeof (priceBg as any)[key] === 'number' ? (priceBg as any)[key] : -1;
-        // Armazena valor original na primeira vez
-        if (curVal >= 0 && origVal < 0) {
-            (priceBg as any)[origKey] = curVal;
-        }
-        const base = origVal >= 0 ? origVal : curVal;
-        if (base >= 0) {
-            (priceBg as any)[key] = base * scale;
-        }
-    });
-
-    // Scale stroke proportionally
-    const originalStrokeW = typeof (priceBg as any)?.__strokeWidth === 'number'
-        ? (priceBg as any).__strokeWidth
-        : null;
-    if (originalStrokeW !== null) {
-        priceBg.set({ strokeWidth: originalStrokeW * scale });
-    }
-
-    // Scale shadow blur proportionally
-    if (fabric?.Shadow && priceBg.shadow) {
-        const originalBlur = typeof (priceBg as any)?.__shadowBlur === 'number'
-            ? (priceBg as any).__shadowBlur
-            : 15;
-        const shadow = priceBg.shadow;
-        shadow.blur = Math.max(2, originalBlur * scale);
-    }
-
-    // Handle background image
-    if (priceBgImage && priceBgImage.type === 'image') {
-        const img: any = priceBgImage;
-        img.set({
-            originX: 'center',
-            originY: 'center',
-            left: 0,
-            top: 0
-        });
-
-        const el: any = img._originalElement || img._element;
-        const iw = el?.naturalWidth || el?.width || img.width || 0;
-        const ih = el?.naturalHeight || el?.height || img.height || 0;
-
-        if (iw > 0 && ih > 0) {
-            img.set({ cropX: 0, cropY: 0, width: iw, height: ih });
-            const imgScale = Math.max(newW / iw, newH / ih);
-            if (Number.isFinite(imgScale) && imgScale > 0) {
-                const cropW = Math.min(iw, newW / imgScale);
-                const cropH = Math.min(ih, newH / imgScale);
-                const cropX = Math.max(0, (iw - cropW) / 2);
-                const cropY = Math.max(0, (ih - cropH) / 2);
-                img.set({ cropX, cropY, width: cropW, height: cropH, scaleX: imgScale, scaleY: imgScale });
-            }
-        }
-
-        // Clip to pill shape (com suporte a cantos individuais)
-        if (fabric?.Rect) {
-            const clip = new fabric.Rect({
-                width: newW,
-                height: newH,
-                rx: radius,
-                ry: radius,
-                originX: 'center',
-                originY: 'center',
-                left: 0,
-                top: 0
-            });
-            // Propagar cantos individuais para o clip
-            (['__cornerTL', '__cornerTR', '__cornerBL', '__cornerBR'] as const).forEach(k => {
-                if (typeof (priceBg as any)[k] === 'number' && (priceBg as any)[k] >= 0) {
-                    (clip as any)[k] = (priceBg as any)[k];
-                }
-            });
-            img.set({ clipPath: clip });
-        }
-
-        // Salvar fill original antes de tornar transparent
-        if (typeof priceBg.fill === 'string' && priceBg.fill !== 'transparent') {
-            if (typeof (priceBg as any).__originalFill === 'undefined') (priceBg as any).__originalFill = priceBg.fill;
-            priceBg.set('fill', 'transparent');
-        }
-        if (typeof img.sendToBack === 'function') img.sendToBack();
-    } else if (priceBg) {
-        // Sem imagem de fundo: restaurar fill se ficou transparent
-        const curFill = priceBg.fill;
-        if (!curFill || curFill === 'transparent' || curFill === '') {
-            const saved = (priceBg as any).__originalFill;
-            priceBg.set('fill', typeof saved === 'string' && saved !== 'transparent' ? saved : '#000000');
-        }
-    }
-
-    // Identify price-related text elements for dynamic positioning
-    const priceInteger = all.find((o: any) => o.name === 'price_integer_text' || o.name === 'priceInteger' || o.name === 'price_integer');
-    const priceDecimal = all.find((o: any) => o.name === 'price_decimal_text' || o.name === 'priceDecimal' || o.name === 'price_decimal');
-    const priceUnit = all.find((o: any) => o.name === 'price_unit_text' || o.name === 'priceUnit' || o.name === 'price_unit');
-    const currencyText = getSinglePriceCurrencyTextCandidate(all);
-    const currencyCircle = ensureSinglePriceCurrencyCircleAnchor(priceGroup, all);
-    const priceText = all.find((o: any) => o.name === 'price_value_text' || o.name === 'smart_price');
-
-    // Check if we have split price elements (integer + decimal)
-    const hasSplitPrice = !!(priceInteger && priceDecimal);
-    const hasPriceStructure = hasSplitPrice || priceText;
-
-    // Ler multiplicador de escala de texto propagado pelo card refresh.
-    const textScaleMult = typeof (priceGroup as any).__splashTextScale === 'number'
-        ? (priceGroup as any).__splashTextScale
-        : 1;
-
-    // First pass: scale all text elements
-    all.forEach((obj: any) => {
-        if (!isTextLikeObject(obj)) return;
-
-        // Get original font size from metadata or current value
-        const originalFontSize = typeof obj.__originalFontSize === 'number'
-            ? obj.__originalFontSize
-            : (obj.fontSize || 14);
-
-        // Get original fontFamily from metadata or current value
-        const originalFontFamily = typeof obj.__originalFontFamily === 'string'
-            ? obj.__originalFontFamily
-            : obj.fontFamily;
-
-        // Apply scaled font size and preserve fontFamily
-        // Position will be set later for price elements
-        obj.set({
-            fontFamily: originalFontFamily || 'Inter',
-            fontSize: originalFontSize * scale * textScaleMult,
-            scaleX: 1,
-            scaleY: 1,
-            strokeWidth: (obj.strokeWidth || 0) * scale
-        });
-
-        if (typeof obj.initDimensions === 'function') obj.initDimensions();
-    });
-
-    // Second pass: set non-price text positions proportionally
-    all.forEach((obj: any) => {
-        if (!isTextLikeObject(obj)) return;
-        // Skip price elements - they will be positioned dynamically
-        if (hasPriceStructure && (
-            obj === priceInteger || obj === priceDecimal || obj === priceUnit ||
-            obj === priceText || obj === currencyText
-        )) {
-            return;
-        }
-
-        const originalLeft = typeof obj.__originalLeft === 'number' ? obj.__originalLeft : obj.left;
-        const originalTop = typeof obj.__originalTop === 'number' ? obj.__originalTop : obj.top;
-        const originalOriginX = obj.__originalOriginX || obj.originX || 'center';
-        const originalOriginY = obj.__originalOriginY || obj.originY || 'center';
-
-        obj.set({
-            left: (typeof originalLeft === 'number' ? originalLeft * scale : originalLeft),
-            top: (typeof originalTop === 'number' ? originalTop * scale : originalTop),
-            originX: originalOriginX,
-            originY: originalOriginY
-        });
-    });
-
-    // Dynamic positioning for price elements (same logic as layoutPriceGroup)
-    if (hasPriceStructure) {
-        const getW = (t: any) => (t && typeof t.getScaledWidth === 'function' ? t.getScaledWidth() : 0);
-
-        // Calculate starting X position for price text
-        let textStartX = -(newW / 2) + (newH * 0.35 * 0.85); // Similar to circleCenterX + circleSize/2
-
-        // If we have a currency circle, adjust textStartX
-        if (currencyCircle) {
-            const circleSize = newH * 0.72;
-            const circleCenterX = -(newW / 2) + (circleSize * 0.35);
-            textStartX = circleCenterX + (circleSize / 2) + (newH * 0.18);
-        } else if (currencyText) {
-            // Use currency text width to determine start position
-            const currencyW = getW(currencyText);
-            textStartX = -(newW / 2) + currencyW + (newH * 0.1);
-        }
-
-        if (hasSplitPrice) {
-            // Position integer and decimal dynamically
-        const intY = (typeof priceInteger.__yOffsetRatio === 'number' ? priceInteger.__yOffsetRatio : 0) * newH;
-        const decY = (typeof priceDecimal.__yOffsetRatio === 'number' ? priceDecimal.__yOffsetRatio : -0.18) * newH;
-            const unitY = (typeof priceUnit?.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * newH;
-            const rightPad = newH * 0.35;
-            const maxTextW = Math.max(20, (newW / 2) - rightPad - textStartX);
-            layoutPrice({
-                priceInteger,
-                priceDecimal,
-                priceUnit,
-                intX: textStartX,
-                intY,
-                decY,
-                unitY,
-                maxWidth: maxTextW,
-                gapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
-                minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
-                maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
-            });
-        } else if (priceText) {
-            // Single price text
-            const priceY = (typeof priceText.__yOffsetRatio === 'number' ? priceText.__yOffsetRatio : 0) * newH;
-            priceText.set({ originX: 'left', originY: 'center', left: textStartX, top: priceY });
-        }
-    }
-
-    // Scale all other objects (circles, rects, etc.)
-    all.forEach((obj: any) => {
-        if (!obj || isTextLikeObject(obj)) return;
-        if (obj.name === 'price_bg' || obj.name === 'price_bg_image' || obj.name === 'splash_image') return;
-
-        // Get original dimensions
-        const originalLeft = typeof obj.__originalLeft === 'number' ? obj.__originalLeft : obj.left;
-        const originalTop = typeof obj.__originalTop === 'number' ? obj.__originalTop : obj.top;
-        const originalScaleX = typeof obj.__originalScaleX === 'number' ? obj.__originalScaleX : 1;
-        const originalScaleY = typeof obj.__originalScaleY === 'number' ? obj.__originalScaleY : 1;
-
-        obj.set({
-            left: (typeof originalLeft === 'number' ? originalLeft * scale : originalLeft),
-            top: (typeof originalTop === 'number' ? originalTop * scale : originalTop),
-            scaleX: originalScaleX * scale,
-            scaleY: originalScaleY * scale
-        });
-
-        // For circles, also scale radius
-        if (obj.type === 'circle' && typeof obj.__originalRadius === 'number') {
-            obj.set({ radius: obj.__originalRadius * scale });
-        }
-        // For rects, also scale width/height if they have original values stored
-        if (obj.type === 'rect') {
-            if (typeof obj.__originalWidth === 'number') {
-                obj.set({ width: obj.__originalWidth * scale });
-            }
-            if (typeof obj.__originalHeight === 'number') {
-                obj.set({ height: obj.__originalHeight * scale });
-            }
-            if (typeof obj.__originalRx === 'number') {
-                obj.set({ rx: obj.__originalRx * scale });
-            }
-            if (typeof obj.__originalRy === 'number') {
-                obj.set({ ry: obj.__originalRy * scale });
-            }
-        }
-    });
-
-    constrainSinglePriceTextInsideBackground(priceGroup);
-
-    // CRITICAL: Freeze priceGroup to intended pill dimensions (no auto-expand).
-    priceGroup.set({ width: newW, height: newH });
-    const _cpgParts = priceGroup.getObjects?.() || [];
-    _cpgParts.forEach((o: any) => { if (o && typeof o.setCoords === 'function') o.setCoords(); });
-    priceGroup.dirty = true;
-    if (typeof priceGroup.setCoords === 'function') priceGroup.setCoords();
-    return { pillW: newW, pillH: newH };
 }
 
 const priceGroupAtacarejoProbeCache = new WeakMap<any, { childCount: number; hasAtacarejo: boolean }>();
@@ -29136,6 +26656,13 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
         )
     );
 
+    if (preserveTemplateVisual && hasSplitPair) {
+        // Capture the Mini Editor geometry before replacing the text with product values.
+        // If we recompute after "1,99" / "1.299,99", the cents anchor inherits the
+        // transient text width and the template can be born with exaggerated gaps.
+        readSingleManualPriceAnchors(pg) || readSingleManualPriceAnchors(pg, { force: true });
+    }
+
 	    if (hasSplitPair && splitLooksLikeMainPrice) {
         intTxt.set?.('text', integer);
         decTxt.set?.('text', decimalText);
@@ -29153,11 +26680,6 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
                 unitTxt.set?.({ text: '', visible: false });
             }
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
-        }
-        // Capture anchors after unit visibility is settled, so hidden gramatura
-        // does not participate in the dynamic centering/fitting pass.
-        if (preserveTemplateVisual) {
-            readSingleManualPriceAnchors(pg, { force: true });
         }
         // Keep Mini Editor templates visually identical and only fit dynamic values.
         if (preserveTemplateVisual) {
@@ -29186,9 +26708,6 @@ function setPriceOnPriceGroup(pg: any, rawPrice: string, unitText?: string) {
                 unitTxt.set?.({ text: '', visible: false });
             }
             if (typeof unitTxt.initDimensions === 'function') unitTxt.initDimensions();
-        }
-        if (preserveTemplateVisual) {
-            readSingleManualPriceAnchors(pg, { force: true });
         }
     } else {
         console.warn('[setPriceOnPriceGroup] Nenhum campo de preco encontrado no template! rawPrice:', rawPrice, 'parts:', parts.length, 'names:', parts.map((o: any) => o?.name).filter(Boolean));
@@ -34736,252 +32255,65 @@ const handleRecalculateLayout = () => {
         @open-panel="openMobilePanel"
       />
 
-      <!-- Mobile Bottom Sheet -->
-      <EditorMobileBottomSheet
+      <EditorMobilePanels
         v-if="isMobile && mobilePanel"
-        :title="mobilePanel === 'tools' ? 'Ferramentas' : mobilePanel === 'layers' ? 'Camadas' : mobilePanel === 'properties' ? 'Propriedades' : mobilePanel === 'pages' ? 'Páginas' : mobilePanel === 'uploads' ? 'Imagens' : 'Mais'"
-        @close="mobilePanel = null; mobileNavRef?.clearActive()"
-      >
-        <!-- Tools panel -->
-        <div v-if="mobilePanel === 'tools'" class="space-y-4">
-          <!-- Shapes -->
-          <div>
-            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Formas</div>
-            <div class="grid grid-cols-4 gap-2">
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addFrame(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-                <span class="text-[11px]">Frame</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('rect'); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>
-                <span class="text-[11px]">Retângulo</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('rect', { rx: 16, ry: 16 }); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="6"/></svg>
-                <span class="text-[11px]">Arredondado</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('circle'); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/></svg>
-                <span class="text-[11px]">Círculo</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('ellipse'); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="12" rx="10" ry="6"/></svg>
-                <span class="text-[11px]">Elipse</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('triangle'); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 4L3 20h18L12 4z"/></svg>
-                <span class="text-[11px]">Triângulo</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('line'); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg>
-                <span class="text-[11px]">Linha</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addShape('star'); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                <span class="text-[11px]">Estrela</span>
-              </button>
-            </div>
-          </div>
-          <!-- Text & Drawing -->
-          <div>
-            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Texto & Desenho</div>
-            <div class="grid grid-cols-4 gap-2">
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addText(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 7V4h16v3"/><path d="M12 4v16"/><path d="M8 20h8"/></svg>
-                <span class="text-[11px]">Texto</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addText('heading'); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 12h12"/><path d="M6 4v16"/><path d="M18 4v16"/></svg>
-                <span class="text-[11px]">Título</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="togglePenMode(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
-                <span class="text-[11px]">Caneta</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="toggleDrawing(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
-                <span class="text-[11px]">Desenho</span>
-              </button>
-            </div>
-          </div>
-          <!-- Product & Templates -->
-          <div>
-            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Produtos & Templates</div>
-            <div class="grid grid-cols-4 gap-2">
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="addGridZone(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                <span class="text-[11px]">Grid Zone</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="showLabelTemplatesModal = true; mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
-                <span class="text-[11px]">Etiquetas</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="mobilePanel = 'uploads'">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                <span class="text-[11px]">Imagens</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="openAiGenerationModal(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-                <span class="text-[11px]">IA Gerar</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Uploads / Imagens panel -->
-        <template v-if="mobilePanel === 'uploads'">
-          <AssetsPanel
-            class="-mx-4 -mb-4 flex-1 min-h-0"
-            @insert-asset="(asset) => { insertAssetToCanvas(asset); mobilePanel = null; mobileNavRef?.clearActive(); }"
-          />
-        </template>
-
-        <!-- Layers panel -->
-        <template v-if="mobilePanel === 'layers'">
-          <LayersPanel
-            class="flex-1 min-h-0"
-            :objects="canvasObjects"
-            :selectedId="selectedObjectId"
-            :selectedIds="selectedObjectIds"
-            @select="selectObject"
-            @toggle-visible="toggleVisible"
-            @toggle-lock="toggleLock"
-            @delete="deleteObject"
-            @move-up="id => moveLayer(id, 'up')"
-            @move-down="id => moveLayer(id, 'down')"
-            @rename="renameLayer"
-            @reorder="reorderLayerByDrag"
-          />
-        </template>
-
-        <!-- Properties panel (right sidebar content) -->
-        <template v-if="mobilePanel === 'properties'">
-          <EditorRightSidebar
-            :collaborators="[]"
-            :current-user="currentUser"
-            :show-zoom-menu="false"
-            :current-zoom="currentZoom"
-            :get-color-from-string="getColorFromString"
-            :get-initial="getInitial"
-            :selected-object="selectedObjectRef"
-            :active-mode="activeMode"
-            :page-settings="pageSettings"
-            :color-styles="project.colorStyles || []"
-            :product-zone="productZoneState.productZone.value"
-            :product-zone-inspector="selectedZoneInspectorData"
-            :product-global-styles="productZoneState.globalStyles.value"
-            :label-templates="labelTemplates"
-            :view-show-grid="viewShowGrid"
-            :view-show-rulers="viewShowRulers"
-            :view-show-guides="viewShowGuides"
-            :snap-to-objects="snapToObjects"
-            :snap-to-guides="snapToGuides"
-            :snap-to-grid="snapToGrid"
-            :grid-size="gridSize"
-            class="relative! w-full! shadow-none! border-0!"
-            @update-property="updateObjectProperty"
-            @update-smart-group="updateSmartGroup"
-            @update-page-settings="updatePageSettings"
-            @action="handleAction"
-            @add-color-style="addColorStyle"
-            @apply-color-style="applyColorStyle"
-            @update-zone="handleUpdateZone"
-            @update-global-styles="handleUpdateGlobalStyles"
-            @apply-template-to-zone="handleApplyTemplateToZone"
-            @apply-preset="handleApplyZonePreset"
-            @sync-gaps="handleSyncZoneGaps"
-            @recalculate-layout="handleRecalculateLayout"
-            @manage-label-templates="showLabelTemplatesModal = true"
-            @open-zone-review="handleZoneQuickActionFill"
-            @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
-          />
-        </template>
-
-        <!-- Pages panel -->
-        <template v-if="mobilePanel === 'pages'">
-          <PageNavigator
-            :pages="project.pages || []"
-            :active-page-id="currentPageId"
-            @select-page="switchToPage"
-            @add-page="addNewPage"
-            @duplicate-page="duplicatePage"
-            @delete-page="deletePage"
-            @reorder-pages="reorderPages"
-          />
-        </template>
-
-        <!-- More panel -->
-        <div v-if="mobilePanel === 'more'" class="space-y-4">
-          <!-- Zoom -->
-          <div>
-            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Zoom ({{ Math.round(currentZoom) }}%)</div>
-            <div class="grid grid-cols-4 gap-2">
-              <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleZoom50()">
-                <span class="text-sm font-semibold">50%</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleZoom100()">
-                <span class="text-sm font-semibold">100%</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="handleZoom200()">
-                <span class="text-sm font-semibold">200%</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="zoomToFit(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></svg>
-                <span class="text-[10px]">Ajustar</span>
-              </button>
-            </div>
-          </div>
-          <!-- Actions -->
-          <div>
-            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Ações</div>
-            <div class="grid grid-cols-4 gap-2">
-              <!-- Exportar: abre o ExportDialog completo (PNG/JPEG/PDF, pagina/frame/todos) -->
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 active:text-white col-span-2" @click="exportDesign(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                <span class="text-[11px] font-semibold">Exportar (PNG / JPG / PDF)</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="startPresentation(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                <span class="text-[11px]">Apresentar</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="shareDesign(); mobilePanel = null; mobileNavRef?.clearActive()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
-                <span class="text-[11px]">Compartilhar</span>
-              </button>
-            </div>
-          </div>
-          <!-- View Settings -->
-          <div>
-            <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Visualização</div>
-            <div class="grid grid-cols-3 gap-2">
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="viewShowGrid ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleGrid()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
-                <span class="text-[11px]">Grid</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="viewShowRulers ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleRulers()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5v14"/><path d="M3 5h4"/><path d="M3 9h2"/><path d="M3 13h4"/><path d="M3 17h2"/><path d="M3 19h18V5"/><path d="M21 5h-4"/><path d="M17 5v2"/><path d="M13 5v4"/><path d="M9 5v2"/></svg>
-                <span class="text-[11px]">Réguas</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="viewShowGuides ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleGuides()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" x2="12" y1="2" y2="22" stroke-dasharray="4 2"/><line x1="2" x2="22" y1="12" y2="12" stroke-dasharray="4 2"/></svg>
-                <span class="text-[11px]">Guias</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="snapToObjects ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleSnapObjects()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 4.5l3 3"/><path d="M19.5 4.5l-3 3"/><path d="M4.5 19.5l3-3"/><path d="M19.5 19.5l-3-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
-                <span class="text-[10px]">Snap Obj</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="snapToGuides ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleSnapGuides()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" x2="12" y1="2" y2="22"/><path d="M8 8l4-4 4 4"/><path d="M8 16l4 4 4-4"/></svg>
-                <span class="text-[10px]">Snap Guia</span>
-              </button>
-              <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/10 active:text-white" :class="snapToGrid ? 'bg-violet-500/20 text-violet-400' : 'bg-white/5 text-white/70'" @click="toggleSnapGrid()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg>
-                <span class="text-[10px]">Snap Grid</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </EditorMobileBottomSheet>
+        :panel="mobilePanel"
+        :title="getMobilePanelTitle(mobilePanel)"
+        :current-zoom="currentZoom"
+        :pages="project.pages || []"
+        :current-page-id="currentPageId"
+        :canvas-objects="canvasObjects"
+        :selected-object-id="selectedObjectId"
+        :selected-object-ids="selectedObjectIds"
+        :current-user="currentUser"
+        :selected-object="selectedObjectRef"
+        :active-mode="activeMode"
+        :page-settings="pageSettings"
+        :color-styles="project.colorStyles || []"
+        :product-zone="productZoneState.productZone.value"
+        :product-zone-inspector="selectedZoneInspectorData"
+        :product-global-styles="productZoneState.globalStyles.value"
+        :label-templates="labelTemplates"
+        :view-show-grid="viewShowGrid"
+        :view-show-rulers="viewShowRulers"
+        :view-show-guides="viewShowGuides"
+        :snap-to-objects="snapToObjects"
+        :snap-to-guides="snapToGuides"
+        :snap-to-grid="snapToGrid"
+        :grid-size="gridSize"
+        :get-color-from-string="getColorFromString"
+        :get-initial="getInitial"
+        @close="closeMobilePanel"
+        @set-panel="mobilePanel = $event"
+        @command="handleMobilePanelCommand"
+        @insert-asset="asset => { insertAssetToCanvas(asset); closeMobilePanel(); }"
+        @select-layer="selectObject"
+        @toggle-visible="toggleVisible"
+        @toggle-lock="toggleLock"
+        @delete-layer="deleteObject"
+        @move-layer="moveLayer"
+        @rename-layer="renameLayer"
+        @reorder-layer="reorderLayerByDrag"
+        @update-property="updateObjectProperty"
+        @update-smart-group="updateSmartGroup"
+        @update-page-settings="updatePageSettings"
+        @add-color-style="addColorStyle"
+        @apply-color-style="applyColorStyle"
+        @update-zone="handleUpdateZone"
+        @update-global-styles="handleUpdateGlobalStyles"
+        @apply-template-to-zone="handleApplyTemplateToZone"
+        @apply-preset="handleApplyZonePreset"
+        @sync-gaps="handleSyncZoneGaps"
+        @recalculate-layout="handleRecalculateLayout"
+        @manage-label-templates="showLabelTemplatesModal = true; closeMobilePanel()"
+        @open-zone-review="handleZoneQuickActionFill"
+        @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
+        @select-page="switchToPage"
+        @add-page="addNewPage"
+        @duplicate-page="duplicatePage"
+        @delete-page="deletePage"
+        @reorder-pages="reorderPages"
+      />
 
       <!-- MODALS SYSTEM (Internal Dialogs) -->
       <EditorModalsHost
@@ -35098,149 +32430,15 @@ const handleRecalculateLayout = () => {
       </div>
 
       <!-- Page History / Restore Modal -->
-      <Teleport to="body">
-        <Transition
-          enter-active-class="transition duration-200 ease-out"
-          enter-from-class="opacity-0"
-          enter-to-class="opacity-100"
-          leave-active-class="transition duration-150 ease-in"
-          leave-from-class="opacity-100"
-          leave-to-class="opacity-0"
-        >
-          <div v-if="showHistoryModal" class="fixed inset-0 z-(--z-modal) flex items-center justify-center">
-            <!-- Backdrop -->
-            <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="showHistoryModal = false" />
-
-            <!-- Panel -->
-            <div class="relative w-[min(520px,92vw)] max-h-[85vh] flex flex-col rounded-2xl border border-white/8 bg-zinc-900/95 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.7)] overflow-hidden">
-
-              <!-- Header -->
-              <div class="flex items-center gap-3 px-5 pt-5 pb-4">
-                <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-violet-500/15 shrink-0">
-                  <svg class="w-4.5 h-4.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div class="flex-1 min-w-0">
-                  <h3 class="text-[15px] font-semibold text-white/95 leading-tight tracking-[-0.01em]">Historico da pagina</h3>
-                  <p class="text-[12px] text-white/45 mt-0.5">Restaure uma versao anterior</p>
-                </div>
-                <button
-                  type="button"
-                  class="flex items-center justify-center w-8 h-8 rounded-lg text-white/40 hover:text-white/80 hover:bg-white/6 transition-all duration-150"
-                  @click="showHistoryModal = false"
-                >
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <!-- Content -->
-              <div class="flex-1 overflow-y-auto px-5 pb-5 min-h-0">
-
-                <!-- Loading state -->
-                <div v-if="historyLoading" class="flex flex-col items-center justify-center py-12 gap-3">
-                  <div class="w-8 h-8 rounded-full border-2 border-white/10 border-t-violet-400 animate-spin" />
-                  <p class="text-[13px] text-white/50">Carregando versoes...</p>
-                </div>
-
-                <!-- Error state -->
-                <div v-else-if="historyError" class="flex flex-col items-center justify-center py-10 gap-2">
-                  <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-red-500/10">
-                    <svg class="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                    </svg>
-                  </div>
-                  <p class="text-[13px] text-red-300/90 text-center max-w-70">{{ historyError }}</p>
-                </div>
-
-                <!-- Empty state -->
-                <div v-else-if="!historyItems.length" class="flex flex-col items-center justify-center py-10 gap-2">
-                  <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-white/4">
-                    <svg class="w-5 h-5 text-white/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-2.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                    </svg>
-                  </div>
-                  <p class="text-[13px] text-white/40">Nenhuma versao salva ainda</p>
-                  <p class="text-[11px] text-white/25 max-w-60 text-center">Versoes sao salvas automaticamente quando voce edita o projeto.</p>
-                </div>
-
-                <!-- History items -->
-                <div v-else class="flex flex-col gap-2">
-                  <div
-                    v-for="(it, idx) in historyItems"
-                    :key="`${it.source}:${it.key}:${it.versionId || ''}:${it.lastModified}`"
-                    class="group relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl border transition-all duration-150"
-                    :class="((it as any).source === 'current' || historyItemIsLatest(idx)) ? 'bg-violet-500/[0.07] border-violet-500/20 hover:border-violet-500/35' : 'bg-white/2 border-white/6 hover:bg-white/4 hover:border-white/12'"
-                  >
-                    <!-- Timeline dot -->
-                    <div class="flex flex-col items-center self-stretch shrink-0">
-                      <div
-                        class="w-2.5 h-2.5 rounded-full mt-0.5 ring-[3px] shrink-0"
-                        :class="((it as any).source === 'current' || historyItemIsLatest(idx)) ? 'bg-violet-400 ring-violet-400/20' : 'bg-white/20 ring-white/6'"
-                      />
-                      <div v-if="idx < historyItems.length - 1" class="w-px flex-1 mt-1 bg-white/6" />
-                    </div>
-
-                    <!-- Info -->
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2">
-                        <p class="text-[13px] font-medium text-white/90 leading-tight">
-                          {{ formatHistoryDateTime(it.lastModified) }}
-                        </p>
-                        <span
-                          v-if="(it as any).source === 'current'"
-                          class="inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium bg-emerald-500/20 text-emerald-300 leading-relaxed"
-                        >Versao atual</span>
-                        <span
-                          v-else-if="historyItemIsLatest(idx)"
-                          class="inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium bg-violet-500/20 text-violet-300 leading-relaxed"
-                        >Mais recente</span>
-                      </div>
-                      <div class="flex items-center gap-1.5 mt-1">
-                        <span class="text-[11px] text-white/35">{{ formatHistoryRelative(it.lastModified) }}</span>
-                        <span v-if="it.objectCount != null" class="text-[11px] text-white/20">&#183;</span>
-                        <span v-if="it.objectCount != null" class="text-[11px] text-white/35">{{ it.objectCount }} objetos</span>
-                        <span v-if="it.size != null" class="text-[11px] text-white/20">&#183;</span>
-                        <span v-if="it.size != null" class="text-[11px] text-white/35">{{ Math.max(1, Math.round((it.size || 0) / 1024)) }} KB</span>
-                      </div>
-                    </div>
-
-                    <!-- Restore button -->
-                    <button
-                      type="button"
-                      class="shrink-0 flex items-center gap-1.5 text-[12px] font-medium px-3.5 py-2 rounded-lg transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                      :class="restoringHistoryKey === getHistoryRestoreKey(it as any)
-                        ? 'bg-violet-500/20 text-violet-300 cursor-wait'
-                        : 'bg-white/6 text-white/70 hover:bg-violet-500/15 hover:text-violet-200 active:scale-[0.97]'"
-                      :disabled="!!restoringHistoryKey"
-                      @click="restoreFromHistoryItem(it as any)"
-                    >
-                      <svg v-if="restoringHistoryKey === getHistoryRestoreKey(it as any)" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      {{ restoringHistoryKey === getHistoryRestoreKey(it as any) ? 'Restaurando...' : 'Restaurar' }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Footer hint -->
-              <div v-if="!historyLoading && !historyError && historyItems.length" class="px-5 py-3 border-t border-white/6 bg-white/2">
-                <p class="text-[11px] text-white/30 text-center">
-                  Ate {{ 3 }} versoes salvas automaticamente por pagina
-                </p>
-              </div>
-
-            </div>
-          </div>
-        </Transition>
-      </Teleport>
+      <EditorPageHistoryModal
+        :show="showHistoryModal"
+        :loading="historyLoading"
+        :error="historyError"
+        :items="historyItems"
+        :restoring-key="restoringHistoryKey"
+        @close="showHistoryModal = false"
+        @restore="restoreFromHistoryItem"
+      />
 
   </div>
 </template>

@@ -1,71 +1,13 @@
 import { blobFromDataLikeUrl } from './browserBlob'
+import {
+  clampExportMinPositive,
+  getRequestedMultiplier,
+  getSafeMultiplier,
+  roundExportMultiplier,
+  type ExportImageFormat,
+  type ExportQualityPreset
+} from './editorExportConfig'
 
-export type ExportImageFormat = 'png' | 'jpg'
-export type ExportQualityPreset = 'print-300' | 'ultra-600'
-
-/**
- * Multiplicador padrao de scale para export de alta resolucao (6x).
- * Suficiente para impressao em 300dpi a partir de canvas em viewport
- * de tela.
- */
-export const HIGH_RES_EXPORT_SCALE = 6
-
-/**
- * Qualidade JPG para export de alta resolucao (1.0 = max). PNG ignora
- * este valor (e lossless), mas mantemos a constante unificada.
- */
-export const HIGH_RES_EXPORT_QUALITY = 1
-
-/**
- * Saturacao aplicada na pos-pipeline de export para realcar cores
- * impressas (impressoras tendem a "comer" 5-10% da saturacao).
- */
-export const EXPORT_COLOR_SATURATION = 1.12
-
-/**
- * Contraste aplicado na pos-pipeline de export. Compensa perda de
- * contraste em papel comum.
- */
-export const EXPORT_COLOR_CONTRAST = 1.08
-
-/**
- * Brilho aplicado na pos-pipeline de export. Pequeno ajuste para
- * manter brancos puros mesmo apos contraste/saturacao.
- */
-export const EXPORT_COLOR_BRIGHTNESS = 1.02
-
-/**
- * Quality preset default quando o usuario nao seleciona explicitamente.
- * 'ultra-600' = 600dpi (overkill mas seguro para qualquer impressao).
- */
-export const DEFAULT_EXPORT_QUALITY_PRESET: ExportQualityPreset = 'ultra-600'
-
-/**
- * Modo default para export de multiplos frames: 'zip' agrupa em um
- * unico download, 'separate' faz N downloads individuais.
- */
-export const DEFAULT_MULTI_FILE_MODE: 'zip' | 'separate' = 'zip'
-
-/**
- * Normaliza string vinda da UI para um ExportImageFormat valido.
- * Aceita "jpeg" ou "jpg" como sinonimos para 'jpg'; qualquer outro
- * valor cai no default 'png'.
- */
-export const normalizeExportImageFormat = (format: any): ExportImageFormat => (
-    String(format) === 'jpeg' || String(format) === 'jpg' ? 'jpg' : 'png'
-)
-
-/**
- * Normaliza string vinda da UI para um ExportQualityPreset valido.
- * Apenas 'print-300' e reconhecido; qualquer outro valor cai em
- * 'ultra-600' (default de alta qualidade).
- */
-export const normalizeExportQualityPreset = (value: any): ExportQualityPreset => (
-    String(value) === 'print-300' ? 'print-300' : 'ultra-600'
-)
-
-const EXPORT_MAX_CANVAS_DIMENSION = 16384
-const EXPORT_MAX_CANVAS_AREA = 140_000_000
 const PDF_BASE_DPI = 300
 
 export type ExportRetryInput = {
@@ -97,56 +39,8 @@ export type PdfPageInput = {
   pageHeightPx: number
 }
 
-const roundMultiplier = (value: number): number => {
-  if (!Number.isFinite(value)) return 1
-  return Number(Math.max(1, value).toFixed(3))
-}
-
-const clampMinPositive = (value: number): number => {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return 1
-  return Math.max(1, parsed)
-}
-
-export const getRequestedMultiplier = (
-  qualityPreset: ExportQualityPreset,
-  width: number,
-  height: number
-): number => {
-  if (qualityPreset !== 'ultra-600') return 1
-
-  const safeWidth = clampMinPositive(width)
-  const safeHeight = clampMinPositive(height)
-  const maxSide = Math.max(safeWidth, safeHeight)
-
-  if (maxSide <= 1400) return 4
-  if (maxSide <= 2200) return 3
-  if (maxSide <= 3000) return 2.5
-  return 2
-}
-
-export const getSafeMultiplier = (
-  width: number,
-  height: number,
-  requested: number
-): number => {
-  const safeWidth = clampMinPositive(width)
-  const safeHeight = clampMinPositive(height)
-  const sourceArea = safeWidth * safeHeight
-  const requestedScale = clampMinPositive(requested)
-
-  const maxByDimension = Math.min(
-    EXPORT_MAX_CANVAS_DIMENSION / safeWidth,
-    EXPORT_MAX_CANVAS_DIMENSION / safeHeight
-  )
-  const maxByArea = Math.sqrt(EXPORT_MAX_CANVAS_AREA / Math.max(1, sourceArea))
-  const hardLimit = Math.max(1, Math.min(maxByDimension, maxByArea))
-
-  return roundMultiplier(Math.min(requestedScale, hardLimit))
-}
-
 export const buildMultiplierLadder = (start: number): number[] => {
-  const first = roundMultiplier(start)
+  const first = roundExportMultiplier(start)
   if (first <= 1) return [1]
 
   const raw = [
@@ -157,7 +51,7 @@ export const buildMultiplierLadder = (start: number): number[] => {
     first * 0.5,
     1
   ]
-  const rounded = raw.map(roundMultiplier).filter((n) => n >= 1)
+  const rounded = raw.map(roundExportMultiplier).filter((n) => n >= 1)
   const unique = Array.from(new Set(rounded))
   unique.sort((a, b) => b - a)
   if (unique[unique.length - 1] !== 1) unique.push(1)
@@ -217,16 +111,6 @@ export const exportObjectAsBlob = async (input: ExportRetryInput): Promise<Expor
   return await exportWithRetry(input)
 }
 
-export const sanitizeExportFileToken = (value: string, fallback = 'arquivo'): string => {
-  const token = String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-  return token || fallback
-}
-
 const sanitizeZipEntryName = (value: string): string => {
   const normalized = String(value || '')
     .trim()
@@ -247,15 +131,6 @@ const normalizeUint8ToArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   const start = bytes.byteOffset
   const end = bytes.byteOffset + bytes.byteLength
   return bytes.buffer.slice(start, end) as ArrayBuffer
-}
-
-export const formatExportTimestampToken = (date = new Date()): string => {
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  const hh = String(date.getHours()).padStart(2, '0')
-  const min = String(date.getMinutes()).padStart(2, '0')
-  return `${yyyy}${mm}${dd}-${hh}${min}`
 }
 
 export const buildZipBlob = async (files: ZipEntryInput[]): Promise<Blob> => {
@@ -294,7 +169,7 @@ export const buildZipBlob = async (files: ZipEntryInput[]): Promise<Blob> => {
   return new Blob([normalizeUint8ToArrayBuffer(zipped)], { type: 'application/zip' })
 }
 
-const pxToPt = (px: number, dpi: number) => (clampMinPositive(px) * 72) / clampMinPositive(dpi)
+const pxToPt = (px: number, dpi: number) => (clampExportMinPositive(px) * 72) / clampExportMinPositive(dpi)
 
 export const buildPdfBlob = async (
   pages: PdfPageInput[],
@@ -305,7 +180,7 @@ export const buildPdfBlob = async (
     throw new Error('Nenhuma página válida para gerar PDF')
   }
 
-  const dpiBase = clampMinPositive(opts.dpiBase ?? PDF_BASE_DPI)
+  const dpiBase = clampExportMinPositive(opts.dpiBase ?? PDF_BASE_DPI)
   const { PDFDocument } = await import('pdf-lib')
   const pdfDoc = await PDFDocument.create()
 

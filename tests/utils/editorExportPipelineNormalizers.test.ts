@@ -9,7 +9,7 @@ import {
   EXPORT_COLOR_BRIGHTNESS,
   DEFAULT_EXPORT_QUALITY_PRESET,
   DEFAULT_MULTI_FILE_MODE
-} from '~/utils/editorExportPipeline'
+} from '~/utils/editorExportConfig'
 
 describe('normalizeExportImageFormat', () => {
   it('jpg → jpg', () => {

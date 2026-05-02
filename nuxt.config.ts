@@ -164,21 +164,45 @@ export default defineNuxtConfig({
             if (id.includes('vite/preload-helper')) return 'app-preload-helper'
 
             // Editor local code splitting (non-node_modules)
-            if (id.includes('/components/EditorCanvas.vue')) return 'editor-canvas'
             if (
               id.includes('/types/product-zone.ts') ||
               id.includes('/composables/useProductZone.ts') ||
               id.includes('/utils/product-zone-helpers')
-            ) return 'editor-product-zone'
+            ) return 'editor-core-tools'
             if (
               id.includes('/src/ai/') ||
               id.includes('/server/utils/ai-') ||
               id.includes('/server/utils/openai-')
             ) return 'editor-ai'
             if (
+              id.includes('/composables/useEditor') ||
               id.includes('/composables/useProject.ts') ||
-              id.includes('/composables/useStorage.ts')
-            ) return 'editor-project-storage'
+              id.includes('/composables/useStorage.ts') ||
+              id.includes('/composables/useFigmaCrop.ts') ||
+              id.includes('/composables/useResponsive.ts') ||
+              id.includes('/composables/useAiImageStudio.ts') ||
+              id.includes('/utils/price') ||
+              id.includes('/utils/labelTemplate') ||
+              id.includes('/utils/templateSnapshot') ||
+              id.includes('/utils/redBurst') ||
+              id.includes('/utils/livePrice') ||
+              id.includes('/utils/globalStyles') ||
+              id.includes('/utils/canvas') ||
+              id.includes('/utils/fabric') ||
+              id.includes('/utils/frame') ||
+              id.includes('/utils/viewport') ||
+              id.includes('/utils/pathHelpers') ||
+              id.includes('/utils/arrangeOrder') ||
+              id.includes('/utils/clipboard') ||
+              id.includes('/utils/snap') ||
+              id.includes('/utils/userGuide') ||
+              id.includes('/utils/product') ||
+              id.includes('/utils/zone') ||
+              id.includes('/utils/missingProduct') ||
+              id.includes('/utils/card') ||
+              id.includes('/utils/imageMatchMode') ||
+              id.includes('/utils/editor')
+            ) return 'editor-core-tools'
 
             if (!id.includes('node_modules')) return
 

@@ -1,16 +1,36 @@
 #!/bin/bash
 set -euo pipefail
 
-# Verifica o maior chunk JS do client em .vercel/output/static/_nuxt.
+# Verifica o maior chunk JS do client.
+# Suporta tanto a saída do Vercel quanto o build local do Nuxt.
 # Uso:
 #   ./scripts/check-client-chunk-size.sh
 #   MAX_CLIENT_CHUNK_KB=500 ./scripts/check-client-chunk-size.sh
+#   CLIENT_ASSETS_DIR=node_modules/.cache/nuxt/.nuxt/dist/client/_nuxt ./scripts/check-client-chunk-size.sh
 
 MAX_CLIENT_CHUNK_KB="${MAX_CLIENT_CHUNK_KB:-500}"
-ASSETS_DIR=".vercel/output/static/_nuxt"
+ASSETS_DIR="${CLIENT_ASSETS_DIR:-}"
+
+if [ -z "$ASSETS_DIR" ]; then
+  for candidate in \
+    ".vercel/output/static/_nuxt" \
+    ".output/public/_nuxt" \
+    "node_modules/.cache/nuxt/.nuxt/dist/client/_nuxt"
+  do
+    if [ -d "$candidate" ]; then
+      ASSETS_DIR="$candidate"
+      break
+    fi
+  done
+fi
 
 if [ ! -d "$ASSETS_DIR" ]; then
-  echo "❌ Diretório de assets não encontrado: $ASSETS_DIR"
+  echo "❌ Diretório de assets não encontrado"
+  echo "   Procurados:"
+  echo "   - .vercel/output/static/_nuxt"
+  echo "   - .output/public/_nuxt"
+  echo "   - node_modules/.cache/nuxt/.nuxt/dist/client/_nuxt"
+  echo "   Ou informe CLIENT_ASSETS_DIR=/caminho/_nuxt"
   echo "   Rode primeiro: npm run build"
   exit 1
 fi
