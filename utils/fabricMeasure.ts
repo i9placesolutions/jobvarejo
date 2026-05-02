@@ -7,6 +7,8 @@
  * Funcoes 100% puras. Cobertura: tests/utils/fabricMeasure.test.ts
  */
 
+import { collectObjectsDeep } from './fabricObjectClassifiers'
+
 export type HorizontalBounds = { left: number; right: number }
 export type VerticalBounds = { top: number; bottom: number }
 export type ContentBounds = HorizontalBounds & VerticalBounds & {
@@ -365,5 +367,32 @@ export const setObjectCenterInParentPlane = (
         obj.setPositionByOrigin(pointFactory(cx, cy), 'center', 'center')
     } else {
         obj.set?.({ left: cx, top: cy, originX: 'center', originY: 'center' })
+    }
+}
+
+/**
+ * Resolve os bounds visiveis (ignorando objetos invisiveis) de um
+ * priceGroup. Fallback: usa as dimensoes scaled do proprio group
+ * centradas em (0,0).
+ *
+ * Pure: usa `collectObjectsDeep`, `isObjectShownForBounds`,
+ * `measureContentBoundsLocal` (todos extraidos).
+ */
+export const resolvePriceGroupVisibleBoundsLocal = (priceGroup: any): ContentBounds | null => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null
+    const all = collectObjectsDeep(priceGroup).filter((obj: any) => obj && obj !== priceGroup && isObjectShownForBounds(obj))
+    const bounds = measureContentBoundsLocal(all)
+    if (bounds) return bounds
+
+    const width = Math.abs(Number(priceGroup.getScaledWidth?.() ?? priceGroup.width ?? 0) || 0)
+    const height = Math.abs(Number(priceGroup.getScaledHeight?.() ?? priceGroup.height ?? 0) || 0)
+    if (!width || !height) return null
+    return {
+        left: -(width / 2),
+        right: width / 2,
+        top: -(height / 2),
+        bottom: height / 2,
+        width,
+        height
     }
 }

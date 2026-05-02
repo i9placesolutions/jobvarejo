@@ -306,7 +306,8 @@ import {
     guessAiSizeFromObject,
     setObjectCenterInParentPlane as setObjectCenterInParentPlaneHelper,
     computeViewportCenterInWorld,
-    computeViewportBoundsInWorld
+    computeViewportBoundsInWorld,
+    resolvePriceGroupVisibleBoundsLocal
 } from '~/utils/fabricMeasure'
 import {
     setText,
@@ -27180,24 +27181,7 @@ type PriceUnitLabel = import('~/utils/priceTagText').PriceUnitLabel;
 // measureContentBoundsLocal foram extraidos para utils/fabricMeasure.ts
 // (Fase 2 da modularizacao).
 
-const resolvePriceGroupVisibleBoundsLocal = (priceGroup: any) => {
-    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
-    const all = collectObjectsDeep(priceGroup).filter((obj: any) => obj && obj !== priceGroup && isObjectShownForBounds(obj));
-    const bounds = measureContentBoundsLocal(all);
-    if (bounds) return bounds;
-
-    const width = Math.abs(Number(priceGroup.getScaledWidth?.() ?? priceGroup.width ?? 0) || 0);
-    const height = Math.abs(Number(priceGroup.getScaledHeight?.() ?? priceGroup.height ?? 0) || 0);
-    if (!width || !height) return null;
-    return {
-        left: -(width / 2),
-        right: width / 2,
-        top: -(height / 2),
-        bottom: height / 2,
-        width,
-        height
-    };
-};
+// resolvePriceGroupVisibleBoundsLocal extraido para utils/fabricMeasure.ts.
 
 const getPriceGroupPlacementSnapshotFromCard = (card: any) => {
     const priceGroup = getPriceGroupFromAny(card);
