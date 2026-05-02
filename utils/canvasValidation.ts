@@ -119,3 +119,38 @@ export const isValidClipPath = (clipPath: any): boolean => {
 
     return true
 }
+
+/**
+ * Limpa todos os objetos de uma instancia de canvas com fallback robusto:
+ *  1. discardActiveObject() + clear() (caminho rapido)
+ *  2. Em caso de erro: remove cada objeto individualmente em ordem inversa
+ *
+ * Usado durante page switches onde clear() pode falhar com objetos em
+ * estado inconsistente (resultado de bug em outras partes do pipeline).
+ *
+ * Mutates a canvas instance. Sem retorno — best-effort.
+ */
+export const clearCanvasForPageSwitch = (canvasInstance: any): void => {
+    if (!canvasInstance) return
+    try {
+        canvasInstance.discardActiveObject?.()
+        canvasInstance.clear()
+        return
+    } catch (err) {
+        console.warn('⚠️ clear() falhou no page switch, tentando remoção manual:', err)
+    }
+
+    try {
+        const allObjects = Array.isArray(canvasInstance.getObjects?.()) ? [...canvasInstance.getObjects()] : []
+        for (let i = allObjects.length - 1; i >= 0; i--) {
+            try {
+                canvasInstance.remove(allObjects[i])
+            } catch {
+                // ignore object-specific remove failures
+            }
+        }
+        canvasInstance.requestRenderAll?.()
+    } catch (manualErr) {
+        console.error('❌ Falha ao limpar canvas no page switch:', manualErr)
+    }
+}

@@ -48,7 +48,8 @@ import {
     isValidFabricCanvasObject,
     isValidClipPath,
     isAuthLookupError,
-    isUsableFabricObjectClone
+    isUsableFabricObjectClone,
+    clearCanvasForPageSwitch
 } from '~/utils/canvasValidation'
 import {
     getPreferredProductImageFromGroup,
@@ -9488,30 +9489,7 @@ const applyViewportTransform = (vpt: number[]) => {
     safeRequestRenderAll();
 };
 
-const clearCanvasForPageSwitch = (canvasInstance: any) => {
-    if (!canvasInstance) return
-    try {
-        canvasInstance.discardActiveObject?.()
-        canvasInstance.clear()
-        return
-    } catch (err) {
-        console.warn('⚠️ clear() falhou no page switch, tentando remoção manual:', err)
-    }
-
-    try {
-        const allObjects = Array.isArray(canvasInstance.getObjects?.()) ? [...canvasInstance.getObjects()] : []
-        for (let i = allObjects.length - 1; i >= 0; i--) {
-            try {
-                canvasInstance.remove(allObjects[i])
-            } catch {
-                // ignore object-specific remove failures
-            }
-        }
-        canvasInstance.requestRenderAll?.()
-    } catch (manualErr) {
-        console.error('❌ Falha ao limpar canvas no page switch:', manualErr)
-    }
-}
+// clearCanvasForPageSwitch extraido para utils/canvasValidation.ts.
 
 // CANVAS_CUSTOM_PROPS extraido para utils/canvasCustomProps.ts.
 
