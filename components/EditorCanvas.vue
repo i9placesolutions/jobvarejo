@@ -229,7 +229,9 @@ import {
 import {
     clonePlainForZoneSnapshot,
     finiteZoneSnapshotNumber,
-    firstDefinedZoneSnapshotValue
+    firstDefinedZoneSnapshotValue,
+    buildZoneCardStateSnapshot as buildZoneCardStateSnapshotHelper,
+    buildZoneStateSnapshot as buildZoneStateSnapshotHelper
 } from '~/utils/zoneSnapshotHelpers'
 import {
     templateSnapshotHasAtacStructure,
@@ -25364,123 +25366,27 @@ const getZoneCardDiagnosticsPayload = (zone: any, zoneCardsOverride?: any[]) => 
 // clonePlainForZoneSnapshot, finiteZoneSnapshotNumber e firstDefinedZoneSnapshotValue
 // extraidos para utils/zoneSnapshotHelpers.ts.
 
-const buildZoneCardStateSnapshot = (card: any, index: number) => {
-    const productData = card?._productData && typeof card._productData === 'object' ? card._productData : {};
-    const titleText = getCardTitleText(card);
-    let priceGroupSnapshot: any = null;
-    try {
-        priceGroupSnapshot = serializePriceGroupForTemplate(getPriceGroupFromAny(card));
-    } catch (err) {
-        if (import.meta.dev) {
-            console.warn('[zoneStateSnapshot] Falha ao serializar etiqueta do card:', err);
-        }
-    }
+// buildZoneCardStateSnapshot + buildZoneStateSnapshot extraidos para
+// utils/zoneSnapshotHelpers.ts. Wrappers locais injetam getCardTitleText,
+// getPriceGroupFromAny, serializePriceGroupForTemplate, getZoneGlobalStyles.
+const buildZoneCardStateSnapshot = (card: any, index: number) =>
+    buildZoneCardStateSnapshotHelper(
+        card,
+        index,
+        getCardTitleText,
+        getPriceGroupFromAny,
+        serializePriceGroupForTemplate
+    )
 
-    return {
-        id: String(card?._customId || '').trim(),
-        order: finiteZoneSnapshotNumber(card?._zoneOrder, index),
-        parentZoneId: String(card?.parentZoneId || '').trim(),
-        parentFrameId: String(card?.parentFrameId || '').trim() || null,
-        slot: clonePlainForZoneSnapshot(card?._zoneSlot || null),
-        geometry: {
-            left: finiteZoneSnapshotNumber(card?.left),
-            top: finiteZoneSnapshotNumber(card?.top),
-            width: finiteZoneSnapshotNumber(card?._cardWidth ?? card?.width),
-            height: finiteZoneSnapshotNumber(card?._cardHeight ?? card?.height),
-            scaleX: finiteZoneSnapshotNumber(card?.scaleX, 1),
-            scaleY: finiteZoneSnapshotNumber(card?.scaleY, 1),
-            angle: finiteZoneSnapshotNumber(card?.angle)
-        },
-        productData: clonePlainForZoneSnapshot(productData),
-        product: {
-            name: String(firstDefinedZoneSnapshotValue(productData?.name, productData?.title, card?.productName, titleText?.text) || '').trim(),
-            description: String(firstDefinedZoneSnapshotValue(productData?.description, productData?.subtitle, '') || '').trim(),
-            imageUrl: firstDefinedZoneSnapshotValue(card?.imageUrl, productData?.imageUrl, productData?.image),
-            priceMode: firstDefinedZoneSnapshotValue(productData?.priceMode, productData?.price_mode),
-            price: firstDefinedZoneSnapshotValue(productData?.price, card?.price),
-            pricePack: firstDefinedZoneSnapshotValue(productData?.pricePack, card?.pricePack),
-            priceUnit: firstDefinedZoneSnapshotValue(productData?.priceUnit, card?.priceUnit),
-            priceSpecial: firstDefinedZoneSnapshotValue(productData?.priceSpecial, card?.priceSpecial),
-            priceSpecialUnit: firstDefinedZoneSnapshotValue(productData?.priceSpecialUnit, card?.priceSpecialUnit),
-            priceWholesale: firstDefinedZoneSnapshotValue(productData?.priceWholesale, card?.priceWholesale),
-            wholesaleTrigger: firstDefinedZoneSnapshotValue(productData?.wholesaleTrigger, card?.wholesaleTrigger),
-            wholesaleTriggerUnit: firstDefinedZoneSnapshotValue(productData?.wholesaleTriggerUnit, card?.wholesaleTriggerUnit),
-            packQuantity: firstDefinedZoneSnapshotValue(productData?.packQuantity, card?.packQuantity),
-            packUnit: firstDefinedZoneSnapshotValue(productData?.packUnit, card?.packUnit),
-            packageLabel: firstDefinedZoneSnapshotValue(productData?.packageLabel, card?.packageLabel),
-            specialCondition: firstDefinedZoneSnapshotValue(productData?.specialCondition, card?.specialCondition),
-            unit: firstDefinedZoneSnapshotValue(productData?.unit, card?.unit),
-            unitLabel: firstDefinedZoneSnapshotValue(productData?.unitLabel, card?.unitLabel),
-            limit: firstDefinedZoneSnapshotValue(productData?.limit, card?.limit),
-            titleText: titleText?.text ?? null
-        },
-        priceGroup: clonePlainForZoneSnapshot(priceGroupSnapshot)
-    };
-}
-
-const buildZoneStateSnapshot = (zone: any, zoneCards: any[]) => {
-    const orderedCards = [...(zoneCards || [])].sort((a: any, b: any) => {
-        const orderA = finiteZoneSnapshotNumber(a?._zoneOrder, Number.MAX_SAFE_INTEGER);
-        const orderB = finiteZoneSnapshotNumber(b?._zoneOrder, Number.MAX_SAFE_INTEGER);
-        if (orderA !== orderB) return orderA - orderB;
-        return String(a?._customId || '').localeCompare(String(b?._customId || ''));
-    });
-    const globalStyles = getZoneGlobalStyles(zone);
-    const snapshotTemplateId = String(zone?._zoneTemplateSnapshotId || globalStyles?.splashTemplateId || '').trim();
-
-    return {
-        version: 1,
-        zone: {
-            id: String(zone?._customId || '').trim(),
-            name: String(zone?.zoneName || '').trim() || 'Zona de Produtos',
-            role: zone?.role || 'grid',
-            contentSource: zone?.contentSource || 'manual',
-            contentStatus: zone?.contentStatus || 'empty',
-            overflowPolicy: zone?.overflowPolicy || 'warn',
-            parentFrameId: String(zone?.parentFrameId || '').trim() || null,
-            geometry: {
-                x: finiteZoneSnapshotNumber(zone?.left),
-                y: finiteZoneSnapshotNumber(zone?.top),
-                width: finiteZoneSnapshotNumber(zone?._zoneWidth ?? zone?.width, 900),
-                height: finiteZoneSnapshotNumber(zone?._zoneHeight ?? zone?.height, 600),
-                scaleX: finiteZoneSnapshotNumber(zone?.scaleX, 1),
-                scaleY: finiteZoneSnapshotNumber(zone?.scaleY, 1),
-                angle: finiteZoneSnapshotNumber(zone?.angle)
-            },
-            layout: {
-                padding: finiteZoneSnapshotNumber(zone?._zonePadding ?? zone?.padding, 15),
-                gapHorizontal: finiteZoneSnapshotNumber(zone?.gapHorizontal ?? zone?._zonePadding ?? zone?.padding, 15),
-                gapVertical: finiteZoneSnapshotNumber(zone?.gapVertical ?? zone?._zonePadding ?? zone?.padding, 15),
-                columns: finiteZoneSnapshotNumber(zone?.columns),
-                rows: finiteZoneSnapshotNumber(zone?.rows),
-                columnRatio: clonePlainForZoneSnapshot(zone?.columnRatio ?? null),
-                rowRatio: clonePlainForZoneSnapshot(zone?.rowRatio ?? null),
-                cardAspectRatio: zone?.cardAspectRatio ?? 'fill',
-                lastRowBehavior: zone?.lastRowBehavior ?? 'fill',
-                layoutDirection: zone?.layoutDirection ?? 'horizontal',
-                verticalAlign: zone?.verticalAlign ?? 'stretch',
-                highlightCount: finiteZoneSnapshotNumber(zone?.highlightCount),
-                highlightPos: zone?.highlightPos ?? 'first',
-                highlightHeight: finiteZoneSnapshotNumber(zone?.highlightHeight, 1.5),
-                highlightStyle: zone?.highlightStyle ?? null,
-                splashOffsetByCol: clonePlainForZoneSnapshot(zone?.splashOffsetByCol ?? null)
-            },
-            appearance: {
-                backgroundColor: zone?.backgroundColor ?? zone?.fill ?? null,
-                borderColor: zone?.stroke ?? null,
-                borderWidth: finiteZoneSnapshotNumber(zone?.strokeWidth),
-                borderRadius: finiteZoneSnapshotNumber(zone?.rx ?? zone?.borderRadius),
-                showBorder: zone?.stroke !== 'transparent' && zone?.strokeWidth !== 0
-            }
-        },
-        globalStyles: clonePlainForZoneSnapshot(globalStyles),
-        labelTemplate: {
-            id: snapshotTemplateId || null,
-            snapshot: clonePlainForZoneSnapshot(zone?._zoneTemplateSnapshot || null)
-        },
-        cards: orderedCards.map((card: any, index: number) => buildZoneCardStateSnapshot(card, index))
-    };
-}
+const buildZoneStateSnapshot = (zone: any, zoneCards: any[]) =>
+    buildZoneStateSnapshotHelper(
+        zone,
+        zoneCards,
+        getZoneGlobalStyles,
+        getCardTitleText,
+        getPriceGroupFromAny,
+        serializePriceGroupForTemplate
+    )
 
 const getZoneSnapshotCards = (zone: any): any[] => {
     const snapshot = zone?._zoneStateSnapshot;
