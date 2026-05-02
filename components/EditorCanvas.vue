@@ -7,6 +7,8 @@ import { useResponsive } from '~/composables/useResponsive'
 import { useFigmaCrop } from '~/composables/useFigmaCrop'
 import { useProductZone } from '~/composables/useProductZone'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
+import { useEditorSnapping } from '~/composables/useEditorSnapping'
+import { useEditorAltDragDuplicate } from '~/composables/useEditorAltDragDuplicate'
 import { toWasabiDirectUrl, toWasabiProxyUrl } from '~/utils/storageProxy'
 import { finalizeSerializedCanvasJson } from '~/utils/editorCanvasSerialize'
 import { prepareCanvasForSerialization } from '~/utils/editorCanvasPreSerialize'
@@ -612,7 +614,51 @@ let globalEscKeyHandler: ((e: KeyboardEvent) => void) | null = null
 // atribuimos esta ref quando a funcao for criada.
 let resetAllDeepSelectPriceGroupsRef: (() => void) | null = null
 let globalKeyUpHandler: ((e: KeyboardEvent) => void) | null = null
-let teardownSnapping: (() => void) | null = null
+let teardownReactivity: (() => void) | null = null
+const editorAltDragDuplicate = useEditorAltDragDuplicate({
+    get canvasInstance() { return canvas.value },
+    get fabric() { return fabric },
+    makeId,
+    isPenMode,
+    isNodeEditing,
+    isDrawing,
+    isLikelyProductZone,
+    isLikelyProductCard,
+    isProductCardContainer,
+    safeRequestRenderAll,
+    shouldApplyContainmentConstraints,
+    applyContainmentConstraints,
+    getFrameDescendants,
+    syncObjectFrameClip,
+    saveCurrentState,
+    refreshSelectedRef,
+    flushZoneRelayoutOnDrop,
+    getZoneMetrics,
+    getZoneGlobalStyles
+})
+const editorSnapping = useEditorSnapping({
+    get canvasInstance() { return canvas.value },
+    get canvasEl() { return canvasEl.value },
+    get fabric() { return fabric },
+    snapToObjects,
+    snapToGuides,
+    snapToGrid,
+    gridSize,
+    viewShowGuides,
+    activePage,
+    userGuidesIndex,
+    isLikelyProductCard,
+    isLikelyProductZone,
+    isActiveSelectionObject,
+    getFrameDescendants,
+    syncObjectFrameClip,
+    applyContainmentConstraints,
+    shouldApplyContainmentConstraints,
+    getZoneMetrics,
+    safeRequestRenderAll,
+    refreshSelectedRef,
+    flushZoneRelayoutOnDrop
+})
 let domCanvasDblClickHandler: ((e: MouseEvent) => void) | null = null
 let domCanvasTouchStartHandler: ((e: TouchEvent) => void) | null = null
 let domCanvasTouchMoveHandler: ((e: TouchEvent) => void) | null = null
@@ -3398,684 +3444,6 @@ const findParentGroupForObjectGlobal = (obj: any): any => {
 
 // === ALT/OPTION + DRAG DUPLICATE (Figma/Canva-like) ===
 // When user Alt-drags an object, we keep the original in place and drag a clone.
-const setupAltDragDuplicate = () => {
-    if (!canvas.value || !fabric) return;
-
-    const isValidFabricObject = (o: any) => {
-        if (!o || typeof o !== 'object') return false;
-        return typeof o.set === 'function' && typeof o.render === 'function' && typeof o.setCoords === 'function';
-    };
-
-    const assignNewIdsDeep = (obj: any) => {
-        if (!obj || typeof obj !== 'object') return;
-        if (typeof obj.set !== 'function') return;
-        (obj as any).__duplicateSourceCustomId = String((obj as any)._customId || '').trim();
-        obj._customId = makeId();
-        if (typeof obj.getObjects === 'function') {
-            (obj.getObjects() || []).forEach((c: any) => {
-                if (c && typeof c.set === 'function') {
-                    (c as any).__duplicateSourceCustomId = String((c as any)._customId || '').trim();
-                    c._customId = makeId();
-                }
-            });
-        }
-    };
-
-    const state = {
-        armed: false,
-        cloning: false,
-        didDuplicate: false,
-        cloneRequestSeq: 0,
-        activeCloneRequestId: 0,
-        original: null as any,
-        clone: null as any,
-        parentGroup: null as any,
-        cloneInGroup: false,
-        startLeft: 0,
-        startTop: 0,
-        origLockX: false,
-        origLockY: false,
-        // Track current pointer during async clone for smooth positioning
-        lastPointerX: 0,
-        lastPointerY: 0,
-        pointerDownX: 0,
-        pointerDownY: 0,
-        manualFollowClone: false,
-    };
-
-    const restoreOriginalLocks = (obj: any) => {
-        if (!obj || typeof obj.set !== 'function') return;
-        obj.set({
-            lockMovementX: !!state.origLockX,
-            lockMovementY: !!state.origLockY,
-        });
-        obj.setCoords?.();
-    };
-
-    const isEligibleTarget = (obj: any) => {
-        if (!obj) return false;
-        if (obj.excludeFromExport) return false;
-        if (isPenMode.value || isNodeEditing.value || isDrawing.value) return false;
-        if (isLikelyProductZone(obj)) return false;
-        // ActiveSelection is allowed — Alt+drag duplicates all selected objects
-        return true;
-    };
-
-    const pickAltDragSource = (opt: any) => {
-        const candidates: any[] = [];
-        const seen = new Set<any>();
-        const push = (obj: any) => {
-            if (!obj || seen.has(obj)) return;
-            seen.add(obj);
-            candidates.push(obj);
-        };
-
-        if (Array.isArray(opt?.subTargets)) {
-            opt.subTargets.forEach((obj: any) => push(obj));
-        }
-        push(opt?.subTarget);
-        push(opt?.target);
-
-        const tr: any = (canvas.value as any)?._currentTransform;
-        push(tr?.target);
-
-        const active = canvas.value?.getActiveObject?.();
-        push((active as any)?._activeObject);
-        push(active);
-
-        return candidates.find((obj: any) => isEligibleTarget(obj)) || null;
-    };
-
-    const resolveSourceFromTransform = (source: any, transformTarget: any) => {
-        if (!isEligibleTarget(transformTarget)) return source;
-        if (!source) return transformTarget;
-        if (transformTarget === source) return source;
-
-        const sourceType = String(source?.type || '').toLowerCase();
-        const sourceIsGroup = sourceType === 'group';
-        if (sourceIsGroup && transformTarget.group === source) {
-            return transformTarget;
-        }
-
-        const sourceParent = source?.group;
-        if (sourceParent && transformTarget === sourceParent) {
-            // User may be deep-selecting a child while Fabric reports parent group as transform target.
-            return source;
-        }
-        if (sourceParent && transformTarget.group === sourceParent) {
-            return transformTarget;
-        }
-
-        return source;
-    };
-
-    // isTransformRelatedToSource extraido para utils/fabricObjectClassifiers.ts.
-
-    const syncCloneToPointerDelta = () => {
-        if (!state.clone || !isValidFabricObject(state.clone)) return;
-        if (!Number.isFinite(state.pointerDownX) || !Number.isFinite(state.pointerDownY)) return;
-
-        const worldDx = Number(state.lastPointerX || 0) - Number(state.pointerDownX || 0);
-        const worldDy = Number(state.lastPointerY || 0) - Number(state.pointerDownY || 0);
-
-        let localDx = worldDx;
-        let localDy = worldDy;
-        const parentGroup = (state.clone as any)?.group;
-        if (parentGroup) {
-            const angle = (Number((parentGroup as any)?.angle) || 0) * (Math.PI / 180);
-            const cos = Math.cos(-angle);
-            const sin = Math.sin(-angle);
-            const rotatedX = worldDx * cos - worldDy * sin;
-            const rotatedY = worldDx * sin + worldDy * cos;
-            const scaleX = Number((parentGroup as any)?.scaleX) || 1;
-            const scaleY = Number((parentGroup as any)?.scaleY) || 1;
-            localDx = rotatedX / (scaleX || 1);
-            localDy = rotatedY / (scaleY || 1);
-        }
-
-        state.clone.set({
-            left: Number(state.startLeft || 0) + localDx,
-            top: Number(state.startTop || 0) + localDy,
-        });
-        state.clone.setCoords?.();
-        if (shouldApplyContainmentConstraints(state.clone)) {
-            applyContainmentConstraints(state.clone);
-        }
-    };
-
-    const getScenePointerFromEvent = (evt: any): { x: number; y: number } | null => {
-        if (!canvas.value || !evt) return null;
-        try {
-            // Use scene/world coords first (matches object left/top space).
-            const scene = canvas.value.getScenePoint?.(evt);
-            if (scene && Number.isFinite(scene.x) && Number.isFinite(scene.y)) {
-                return { x: Number(scene.x), y: Number(scene.y) };
-            }
-            const viewport = canvas.value.getViewportPoint?.(evt);
-            if (viewport && Number.isFinite(viewport.x) && Number.isFinite(viewport.y)) {
-                return { x: Number(viewport.x), y: Number(viewport.y) };
-            }
-        } catch {
-            // ignore
-        }
-        return null;
-    };
-
-    canvas.value.on('mouse:down', (opt: any) => {
-        const evt: MouseEvent | undefined = opt?.e;
-        if (!evt || evt.button !== 0 || !evt.altKey) {
-            state.armed = false;
-            state.activeCloneRequestId = 0;
-            state.manualFollowClone = false;
-            return;
-        }
-        const source = pickAltDragSource(opt);
-        if (!isEligibleTarget(source)) {
-            state.armed = false;
-            state.activeCloneRequestId = 0;
-            state.manualFollowClone = false;
-            return;
-        }
-
-        // FIGMA BEHAVIOR: When user deep-selects a child inside a product card
-        // (e.g., product image, title text), ALT+drag should duplicate JUST that child,
-        // NOT the entire card group. The child will be cloned inside the same parent group.
-        // If the user wants to duplicate the whole card, they select the card group itself.
-
-        state.armed = true;
-        state.cloning = false;
-        state.didDuplicate = false;
-        state.manualFollowClone = false;
-        state.activeCloneRequestId = 0;
-        state.original = source;
-        state.startLeft = Number(source.left || 0);
-        state.startTop = Number(source.top || 0);
-        // Initialize pointer tracking at mousedown position
-        const ptr = getScenePointerFromEvent(evt);
-        if (ptr) {
-            state.lastPointerX = ptr.x;
-            state.lastPointerY = ptr.y;
-            state.pointerDownX = ptr.x;
-            state.pointerDownY = ptr.y;
-        } else {
-            state.lastPointerX = state.startLeft;
-            state.lastPointerY = state.startTop;
-            state.pointerDownX = state.startLeft;
-            state.pointerDownY = state.startTop;
-        }
-    });
-
-    canvas.value.on('mouse:move:before', (opt: any) => {
-        if (!state.armed || state.cloning) return;
-        if (!canvas.value) return;
-
-        // Track pointer continuously for smooth clone positioning
-        try {
-            const evt = opt?.e;
-            if (evt) {
-                const ptr = getScenePointerFromEvent(evt);
-                if (ptr) { state.lastPointerX = ptr.x; state.lastPointerY = ptr.y; }
-            }
-        } catch { /* ignore */ }
-
-        if (state.didDuplicate) {
-            if (state.manualFollowClone && state.clone) {
-                syncCloneToPointerDelta();
-                safeRequestRenderAll();
-            }
-            return;
-        }
-
-        const tr: any = (canvas.value as any)._currentTransform;
-        const transformTarget = tr?.target;
-        const resolvedSource = resolveSourceFromTransform(state.original, transformTarget);
-        if (resolvedSource && resolvedSource !== state.original) {
-            state.original = resolvedSource;
-            state.startLeft = Number(resolvedSource.left || 0);
-            state.startTop = Number(resolvedSource.top || 0);
-            // Re-anchor drag delta when Fabric swaps parent->child target to avoid jump.
-            if (Number.isFinite(state.lastPointerX) && Number.isFinite(state.lastPointerY)) {
-                state.pointerDownX = Number(state.lastPointerX);
-                state.pointerDownY = Number(state.lastPointerY);
-            }
-        }
-
-        // For interactive groups (product cards with subTargetCheck=true), Fabric may report
-        // transform target as either the child or its parent group depending on hit-test timing.
-        // When transform is not yet available or target is null, trust the mousedown source.
-        if (tr && transformTarget && !isTransformRelatedToSource(state.original, transformTarget)) {
-            const sourceGroup = state.original?.group;
-            const inInteractiveGroup = !!(
-                sourceGroup &&
-                (sourceGroup.interactive || sourceGroup.subTargetCheck)
-            );
-            if (!inInteractiveGroup) return;
-        }
-
-        // Start cloning (runs once)
-        state.cloning = true;
-        const original = state.original;
-        const origLeft = state.startLeft;
-        const origTop = state.startTop;
-
-        // Fabric can occasionally keep the transform bound to the parent group even when
-        // user is dragging a deep-selected child. Re-bind to child so clone handoff is stable.
-        const sourceParentGroup = (original as any)?.group;
-        if (tr && sourceParentGroup && tr.target === sourceParentGroup && tr.target !== original) {
-            tr.target = original;
-            if (tr.original && typeof tr.original === 'object') {
-                tr.original.left = origLeft;
-                tr.original.top = origTop;
-            }
-        }
-
-        // Lock original IMMEDIATELY to prevent it from moving while clone is being created.
-        // This is critical because doClone() is async (fabric.clone / enlivenObjects return Promises).
-        // Without this, the original moves with the mouse for 1-2 frames before the clone takes over.
-        state.origLockX = !!original.lockMovementX;
-        state.origLockY = !!original.lockMovementY;
-        original.set({ lockMovementX: true, lockMovementY: true });
-        original.set({ left: origLeft, top: origTop });
-        original.setCoords?.();
-        const cloneRequestId = ++state.cloneRequestSeq;
-        state.activeCloneRequestId = cloneRequestId;
-
-        // Clone via Fabric's native clone
-        const CLONE_PROPS = [
-            '_customId', 'isFrame', 'layerName', 'clipContent', 'parentFrameId', 'parentZoneId',
-            'objectMaskEnabled',
-            'isSmartObject', 'isProductCard', 'name', 'smartGridId', 'unitLabel',
-            'price', 'pricePack', 'priceUnit', 'priceSpecial', 'priceSpecialUnit', 'specialCondition',
-            'priceWholesale', 'wholesaleTrigger', 'wholesaleTriggerUnit', 'packQuantity', 'packUnit', 'packageLabel',
-            'unit', 'limit', '_productData', '_cardWidth', '_cardHeight', 'subTargetCheck', 'interactive',
-            '__preserveManualLayout', '__isCustomTemplate', '__forceAtacarejoCanonical',
-            '__manualTemplateBaseW', '__manualTemplateBaseH', '__manualGapSingle', '__manualGapRetail', '__manualGapWholesale',
-            '__atacValueVariants', '__atacVariantGroups'
-        ];
-
-        const cloneSingleObject = async (src: any): Promise<any> => {
-            let cloned: any = null;
-            const srcType = String(src.type || '').toLowerCase();
-            const isSrcGroup = srcType === 'group';
-
-            // For groups, prefer serialize+enliven — fabric.clone() on groups sometimes
-            // produces children that lose critical methods (getRelativeCenterPoint etc.)
-            if (isSrcGroup) {
-                try {
-                    const json = typeof src.toObject === 'function' ? src.toObject(CLONE_PROPS) : null;
-                    if (json && fabric?.util?.enlivenObjects) {
-                        const objs = await fabric.util.enlivenObjects([json]);
-                        cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
-                    }
-                } catch (e) {
-                    console.warn('[alt-drag-duplicate] serialize+enliven for group failed', e);
-                    cloned = null;
-                }
-            }
-
-            // For non-groups (or if serialize failed), try native clone
-            if (!isValidFabricObject(cloned)) {
-                try {
-                    if (typeof src.clone === 'function') {
-                        const result = src.clone(CLONE_PROPS);
-                        if (result && typeof result.then === 'function') {
-                            cloned = await result;
-                        }
-                    }
-                } catch { /* ignore */ }
-            }
-
-            // Final fallback: serialize + enliven
-            if (!isValidFabricObject(cloned) && !isSrcGroup) {
-                try {
-                    const json = typeof src.toObject === 'function' ? src.toObject(CLONE_PROPS) : null;
-                    if (json && fabric?.util?.enlivenObjects) {
-                        const objs = await fabric.util.enlivenObjects([json]);
-                        cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
-                    }
-                } catch { /* ignore */ }
-            }
-
-            // Validate group children have proper methods
-            if (isValidFabricObject(cloned) && cloned.type === 'group' && typeof cloned.getObjects === 'function') {
-                const children = cloned.getObjects();
-                const allValid = children.every((c: any) => c && typeof c === 'object' && typeof c.getRelativeCenterPoint === 'function');
-                if (!allValid) {
-                    cloned = null;
-                    try {
-                        const json = typeof src.toObject === 'function' ? src.toObject(CLONE_PROPS) : null;
-                        if (json && fabric?.util?.enlivenObjects) {
-                            const objs = await fabric.util.enlivenObjects([json]);
-                            cloned = Array.isArray(objs) && objs.length > 0 ? objs[0] : null;
-                        }
-                    } catch { /* ignore */ }
-                }
-            }
-
-            return cloned;
-        };
-
-        const doClone = async () => {
-            const isActiveSelection = String(original.type || '').toLowerCase() === 'activeselection';
-
-            // ── ActiveSelection: clone each member individually ──
-            if (isActiveSelection) {
-                const members = typeof original.getObjects === 'function' ? original.getObjects() : [];
-                if (members.length === 0) {
-                    state.activeCloneRequestId = 0;
-                    state.armed = false;
-                    restoreOriginalLocks(original);
-                    state.cloning = false;
-                    return;
-                }
-
-                const clones: any[] = [];
-                for (const member of members) {
-                    const c = await cloneSingleObject(member);
-                    if (!isValidFabricObject(c)) continue;
-                    assignNewIdsDeep(c);
-                    // Compute absolute position from the ActiveSelection's transform matrix
-                    const mat = member.calcTransformMatrix?.();
-                    if (mat) {
-                        const decomposed = fabric.util.qrDecompose?.(mat) || {} as any;
-                        c.set({
-                            left: decomposed.translateX ?? Number(member.left || 0),
-                            top: decomposed.translateY ?? Number(member.top || 0),
-                            scaleX: decomposed.scaleX ?? member.scaleX ?? 1,
-                            scaleY: decomposed.scaleY ?? member.scaleY ?? 1,
-                            angle: decomposed.angle ?? member.angle ?? 0,
-                        });
-                    }
-                    c.set({ selectable: true, evented: true, hasControls: true, hasBorders: true, objectCaching: false, dirty: true });
-                    // Copy parentFrameId
-                    if ((member as any).parentFrameId != null) (c as any).parentFrameId = (member as any).parentFrameId;
-                    c.setCoords?.();
-                    canvas.value.add(c);
-                    clones.push(c);
-                }
-                remapDuplicatedSelectionBindings(clones, { reason: 'alt-drag-selection', relayout: false });
-
-                if (clones.length === 0 || !canvas.value) {
-                    state.activeCloneRequestId = 0;
-                    state.armed = false;
-                    restoreOriginalLocks(original);
-                    state.cloning = false;
-                    return;
-                }
-
-                // Create new ActiveSelection from clones
-                const newAS = new (fabric as any).ActiveSelection(clones, { canvas: canvas.value });
-                canvas.value.setActiveObject(newAS);
-
-                // Swap Fabric transform to the new ActiveSelection
-                const tr: any = (canvas.value as any)._currentTransform;
-                let didSwapTransform = false;
-                if (tr && (tr.target === original || isTransformRelatedToSource(original, tr.target))) {
-                    tr.target = newAS;
-                    if (tr.original && typeof tr.original === 'object') {
-                        tr.original.left = newAS.left;
-                        tr.original.top = newAS.top;
-                    }
-                    didSwapTransform = true;
-                }
-
-                // Pin originals in place
-                original.set({ left: origLeft, top: origTop });
-                original.setCoords?.();
-
-                state.clone = newAS;
-                state.didDuplicate = true;
-                state.manualFollowClone = !didSwapTransform;
-                syncCloneToPointerDelta();
-
-                if (didSwapTransform) {
-                    const tr2: any = (canvas.value as any)?._currentTransform;
-                    if (tr2?.original && typeof tr2.original === 'object') {
-                        tr2.original.left = newAS.left;
-                        tr2.original.top = newAS.top;
-                    }
-                }
-                state.cloning = false;
-                safeRequestRenderAll();
-                return;
-            }
-
-            // ── Single object clone ──
-            let cloned = await cloneSingleObject(original);
-
-            const cloneWasCancelled = cloneRequestId !== state.activeCloneRequestId || !state.armed;
-            if (cloneWasCancelled || !isValidFabricObject(cloned) || !canvas.value) {
-                state.activeCloneRequestId = 0;
-                state.armed = false;
-                restoreOriginalLocks(original);
-                state.cloning = false;
-                return;
-            }
-
-            assignNewIdsDeep(cloned);
-
-            // Copy metadata — only for top-level objects or card groups.
-            // When cloning a CHILD element inside a card (e.g., a product image),
-            // do NOT copy card-level meta to the child clone.
-            const isCloneACard = cloned.type === 'group' && (cloned.isSmartObject || cloned.isProductCard || isLikelyProductCard(cloned));
-            if (isCloneACard) {
-                for (const k of ['parentFrameId', 'parentZoneId', 'isSmartObject', 'isProductCard', 'unitLabel', 'smartGridId', '_cardWidth', '_cardHeight']) {
-                    if ((original as any)[k] != null) (cloned as any)[k] = (original as any)[k];
-                }
-            } else if (!original.group || !(original.group.isSmartObject || original.group.isProductCard || isLikelyProductCard(original.group))) {
-                // Only copy frame/zone binding for non-card-child objects
-                for (const k of ['parentFrameId']) {
-                    if ((original as any)[k] != null) (cloned as any)[k] = (original as any)[k];
-                }
-            }
-
-            // Ensure cloned product card groups have correct child flags
-            if ((cloned.isSmartObject || cloned.isProductCard) && cloned.type === 'group' && typeof cloned.getObjects === 'function') {
-                cloned.set({ subTargetCheck: true, interactive: true });
-                cloned.getObjects().forEach((child: any) => {
-                    const isBackground = child.name === 'offerBackground' || child.name === 'price_bg';
-                    child.set({
-                        selectable: !isBackground,
-                        evented: !isBackground,
-                        hasControls: !isBackground,
-                        hasBorders: !isBackground,
-                    });
-                });
-            }
-
-            // Check if original is inside a group (e.g. product card inside product zone)
-            const parentGroup = (original as any).group;
-            const isInsideGroup = parentGroup && String(parentGroup.type || '').toLowerCase() !== 'activeselection';
-            state.parentGroup = isInsideGroup ? parentGroup : null;
-            state.cloneInGroup = false;
-
-            // ── Position & insert the clone ──
-            if (isInsideGroup && parentGroup) {
-                // INSIDE GROUP: insert clone directly into parent group at same local coords.
-                cloned.set({
-                    left: origLeft,
-                    top: origTop,
-                    originX: original.originX || 'left',
-                    originY: original.originY || 'top',
-                    selectable: true,
-                    evented: true,
-                    hasControls: true,
-                    hasBorders: true,
-                    objectCaching: false,
-                    dirty: true,
-                });
-
-                // SILENT insertion: disable LayoutManager to prevent position recalculation
-                const lm = (parentGroup as any).layoutManager;
-                const origPerformLayout = lm?.performLayout;
-                if (lm) lm.performLayout = () => {};
-
-                const groupObjects = typeof parentGroup.getObjects === 'function'
-                    ? parentGroup.getObjects()
-                    : (Array.isArray((parentGroup as any)._objects) ? (parentGroup as any)._objects : []);
-                const originalIndexInGroup = Array.isArray(groupObjects) ? groupObjects.indexOf(original) : -1;
-                const insertIndex = originalIndexInGroup >= 0
-                    ? Math.min(originalIndexInGroup + 1, groupObjects.length)
-                    : -1;
-
-                if (insertIndex >= 0 && typeof (parentGroup as any).insertAt === 'function') {
-                    (parentGroup as any).insertAt(insertIndex, cloned);
-                } else if (Array.isArray((parentGroup as any)._objects)) {
-                    if (insertIndex >= 0) {
-                        (parentGroup as any)._objects.splice(insertIndex, 0, cloned);
-                    } else {
-                        (parentGroup as any)._objects.push(cloned);
-                    }
-                    (cloned as any).group = parentGroup;
-                    cloned.canvas = canvas.value;
-                } else if (typeof parentGroup.add === 'function') {
-                    parentGroup.add(cloned);
-                }
-
-                if (lm && origPerformLayout) lm.performLayout = origPerformLayout;
-
-                cloned.setCoords?.();
-                parentGroup.set('dirty', true);
-                if (shouldApplyContainmentConstraints(cloned)) {
-                    applyContainmentConstraints(cloned);
-                }
-                state.cloneInGroup = true;
-
-            } else {
-                // CANVAS LEVEL: same left/top/origin
-                cloned.set({
-                    left: origLeft,
-                    top: origTop,
-                    originX: original.originX || 'left',
-                    originY: original.originY || 'top',
-                    selectable: true,
-                    evented: true,
-                    hasControls: true,
-                    hasBorders: true,
-                    objectCaching: false,
-                    dirty: true,
-                });
-                cloned.setCoords?.();
-
-                canvas.value.add(cloned);
-
-                // Z-order: place clone right above the original
-                const canvasObjs = canvas.value.getObjects();
-                const origIdx = canvasObjs.indexOf(original);
-                if (origIdx >= 0 && typeof (canvas.value as any).moveTo === 'function') {
-                    (canvas.value as any).moveTo(cloned, origIdx + 1);
-                }
-            }
-
-            // FIGMA/CANVA BEHAVIOR: original stays in place, CLONE follows mouse.
-            // Swap Fabric's internal transform target from original → clone.
-            const tr: any = (canvas.value as any)._currentTransform;
-            let didSwapTransform = false;
-            if (tr) {
-                const parentGroup2 = (original as any)?.group;
-                const shouldSwap = isTransformRelatedToSource(original, tr.target)
-                    || (isInsideGroup && parentGroup2 && tr.target === parentGroup2)
-                    || tr.target === original;
-
-                if (shouldSwap) {
-                    tr.target = cloned;
-                    if (tr.original && typeof tr.original === 'object') {
-                        tr.original.left = cloned.left;
-                        tr.original.top = cloned.top;
-                    }
-                    didSwapTransform = true;
-                }
-            }
-
-            // Ensure original is still pinned (was locked before doClone, reinforce here)
-            original.set({ left: origLeft, top: origTop });
-            original.setCoords?.();
-
-            // Select the clone (it follows the mouse)
-            canvas.value.setActiveObject(cloned);
-
-            state.clone = cloned;
-            state.didDuplicate = true;
-            state.manualFollowClone = !didSwapTransform;
-
-            // Always align clone to the current pointer delta on the first frame.
-            syncCloneToPointerDelta();
-
-            if (didSwapTransform) {
-                const tr2: any = (canvas.value as any)?._currentTransform;
-                if (tr2?.original && typeof tr2.original === 'object') {
-                    tr2.original.left = cloned.left;
-                    tr2.original.top = cloned.top;
-                }
-            }
-            state.cloning = false;
-
-            safeRequestRenderAll();
-        };
-
-        doClone();
-    });
-
-    canvas.value.on('mouse:up', () => {
-        if (!state.didDuplicate || !canvas.value) {
-            state.activeCloneRequestId = 0;
-            restoreOriginalLocks(state.original);
-            state.armed = false;
-            state.cloning = false;
-            state.didDuplicate = false;
-            state.manualFollowClone = false;
-            state.original = null;
-            state.clone = null;
-            state.pointerDownX = 0;
-            state.pointerDownY = 0;
-            return;
-        }
-
-        const original = state.original;
-        const clone = state.clone;
-        const pg = state.parentGroup;
-
-        // Unlock original (restore previous lock state)
-        if (original) {
-            restoreOriginalLocks(original);
-        }
-
-        // Clone is already in the correct parent (group or canvas). Just finalize.
-        if (clone && pg) {
-            pg.set('dirty', true);
-            if (typeof pg.setCoords === 'function') pg.setCoords();
-        }
-
-        // Select the clone (the one the user just placed)
-        if (clone) {
-            clone.setCoords?.();
-            if (pg) {
-                pg.set({ subTargetCheck: true, interactive: true });
-            }
-            canvas.value.setActiveObject(clone);
-        }
-
-        safeRequestRenderAll();
-
-        // Update objects list
-        refreshCanvasObjects();
-
-        // Reset state
-        state.activeCloneRequestId = 0;
-        state.armed = false;
-        state.cloning = false;
-        state.didDuplicate = false;
-        state.manualFollowClone = false;
-        state.original = null;
-        state.clone = null;
-        state.parentGroup = null;
-        state.cloneInGroup = false;
-        state.pointerDownX = 0;
-        state.pointerDownY = 0;
-
-        saveCurrentState();
-    });
-};
 
 // type ArrangeMode + computeArrangedOrder extraidos para utils/arrangeOrder.ts.
 type ArrangeMode = import('~/utils/arrangeOrder').ArrangeMode;
@@ -6862,10 +6230,6 @@ const openAiGenerationModal = () => {
     showAIModal.value = true
 }
 
-onUnmounted(() => {
-    if (aiToastTimer) clearTimeout(aiToastTimer)
-})
-
 const showExportModal = ref(false)
 const showShareModal = ref(false)
 const isExportDownloadInProgress = ref(false)
@@ -8733,7 +8097,7 @@ onMounted(async () => {
       setupZoomPan();
       
       // Snapping
-      setupSnapping();
+      editorSnapping.setup();
 
       // Load Fonts
       loadFonts();
@@ -8749,7 +8113,7 @@ onMounted(async () => {
       setupHistory();
 
       // Alt/Option + Drag duplicate
-      setupAltDragDuplicate();
+      editorAltDragDuplicate.setup();
       
       // Global Key Listener
       window.addEventListener('keydown', handleKeyDown);
@@ -9469,10 +8833,13 @@ onUnmounted(() => {
     window.removeEventListener('blur', globalWindowBlurHandler);
     globalWindowBlurHandler = null;
   }
-  if (teardownSnapping) {
-    teardownSnapping();
-    teardownSnapping = null;
+  editorSnapping.teardown();
+  editorAltDragDuplicate.teardown();
+  if (aiToastTimer) {
+    clearTimeout(aiToastTimer);
+    aiToastTimer = null;
   }
+  teardownReactivity?.();
   if (canvas.value) {
     // FIX #5: explicitly remove ALL Fabric event listeners before dispose() to
     // break closures that retain Vue reactive refs and prevent GC.
@@ -14876,13 +14243,12 @@ const applyUserGuidesVisibility = () => {
 }
 
 // makeUserGuideId extraido para utils/userGuideHelpers.ts.
-const makeUserGuideId = (axis: 'x' | 'y') => makeUserGuideIdHelper(axis, makeId)
 
 const handleCreateUserGuide = ({ axis, pos }: { axis: 'x' | 'y'; pos: number }) => {
     if (!canvas.value || !fabric) return
     const p = Number(pos || 0)
     if (!Number.isFinite(p)) return
-    const id = makeUserGuideId(axis)
+    const id = makeUserGuideIdHelper(axis, makeId)
     const coords = axis === 'x'
         ? [p, -USER_GUIDE_EXTENT, p, USER_GUIDE_EXTENT]
         : [-USER_GUIDE_EXTENT, p, USER_GUIDE_EXTENT, p]
@@ -14944,1012 +14310,6 @@ const rulerGuides = computed(() => (viewShowGuides.value ? userGuidesIndex.value
 // GUIDE_COLOR, GUIDE_STROKE_WIDTH, SNAP_* constantes extraidas para
 // utils/snapConstants.ts.
 
-const setupSnapping = () => {
-    if (!canvas.value) return;
-
-    if (teardownSnapping) {
-        teardownSnapping();
-        teardownSnapping = null;
-    }
-    if (!canvas.value) return;
-    const canvasInstance = canvas.value;
-
-    // Defensive cleanup for old guide instances left from prior setup runs.
-    const staleGuides = canvasInstance
-        .getObjects()
-        .filter((o: any) => o?.id === 'guide-vertical' || o?.id === 'guide-horizontal');
-    staleGuides.forEach((g: any) => {
-        try {
-            canvasInstance.remove(g);
-        } catch {
-            // ignore stale guide removal errors
-        }
-    });
-
-    const verticalGuide = new fabric.Line([0, 0, 0, 100], {
-        stroke: GUIDE_COLOR,
-        strokeWidth: GUIDE_STROKE_WIDTH,
-        selectable: false,
-        evented: false,
-        visible: false,
-        opacity: 1,
-        strokeDashArray: [10, 6],
-        strokeLineCap: 'round',
-        strokeUniform: true,
-        objectCaching: false,
-        id: 'guide-vertical',
-        excludeFromExport: true
-    });
-    const horizontalGuide = new fabric.Line([0, 0, 100, 0], {
-        stroke: GUIDE_COLOR,
-        strokeWidth: GUIDE_STROKE_WIDTH,
-        selectable: false,
-        evented: false,
-        visible: false,
-        opacity: 1,
-        strokeDashArray: [10, 6],
-        strokeLineCap: 'round',
-        strokeUniform: true,
-        objectCaching: false,
-        id: 'guide-horizontal',
-        excludeFromExport: true
-    });
-
-    canvasInstance.add(verticalGuide);
-    canvasInstance.add(horizontalGuide);
-    // Ensure snap overlays are always on top of content (otherwise large rects/images can cover them).
-    try {
-        if (typeof canvasInstance.bringObjectToFront === 'function') {
-            canvasInstance.bringObjectToFront(verticalGuide);
-            canvasInstance.bringObjectToFront(horizontalGuide);
-        }
-    } catch {
-        // ignore
-    }
-
-    type SnapBounds = {
-        left: number;
-        right: number;
-        top: number;
-        bottom: number;
-        centerX: number;
-        centerY: number;
-        width: number;
-        height: number;
-    };
-
-    // FIXED: Use local coordinates to avoid jump/snap issues
-    // getBoundingRect(true, true) returns world coordinates which conflict with local positioning
-    const getBounds = (o: any): SnapBounds => {
-        // For objects inside groups, we need to calculate bounds relative to the canvas
-        // Use origin-aware calculations to get consistent bounds
-        const width = Math.abs((o.width || 0) * (o.scaleX || 1));
-        const height = Math.abs((o.height || 0) * (o.scaleY || 1));
-
-        // Calculate actual left/top based on originX/originY
-        let actualLeft = o.left || 0;
-        let actualTop = o.top || 0;
-
-        if (o.originX === 'center') {
-            actualLeft = (o.left || 0) - width / 2;
-        } else if (o.originX === 'right') {
-            actualLeft = (o.left || 0) - width;
-        }
-
-        if (o.originY === 'center') {
-            actualTop = (o.top || 0) - height / 2;
-        } else if (o.originY === 'bottom') {
-            actualTop = (o.top || 0) - height;
-        }
-
-        return {
-            left: actualLeft,
-            right: actualLeft + width,
-            top: actualTop,
-            bottom: actualTop + height,
-            centerX: actualLeft + width / 2,
-            centerY: actualTop + height / 2,
-            width,
-            height
-        };
-    };
-
-    const w = (o: any) => Math.abs((o.width || 0) * (o.scaleX || 1));
-    const h = (o: any) => Math.abs((o.height || 0) * (o.scaleY || 1));
-
-    // FIXED: Use Fabric.js native methods for reliable positioning
-    const setObjLeft = (obj: any, x: number) => {
-        // Set the left edge to x, considering originX
-        const width = w(obj);
-        if (obj.originX === 'center') {
-            obj.set('left', x + width / 2);
-        } else if (obj.originX === 'right') {
-            obj.set('left', x + width);
-        } else {
-            obj.set('left', x);
-        }
-    };
-    const setObjRight = (obj: any, x: number) => {
-        // Set the right edge to x, considering originX
-        const width = w(obj);
-        if (obj.originX === 'center') {
-            obj.set('left', x - width / 2);
-        } else if (obj.originX === 'right') {
-            obj.set('left', x);
-        } else {
-            obj.set('left', x - width);
-        }
-    };
-    const setObjTop = (obj: any, y: number) => {
-        // Set the top edge to y, considering originY
-        const height = h(obj);
-        if (obj.originY === 'center') {
-            obj.set('top', y + height / 2);
-        } else if (obj.originY === 'bottom') {
-            obj.set('top', y + height);
-        } else {
-            obj.set('top', y);
-        }
-    };
-    const setObjBottom = (obj: any, y: number) => {
-        // Set the bottom edge to y, considering originY
-        const height = h(obj);
-        if (obj.originY === 'center') {
-            obj.set('top', y - height / 2);
-        } else if (obj.originY === 'bottom') {
-            obj.set('top', y);
-        } else {
-            obj.set('top', y - height);
-        }
-    };
-    const setObjCenterX = (obj: any, x: number) => {
-        // FIXED: Position center at x
-        // When originX='left', center is at left + width/2, so left = x - width/2
-        // When originX='center', center is at left, so left = x
-        // When originX='right', center is at left - width/2, so left = x + width/2
-        const width = w(obj);
-        if (obj.originX === 'left') {
-            obj.set('left', x - width / 2);
-        } else if (obj.originX === 'right') {
-            obj.set('left', x + width / 2);
-        } else {
-            obj.set('left', x);
-        }
-    };
-    const setObjCenterY = (obj: any, y: number) => {
-        // FIXED: Position center at y
-        // When originY='top', center is at top + height/2, so top = y - height/2
-        // When originY='center', center is at top, so top = y
-        // When originY='bottom', center is at top - height/2, so top = y + height/2
-        const height = h(obj);
-        if (obj.originY === 'top') {
-            obj.set('top', y - height / 2);
-        } else if (obj.originY === 'bottom') {
-            obj.set('top', y + height / 2);
-        } else {
-            obj.set('top', y);
-        }
-    };
-
-    const isControl = (o: any) => {
-        const n = (o?.name || '').toString();
-        return n === 'path_node' || n === 'bezier_handle' || n === 'control_point' || n === 'handle_line';
-    };
-
-    // === SNAP TARGET CACHING: avoid recalculating on every mouse move ===
-    let cachedSnapTargets: any[] | null = null;
-    let cachedSnapExclude: any = null;
-    let cachedTargetBounds: Map<any, SnapBounds> | null = null;
-    const frameLookup = new Map<string, any | null>();
-    let cachedZones: any[] | null = null;
-    let cachedZoneById: Map<string, any> | null = null;
-    let cachedZoneMetrics: Map<any, any> | null = null;
-
-    const invalidateSnapCache = () => {
-        cachedSnapTargets = null;
-        cachedSnapExclude = null;
-        cachedTargetBounds = null;
-        cachedZones = null;
-        cachedZoneById = null;
-        cachedZoneMetrics = null;
-        frameLookup.clear();
-    };
-
-    const getSnapTargets = (exclude: any) => {
-        // Return cached targets if same object being dragged
-        if (cachedSnapTargets && cachedSnapExclude === exclude && cachedTargetBounds) return cachedSnapTargets;
-
-        const all = canvasInstance.getObjects();
-        // Get the parent frame ID of the object being moved (if any)
-        const parentFrameId = (exclude as any)?.parentFrameId as string | undefined;
-        // When moving a frame, exclude its descendants from snap targets. Otherwise the frame
-        // "snaps" to its own children (distance is often 0) and guides feel broken/noisy.
-        const frameDescendants = (exclude as any)?.isFrame ? new Set(getFrameDescendants(exclude)) : null;
-        const nextTargets: any[] = [];
-        const nextBounds = new Map<any, SnapBounds>();
-
-        for (const o of all) {
-            if (!o || o === exclude) continue;
-            if (frameDescendants && frameDescendants.has(o)) continue;
-            if (o.excludeFromExport || isControl(o)) continue;
-            if (o.id === 'artboard-bg' || o.id === 'guide-vertical' || o.id === 'guide-horizontal') continue;
-            // CRITICAL: Exclude the parent frame from snap targets to prevent the object
-            // from being "stuck" snapping to its own container
-            if (parentFrameId && o.isFrame && o._customId === parentFrameId) continue;
-            nextTargets.push(o);
-            nextBounds.set(o, getBounds(o));
-        }
-
-        cachedSnapTargets = nextTargets;
-        cachedTargetBounds = nextBounds;
-        cachedSnapExclude = exclude;
-        return cachedSnapTargets;
-    };
-
-    const getCachedBounds = (o: any): SnapBounds => {
-        const cached = cachedTargetBounds?.get(o);
-        if (cached) return cached;
-        const fresh = getBounds(o);
-        if (cachedTargetBounds) cachedTargetBounds.set(o, fresh);
-        return fresh;
-    };
-
-    const getSnapFrameById = (frameId: string | undefined) => {
-        if (!frameId) return null;
-        if (frameLookup.has(frameId)) return frameLookup.get(frameId) || null;
-        const frame = canvasInstance.getObjects().find((o: any) => o.isFrame && o._customId === frameId) || null;
-        frameLookup.set(frameId, frame);
-        return frame;
-    };
-
-    const getCachedZoneMetrics = (zone: any) => {
-        if (!zone) return null;
-        if (!cachedZoneMetrics) cachedZoneMetrics = new Map<any, any>();
-        if (cachedZoneMetrics.has(zone)) return cachedZoneMetrics.get(zone) || null;
-        const metrics = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
-        cachedZoneMetrics.set(zone, metrics);
-        return metrics;
-    };
-
-    const getCachedZones = () => {
-        if (cachedZones && cachedZoneById && cachedZoneMetrics) return cachedZones;
-        const zones = canvasInstance.getObjects().filter((o: any) => isLikelyProductZone(o));
-        const byId = new Map<string, any>();
-        const metricsMap = new Map<any, any>();
-        zones.forEach((zone: any) => {
-            const id = String(zone?._customId || '').trim();
-            if (id) byId.set(id, zone);
-            metricsMap.set(zone, getZoneMetrics(zone) ?? zone.getBoundingRect(true));
-        });
-        cachedZones = zones;
-        cachedZoneById = byId;
-        cachedZoneMetrics = metricsMap;
-        return zones;
-    };
-
-    const getCachedZoneById = (zoneId: string) => {
-        const id = String(zoneId || '').trim();
-        if (!id) return null;
-        if (!cachedZoneById) getCachedZones();
-        return cachedZoneById?.get(id) || null;
-    };
-
-    let lastPointer = { x: 0, y: 0 };
-    let constrainAxis: 'x' | 'y' | null = null;
-    let constrainRef = { left: 0, top: 0 };
-    let stickySnapOwner: any = null;
-    let stickyVerticalSnap: { x: number; type: 'left' | 'right' | 'center' } | null = null;
-    let stickyHorizontalSnap: { y: number; type: 'top' | 'bottom' | 'center' } | null = null;
-    let lastMoveEvalPoint = { x: 0, y: 0 };
-    let hasLastMoveEvalPoint = false;
-    let moveActivationPoint = { x: 0, y: 0 };
-    let hasMoveActivationPoint = false;
-    let isMoveArmedForSnap = false;
-    const clearStickySnaps = () => {
-        stickyVerticalSnap = null;
-        stickyHorizontalSnap = null;
-    };
-    let lastGuideRender = {
-        vVisible: false,
-        hVisible: false,
-        vX: 0,
-        hY: 0
-    };
-    const getVerticalSnapDistance = (
-        bounds: SnapBounds,
-        snap: { x: number; type: 'left' | 'right' | 'center' }
-    ) => {
-        if (snap.type === 'left') return Math.abs(bounds.left - snap.x);
-        if (snap.type === 'right') return Math.abs(bounds.right - snap.x);
-        return Math.abs(bounds.centerX - snap.x);
-    };
-    const getHorizontalSnapDistance = (
-        bounds: SnapBounds,
-        snap: { y: number; type: 'top' | 'bottom' | 'center' }
-    ) => {
-        if (snap.type === 'top') return Math.abs(bounds.top - snap.y);
-        if (snap.type === 'bottom') return Math.abs(bounds.bottom - snap.y);
-        return Math.abs(bounds.centerY - snap.y);
-    };
-    const hideGuides = () => {
-        if (verticalGuide.visible) verticalGuide.set({ visible: false });
-        if (horizontalGuide.visible) horizontalGuide.set({ visible: false });
-        lastGuideRender.vVisible = false;
-        lastGuideRender.hVisible = false;
-    };
-
-    // Canvas-space bounds of what is currently visible in the viewport.
-    // This fixes "guides not showing" when the user pans far from (0,0):
-    // previous implementation drew lines around the origin only.
-    const getViewportBounds = () => {
-        const vpt = canvasInstance.viewportTransform || [1, 0, 0, 1, 0, 0];
-        const w = (typeof canvasInstance.getWidth === 'function' ? canvasInstance.getWidth() : canvasInstance.width) || 0;
-        const h = (typeof canvasInstance.getHeight === 'function' ? canvasInstance.getHeight() : canvasInstance.height) || 0;
-        try {
-            const inv = fabric.util.invertTransform(vpt);
-            const tl = fabric.util.transformPoint({ x: 0, y: 0 }, inv);
-            const br = fabric.util.transformPoint({ x: w, y: h }, inv);
-            const minX = Math.min(tl.x, br.x);
-            const maxX = Math.max(tl.x, br.x);
-            const minY = Math.min(tl.y, br.y);
-            const maxY = Math.max(tl.y, br.y);
-            return { minX, maxX, minY, maxY };
-        } catch {
-            // Fallback: big range so guides are still visible.
-            return { minX: -100000, maxX: 100000, minY: -100000, maxY: 100000 };
-        }
-    };
-
-    const syncMovingFrameClip = (target: any) => {
-        if (!target || target.isFrame || target.excludeFromExport) return;
-        if (!(target as any).parentFrameId) return;
-        try {
-            syncObjectFrameClip(target);
-        } catch {
-            // ignore clip sync errors during drag
-        }
-    };
-
-    const getPointer = (evt: MouseEvent) => {
-        const el = canvasEl.value || canvasInstance.getElement?.();
-        if (!el) return { x: 0, y: 0 };
-        const rect = el.getBoundingClientRect();
-        const vpt = canvasInstance.viewportTransform || [1, 0, 0, 1, 0, 0];
-        const z = canvasInstance.getZoom() || 1;
-        return {
-            x: (evt.clientX - rect.left - vpt[4]) / z,
-            y: (evt.clientY - rect.top - vpt[5]) / z
-        };
-    };
-
-    const objectMovingHandler = (e: any) => {
-        const obj = e.target;
-        const evt = e.e as MouseEvent | undefined;
-        const currentTransform: any = (canvasInstance as any)?._currentTransform;
-        const transformAction = String(currentTransform?.action || '').toLowerCase();
-        const isScaleTransform = !!currentTransform && transformAction.includes('scale');
-        const zoom = Math.max(0.01, Number(canvasInstance.getZoom?.() || 1));
-        const snapRange = SNAP_RANGE_PX / zoom;
-        const isRectOrImage = String(obj.type || '').toLowerCase() === 'rect' || String(obj.type || '').toLowerCase() === 'image';
-        const activeSnapRange = snapRange * (isRectOrImage ? SNAP_RANGE_FACTOR_RECT_IMAGE : 1);
-        const snapReleaseFactor = isRectOrImage ? SNAP_HYSTERESIS_HOLD_FACTOR_RECT_IMAGE : SNAP_HYSTERESIS_HOLD_FACTOR;
-
-        // Skip for controls (nodes/handles/etc). Frames can snap too.
-        if (!obj || isControl(obj)) {
-            hideGuides();
-            return;
-        }
-
-        if (!evt?.shiftKey && !evt?.altKey && !isScaleTransform) {
-            const pointerScreen = evt
-                ? { x: Number(evt.clientX || 0), y: Number(evt.clientY || 0) }
-                : null;
-            const currentMoveX = pointerScreen?.x ?? Number(obj.left || 0);
-            const currentMoveY = pointerScreen?.y ?? Number(obj.top || 0);
-            const moveGatePx = isRectOrImage ? SNAP_MOVE_EPSILON_PX_RECT_IMAGE : SNAP_MOVE_EPSILON_PX;
-            const fastMoveSuppressionPx = isRectOrImage
-                ? SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE
-                : SNAP_FAST_MOVE_SUPPRESSION_PX;
-
-            if (!hasMoveActivationPoint) {
-                moveActivationPoint = { x: currentMoveX, y: currentMoveY };
-                hasMoveActivationPoint = true;
-                isMoveArmedForSnap = false;
-            }
-
-            if (!isMoveArmedForSnap) {
-                const moveFromActivation = Math.hypot(currentMoveX - moveActivationPoint.x, currentMoveY - moveActivationPoint.y);
-                if (moveFromActivation < moveGatePx) {
-                    hasLastMoveEvalPoint = true;
-                    lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY };
-                    hideGuides();
-                    syncMovingFrameClip(obj);
-                    return;
-                }
-                isMoveArmedForSnap = true;
-            }
-
-            const perFrameMoveGatePx = isRectOrImage ? moveGatePx : SNAP_MOVE_EPSILON_PX;
-            if (hasLastMoveEvalPoint) {
-                const moveDelta = Math.hypot(currentMoveX - lastMoveEvalPoint.x, currentMoveY - lastMoveEvalPoint.y);
-                if (moveDelta < perFrameMoveGatePx) {
-                    lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY };
-                    hideGuides();
-                    syncMovingFrameClip(obj);
-                    return;
-                }
-                if (moveDelta >= fastMoveSuppressionPx) {
-                    lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY };
-                    hideGuides();
-                    clearStickySnaps();
-                    syncMovingFrameClip(obj);
-                    return;
-                }
-            } else {
-                hasLastMoveEvalPoint = true;
-            }
-            lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY };
-        } else {
-            hasMoveActivationPoint = false;
-            hasLastMoveEvalPoint = false;
-            isMoveArmedForSnap = false;
-        }
-
-        // While transforming (scale/rotate/skew), we keep showing guides but do NOT reposition the object here
-        // to avoid cursor drift/jumps (each transform type has its own normalization path).
-        const isTransforming =
-            !!currentTransform &&
-            (transformAction.includes('scale') || transformAction.includes('rotate') || transformAction.includes('skew'));
-        const allowPositionSnap = !(isTransforming && currentTransform?.target === obj);
-        if (stickySnapOwner !== obj) {
-            stickySnapOwner = obj;
-            clearStickySnaps();
-            hasMoveActivationPoint = false;
-            isMoveArmedForSnap = false;
-            hasLastMoveEvalPoint = false;
-        }
-
-        // Multi-selection: enforce containment/bindings per member.
-        if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
-            const members = (obj.getObjects() || []).slice();
-            members.forEach((member: any) => {
-                if (!member) return;
-                if (member.group && !member.group.isSmartObject && !member.group.isProductCard && isLikelyProductCard(member.group)) {
-                    member.group.isSmartObject = true;
-                    member.group.isProductCard = true;
-                }
-                if (shouldApplyContainmentConstraints(member)) {
-                    applyContainmentConstraints(member);
-                }
-                try {
-                    if (member.parentFrameId) syncObjectFrameClip(member);
-                } catch {
-                    // ignore clip sync errors during drag
-                }
-            });
-            hideGuides();
-            clearStickySnaps();
-            return;
-        }
-
-        // If moving a child inside a legacy product card, upgrade the parent group so containment works.
-        if (obj.group && !obj.group.isSmartObject && !obj.group.isProductCard && isLikelyProductCard(obj.group)) {
-            obj.group.isSmartObject = true;
-            obj.group.isProductCard = true;
-        }
-
-        // SmartObject containment
-        if (obj.group && (obj.group as any).isSmartObject) {
-            hideGuides();
-            clearStickySnaps();
-            const parentGroup = obj.group;
-            const cardW = (parentGroup as any)._cardWidth || parentGroup.width;
-            const cardH = (parentGroup as any)._cardHeight || parentGroup.height;
-
-            // Mark as user-customized so future relayouts (zone recalculation / reload) don't override placement.
-            // Persisted via `CANVAS_CUSTOM_PROPS`.
-            (obj as any).__manualTransform = true;
-            (obj as any).__manualTransformCardW = Number(cardW) || (obj as any).__manualTransformCardW;
-            (obj as any).__manualTransformCardH = Number(cardH) || (obj as any).__manualTransformCardH;
-
-            const halfW = cardW / 2, halfH = cardH / 2;
-            const objW = obj.getScaledWidth(), objH = obj.getScaledHeight();
-            let minX = -halfW, maxX = halfW, minY = -halfH, maxY = halfH;
-            if (obj.originX === 'center') { minX = -halfW + objW / 2; maxX = halfW - objW / 2; } else if (obj.originX === 'left') { maxX = halfW - objW; }
-            if (obj.originY === 'center') { minY = -halfH + objH / 2; maxY = halfH - objH / 2; } else if (obj.originY === 'top') { maxY = halfH - objH; }
-            // If the inner object is larger than the card, the computed range is inverted.
-            // Swap so clamping does not "teleport" the object to the opposite side.
-            if (minX > maxX) { const t = minX; minX = maxX; maxX = t; }
-            if (minY > maxY) { const t = minY; minY = maxY; maxY = t; }
-            if (obj.left < minX) obj.set('left', minX); if (obj.left > maxX) obj.set('left', maxX);
-            if (obj.top < minY) obj.set('top', minY); if (obj.top > maxY) obj.set('top', maxY);
-            obj.setCoords?.();
-            syncMovingFrameClip(obj);
-            return;
-        }
-
-        // Card-in-zone containment (cards are NOT children of the zone group; they are bound via parentZoneId)
-        // Legacy cards detected by heuristic use parentZoneId or _zoneSlot as a fast hint.
-        const isCardLike = !!(
-            obj.isSmartObject ||
-            obj.isProductCard ||
-            String(obj.name || '').startsWith('product-card') ||
-            isLikelyProductCard(obj) ||
-            String((obj as any).parentZoneId || '').trim().length
-        );
-        let handledCardZoneDrag = false;
-        if (isCardLike) {
-            // Upgrade legacy cards so downstream logic is consistent.
-            if (!obj.isProductCard && !obj.isSmartObject && isLikelyProductCard(obj)) {
-                obj.isProductCard = true;
-                obj.isSmartObject = true;
-            }
-
-            let zone: any = null;
-            const zoneId = String((obj as any).parentZoneId || '').trim();
-            if (zoneId) {
-                zone = getCachedZoneById(zoneId);
-            }
-            if (!zone) {
-                const slotZoneId = String((obj as any)?._zoneSlot?.zoneId || '').trim();
-                if (slotZoneId) {
-                    zone = getCachedZoneById(slotZoneId);
-                }
-            }
-
-            // Keep card drag lightweight when no zone is attached yet.
-            if (!zone) {
-                hideGuides();
-                clearStickySnaps();
-                syncMovingFrameClip(obj);
-                return;
-            }
-
-            if (zone) {
-                const boundZone = zone;
-                const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
-                const objW = obj.getScaledWidth?.() ?? 0;
-                const objH = obj.getScaledHeight?.() ?? 0;
-
-                // Zone bounds constraint while dragging (reorder happens on drop).
-                if (center) {
-                    const zr = getCachedZoneMetrics(boundZone) ?? boundZone.getBoundingRect(true);
-                    const pad = typeof (boundZone as any)._zonePadding === 'number' ? (boundZone as any)._zonePadding : 20;
-                    let minCx = zr.left + pad + (objW / 2);
-                    let maxCx = (zr.left + zr.width) - pad - (objW / 2);
-                    let minCy = zr.top + pad + (objH / 2);
-                    let maxCy = (zr.top + zr.height) - pad - (objH / 2);
-                    if (minCx > maxCx) {
-                        const centerX = zr.left + (zr.width / 2);
-                        minCx = centerX;
-                        maxCx = centerX;
-                    }
-                    if (minCy > maxCy) {
-                        const centerY = zr.top + (zr.height / 2);
-                        minCy = centerY;
-                        maxCy = centerY;
-                    }
-                    const cx = clamp(center.x, minCx, maxCx);
-                    const cy = clamp(center.y, minCy, maxCy);
-                    setObjCenterX(obj, cx);
-                    setObjCenterY(obj, cy);
-                    obj.setCoords();
-                    handledCardZoneDrag = true;
-                }
-            }
-        }
-
-        // Product cards should feel fluid while dragging inside zones:
-        // apply zone containment only and skip expensive/global snapping.
-        if (handledCardZoneDrag) {
-            hideGuides();
-            clearStickySnaps();
-            syncMovingFrameClip(obj);
-            return;
-        }
-
-        // ProductZone containment
-        if (obj.group && (obj.group as any).isProductZone) {
-            hideGuides();
-            clearStickySnaps();
-            const zone = obj.group;
-            const zoneW = (zone as any)._zoneWidth || zone.width;
-            const zoneH = (zone as any)._zoneHeight || zone.height;
-            const halfW = zoneW / 2, halfH = zoneH / 2;
-            const cardW = obj.getScaledWidth(), cardH = obj.getScaledHeight();
-            let minX = -halfW, maxX = halfW - cardW, minY = -halfH, maxY = halfH - cardH;
-            if (obj.originX === 'center') { minX = -halfW + cardW / 2; maxX = halfW - cardW / 2; }
-            if (obj.originY === 'center') { minY = -halfH + cardH / 2; maxY = halfH - cardH / 2; }
-            if (obj.left < minX) obj.set('left', minX); if (obj.left > maxX) obj.set('left', maxX);
-            if (obj.top < minY) obj.set('top', minY); if (obj.top > maxY) obj.set('top', maxY);
-            syncMovingFrameClip(obj);
-            return;
-        }
-
-        // SHIFT: constrain to axis
-        if (evt?.shiftKey) {
-            hideGuides();
-            clearStickySnaps();
-            const ptr = getPointer(evt);
-            const dx = Math.abs(ptr.x - lastPointer.x);
-            const dy = Math.abs(ptr.y - lastPointer.y);
-            if (constrainAxis === null && (dx > 2 || dy > 2)) {
-                constrainAxis = dx >= dy ? 'y' : 'x';
-                constrainRef = { left: obj.left, top: obj.top };
-            }
-            if (constrainAxis === 'x') obj.set('top', constrainRef.top);
-            if (constrainAxis === 'y') obj.set('left', constrainRef.left);
-            lastPointer = ptr;
-            syncMovingFrameClip(obj);
-            return;
-        }
-        constrainAxis = null;
-        if (evt) lastPointer = getPointer(evt);
-
-        // Alt/Option: temporarily disable snapping (but keep containment constraints above).
-        if (evt?.altKey) {
-            hideGuides();
-            clearStickySnaps();
-            syncMovingFrameClip(obj);
-            return;
-        }
-
-        // Deep-selected children inside groups can use local coordinates that conflict with
-        // global snap targets, causing visible jump/teleport while dragging.
-        // Keep drag smooth by skipping snap in this case.
-        if (obj.group && String(obj.group.type || '').toLowerCase() !== 'activeselection') {
-            hideGuides();
-            clearStickySnaps();
-            syncMovingFrameClip(obj);
-            return;
-        }
-
-        const anySnapEnabled = !!(snapToObjects.value || (snapToGuides.value && viewShowGuides.value) || snapToGrid.value);
-        if (!anySnapEnabled) {
-            hideGuides();
-            clearStickySnaps();
-            syncMovingFrameClip(obj);
-            return;
-        }
-
-        // === SMART GUIDES - Calculate on-the-fly ===
-        const targets = snapToObjects.value ? (getSnapTargets(obj) || []) : [];
-        const b = getBounds(obj);
-
-        // Get parent frame for snap targets (if object is inside a frame)
-        const parentFrameId = (obj as any).parentFrameId as string | undefined;
-        const parentFrame = getSnapFrameById(parentFrameId);
-
-        // Container (frame parent if any, else "page" rect at 0..W/H)
-        const pageW = activePage.value?.width ?? 1080;
-        const pageH = activePage.value?.height ?? 1920;
-        const container = parentFrame
-            ? (() => {
-                const fb = getCachedBounds(parentFrame);
-                return {
-                    left: fb.left,
-                    right: fb.right,
-                    top: fb.top,
-                    bottom: fb.bottom,
-                    centerX: fb.centerX,
-                    centerY: fb.centerY
-                };
-            })()
-            : {
-                left: 0,
-                right: pageW,
-                top: 0,
-                bottom: pageH,
-                centerX: pageW / 2,
-                centerY: pageH / 2
-            };
-
-        let vVisible = false, hVisible = false;
-        let vX = 0, hY = 0;
-        let bestVDist = snapRange + 1;
-        let bestHDist = snapRange + 1;
-        let snapVType: 'left' | 'right' | 'center' = 'center';
-        let snapHType: 'top' | 'bottom' | 'center' = 'center';
-
-        // Snap against container (page/frame): edges + center
-        if (snapToObjects.value) {
-            const dlc = Math.abs(b.left - container.left);
-            const drc = Math.abs(b.right - container.right);
-            const dcc = Math.abs(b.centerX - container.centerX);
-            if (dlc < bestVDist) { bestVDist = dlc; vX = container.left; snapVType = 'left'; }
-            if (drc < bestVDist) { bestVDist = drc; vX = container.right; snapVType = 'right'; }
-            if (dcc < bestVDist) { bestVDist = dcc; vX = container.centerX; snapVType = 'center'; }
-
-            const dtc = Math.abs(b.top - container.top);
-            const dbc = Math.abs(b.bottom - container.bottom);
-            const dmc = Math.abs(b.centerY - container.centerY);
-            if (dtc < bestHDist) { bestHDist = dtc; hY = container.top; snapHType = 'top'; }
-            if (dbc < bestHDist) { bestHDist = dbc; hY = container.bottom; snapHType = 'bottom'; }
-            if (dmc < bestHDist) { bestHDist = dmc; hY = container.centerY; snapHType = 'center'; }
-        }
-
-        const snapWindow = Math.max(240, snapRange * 20);
-        // Check snap against other objects.
-        for (const t of targets) {
-            if (!t) continue;
-            const tb = getCachedBounds(t);
-            // Fast-path skip for distant objects. This avoids expensive per-object
-            // snap math when no snap can possibly happen this frame.
-            if (
-                tb.right < b.left - snapWindow ||
-                tb.left > b.right + snapWindow ||
-                tb.bottom < b.top - snapWindow ||
-                tb.top > b.bottom + snapWindow
-            ) {
-                continue;
-            }
-
-            // Vertical snaps (left-left, right-right, left-right, right-left, center-center)
-            const dl = Math.abs(b.left - tb.left);
-            const dr = Math.abs(b.right - tb.right);
-            const dlr = Math.abs(b.left - tb.right);
-            const drl = Math.abs(b.right - tb.left);
-            const dc = Math.abs(b.centerX - tb.centerX);
-
-            if (dl < bestVDist) { bestVDist = dl; vX = tb.left; snapVType = 'left'; }
-            if (dr < bestVDist) { bestVDist = dr; vX = tb.right; snapVType = 'right'; }
-            if (dlr < bestVDist) { bestVDist = dlr; vX = tb.right; snapVType = 'left'; }
-            if (drl < bestVDist) { bestVDist = drl; vX = tb.left; snapVType = 'right'; }
-            if (dc < bestVDist) { bestVDist = dc; vX = tb.centerX; snapVType = 'center'; }
-
-            // Horizontal snaps (top-top, bottom-bottom, top-bottom, bottom-top, center-center)
-            const dt = Math.abs(b.top - tb.top);
-            const dbo = Math.abs(b.bottom - tb.bottom);
-            const dtb = Math.abs(b.top - tb.bottom);
-            const dbt = Math.abs(b.bottom - tb.top);
-            const dcy2 = Math.abs(b.centerY - tb.centerY);
-
-            if (dt < bestHDist) { bestHDist = dt; hY = tb.top; snapHType = 'top'; }
-            if (dbo < bestHDist) { bestHDist = dbo; hY = tb.bottom; snapHType = 'bottom'; }
-            if (dtb < bestHDist) { bestHDist = dtb; hY = tb.bottom; snapHType = 'top'; }
-            if (dbt < bestHDist) { bestHDist = dbt; hY = tb.top; snapHType = 'bottom'; }
-            if (dcy2 < bestHDist) { bestHDist = dcy2; hY = tb.centerY; snapHType = 'center'; }
-        }
-
-        // Check snap against user guides
-        if (snapToGuides.value && viewShowGuides.value) {
-            const gids = userGuidesIndex.value || [];
-            for (const g of gids) {
-                if (!g) continue;
-                if (g.axis === 'x') {
-                    const gx = Number(g.pos || 0);
-                    const dl = Math.abs(b.left - gx);
-                    const dr = Math.abs(b.right - gx);
-                    const dc = Math.abs(b.centerX - gx);
-                    if (dl < bestVDist) { bestVDist = dl; vX = gx; snapVType = 'left'; }
-                    if (dr < bestVDist) { bestVDist = dr; vX = gx; snapVType = 'right'; }
-                    if (dc < bestVDist) { bestVDist = dc; vX = gx; snapVType = 'center'; }
-                } else {
-                    const gy = Number(g.pos || 0);
-                    const dt = Math.abs(b.top - gy);
-                    const db = Math.abs(b.bottom - gy);
-                    const dc = Math.abs(b.centerY - gy);
-                    if (dt < bestHDist) { bestHDist = dt; hY = gy; snapHType = 'top'; }
-                    if (db < bestHDist) { bestHDist = db; hY = gy; snapHType = 'bottom'; }
-                    if (dc < bestHDist) { bestHDist = dc; hY = gy; snapHType = 'center'; }
-                }
-            }
-        }
-
-        // Snap hysteresis:
-        // after snapping, keep it "locked" for a slightly wider range to avoid
-        // micro-jumps when cursor oscillates near the threshold.
-        const snapReleaseRange = activeSnapRange * snapReleaseFactor;
-
-        if (!allowPositionSnap) {
-            clearStickySnaps();
-        }
-
-        const verticalStickyDist = stickyVerticalSnap ? getVerticalSnapDistance(b, stickyVerticalSnap) : Number.POSITIVE_INFINITY;
-        if (allowPositionSnap && stickyVerticalSnap && verticalStickyDist <= snapReleaseRange) {
-            vVisible = true;
-            vX = stickyVerticalSnap.x;
-            snapVType = stickyVerticalSnap.type;
-        } else {
-            if (stickyVerticalSnap && verticalStickyDist > snapReleaseRange) {
-                stickyVerticalSnap = null;
-            }
-            if (bestVDist <= activeSnapRange) {
-                vVisible = true;
-                stickyVerticalSnap = { x: vX, type: snapVType };
-            }
-        }
-
-        const horizontalStickyDist = stickyHorizontalSnap ? getHorizontalSnapDistance(b, stickyHorizontalSnap) : Number.POSITIVE_INFINITY;
-        if (allowPositionSnap && stickyHorizontalSnap && horizontalStickyDist <= snapReleaseRange) {
-            hVisible = true;
-            hY = stickyHorizontalSnap.y;
-            snapHType = stickyHorizontalSnap.type;
-        } else {
-            if (stickyHorizontalSnap && horizontalStickyDist > snapReleaseRange) {
-                stickyHorizontalSnap = null;
-            }
-            if (bestHDist <= activeSnapRange) {
-                hVisible = true;
-                stickyHorizontalSnap = { y: hY, type: snapHType };
-            }
-        }
-
-        if (allowPositionSnap && vVisible) {
-            if (snapVType === 'left') setObjLeft(obj, vX);
-            else if (snapVType === 'right') setObjRight(obj, vX);
-            else setObjCenterX(obj, vX);
-        }
-        if (allowPositionSnap && hVisible) {
-            if (snapHType === 'top') setObjTop(obj, hY);
-            else if (snapHType === 'bottom') setObjBottom(obj, hY);
-            else setObjCenterY(obj, hY);
-        }
-
-        // Grid snap as fallback (only if no other snap won)
-        if (allowPositionSnap && snapToGrid.value && !isRectOrImage && !vVisible && !hVisible) {
-            const gs = Math.max(4, Math.round(Number(gridSize.value) || 20));
-            const snappedLeft = Math.round(b.left / gs) * gs;
-            const snappedTop = Math.round(b.top / gs) * gs;
-            const dl = Math.abs(b.left - snappedLeft);
-            const dt = Math.abs(b.top - snappedTop);
-            if (dl <= activeSnapRange) {
-                setObjLeft(obj, snappedLeft);
-                vVisible = true;
-                vX = snappedLeft;
-                snapVType = 'left';
-            }
-            if (dt <= activeSnapRange) {
-                setObjTop(obj, snappedTop);
-                hVisible = true;
-                hY = snappedTop;
-                snapHType = 'top';
-            }
-        }
-
-        // CRITICAL: Update object coordinates after snap to prevent jumping
-        if (allowPositionSnap && (vVisible || hVisible)) {
-            obj.setCoords();
-        }
-
-        // Draw guides across the visible viewport in canvas coordinates (works even when panned far).
-        // Avoid viewport math/sets when nothing is being snapped.
-        if (vVisible || hVisible) {
-            const vb = getViewportBounds();
-            const viewW = Math.max(1, vb.maxX - vb.minX);
-            const viewH = Math.max(1, vb.maxY - vb.minY);
-            const pad = Math.max(400, Math.max(viewW, viewH) * 0.5);
-
-            if (vVisible) {
-                if (!lastGuideRender.vVisible || lastGuideRender.vX !== vX) {
-                    verticalGuide.set({ x1: vX, y1: vb.minY - pad, x2: vX, y2: vb.maxY + pad, visible: true });
-                    lastGuideRender.vX = vX;
-                }
-                lastGuideRender.vVisible = true;
-            } else if (lastGuideRender.vVisible) {
-                verticalGuide.set({ visible: false });
-                lastGuideRender.vVisible = false;
-            }
-
-            if (hVisible) {
-                if (!lastGuideRender.hVisible || lastGuideRender.hY !== hY) {
-                    horizontalGuide.set({ x1: vb.minX - pad, y1: hY, x2: vb.maxX + pad, y2: hY, visible: true });
-                    lastGuideRender.hY = hY;
-                }
-                lastGuideRender.hVisible = true;
-            } else if (lastGuideRender.hVisible) {
-                horizontalGuide.set({ visible: false });
-                lastGuideRender.hVisible = false;
-            }
-
-            // Keep them on top even after object loads / stacking changes.
-            if (lastGuideRender.vVisible || lastGuideRender.hVisible) {
-                try {
-                    if (typeof canvasInstance.bringObjectToFront === 'function') {
-                        canvasInstance.bringObjectToFront(verticalGuide);
-                        canvasInstance.bringObjectToFront(horizontalGuide);
-                    }
-                } catch {
-                    // ignore
-                }
-            }
-        } else {
-            if (lastGuideRender.vVisible) {
-                verticalGuide.set({ visible: false });
-                lastGuideRender.vVisible = false;
-            }
-            if (lastGuideRender.hVisible) {
-                horizontalGuide.set({ visible: false });
-                lastGuideRender.hVisible = false;
-            }
-        }
-
-        // Keep clipping in sync after all snapping/containment adjustments.
-        syncMovingFrameClip(obj);
-    };
-
-    // Smooth drag path: coalesce bursty Fabric move/scale/rotate events to 1 update per frame.
-    let objectMoveRafId: number | null = null;
-    let pendingObjectMoveEvent: { target: any; e?: MouseEvent } | null = null;
-
-    const flushPendingObjectMove = () => {
-        if (!pendingObjectMoveEvent) return;
-        const nextEvent = pendingObjectMoveEvent;
-        pendingObjectMoveEvent = null;
-        objectMovingHandler(nextEvent as any);
-    };
-
-    const queueObjectMove = (e: any) => {
-        pendingObjectMoveEvent = {
-            target: e?.target,
-            e: e?.e
-        };
-        if (objectMoveRafId !== null) return;
-        objectMoveRafId = requestAnimationFrame(() => {
-            objectMoveRafId = null;
-            flushPendingObjectMove();
-        });
-    };
-
-    const mouseUpHandler = () => {
-        if (objectMoveRafId !== null) {
-            cancelAnimationFrame(objectMoveRafId);
-            objectMoveRafId = null;
-        }
-        flushPendingObjectMove();
-        hideGuides();
-        constrainAxis = null;
-        clearStickySnaps();
-        stickySnapOwner = null;
-        hasLastMoveEvalPoint = false;
-        hasMoveActivationPoint = false;
-        isMoveArmedForSnap = false;
-        invalidateSnapCache();
-        flushZoneRelayoutOnDrop();
-        safeRequestRenderAll(canvasInstance);
-        // CRITICAL: Create fresh snapshot (not just triggerRef) so PropertiesPanel
-        // sees updated position/dimension/zone values after drag/resize.
-        refreshSelectedRef();
-    };
-
-    canvasInstance.on('object:moving', queueObjectMove);
-    // Show guides while resizing/rotating too (without snapping position).
-    canvasInstance.on('object:scaling', queueObjectMove);
-    canvasInstance.on('object:rotating', queueObjectMove);
-    canvasInstance.on('mouse:up', mouseUpHandler);
-    canvasInstance.on('object:added', invalidateSnapCache);
-    canvasInstance.on('object:removed', invalidateSnapCache);
-    canvasInstance.on('object:modified', invalidateSnapCache);
-
-    teardownSnapping = () => {
-        try {
-            canvasInstance.off('object:moving', queueObjectMove);
-            canvasInstance.off('object:scaling', queueObjectMove);
-            canvasInstance.off('object:rotating', queueObjectMove);
-            canvasInstance.off('mouse:up', mouseUpHandler);
-            canvasInstance.off('object:added', invalidateSnapCache);
-            canvasInstance.off('object:removed', invalidateSnapCache);
-            canvasInstance.off('object:modified', invalidateSnapCache);
-        } catch {
-            // ignore teardown errors
-        }
-        if (objectMoveRafId !== null) {
-            cancelAnimationFrame(objectMoveRafId);
-            objectMoveRafId = null;
-        }
-        pendingObjectMoveEvent = null;
-        clearStickySnaps();
-        stickySnapOwner = null;
-        hideGuides();
-        try {
-            if (verticalGuide.canvas === canvasInstance) canvasInstance.remove(verticalGuide);
-            if (horizontalGuide.canvas === canvasInstance) canvasInstance.remove(horizontalGuide);
-        } catch {
-            // ignore guide cleanup errors
-        }
-        invalidateSnapCache();
-    };
-}
 
 // Global updateFloatingUI function
 const updateFloatingUI = () => {
@@ -16053,21 +14413,34 @@ let reactivityBoundCanvas: any = null;
 const setupReactivity = () => {
     if (!canvas.value) return;
     if (reactivityBoundCanvas === canvas.value) return;
+    // Teardown any previous binding to avoid duplicate listeners
+    if (teardownReactivity) {
+        teardownReactivity();
+        teardownReactivity = null;
+    }
+    if (!canvas.value) return;
+
+    const tracked: Array<{ event: string; handler: any }> = [];
+    const trackOn = (event: string, handler: any) => {
+        canvas.value!.on(event, handler);
+        tracked.push({ event, handler });
+    };
+
     reactivityBoundCanvas = canvas.value;
 
-    canvas.value.on('object:added', invalidateFrameRuntimeCache);
-    canvas.value.on('object:removed', invalidateFrameRuntimeCache);
-    canvas.value.on('object:modified', invalidateFrameRuntimeCache);
-    canvas.value.on('object:added', invalidateContainmentZoneCache);
-    canvas.value.on('object:removed', invalidateContainmentZoneCache);
-    canvas.value.on('object:modified', invalidateContainmentZoneCache);
-    canvas.value.on('object:added', (e: any) => {
+    trackOn('object:added', invalidateFrameRuntimeCache);
+    trackOn('object:removed', invalidateFrameRuntimeCache);
+    trackOn('object:modified', invalidateFrameRuntimeCache);
+    trackOn('object:added', invalidateContainmentZoneCache);
+    trackOn('object:removed', invalidateContainmentZoneCache);
+    trackOn('object:modified', invalidateContainmentZoneCache);
+    trackOn('object:added', (e: any) => {
         if (e?.target?.isFrame) markFrameLabelsDirty();
     });
-    canvas.value.on('object:removed', (e: any) => {
+    trackOn('object:removed', (e: any) => {
         if (e?.target?.isFrame) markFrameLabelsDirty();
     });
-    canvas.value.on('object:modified', (e: any) => {
+    trackOn('object:modified', (e: any) => {
         if (e?.target?.isFrame) markFrameLabelsDirty();
     });
 
@@ -17049,12 +15422,12 @@ const setupReactivity = () => {
         });
     };
 
-    canvas.value.on('object:added', scheduleUpdateObjects);
-    canvas.value.on('object:removed', scheduleUpdateObjects);
-    canvas.value.on('object:modified', scheduleUpdateObjects); 
+    trackOn('object:added', scheduleUpdateObjects);
+    trackOn('object:removed', scheduleUpdateObjects);
+    trackOn('object:modified', scheduleUpdateObjects); 
 
     // Frames: auto-parent new objects when created inside a frame + keep clipPaths in sync
-    canvas.value.on('object:added', (e: any) => {
+    trackOn('object:added', (e: any) => {
         const obj = e?.target;
         if (!obj || typeof obj !== 'object' || isTransientCanvasObject(obj)) return;
         ensurePersistentContentFlags(obj);
@@ -17080,7 +15453,7 @@ const setupReactivity = () => {
         syncObjectFrameClip(obj);
     });
 
-    canvas.value.on('object:modified', (e: any) => {
+    trackOn('object:modified', (e: any) => {
         const obj = e?.target;
         if (!obj || isTransientCanvasObject(obj)) return;
         ensurePersistentContentFlags(obj);
@@ -17176,7 +15549,7 @@ const setupReactivity = () => {
         }
     });
 
-    canvas.value.on('object:modified', () => { 
+    trackOn('object:modified', () => { 
         // CRITICAL: Create a fresh snapshot instead of just triggering the old one.
         // After modifications (drag, scale, etc.) the Fabric object's properties may have changed
         // (e.g. ensureZoneSanity, normalizeZoneScale). A stale snapshot causes PropertiesPanel
@@ -17191,7 +15564,7 @@ const setupReactivity = () => {
     let layoutDebounceTimer: any = null;
     let pendingZones: Set<any> = new Set();
     
-    canvas.value.on('object:added', (e: any) => {
+    trackOn('object:added', (e: any) => {
         if (isBulkProductMutation || isHistoryProcessing.value || isDesignLoading.value) return;
         // Não disparar relayout durante cooldown pós-undo/redo (loadFromJSON recria objetos)
         if (Date.now() < _historyRestoreCooldownUntil) return;
@@ -17235,7 +15608,7 @@ const setupReactivity = () => {
     let lastZoneState = { left: 0, top: 0 };
 
     let previousShiftSelectionAtMousedown: any[] | null = null;
-    canvas.value.on('mouse:down:before', (e: any) => {
+    trackOn('mouse:down:before', (e: any) => {
         if (e?.e?.shiftKey) {
             refreshShiftSelectionBaseline(canvas.value.getActiveObject?.());
             previousShiftSelectionAtMousedown = shiftSelectionBaselineMembers.slice();
@@ -17245,7 +15618,7 @@ const setupReactivity = () => {
         previousShiftSelectionAtMousedown = null;
     });
 
-    canvas.value.on('mouse:down', (e: any) => {
+    trackOn('mouse:down', (e: any) => {
          const evt: MouseEvent | undefined = e?.e;
          const isContextClick = !!evt && (evt.button === 2 || (evt.button === 0 && (evt as any).ctrlKey && !(evt as any).metaKey));
          if (isContextClick) {
@@ -17388,7 +15761,7 @@ const setupReactivity = () => {
         pendingObjectMoveViewportCull = false;
         scheduleViewportCulling('object-move-end');
     };
-    canvas.value.on('object:moving', (e: any) => {
+    trackOn('object:moving', (e: any) => {
         lastTransformMutationAt = Date.now();
         const target = e.target;
         const isCardImageTarget = !!(
@@ -17527,7 +15900,7 @@ const setupReactivity = () => {
     });
 
     // Smart Scaling for Textbox Reflow & Product Zone AutoLayout
-    canvas.value.on('object:scaling', (e: any) => {
+    trackOn('object:scaling', (e: any) => {
         lastTransformMutationAt = Date.now();
         updateFloatingUI();
         const obj = e.target;
@@ -17677,12 +16050,12 @@ const setupReactivity = () => {
         safeRequestRenderAll();
     });
 
-    canvas.value.on('object:rotating', () => {
+    trackOn('object:rotating', () => {
         lastTransformMutationAt = Date.now();
     });
     
     // 🔒 Apply containment after modification (drag end)
-    canvas.value.on('object:modified', (e: any) => {
+    trackOn('object:modified', (e: any) => {
         const obj = e.target;
         if (obj) {
             if (isProductCardContainer(obj)) {
@@ -17727,7 +16100,7 @@ const setupReactivity = () => {
         }
         flushObjectMoveViewportCull();
     });
-    canvas.value.on('mouse:up', flushObjectMoveViewportCull);
+    trackOn('mouse:up', flushObjectMoveViewportCull);
 
     const syncTextSelectionSnapshot = (e: any) => {
         if (!canvas.value) return;
@@ -17764,13 +16137,13 @@ const setupReactivity = () => {
         }
     };
 
-    canvas.value.on('text:selection:changed', syncTextSelectionSnapshot);
-    canvas.value.on('text:editing:entered', syncTextSelectionSnapshot);
-    canvas.value.on('text:editing:exited', handleTextEditingExited);
-    canvas.value.on('text:changed', handleTextChanged);
+    trackOn('text:selection:changed', syncTextSelectionSnapshot);
+    trackOn('text:editing:entered', syncTextSelectionSnapshot);
+    trackOn('text:editing:exited', handleTextEditingExited);
+    trackOn('text:changed', handleTextChanged);
     
     // 'selection:created', 'selection:updated', 'selection:cleared'
-    canvas.value.on('selection:created', () => {
+    trackOn('selection:created', () => {
         if (normalizeActiveSelectionForProductCards()) {
             refreshShiftSelectionBaseline();
             updateSelection();
@@ -17779,7 +16152,7 @@ const setupReactivity = () => {
         refreshShiftSelectionBaseline();
         updateSelection();
     });
-    canvas.value.on('selection:updated', () => {
+    trackOn('selection:updated', () => {
         // Se a nova selecao NAO e nenhum dos priceGroups com deep-select ativo
         // (nem um filho deles), resetamos todos para evitar deep-select "preso".
         try {
@@ -17801,7 +16174,7 @@ const setupReactivity = () => {
         refreshShiftSelectionBaseline();
         updateSelection();
     });
-    canvas.value.on('selection:cleared', (e: any) => {
+    trackOn('selection:cleared', (e: any) => {
         shiftSelectionBaselineMembers = [];
         updateSelection();
         // Exit Deep Select Mode on clear
@@ -17854,7 +16227,7 @@ const setupReactivity = () => {
     }
 
     // 2. Enable deep select on Double Click
-    canvas.value.on('mouse:dblclick', (opt: any) => {
+    trackOn('mouse:dblclick', (opt: any) => {
         if (showProductReviewModal.value) return;
 
         const c: any = canvas.value as any;
@@ -18007,6 +16380,16 @@ const setupReactivity = () => {
     
     // Initial fetch
     updateObjects();
+    const teardown = () => {
+        tracked.forEach(({ event, handler }) => {
+            try {
+                canvas.value?.off(event, handler);
+            } catch {
+                // ignore teardown errors
+            }
+        });
+    };
+    teardownReactivity = teardown;
 }
 
 // Properties Updates
@@ -23078,7 +21461,7 @@ const clearCanvas = () => {
     
     // Restore Environment
     updateArtboard(); // Redraw white page
-    setupSnapping();
+    editorSnapping.setup();
     setupReactivity();
     
     saveCurrentState();
@@ -24116,6 +22499,7 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
         console.warn('[confirmProductImport] Import already running, ignoring duplicate trigger.')
         return
     }
+    console.log('[DEBUG confirmProductImport] targetGridZone:', targetGridZone.value?._customId, 'targetGridZones count:', targetGridZones.value?.length);
 
     isConfirmingProductImport.value = true
     showProductReviewModal.value = false
@@ -24133,6 +22517,7 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
             // Recover the real zone object from canvas state (prevents "solto" cards on stale refs).
             const zones = getImportTargetZones()
             const zone = zones[0] || resolveImportTargetZone()
+            console.log('[DEBUG confirmProductImport] resolved zones:', zones.map((z: any) => z._customId), 'final zone:', zone?._customId);
             if (!zone) {
                 console.warn('[confirmProductImport] Could not resolve target product zone. Import aborted to avoid detached cards.')
                 notifyEditorError('Nao foi possivel localizar a zona de produtos para substituir os cards.')
@@ -25237,6 +23622,8 @@ const scheduleGlobalStylesStateSave = (prop: string) => {
 const getCurrentZoneObject = () => {
     if (!canvas.value) return null;
     
+    const activeDebug = canvas.value.getActiveObject?.();
+    console.log('[DEBUG getCurrentZoneObject] active:', activeDebug?._customId, activeDebug?.name, 'isZone:', activeDebug ? isLikelyProductZone(activeDebug) : 'n/a');
     // 1. Check active canvas object first (the real Fabric object)
     const active = canvas.value.getActiveObject?.();
     if (active && isLikelyProductZone(active)) return active;
@@ -25302,6 +23689,7 @@ const getCurrentZoneObject = () => {
     const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
     if (zones.length === 1) return zones[0];
     
+    console.log('[DEBUG getCurrentZoneObject] returning null. zones count:', zones.length);
     return null;
 }
 
@@ -25658,6 +24046,7 @@ const handleZoneQuickActionFill = () => {
 
 const handleZoneQuickActionAppend = () => {
     const zone = selectedZoneQuickActions.value?.zone;
+    console.log('[DEBUG handleZoneQuickActionAppend] zone:', zone?._customId, zone?.name);
     if (!zone) return;
     openProductReviewForZone(zone, { mode: 'append' });
 }

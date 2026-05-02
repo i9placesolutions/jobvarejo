@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { BuilderFlyerProduct, BuilderPriceTagStyle } from '~/types/builder'
+import { parsePriceBR, formatCentsToPrice, parsePriceToCents } from '~/utils/priceTagText'
+import { parsePrice } from '~/utils/product-zone-helpers'
 
 const props = defineProps<{
   product: BuilderFlyerProduct
@@ -263,19 +265,24 @@ const decimalSize = computed(() => {
 // ── Price formatting ────────────────────────────────────────────────────────
 function splitPrice(val: number | string | null | undefined): { integer: string; decimal: string } | null {
   if (val == null) return null
-  const num = typeof val === 'string' ? parseFloat(val) : val
-  if (isNaN(num)) return null
-  const fixed = num.toFixed(2)
-  const [intPart, decPart] = fixed.split('.')
-  const integer = (intPart ?? '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.')
-  return { integer, decimal: decPart ?? '00' }
+  // FIX: usar parsePriceBR para suportar strings no formato brasileiro (ex: '20,99')
+  // parseFloat('20,99') === 20 (ignora centavos), causando decimal='00' incorretamente.
+  const raw = String(val).trim()
+  if (!raw) return null
+  const parsed = parsePriceBR(raw)
+  const integer = parsed.inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return { integer, decimal: parsed.centavos }
 }
 
 function formatFull(val: number | string | null | undefined): string {
   if (val == null) return ''
-  const num = typeof val === 'string' ? parseFloat(val) : val
-  if (isNaN(num)) return ''
-  return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const raw = String(val).trim()
+  if (!raw) return ''
+  const cents = parsePriceToCents(raw)
+  if (cents === null) return ''
+  const formatted = formatCentsToPrice(cents)
+  if (!formatted) return ''
+  return 'R$ ' + formatted
 }
 
 const priceParts = computed(() => splitPrice(props.product.offer_price))
@@ -308,7 +315,9 @@ const barcodeValue = computed(() => (props.product as BuilderFlyerProduct & { ba
 
 // ── Symbolic price: realistic Brazilian coins & notes ───────────────────────
 const symbolicItems = computed(() => {
-  const price = props.product.offer_price
+  // FIX: usar parsePrice para garantir que strings BR sejam interpretadas corretamente
+  const priceRaw = props.product.offer_price
+  const price = typeof priceRaw === 'string' ? parsePrice(priceRaw) : (typeof priceRaw === 'number' ? priceRaw : 0)
   if (price == null || price <= 0) return null
 
   const items: { type: 'coin' | 'note'; image?: string; label: string; bgColor: string; textColor: string; borderColor: string }[] = []

@@ -33,6 +33,21 @@ const textColor = computed(() => props.splash.textColor ?? '#ffffff');
 const rotation = computed(() => props.splash.rotation ?? -5);
 const effectiveScale = computed(() => (props.splash.scale ?? 1) * props.scale);
 
+// FIX: fontSize dinamico baseado no numero de digitos do inteiro para evitar
+// overflow do texto em precos com muitos digitos (ex: 1299,99).
+const integerDigits = computed(() => String(priceDisplay.value.integer || '').length);
+const baseFontSize = computed(() => props.splash.fontSize ?? 60);
+const integerFontSize = computed(() => {
+  const digits = integerDigits.value;
+  const base = baseFontSize.value;
+  if (digits <= 2) return base;
+  if (digits === 3) return Math.round(base * 0.78);
+  if (digits === 4) return Math.round(base * 0.62);
+  return Math.round(base * 0.50); // 5+ digits
+});
+const decimalFontSize = computed(() => Math.round(integerFontSize.value * ((props.splash.decimalSize ?? 50) / 100)));
+const decimalGap = computed(() => Math.max(2, Math.round(integerFontSize.value * 0.06)));
+
 // Effect styles
 const textShadow = computed(() => {
   if (props.splash.textEffect === 'shadow') {
@@ -132,7 +147,7 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
         text-anchor="end"
         :style="{ 
           fontFamily: splash.fontFamily ?? 'Arial',
-          fontSize: `${splash.fontSize ?? 60}px`,
+          fontSize: `${integerFontSize}px`,
           fontWeight: splash.fontWeight ?? 700,
           textShadow,
           WebkitTextStroke: textStroke
@@ -143,11 +158,11 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
 
       <!-- Decimal Part -->
       <text
-        x="88" y="55"
+        :x="85 + decimalGap" y="55"
         :fill="textColor"
         :style="{ 
           fontFamily: splash.fontFamily ?? 'Arial',
-          fontSize: `${(splash.fontSize ?? 60) * ((splash.decimalSize ?? 50) / 100)}px`,
+          fontSize: `${decimalFontSize}px`,
           fontWeight: splash.fontWeight ?? 700,
           textShadow,
           WebkitTextStroke: textStroke

@@ -76,11 +76,15 @@ export const layoutPrice = (opts: LayoutPriceOptions): LayoutPriceResult => {
     const decWInitial = getW(decimal)
 
     if (maxWidth > 0 && intW > 0) {
-        const allowedIntW = Math.max(8, maxWidth - decWInitial - gap)
-        if (intW > allowedIntW) {
+        // FIX: calcular shrink baseado na largura TOTAL da cadeia (inteiro + decimal + gap),
+        // nao apenas no inteiro. Isso evita subestimar o espaco disponivel e encolher
+        // mais do que necessario — o decimal ficava microscopico em precos como 129,99.
+        const totalW = intW + decWInitial + gap
+        if (totalW > maxWidth) {
+            const allowedTotalW = Math.max(8, maxWidth - gap)
+            const shrink = Math.min(1, Math.max(0.35, allowedTotalW / (intW + decWInitial)))
             const baseIntSx = Number(integer.scaleX || 1)
             const baseIntSy = Number(integer.scaleY || 1)
-            const shrink = Math.min(1, Math.max(0.35, allowedIntW / intW))
             integer.set?.({
                 scaleX: baseIntSx * shrink,
                 scaleY: baseIntSy * shrink
