@@ -291,7 +291,8 @@ import {
     getSinglePriceBackgroundImageCandidate,
     getSinglePriceCurrencyTextCandidate,
     isLikelyPriceGroupObject as isLikelyPriceGroupObjectHelper,
-    repairAtacarejoTextNames
+    repairAtacarejoTextNames,
+    hasCollapsedSinglePriceTemplateGeometry as hasCollapsedSinglePriceTemplateGeometryHelper
 } from '~/utils/priceLayoutClassifiers'
 import {
     isObjectShownForBounds,
@@ -27300,49 +27301,16 @@ const ensureSinglePriceCurrencyCircleAnchor = (priceGroup: any, objects?: any[])
     return currencyCircle;
 };
 
-const hasCollapsedSinglePriceTemplateGeometry = (priceGroup: any): boolean => {
-    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;
-    if (!shouldPreserveManualTemplateVisual(priceGroup)) return false;
-
-    const all = collectObjectsDeep(priceGroup);
-    if (findByName(all, 'atac_retail_bg')) return false;
-    if (isRedBurstPriceGroup(priceGroup)) return false;
-
-    const priceText = findByName(all, 'price_value_text') || findByName(all, 'smart_price');
-    const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer');
-    const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
-    if (!(priceText || (integer && decimal))) return false;
-
-    const baseW = Number((priceGroup as any).__manualTemplateBaseW);
-    const baseH = Number((priceGroup as any).__manualTemplateBaseH);
-    const visibleChildren = all.filter((o: any) => o && o !== priceGroup && isObjectShownForBounds(o));
-    const bounds = measureContentBoundsLocal(visibleChildren);
-    const background = getSinglePriceBackgroundCandidate(all);
-    const backgroundBounds = background ? measureContentBoundsLocal([background]) : null;
-    const textNodes = [
-        findByName(all, 'price_currency_text') || findByName(all, 'priceSymbol') || findByName(all, 'price_currency'),
-        integer,
-        decimal,
-        findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit'),
-        priceText
-    ].filter(Boolean) as any[];
-    const tinyScales = textNodes.filter((obj: any) => {
-        const sx = Math.abs(Number(obj?.scaleX ?? 1));
-        const sy = Math.abs(Number(obj?.scaleY ?? 1));
-        return sx > 0 && sy > 0 && (sx < 0.02 || sy < 0.02);
-    }).length;
-    const clusteredAtOrigin = textNodes.length > 0 && textNodes.every((obj: any) =>
-        Math.abs(Number(obj?.left || 0)) < 0.02 && Math.abs(Number(obj?.top || 0)) < 0.02
-    );
-
-    return (
-        (Number.isFinite(baseW) && baseW > 0 && baseW <= 2.5) ||
-        (Number.isFinite(baseH) && baseH > 0 && baseH <= 2.5) ||
-        (!!bounds && (bounds.width < 18 || bounds.height < 10)) ||
-        (!!backgroundBounds && (backgroundBounds.width < 18 || backgroundBounds.height < 10)) ||
-        (tinyScales >= Math.max(2, textNodes.length - 1) && clusteredAtOrigin)
-    );
-};
+// hasCollapsedSinglePriceTemplateGeometry extraido para utils/priceLayoutClassifiers.ts.
+// Wrapper local injeta classifiers + measure helpers.
+const hasCollapsedSinglePriceTemplateGeometry = (priceGroup: any): boolean =>
+    hasCollapsedSinglePriceTemplateGeometryHelper(
+        priceGroup,
+        shouldPreserveManualTemplateVisual,
+        isRedBurstPriceGroup,
+        measureContentBoundsLocal,
+        isObjectShownForBounds
+    )
 
 const repairCollapsedSinglePriceTemplateGeometry = (priceGroup: any, reason: string = 'unknown'): boolean => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false;

@@ -498,3 +498,70 @@ export const repairAtacarejoTextNames = (all: any[]): void => {
         assignNames(texts, 'retail')
     }
 }
+
+/**
+ * Detecta se um priceGroup manual ficou com geometry "colapsada":
+ *  - manualTemplateBaseW/H <= 2.5 (degenerated)
+ *  - bounds totais < 18x10
+ *  - background bounds < 18x10
+ *  - texts com scale < 0.02 + clusterizados em origin (0,0)
+ *
+ * Retorna true SOMENTE para templates manuais NAO atacarejo NAO red burst
+ * (esses tem propria heuristica). Skip se shouldPreserveCheck retorna false.
+ *
+ * Caller injeta:
+ *  - `shouldPreserveCheck` (shouldPreserveManualTemplateVisual)
+ *  - `isRedBurstCheck` (isRedBurstPriceGroup)
+ *  - `measureContentBounds` (measureContentBoundsLocal de fabricMeasure)
+ *  - `getBackgroundCandidate` (getSinglePriceBackgroundCandidate, ja exportado neste modulo)
+ *  - `isShownForBounds` (isObjectShownForBounds de fabricMeasure)
+ */
+export const hasCollapsedSinglePriceTemplateGeometry = (
+    priceGroup: any,
+    shouldPreserveCheck: (g: any) => boolean,
+    isRedBurstCheck: (g: any) => boolean,
+    measureContentBounds: (objs: any[]) => any,
+    isShownForBounds: (obj: any) => boolean
+): boolean => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false
+    if (!shouldPreserveCheck(priceGroup)) return false
+
+    const all = collectObjectsDeep(priceGroup)
+    if (findByName(all, 'atac_retail_bg')) return false
+    if (isRedBurstCheck(priceGroup)) return false
+
+    const priceText = findByName(all, 'price_value_text') || findByName(all, 'smart_price')
+    const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer')
+    const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal')
+    if (!(priceText || (integer && decimal))) return false
+
+    const baseW = Number((priceGroup as any).__manualTemplateBaseW)
+    const baseH = Number((priceGroup as any).__manualTemplateBaseH)
+    const visibleChildren = all.filter((o: any) => o && o !== priceGroup && isShownForBounds(o))
+    const bounds = measureContentBounds(visibleChildren)
+    const background = getSinglePriceBackgroundCandidate(all)
+    const backgroundBounds = background ? measureContentBounds([background]) : null
+    const textNodes = [
+        findByName(all, 'price_currency_text') || findByName(all, 'priceSymbol') || findByName(all, 'price_currency'),
+        integer,
+        decimal,
+        findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit'),
+        priceText
+    ].filter(Boolean) as any[]
+    const tinyScales = textNodes.filter((obj: any) => {
+        const sx = Math.abs(Number(obj?.scaleX ?? 1))
+        const sy = Math.abs(Number(obj?.scaleY ?? 1))
+        return sx > 0 && sy > 0 && (sx < 0.02 || sy < 0.02)
+    }).length
+    const clusteredAtOrigin = textNodes.length > 0 && textNodes.every((obj: any) =>
+        Math.abs(Number(obj?.left || 0)) < 0.02 && Math.abs(Number(obj?.top || 0)) < 0.02
+    )
+
+    return (
+        (Number.isFinite(baseW) && baseW > 0 && baseW <= 2.5) ||
+        (Number.isFinite(baseH) && baseH > 0 && baseH <= 2.5) ||
+        (!!bounds && (bounds.width < 18 || bounds.height < 10)) ||
+        (!!backgroundBounds && (backgroundBounds.width < 18 || backgroundBounds.height < 10)) ||
+        (tinyScales >= Math.max(2, textNodes.length - 1) && clusteredAtOrigin)
+    )
+}
