@@ -188,3 +188,26 @@ export const findObjectByCustomId = (
     }
     return null
 }
+
+/**
+ * Walk recursivo procurando por um product card pelo `_customId`.
+ * Retorna o card encontrado ou seu parent (se o id pertencer a um
+ * filho). Null se nao encontrar.
+ *
+ * Caller injeta:
+ *  - canvasInstance (para `findObjectByCustomId`)
+ *  - `isCardContainerCheck` (isProductCardContainer)
+ *  - `isLikelyCardCheck` (isLikelyProductCard)
+ */
+export const findProductCardByCustomId = (
+    canvasInstance: any,
+    id: string,
+    isCardContainerCheck: (obj: any) => boolean,
+    isLikelyCardCheck: (obj: any) => boolean
+): any | null => {
+    const found = findObjectByCustomId(canvasInstance, id)
+    if (!found) return null
+    if (isCardContainerCheck(found.obj) || isLikelyCardCheck(found.obj)) return found.obj
+    if (found.parent && (isCardContainerCheck(found.parent) || isLikelyCardCheck(found.parent))) return found.parent
+    return null
+}

@@ -50,7 +50,8 @@ import {
     isAuthLookupError,
     isUsableFabricObjectClone,
     clearCanvasForPageSwitch,
-    findObjectByCustomId as findObjectByCustomIdHelper
+    findObjectByCustomId as findObjectByCustomIdHelper,
+    findProductCardByCustomId as findProductCardByCustomIdHelper
 } from '~/utils/canvasValidation'
 import {
     getPreferredProductImageFromGroup,
@@ -22254,13 +22255,9 @@ const insertElementToCanvas = (element: { type: string; data: any }) => {
 const findObjectByCustomId = (id: string): { obj: any; parent: any | null } | null =>
     findObjectByCustomIdHelper(canvas.value, id)
 
-const findProductCardByCustomId = (id: string): any | null => {
-    const found = findObjectByCustomId(id);
-    if (!found) return null;
-    if (isProductCardContainer(found.obj) || isLikelyProductCard(found.obj)) return found.obj;
-    if (found.parent && (isProductCardContainer(found.parent) || isLikelyProductCard(found.parent))) return found.parent;
-    return null;
-};
+// findProductCardByCustomId extraido para utils/canvasValidation.ts.
+const findProductCardByCustomId = (id: string): any | null =>
+    findProductCardByCustomIdHelper(canvas.value, id, isProductCardContainer, isLikelyProductCard)
 
 const addImageToProductCardByUrl = async (
     card: any,
