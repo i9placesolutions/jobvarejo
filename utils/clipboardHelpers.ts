@@ -81,3 +81,85 @@ export const normalizeClipboardPoint = (point: any): { x: number; y: number } =>
         y: Number.isFinite(y) ? y : 0
     }
 }
+
+/**
+ * Serializa um runtime clipboard para JSON string que pode ser
+ * persistido em localStorage e lido em outra aba do navegador.
+ *
+ * Caller deve passar `serializeProps` (tipicamente CLIPBOARD_SERIALIZE_PROPS)
+ * para `item.toObject(serializeProps)`.
+ *
+ * Aborta se:
+ *  - runtimeClipboard nao tem kind 'fabric-items-v2' ou items array
+ *  - todos os items falham toObject
+ *  - JSON resultante excede CROSS_TAB_CLIPBOARD_MAX_BYTES
+ *
+ * Retorna o JSON string ou null.
+ */
+export const serializeRuntimeClipboardForCrossTab = (
+    runtimeClipboard: any,
+    serializeProps: ReadonlyArray<string>
+): string | null => {
+    if (!runtimeClipboard || runtimeClipboard.kind !== 'fabric-items-v2' || !Array.isArray(runtimeClipboard.items)) return null
+
+    const itemsJson: any[] = []
+    for (const item of runtimeClipboard.items) {
+        if (!item || typeof item.toObject !== 'function') continue
+        try {
+            const itemJson = item.toObject(serializeProps)
+            if (itemJson && typeof itemJson === 'object') {
+                itemsJson.push(itemJson)
+            }
+        } catch (err) {
+            console.warn('[clipboard] Falha ao serializar item para cross-tab', err)
+        }
+    }
+
+    if (!itemsJson.length) return null
+
+    const payload = {
+        format: 'jobvarejo-fabric-items-v2',
+        version: 1,
+        copiedAt: Number(runtimeClipboard.copiedAt || Date.now()) || Date.now(),
+        sourcePageId: String(runtimeClipboard.sourcePageId || '').trim(),
+        selectionCenter: normalizeClipboardPoint(runtimeClipboard.selectionCenter),
+        itemsJson
+    }
+
+    try {
+        const raw = JSON.stringify(payload)
+        if (!raw || raw.length > CROSS_TAB_CLIPBOARD_MAX_BYTES) return null
+        return raw
+    } catch (err) {
+        console.warn('[clipboard] Falha ao codificar payload cross-tab', err)
+        return null
+    }
+}
+
+/**
+ * Parse defensivo de um payload cross-tab clipboard armazenado em
+ * localStorage (string ou null). Aceita o payload se:
+ *  - format === 'jobvarejo-fabric-items-v2'
+ *  - itemsJson e' array nao-vazio
+ *  - copiedAt e' numero finito > 0
+ *  - idade < CROSS_TAB_CLIPBOARD_MAX_AGE_MS
+ *
+ * Retorna o payload parseado, ou null em qualquer caso de invalido/expirado.
+ *
+ * Caller decide se quer remover entrada expirada do storage (esta funcao
+ * nao toca em localStorage).
+ */
+export const parseCrossTabClipboardPayload = (raw: string | null | undefined): any | null => {
+    if (!raw) return null
+    try {
+        const payload = JSON.parse(raw)
+        if (!payload || payload.format !== 'jobvarejo-fabric-items-v2' || !Array.isArray(payload.itemsJson)) return null
+        const copiedAt = Number(payload.copiedAt || 0)
+        if (!Number.isFinite(copiedAt) || copiedAt <= 0) return null
+        if ((Date.now() - copiedAt) > CROSS_TAB_CLIPBOARD_MAX_AGE_MS) return null
+        if (!payload.itemsJson.length) return null
+        return payload
+    } catch {
+        return null
+    }
+}

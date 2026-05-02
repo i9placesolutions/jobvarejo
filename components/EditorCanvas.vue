@@ -73,7 +73,9 @@ import {
     CLIPBOARD_SERIALIZE_PROPS,
     CROSS_TAB_CLIPBOARD_STORAGE_KEY,
     CROSS_TAB_CLIPBOARD_MAX_AGE_MS,
-    CROSS_TAB_CLIPBOARD_MAX_BYTES
+    CROSS_TAB_CLIPBOARD_MAX_BYTES,
+    serializeRuntimeClipboardForCrossTab as serializeRuntimeClipboardForCrossTabHelper,
+    parseCrossTabClipboardPayload
 } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
@@ -12778,42 +12780,9 @@ const duplicateActiveObjectWithContext = async (
 
 // normalizeClipboardPoint extraido para utils/clipboardHelpers.ts.
 
-const serializeRuntimeClipboardForCrossTab = (runtimeClipboard: any): string | null => {
-    if (!runtimeClipboard || runtimeClipboard.kind !== 'fabric-items-v2' || !Array.isArray(runtimeClipboard.items)) return null;
-
-    const itemsJson: any[] = [];
-    for (const item of runtimeClipboard.items) {
-        if (!item || typeof item.toObject !== 'function') continue;
-        try {
-            const itemJson = item.toObject(CLIPBOARD_SERIALIZE_PROPS);
-            if (itemJson && typeof itemJson === 'object') {
-                itemsJson.push(itemJson);
-            }
-        } catch (err) {
-            console.warn('[clipboard] Falha ao serializar item para cross-tab', err);
-        }
-    }
-
-    if (!itemsJson.length) return null;
-
-    const payload = {
-        format: 'jobvarejo-fabric-items-v2',
-        version: 1,
-        copiedAt: Number(runtimeClipboard.copiedAt || Date.now()) || Date.now(),
-        sourcePageId: String(runtimeClipboard.sourcePageId || '').trim(),
-        selectionCenter: normalizeClipboardPoint(runtimeClipboard.selectionCenter),
-        itemsJson
-    };
-
-    try {
-        const raw = JSON.stringify(payload);
-        if (!raw || raw.length > CROSS_TAB_CLIPBOARD_MAX_BYTES) return null;
-        return raw;
-    } catch (err) {
-        console.warn('[clipboard] Falha ao codificar payload cross-tab', err);
-        return null;
-    }
-};
+// serializeRuntimeClipboardForCrossTab extraido para utils/clipboardHelpers.ts.
+const serializeRuntimeClipboardForCrossTab = (runtimeClipboard: any): string | null =>
+    serializeRuntimeClipboardForCrossTabHelper(runtimeClipboard, CLIPBOARD_SERIALIZE_PROPS)
 
 const persistRuntimeClipboardForCrossTab = (runtimeClipboard: any) => {
     if (!process.client) return;
@@ -12826,6 +12795,8 @@ const persistRuntimeClipboardForCrossTab = (runtimeClipboard: any) => {
     }
 };
 
+// parseCrossTabClipboardPayload extraido para utils/clipboardHelpers.ts.
+// Wrapper local le do localStorage e remove entrada expirada como side-effect.
 const readCrossTabClipboardPayload = (): any | null => {
     if (!process.client) return null;
     let raw = '';
@@ -12834,22 +12805,17 @@ const readCrossTabClipboardPayload = (): any | null => {
     } catch {
         return null;
     }
-    if (!raw) return null;
-
-    try {
-        const payload = JSON.parse(raw);
-        if (!payload || payload.format !== 'jobvarejo-fabric-items-v2' || !Array.isArray(payload.itemsJson)) return null;
-        const copiedAt = Number(payload.copiedAt || 0);
-        if (!Number.isFinite(copiedAt) || copiedAt <= 0) return null;
-        if ((Date.now() - copiedAt) > CROSS_TAB_CLIPBOARD_MAX_AGE_MS) {
-            try { window.localStorage.removeItem(CROSS_TAB_CLIPBOARD_STORAGE_KEY); } catch {}
-            return null;
-        }
-        if (!payload.itemsJson.length) return null;
-        return payload;
-    } catch {
-        return null;
+    const payload = parseCrossTabClipboardPayload(raw);
+    if (!payload && raw) {
+        // Possivel que tenha expirado — remove se foi recusado
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed?.format === 'jobvarejo-fabric-items-v2') {
+                window.localStorage.removeItem(CROSS_TAB_CLIPBOARD_STORAGE_KEY);
+            }
+        } catch { /* ignore */ }
     }
+    return payload;
 };
 
 const enlivenClipboardItemsFromJson = async (objectsJson: any[]): Promise<any[]> => {

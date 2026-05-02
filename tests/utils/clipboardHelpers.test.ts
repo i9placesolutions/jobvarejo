@@ -5,7 +5,9 @@ import {
   CLIPBOARD_SERIALIZE_PROPS,
   CROSS_TAB_CLIPBOARD_STORAGE_KEY,
   CROSS_TAB_CLIPBOARD_MAX_AGE_MS,
-  CROSS_TAB_CLIPBOARD_MAX_BYTES
+  CROSS_TAB_CLIPBOARD_MAX_BYTES,
+  serializeRuntimeClipboardForCrossTab,
+  parseCrossTabClipboardPayload
 } from '~/utils/clipboardHelpers'
 import { CANVAS_CUSTOM_PROPS } from '~/utils/canvasCustomProps'
 
@@ -106,5 +108,125 @@ describe('CLIPBOARD_SERIALIZE_PROPS', () => {
 
   it('e maior que CLIPBOARD_CLONE_PROPS (tem props extras)', () => {
     expect(CLIPBOARD_SERIALIZE_PROPS.length).toBeGreaterThanOrEqual(CLIPBOARD_CLONE_PROPS.length)
+  })
+})
+
+describe('serializeRuntimeClipboardForCrossTab', () => {
+  const props = ['_customId']
+
+  it('null/invalid kind: null', () => {
+    expect(serializeRuntimeClipboardForCrossTab(null, props)).toBe(null)
+    expect(serializeRuntimeClipboardForCrossTab({}, props)).toBe(null)
+    expect(serializeRuntimeClipboardForCrossTab({ kind: 'wrong' }, props)).toBe(null)
+  })
+
+  it('items array vazio: null', () => {
+    expect(serializeRuntimeClipboardForCrossTab({ kind: 'fabric-items-v2', items: [] }, props)).toBe(null)
+  })
+
+  it('items sem toObject: null (skipped)', () => {
+    expect(serializeRuntimeClipboardForCrossTab({
+      kind: 'fabric-items-v2',
+      items: [{ name: 'no-toObject' }]
+    }, props)).toBe(null)
+  })
+
+  it('items validos: retorna JSON com payload completo', () => {
+    const item1 = { toObject: () => ({ type: 'rect', _customId: 'a' }) }
+    const result = serializeRuntimeClipboardForCrossTab({
+      kind: 'fabric-items-v2',
+      items: [item1],
+      copiedAt: 1000,
+      sourcePageId: 'page-1',
+      selectionCenter: { x: 10, y: 20 }
+    }, props)
+    expect(result).toBeTruthy()
+    const parsed = JSON.parse(result!)
+    expect(parsed.format).toBe('jobvarejo-fabric-items-v2')
+    expect(parsed.itemsJson.length).toBe(1)
+    expect(parsed.copiedAt).toBe(1000)
+    expect(parsed.sourcePageId).toBe('page-1')
+    expect(parsed.selectionCenter).toEqual({ x: 10, y: 20 })
+  })
+
+  it('toObject lanca erro: pula item, segue com outros', () => {
+    const bad = { toObject: () => { throw new Error('boom') } }
+    const good = { toObject: () => ({ type: 'rect' }) }
+    const result = serializeRuntimeClipboardForCrossTab({
+      kind: 'fabric-items-v2',
+      items: [bad, good]
+    }, props)
+    expect(result).toBeTruthy()
+    const parsed = JSON.parse(result!)
+    expect(parsed.itemsJson.length).toBe(1)
+  })
+
+  it('payload excede MAX_BYTES: null', () => {
+    const huge = 'x'.repeat(CROSS_TAB_CLIPBOARD_MAX_BYTES + 100)
+    const item = { toObject: () => ({ type: 'rect', text: huge }) }
+    expect(serializeRuntimeClipboardForCrossTab({
+      kind: 'fabric-items-v2',
+      items: [item]
+    }, props)).toBe(null)
+  })
+})
+
+describe('parseCrossTabClipboardPayload', () => {
+  it('null/empty: null', () => {
+    expect(parseCrossTabClipboardPayload(null)).toBe(null)
+    expect(parseCrossTabClipboardPayload(undefined)).toBe(null)
+    expect(parseCrossTabClipboardPayload('')).toBe(null)
+  })
+
+  it('JSON invalido: null', () => {
+    expect(parseCrossTabClipboardPayload('not-json')).toBe(null)
+  })
+
+  it('format errado: null', () => {
+    const raw = JSON.stringify({ format: 'wrong', itemsJson: [{ type: 'rect' }] })
+    expect(parseCrossTabClipboardPayload(raw)).toBe(null)
+  })
+
+  it('itemsJson nao array: null', () => {
+    const raw = JSON.stringify({ format: 'jobvarejo-fabric-items-v2', itemsJson: 'invalid' })
+    expect(parseCrossTabClipboardPayload(raw)).toBe(null)
+  })
+
+  it('itemsJson vazio: null', () => {
+    const raw = JSON.stringify({
+      format: 'jobvarejo-fabric-items-v2',
+      itemsJson: [],
+      copiedAt: Date.now()
+    })
+    expect(parseCrossTabClipboardPayload(raw)).toBe(null)
+  })
+
+  it('copiedAt invalido: null', () => {
+    const raw = JSON.stringify({
+      format: 'jobvarejo-fabric-items-v2',
+      itemsJson: [{ type: 'rect' }],
+      copiedAt: -1
+    })
+    expect(parseCrossTabClipboardPayload(raw)).toBe(null)
+  })
+
+  it('payload expirado: null', () => {
+    const raw = JSON.stringify({
+      format: 'jobvarejo-fabric-items-v2',
+      itemsJson: [{ type: 'rect' }],
+      copiedAt: Date.now() - CROSS_TAB_CLIPBOARD_MAX_AGE_MS - 1000
+    })
+    expect(parseCrossTabClipboardPayload(raw)).toBe(null)
+  })
+
+  it('payload valido recente: retorna parsed', () => {
+    const raw = JSON.stringify({
+      format: 'jobvarejo-fabric-items-v2',
+      itemsJson: [{ type: 'rect' }],
+      copiedAt: Date.now()
+    })
+    const result = parseCrossTabClipboardPayload(raw)
+    expect(result).toBeTruthy()
+    expect(result.itemsJson.length).toBe(1)
   })
 })
