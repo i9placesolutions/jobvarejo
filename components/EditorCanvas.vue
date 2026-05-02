@@ -339,7 +339,9 @@ import {
     applyRectCornerRadiiPatch,
     snapshotTextShadow,
     computeLinearGradientCoords,
-    buildRoundedRectSvgPath
+    buildRoundedRectSvgPath,
+    applyText3DGoldPreset as applyText3DGoldPresetHelper,
+    clearText3DEffect as clearText3DEffectHelper
 } from '~/utils/fabricStyleHelpers'
 import {
     getFrameBounds,
@@ -19588,66 +19590,17 @@ const applyTextGradientPreset = (textObj: any, preset: 'gold' | 'sunset' = 'gold
 
 // snapshotTextShadow extraido para utils/fabricStyleHelpers.ts.
 
-const applyText3DGoldPreset = (textObj: any) => {
-    if (!(textObj as any).__text3dBackup) {
-        (textObj as any).__text3dBackup = {
-            fill: (textObj as any).fill ?? '#000000',
-            stroke: (textObj as any).stroke ?? null,
-            strokeWidth: Number((textObj as any).strokeWidth || 0),
-            paintFirst: (textObj as any).paintFirst || 'fill',
-            shadow: snapshotTextShadow((textObj as any).shadow)
-        };
-    }
+// applyText3DGoldPreset + clearText3DEffect extraidos para utils/fabricStyleHelpers.ts.
+// Wrappers locais injetam applyTextGradientPreset + factory de fabric.Shadow.
+const applyText3DGoldPreset = (textObj: any) =>
+    applyText3DGoldPresetHelper(
+        textObj,
+        (t: any) => applyTextGradientPreset(t, 'gold'),
+        (props: any) => new fabric.Shadow(props)
+    )
 
-    const baseFontSize = Math.max(12, Number((textObj as any).fontSize || 20));
-    applyTextGradientPreset(textObj, 'gold');
-    textObj.set({
-        stroke: '#7A1B00',
-        strokeWidth: Math.max(1.4, Number((baseFontSize * 0.08).toFixed(2))),
-        strokeLineJoin: 'round',
-        paintFirst: 'stroke',
-        shadow: new fabric.Shadow({
-            color: 'rgba(80,20,0,0.65)',
-            blur: Math.max(2, Math.round(baseFontSize * 0.2)),
-            offsetX: Math.max(1, Math.round(baseFontSize * 0.06)),
-            offsetY: Math.max(2, Math.round(baseFontSize * 0.11))
-        })
-    });
-    (textObj as any).__text3dEnabled = true;
-    textObj.dirty = true;
-};
-
-const clearText3DEffect = (textObj: any) => {
-    const backup = (textObj as any).__text3dBackup;
-    if (backup && typeof backup === 'object') {
-        textObj.set({
-            fill: backup.fill ?? '#000000',
-            stroke: backup.stroke ?? null,
-            strokeWidth: Number(backup.strokeWidth || 0),
-            paintFirst: backup.paintFirst || 'fill'
-        });
-        if (backup.shadow) {
-            textObj.set('shadow', new fabric.Shadow({
-                color: backup.shadow.color,
-                blur: backup.shadow.blur,
-                offsetX: backup.shadow.offsetX,
-                offsetY: backup.shadow.offsetY
-            }));
-        } else {
-            textObj.set('shadow', null);
-        }
-    } else {
-        textObj.set({
-            stroke: null,
-            strokeWidth: 0,
-            paintFirst: 'fill',
-            shadow: null
-        });
-    }
-    (textObj as any).__text3dEnabled = false;
-    delete (textObj as any).__text3dBackup;
-    textObj.dirty = true;
-};
+const clearText3DEffect = (textObj: any) =>
+    clearText3DEffectHelper(textObj, (props: any) => new fabric.Shadow(props))
 
 // OBJECT_MASK_MIN_SELECTION extraida para utils/fabricObjectOps.ts.
 

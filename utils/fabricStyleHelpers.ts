@@ -263,3 +263,88 @@ export const toggleStroke = (obj: any, enabled: boolean): void => {
         obj.set?.({ stroke: 'rgba(0,0,0,0)', strokeWidth: 0, strokeDashArray: null })
     }
 }
+
+/**
+ * Aplica preset 3D "Gold" (gradient + stroke + shadow) em um text object.
+ * Salva backup do estado anterior em `__text3dBackup` para permitir reverter
+ * via `clearText3DEffect`.
+ *
+ * Caller injeta:
+ *  - `applyGradient`: aplica gradient `gold` no text (tipicamente
+ *    `applyTextGradientPreset(text, 'gold')`)
+ *  - `createShadow`: factory para `new fabric.Shadow({...})`
+ */
+export const applyText3DGoldPreset = (
+    textObj: any,
+    applyGradient: (text: any) => void,
+    createShadow: (props: any) => any
+): void => {
+    if (!(textObj as any).__text3dBackup) {
+        (textObj as any).__text3dBackup = {
+            fill: (textObj as any).fill ?? '#000000',
+            stroke: (textObj as any).stroke ?? null,
+            strokeWidth: Number((textObj as any).strokeWidth || 0),
+            paintFirst: (textObj as any).paintFirst || 'fill',
+            shadow: snapshotTextShadow((textObj as any).shadow)
+        }
+    }
+
+    const baseFontSize = Math.max(12, Number((textObj as any).fontSize || 20))
+    applyGradient(textObj)
+    textObj.set({
+        stroke: '#7A1B00',
+        strokeWidth: Math.max(1.4, Number((baseFontSize * 0.08).toFixed(2))),
+        strokeLineJoin: 'round',
+        paintFirst: 'stroke',
+        shadow: createShadow({
+            color: 'rgba(80,20,0,0.65)',
+            blur: Math.max(2, Math.round(baseFontSize * 0.2)),
+            offsetX: Math.max(1, Math.round(baseFontSize * 0.06)),
+            offsetY: Math.max(2, Math.round(baseFontSize * 0.11))
+        })
+    })
+    ;(textObj as any).__text3dEnabled = true
+    textObj.dirty = true
+}
+
+/**
+ * Reverte efeito 3D aplicado por `applyText3DGoldPreset`. Restaura
+ * `fill`, `stroke`, `strokeWidth`, `paintFirst` e `shadow` do backup
+ * `__text3dBackup`. Se nao ha backup, apenas zera stroke/shadow.
+ *
+ * `createShadow` injetado para reconstruir o shadow do backup.
+ */
+export const clearText3DEffect = (
+    textObj: any,
+    createShadow: (props: any) => any
+): void => {
+    const backup = (textObj as any).__text3dBackup
+    if (backup && typeof backup === 'object') {
+        textObj.set({
+            fill: backup.fill ?? '#000000',
+            stroke: backup.stroke ?? null,
+            strokeWidth: Number(backup.strokeWidth || 0),
+            paintFirst: backup.paintFirst || 'fill'
+        })
+        if (backup.shadow) {
+            textObj.set('shadow', createShadow({
+                color: backup.shadow.color,
+                blur: backup.shadow.blur,
+                offsetX: backup.shadow.offsetX,
+                offsetY: backup.shadow.offsetY
+            }))
+        } else {
+            textObj.set('shadow', null)
+        }
+    } else {
+        textObj.set({
+            stroke: null,
+            strokeWidth: 0,
+            paintFirst: 'fill',
+            shadow: null
+        })
+    }
+    ;(textObj as any).__text3dEnabled = false
+    delete (textObj as any).__text3dBackup
+    textObj.dirty = true
+}
