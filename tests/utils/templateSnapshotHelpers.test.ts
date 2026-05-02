@@ -4,8 +4,58 @@ import {
   shouldForceCanonicalAtacForTemplateJson,
   shouldUseAtacVariantSnapshotsForTemplate,
   shouldPreserveManualTemplateVisual,
-  restoreMissingManualTemplateFlags
+  restoreMissingManualTemplateFlags,
+  pickRenderableTemplateGroupJson
 } from '~/utils/templateSnapshotHelpers'
+
+describe('pickRenderableTemplateGroupJson', () => {
+  const isRenderable = (g: any) => !!g && Array.isArray(g.objects) && g.objects.length > 0
+  const noVariants = () => false
+  const useVariants = () => true
+
+  it('null tpl: null', () => {
+    expect(pickRenderableTemplateGroupJson(null, undefined, isRenderable, noVariants)).toBe(null)
+  })
+
+  it('sem variants + base renderavel: retorna base', () => {
+    const tpl = { group: { objects: [{ type: 'rect' }] } }
+    expect(pickRenderableTemplateGroupJson(tpl, undefined, isRenderable, noVariants)).toBe(tpl.group)
+  })
+
+  it('sem variants + base vazio + variant normal renderavel: retorna variant', () => {
+    const variant = { objects: [{ type: 'rect' }] }
+    const tpl = { group: { objects: [], __atacVariantGroups: { normal: variant } } }
+    expect(pickRenderableTemplateGroupJson(tpl, undefined, isRenderable, noVariants)).toBe(variant)
+  })
+
+  it('com variants + preferredKey: retorna variant especifica', () => {
+    const variant = { objects: [{ type: 'rect' }] }
+    const tpl = { group: { objects: [], __atacVariantGroups: { tiny: variant } } }
+    expect(pickRenderableTemplateGroupJson(tpl, 'tiny', isRenderable, useVariants)).toBe(variant)
+  })
+
+  it('com variants + preferredKey vazio: cai para base', () => {
+    const tpl = { group: { objects: [{ type: 'rect' }] } }
+    expect(pickRenderableTemplateGroupJson(tpl, 'tiny', isRenderable, useVariants)).toBe(tpl.group)
+  })
+
+  it('todos vazios: null', () => {
+    const tpl = { group: { objects: [] } }
+    expect(pickRenderableTemplateGroupJson(tpl, undefined, isRenderable, noVariants)).toBe(null)
+  })
+
+  it('recovery: usa variant disponivel quando base e' + ' preferred vazios', () => {
+    const variant = { objects: [{ type: 'rect' }] }
+    const tpl = { group: { objects: [], __atacVariantGroups: { large: variant } } }
+    expect(pickRenderableTemplateGroupJson(tpl, undefined, isRenderable, useVariants)).toBe(variant)
+  })
+
+  it('aceita "objects array vazio MAS isRenderable=true" como renderavel', () => {
+    const customRenderable = (_g: any) => true
+    const tpl = { group: { objects: [] } }
+    expect(pickRenderableTemplateGroupJson(tpl, undefined, customRenderable, noVariants)).toBe(tpl.group)
+  })
+})
 
 describe('restoreMissingManualTemplateFlags', () => {
   const alwaysPreserve = () => true

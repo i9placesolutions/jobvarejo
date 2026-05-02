@@ -192,3 +192,72 @@ export const restoreMissingManualTemplateFlagsInCanvas = (
 
     return restored
 }
+
+/**
+ * Escolhe o melhor groupJson renderavel de um label template.
+ *
+ * Estrategia:
+ *  - Se nao usa variants: prefere baseGroupJson; senao tenta variants
+ *    em ordem de recovery: normal → tiny → large → qualquer outro
+ *  - Se usa variants: prefere `variantMap[preferredVariantKey]`,
+ *    depois baseGroupJson, depois recovery
+ *
+ * Considera renderavel se passar `isRenderableCheck` OU tiver objects[].
+ *
+ * `isRenderableCheck` e `useVariantSnapshotsCheck` injetados.
+ */
+export const pickRenderableTemplateGroupJson = (
+    tpl: any,
+    preferredVariantKey: string | undefined,
+    isRenderableCheck: (groupJson: any) => boolean,
+    useVariantSnapshotsCheck: (groupJson: any) => boolean
+): any => {
+    const baseGroupJson: any = (tpl as any)?.group
+    const variantMap = ((baseGroupJson as any)?.__atacVariantGroups || {}) as Record<string, any>
+    const useVariantSnapshots = useVariantSnapshotsCheck(baseGroupJson)
+
+    const hasAnyObjects = (groupJson: any): boolean => {
+        const objs = Array.isArray(groupJson?.objects) ? groupJson.objects : []
+        return objs.length > 0
+    }
+
+    if (!useVariantSnapshots) {
+        if (isRenderableCheck(baseGroupJson) || hasAnyObjects(baseGroupJson)) return baseGroupJson
+        const orderedRecoveryKeys = ['normal', 'tiny', 'large']
+        for (const k of orderedRecoveryKeys) {
+            const snap = (variantMap as any)?.[k]
+            if (isRenderableCheck(snap) || hasAnyObjects(snap)) return snap
+        }
+        for (const snap of Object.values(variantMap || {})) {
+            if (isRenderableCheck(snap) || hasAnyObjects(snap)) return snap
+        }
+        return null
+    }
+
+    const preferredVariant =
+        preferredVariantKey && variantMap && typeof variantMap === 'object'
+            ? variantMap[String(preferredVariantKey)]
+            : null
+
+    if (isRenderableCheck(preferredVariant) || hasAnyObjects(preferredVariant)) {
+        return preferredVariant
+    }
+    if (isRenderableCheck(baseGroupJson) || hasAnyObjects(baseGroupJson)) {
+        return baseGroupJson
+    }
+
+    if (variantMap && typeof variantMap === 'object') {
+        const orderedKeys = preferredVariantKey
+            ? [String(preferredVariantKey), 'normal', 'tiny', 'large']
+            : ['normal', 'tiny', 'large']
+        for (const k of orderedKeys) {
+            const snap = (variantMap as any)?.[k]
+            if (isRenderableCheck(snap) || hasAnyObjects(snap)) return snap
+        }
+        for (const snap of Object.values(variantMap || {})) {
+            if (isRenderableCheck(snap) || hasAnyObjects(snap)) return snap
+        }
+    }
+
+    return null
+}

@@ -230,7 +230,8 @@ import {
     shouldUseAtacVariantSnapshotsForTemplate,
     shouldPreserveManualTemplateVisual as shouldPreserveManualTemplateVisualHelper,
     restoreMissingManualTemplateFlags as restoreMissingManualTemplateFlagsHelper,
-    restoreMissingManualTemplateFlagsInCanvas as restoreMissingManualTemplateFlagsInCanvasHelper
+    restoreMissingManualTemplateFlagsInCanvas as restoreMissingManualTemplateFlagsInCanvasHelper,
+    pickRenderableTemplateGroupJson as pickRenderableTemplateGroupJsonHelper
 } from '~/utils/templateSnapshotHelpers'
 import {
     getSpecialConditionFromProduct,
@@ -31545,57 +31546,15 @@ const seedManualTemplateOriginalMetrics = (group: any) => {
 // isAtacarejoTemplateGroupJson / isRedBurstTemplateGroupJson foram
 // extraidos para utils/canvasJsonClassifiers.ts.
 
-const pickRenderableTemplateGroupJson = (tpl: LabelTemplate, preferredVariantKey?: AtacVariantKey) => {
-    const baseGroupJson: any = (tpl as any)?.group;
-    const variantMap = ((baseGroupJson as any)?.__atacVariantGroups || {}) as Record<string, any>;
-    const useVariantSnapshots = shouldUseAtacVariantSnapshotsForTemplate(baseGroupJson);
-
-    const hasAnyObjects = (groupJson: any): boolean => {
-        const objs = Array.isArray(groupJson?.objects) ? groupJson.objects : [];
-        return objs.length > 0;
-    };
-
-    if (!useVariantSnapshots) {
-        if (isTemplateGroupJsonRenderable(baseGroupJson) || hasAnyObjects(baseGroupJson)) return baseGroupJson;
-        const orderedRecoveryKeys = ['normal', 'tiny', 'large'];
-        for (const k of orderedRecoveryKeys) {
-            const snap = (variantMap as any)?.[k];
-            if (isTemplateGroupJsonRenderable(snap) || hasAnyObjects(snap)) return snap;
-        }
-        for (const snap of Object.values(variantMap || {})) {
-            if (isTemplateGroupJsonRenderable(snap) || hasAnyObjects(snap)) return snap;
-        }
-        return null;
-    }
-
-    const preferredVariant =
-        preferredVariantKey && variantMap && typeof variantMap === 'object'
-            ? variantMap[String(preferredVariantKey)]
-            : null;
-
-    if (isTemplateGroupJsonRenderable(preferredVariant) || hasAnyObjects(preferredVariant)) {
-        return preferredVariant;
-    }
-    if (isTemplateGroupJsonRenderable(baseGroupJson) || hasAnyObjects(baseGroupJson)) {
-        return baseGroupJson;
-    }
-
-    // Recovery path: pick first valid variation snapshot.
-    if (variantMap && typeof variantMap === 'object') {
-        const orderedKeys = preferredVariantKey
-            ? [String(preferredVariantKey), 'normal', 'tiny', 'large']
-            : ['normal', 'tiny', 'large'];
-        for (const k of orderedKeys) {
-            const snap = (variantMap as any)?.[k];
-            if (isTemplateGroupJsonRenderable(snap) || hasAnyObjects(snap)) return snap;
-        }
-        for (const snap of Object.values(variantMap || {})) {
-            if (isTemplateGroupJsonRenderable(snap) || hasAnyObjects(snap)) return snap;
-        }
-    }
-
-    return null;
-};
+// pickRenderableTemplateGroupJson extraido para utils/templateSnapshotHelpers.ts.
+// Wrapper local injeta isTemplateGroupJsonRenderable + shouldUseAtacVariantSnapshotsForTemplate.
+const pickRenderableTemplateGroupJson = (tpl: LabelTemplate, preferredVariantKey?: AtacVariantKey) =>
+    pickRenderableTemplateGroupJsonHelper(
+        tpl,
+        preferredVariantKey,
+        isTemplateGroupJsonRenderable,
+        shouldUseAtacVariantSnapshotsForTemplate
+    )
 
 // templateSnapshotHasAtacStructure, shouldForceCanonicalAtacForTemplateJson e
 // shouldUseAtacVariantSnapshotsForTemplate extraidos para
