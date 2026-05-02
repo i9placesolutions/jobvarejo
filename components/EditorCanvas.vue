@@ -295,7 +295,8 @@ import {
     hasCollapsedSinglePriceTemplateGeometry as hasCollapsedSinglePriceTemplateGeometryHelper,
     getSinglePriceCurrencyCircleCandidate as getSinglePriceCurrencyCircleCandidateHelper,
     rememberPriceLayoutSnapshot as rememberPriceLayoutSnapshotHelper,
-    restorePriceLayoutSnapshot
+    restorePriceLayoutSnapshot,
+    stabilizePriceGroupsForPersistence as stabilizePriceGroupsForPersistenceHelper
 } from '~/utils/priceLayoutClassifiers'
 import {
     isObjectShownForBounds,
@@ -29909,35 +29910,20 @@ const stabilizeSinglePriceGroupForPersistence = (group: any) => {
     return { fixed, captured };
 };
 
+// stabilizePriceGroupsForPersistence extraido para utils/priceLayoutClassifiers.ts.
+// Wrapper local injeta isLikelyPriceGroupObject + stabilizeSinglePriceGroupForPersistence
+// e adiciona log.
 const stabilizePriceGroupsForPersistence = (canvasInstance: any, reason: string = 'unknown') => {
-    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return { fixed: 0, captured: 0 };
-    const roots = canvasInstance.getObjects() || [];
-    const candidates: any[] = [];
-    const seen = new Set<any>();
-
-    const visit = (node: any) => {
-        if (!node || seen.has(node)) return;
-        seen.add(node);
-        if (isLikelyPriceGroupObject(node)) candidates.push(node);
-        if (typeof node.getObjects === 'function') {
-            (node.getObjects() || []).forEach((child: any) => visit(child));
-        }
-    };
-    roots.forEach((root: any) => visit(root));
-
-    let fixed = 0;
-    let captured = 0;
-    candidates.forEach((group: any) => {
-        const result = stabilizeSinglePriceGroupForPersistence(group);
-        if (result.fixed) fixed += 1;
-        if (result.captured) captured += 1;
-    });
-
-    if (fixed > 0) {
-        console.warn(`[price-layout] ${fixed} etiqueta(s) recuperada(s) antes de persistir (${reason})`);
+    const result = stabilizePriceGroupsForPersistenceHelper(
+        canvasInstance,
+        isLikelyPriceGroupObject,
+        stabilizeSinglePriceGroupForPersistence
+    )
+    if (result.fixed > 0) {
+        console.warn(`[price-layout] ${result.fixed} etiqueta(s) recuperada(s) antes de persistir (${reason})`)
     }
-    return { fixed, captured };
-};
+    return result
+}
 
 
 function layoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {

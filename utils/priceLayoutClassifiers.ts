@@ -793,3 +793,45 @@ export const restorePriceLayoutSnapshot = (group: any): boolean => {
 
     return restoredAny
 }
+
+/**
+ * Walk recursivo em todos os objetos de um canvas procurando por
+ * priceGroups (`isPriceGroupCheck`) e aplica `stabilizePriceGroup`
+ * em cada um.
+ *
+ * Usado pelo pipeline de save para garantir que cada etiqueta foi
+ * normalizada/snapshot-ada antes de serializar para o banco.
+ *
+ * Caller injeta `isPriceGroupCheck` e `stabilizePriceGroup` (que retorna
+ * `{ fixed, captured }`).
+ */
+export const stabilizePriceGroupsForPersistence = (
+    canvasInstance: any,
+    isPriceGroupCheck: (obj: any) => boolean,
+    stabilizePriceGroup: (group: any) => { fixed: boolean; captured: boolean }
+): { fixed: number; captured: number } => {
+    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return { fixed: 0, captured: 0 }
+    const roots = canvasInstance.getObjects() || []
+    const candidates: any[] = []
+    const seen = new Set<any>()
+
+    const visit = (node: any) => {
+        if (!node || seen.has(node)) return
+        seen.add(node)
+        if (isPriceGroupCheck(node)) candidates.push(node)
+        if (typeof node.getObjects === 'function') {
+            (node.getObjects() || []).forEach((child: any) => visit(child))
+        }
+    }
+    roots.forEach((root: any) => visit(root))
+
+    let fixed = 0
+    let captured = 0
+    candidates.forEach((group: any) => {
+        const result = stabilizePriceGroup(group)
+        if (result.fixed) fixed += 1
+        if (result.captured) captured += 1
+    })
+
+    return { fixed, captured }
+}
