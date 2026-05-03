@@ -82,19 +82,9 @@ export const resolveImportTargetZone = (opts: ResolveImportTargetZoneOptions): a
     return byId.get(id) || null;
   };
 
-  // A zona explicita (definida quando o usuario clica "Importar lista" numa
-  // zona especifica) e autoritativa: precisa ir para a zona em que o usuario
-  // clicou, mesmo com varias duplicacoes na tela.
-  const explicit = opts.targetGridZone;
-  if (explicit && opts.isLikelyProductZone(explicit)) {
-    const refreshed = resolveById((explicit as any)?._customId);
-    return refreshed || explicit;
-  }
-  if (explicit) {
-    const byExplicitId = resolveById((explicit as any)?._customId) || resolveById((explicit as any)?.id);
-    if (byExplicitId) return byExplicitId;
-  }
-
+  // A selecao atual do canvas e a fonte de verdade para importacao inteligente.
+  // `targetGridZone` pode ficar stale apos criar/selecionar outra zona; se ele
+  // vencer a selecao real, produtos caem na primeira zona criada.
   const active = opts.canvas.getActiveObject?.();
   const fromActive = opts.resolveZoneForProductImport(active);
   if (fromActive) return fromActive;
@@ -105,6 +95,18 @@ export const resolveImportTargetZone = (opts: ResolveImportTargetZoneOptions): a
     resolveById(snap?.parentZoneId) ||
     resolveById(snap?._zoneSlot?.zoneId);
   if (fromSnapshot) return fromSnapshot;
+
+  // A zona explicita continua como fallback apenas quando a selecao real nao
+  // consegue ser resolvida (ex.: modal aberto e Fabric perdeu activeObject).
+  const explicit = opts.targetGridZone;
+  if (explicit && opts.isLikelyProductZone(explicit)) {
+    const refreshed = resolveById((explicit as any)?._customId);
+    return refreshed || explicit;
+  }
+  if (explicit) {
+    const byExplicitId = resolveById((explicit as any)?._customId) || resolveById((explicit as any)?.id);
+    if (byExplicitId) return byExplicitId;
+  }
 
   if (zones.length === 1) return zones[0];
   return null;

@@ -21,6 +21,7 @@ type ProductImportOptions = {
     mode?: 'replace' | 'append'
     labelTemplateId?: string
     targetMode?: ImportTargetMode
+    targetZoneId?: string
     sourceMode?: ImportSourceMode
     selectedFrameIds?: string[]
     frameAssignments?: FrameAssignment[]
@@ -55,6 +56,7 @@ const props = defineProps<{
     initialImportMode?: 'replace' | 'append'
     labelTemplates?: LabelTemplate[]
     initialLabelTemplateId?: string
+    initialTargetZoneId?: string
     availableFramesForImport?: FrameCandidate[]
     availableZonesForImport?: ZoneCandidate[]
 }>()
@@ -77,6 +79,7 @@ const importSource = ref<ImportSourceMode>('manual')
 const selectedFrameIds = ref<string[]>([])
 const frameAssignmentsMap = ref<Record<string, string | null>>({})
 const zoneAssignmentsMap = ref<Record<string, string | null>>({})
+const lockedTargetZoneId = ref<string>('')
 // Importacao inteligente: por padrao, queremos remover o fundo das imagens encontradas.
 const imageBgPolicy = ref<ImageBgPolicy>('always')
 const isSubmittingImport = ref(false)
@@ -474,6 +477,7 @@ watch(() => props.modelValue, (newVal) => {
     if (!newVal) {
         isSubmittingImport.value = false
         appendBaseProducts.value = null
+        lockedTargetZoneId.value = ''
         reviewFilter.value = 'all'
         reviewSuggestionMap.value = {}
         reviewSuggestionLoadingMap.value = {}
@@ -486,6 +490,7 @@ watch(() => props.modelValue, (newVal) => {
     }
 
     isSubmittingImport.value = false
+    lockedTargetZoneId.value = String(props.initialTargetZoneId || '').trim()
     reviewFilter.value = 'all'
     reviewSuggestionMap.value = {}
     reviewSuggestionLoadingMap.value = {}
@@ -654,6 +659,9 @@ const handleImport = () => {
         mode: importMode.value,
         labelTemplateId: selectedLabelTemplateId.value || undefined,
         targetMode: targetMode.value,
+        targetZoneId: targetMode.value === 'zone'
+            ? (String(lockedTargetZoneId.value || primaryZoneId.value || '').trim() || undefined)
+            : undefined,
         sourceMode: importSource.value,
         imageMatchMode: imageMatchMode.value,
         imageConcurrency: clampImageConcurrency(imageConcurrency.value)

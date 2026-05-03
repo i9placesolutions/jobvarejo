@@ -56,6 +56,9 @@ export const openReviewModalWithProducts = (
             ctx.targetGridZone.value = null
             ctx.targetGridZones.value = []
             ctx.activeProductZoneId.value = null
+            ctx.notifyEditorError('Selecione uma Zona de Produtos antes de importar.')
+            ctx.reviewProducts.value = []
+            return
         }
     }
 
@@ -89,8 +92,9 @@ export const handleImportProductList = (ctx: EditorProductImportContext) => {
 
     ctx.targetGridZone.value = null
     ctx.targetGridZones.value = []
+    ctx.activeProductZoneId.value = null
     ctx.productReviewInitialImportMode.value = 'replace'
-    ctx.showProductReviewModal.value = true
+    ctx.notifyEditorError('Selecione uma Zona de Produtos antes de importar.')
 }
 
 export const handlePasteList = async (ctx: EditorProductImportContext) => {

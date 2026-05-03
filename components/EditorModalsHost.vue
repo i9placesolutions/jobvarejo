@@ -10,6 +10,7 @@ type ProductImportOptions = {
   mode?: 'replace' | 'append'
   labelTemplateId?: string
   targetMode?: ImportTargetMode
+  targetZoneId?: string
   sourceMode?: 'manual' | 'paste-list' | 'file-import'
   selectedFrameIds?: string[]
   frameAssignments?: FrameAssignment[]
@@ -67,6 +68,7 @@ defineProps<{
   productImportExistingCount: number
   productReviewInitialImportMode: 'replace' | 'append'
   importZoneLabelTemplateId: string
+  importTargetZoneId?: string
   showExportModal: boolean
   exportSettings: any
   availableFramesForExport: any[]
@@ -213,6 +215,7 @@ const emit = defineEmits<{
     :initial-import-mode="productReviewInitialImportMode"
     :label-templates="labelTemplates"
     :initial-label-template-id="importZoneLabelTemplateId"
+    :initial-target-zone-id="importTargetZoneId"
     :available-frames-for-import="availableFramesForImport"
     :available-zones-for-import="availableZonesForImport"
     @update:model-value="emit('update:showProductReviewModal', $event)"

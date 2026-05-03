@@ -5439,6 +5439,7 @@ type ProductImportOptions = {
     mode?: 'replace' | 'append'
     labelTemplateId?: string
     targetMode?: ImportTargetMode
+    targetZoneId?: string
     sourceMode?: 'manual' | 'paste-list' | 'file-import'
     selectedFrameIds?: string[]
     frameAssignments?: FrameAssignment[]
@@ -5514,7 +5515,10 @@ const resolveZoneForProductImport = (target: any): any | null => resolveZoneForP
 
 const resolveImportTargetZone = (): any | null => resolveImportTargetZoneHelper({
     canvas: canvas.value,
-    targetGridZone: findProductZoneById(activeProductZoneId.value) || targetGridZone.value,
+    // Let the helper inspect the current Fabric selection first. A cached
+    // activeProductZoneId/targetGridZone can be stale after the user selects a
+    // different zone, which sends imports to the previously created zone.
+    targetGridZone: targetGridZone.value,
     selectedObjectSnapshot: selectedObjectRef.value,
     isLikelyProductZone,
     resolveZoneForProductImport
@@ -5552,23 +5556,6 @@ const resolveRelatedImportZones = (primaryZone: any): any[] => {
 }
 
 const getImportTargetZones = (): any[] => {
-    const activeZone = findProductZoneById(activeProductZoneId.value)
-    if (activeZone && isLikelyProductZone(activeZone)) return [activeZone]
-
-    const stored = Array.isArray(targetGridZones.value) ? targetGridZones.value : []
-    const zones = stored
-        .map((zone: any) => {
-            if (!zone || !isLikelyProductZone(zone) || !canvas.value) return null
-            const id = String((zone as any)?._customId || '').trim()
-            if (!id) return zone
-            return (canvas.value.getObjects?.() || []).find((obj: any) =>
-                isLikelyProductZone(obj) && String((obj as any)?._customId || '').trim() === id
-            ) || zone
-        })
-        .filter((zone: any) => !!zone && isLikelyProductZone(zone))
-
-    if (zones.length > 0) return sortProductZonesByVisualOrder(zones)
-
     const single = resolveImportTargetZone()
     return single ? [single] : []
 }
@@ -5656,6 +5643,13 @@ const importZoneLabelTemplateId = computed(() => {
         if (fromSnapshot) return fromSnapshot;
     }
     return '';
+})
+
+const importTargetZoneId = computed(() => {
+    const zone = resolveImportTargetZone()
+    return zone && isLikelyProductZone(zone)
+        ? String((zone as any)?._customId || (zone as any)?.id || '').trim()
+        : ''
 })
 
 watch(showProductReviewModal, async (open) => {
@@ -20603,16 +20597,19 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
         if (targetMode === 'multi-frame') {
             await importProductsToMultipleFrames(products, opts)
         } else {
-            // Recover the real zone object from canvas state (prevents "solto" cards on stale refs).
-            const zones = getImportTargetZones()
-            const zone = findProductZoneById(activeProductZoneId.value) || zones[0] || resolveImportTargetZone()
-            console.log('[DEBUG confirmProductImport] resolved zones:', zones.map((z: any) => z._customId), 'final zone:', zone?._customId);
+            // Recover the real zone object from current selection. Do not fall
+            // back to zones[0]; with multiple zones that silently imports into
+            // the first created zone instead of the user-selected one.
+            const explicitZoneId = String(opts?.targetZoneId || '').trim()
+            const zone = (explicitZoneId ? findProductZoneById(explicitZoneId) : null) || resolveImportTargetZone()
+            console.log('[DEBUG confirmProductImport] final zone:', zone?._customId);
             if (!zone) {
                 console.warn('[confirmProductImport] Could not resolve target product zone. Import aborted to avoid detached cards.')
-                notifyEditorError('Nao foi possivel localizar a zona de produtos para substituir os cards.')
+                notifyEditorError('Selecione uma Zona de Produtos antes de importar.')
                 return
             }
             targetGridZone.value = zone
+            targetGridZones.value = resolveRelatedImportZones(zone)
             setActiveProductZone(zone)
 
             const targetZones = [zone]
@@ -32343,6 +32340,7 @@ const handleRecalculateLayout = () => {
         :product-import-existing-count="productImportExistingCount"
         :product-review-initial-import-mode="productReviewInitialImportMode"
         :import-zone-label-template-id="importZoneLabelTemplateId"
+        :import-target-zone-id="importTargetZoneId"
         :show-export-modal="showExportModal"
         :export-settings="exportSettings"
         :available-frames-for-export="availableFramesForExport"
