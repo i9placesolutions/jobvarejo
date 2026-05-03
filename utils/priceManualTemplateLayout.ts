@@ -42,6 +42,9 @@ export const layoutManualTemplateGroup = (
 
     let baseW = Number((priceGroup as any).__manualTemplateBaseW)
     let baseH = Number((priceGroup as any).__manualTemplateBaseH)
+    const hasPersistedBase =
+        Number.isFinite(baseW) && baseW > 0 &&
+        Number.isFinite(baseH) && baseH > 0
     const sx = Math.abs(toFinite(priceGroup.scaleX, 1)) || 1
     const sy = Math.abs(toFinite(priceGroup.scaleY, 1)) || 1
     const rawW = toFinite(priceGroup.width, 0)
@@ -50,12 +53,7 @@ export const layoutManualTemplateGroup = (
     const scaledH = toFinite(priceGroup.getScaledHeight?.(), rawH * sy)
     const inferredBaseW = rawW > 0 ? rawW : (scaledW > 0 ? scaledW / sx : 1)
     const inferredBaseH = rawH > 0 ? rawH : (scaledH > 0 ? scaledH / sy : 1)
-    const shouldRefreshBase =
-        !Number.isFinite(baseW) || baseW <= 0 ||
-        !Number.isFinite(baseH) || baseH <= 0 ||
-        inferredBaseW > (baseW * 1.001) ||
-        inferredBaseH > (baseH * 1.001)
-    if (shouldRefreshBase) {
+    if (!hasPersistedBase) {
         baseW = Math.max(1, inferredBaseW)
         baseH = Math.max(1, inferredBaseH)
         ;(priceGroup as any).__manualTemplateBaseW = baseW
@@ -200,7 +198,7 @@ export const layoutManualTemplateGroup = (
         if (!hasSaneBounds(bounds, directChildrenVisibleBounds) && hasSaneBounds(directChildrenVisibleBounds, directChildrenVisibleBounds)) {
             bounds = directChildrenVisibleBounds
         }
-        if (bounds && shouldUseVisibleBoundsFallback(bounds, directChildrenVisibleBounds)) {
+        if (!hasPersistedBase && bounds && shouldUseVisibleBoundsFallback(bounds, directChildrenVisibleBounds)) {
             effectiveW = Math.max(1, Number(bounds.width || baseW || 1))
             effectiveH = Math.max(1, Number(bounds.height || baseH || 1))
             ;(priceGroup as any).__manualTemplateBaseW = effectiveW

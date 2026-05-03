@@ -4305,7 +4305,7 @@ const refreshLoadedCanvasTextMetrics = (canvasInstance: any) => {
     }
 
     canvasInstance.getObjects().forEach(recalcAllTextMetrics);
-    refitManualLabelTemplatesAfterFontMetrics(canvasInstance);
+    refreshManualLabelTemplateMetricsAfterFontLoad(canvasInstance);
 };
 
 const pageSettings = ref({
@@ -13471,9 +13471,9 @@ const removePathPoint = (pathObj: any, index: number) => {
 let didLoadFonts = false
 
 // When webfonts finish loading, Fabric's previous measurements may have been done with fallback fonts.
-// That can permanently "shrink" manual templates because the fitting algorithm runs with wrong glyph widths.
-// After clearing Fabric's font cache and re-initializing text dimensions, re-fit manual label templates.
-const refitManualLabelTemplatesAfterFontMetrics = (canvasInstance: any) => {
+// Refresh text metrics, but do not destructively re-layout persisted manual labels on load:
+// the mini-editor geometry/anchors saved in the canvas are the source of truth.
+const refreshManualLabelTemplateMetricsAfterFontLoad = (canvasInstance: any) => {
     if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return;
 
     const seen = new Set<any>();
@@ -13506,19 +13506,29 @@ const refitManualLabelTemplatesAfterFontMetrics = (canvasInstance: any) => {
                 }
 
                 if (shouldPreserveManualTemplateVisual(obj)) {
-                    // Force anchors to be recomputed with real font metrics (prevents stale currency/gap offsets).
-                    try { delete (obj as any).__manualSingleAnchors; } catch { /* ignore */ }
-                    // Re-fit dynamic values with correct font metrics.
-                    if (isRedBurstPriceGroup(obj)) {
-                        tuneRedBurstPriceGroupLayout(obj);
-                    } else {
-                        const all = collectObjectsDeep(obj);
-                        const hasAtac = !!findByName(all, 'atac_retail_bg');
-                        if (hasAtac) {
+                    const anchors = (obj as any).__manualSingleAnchors;
+                    const hasStableSingleAnchors =
+                        anchors &&
+                        typeof anchors === 'object' &&
+                        Number((anchors as any).__version) === MANUAL_SINGLE_ANCHOR_VERSION;
+                    const all = collectObjectsDeep(obj);
+                    const hasAtac = !!findByName(all, 'atac_retail_bg');
+                    const shouldHealMissingLayout =
+                        hasAtac ||
+                        !hasStableSingleAnchors ||
+                        hasCorruptedPriceLayout(obj);
+
+                    if (shouldHealMissingLayout) {
+                        if (isRedBurstPriceGroup(obj)) {
+                            tuneRedBurstPriceGroupLayout(obj);
+                        } else if (hasAtac) {
                             fitManualAtacarejoValuesIntoTemplate(obj);
                         } else {
                             fitManualSinglePriceValuesIntoTemplate(obj);
                         }
+                    } else {
+                        obj.dirty = true;
+                        obj.setCoords?.();
                     }
                 }
             } catch {
@@ -13575,7 +13585,7 @@ const loadFonts = () => {
                         canvas.value.getObjects().forEach(recalcText);
                         // Re-run manual template fitting now that real font metrics are available.
                         // This is what keeps the product card label identical to the mini editor.
-                        refitManualLabelTemplatesAfterFontMetrics(canvas.value);
+                        refreshManualLabelTemplateMetricsAfterFontLoad(canvas.value);
                         safeRequestRenderAll();
                     }
                 }
@@ -27150,10 +27160,21 @@ async function duplicateLabelTemplateById(templateId: string) {
     const src = labelTemplates.value.find(t => t.id === templateId);
     if (!src) return;
     const now = new Date().toISOString();
+    const cloneTemplatePayload = (value: any) => {
+        try {
+            return typeof structuredClone === 'function'
+                ? structuredClone(value)
+                : JSON.parse(JSON.stringify(value));
+        } catch {
+            return value;
+        }
+    };
     const copy: LabelTemplate = {
         ...src,
         id: makeId(),
         name: `${src.name} (Copia)`,
+        group: cloneTemplatePayload((src as any).group),
+        previewDataUrl: src.previewDataUrl,
         createdAt: now,
         updatedAt: now
     };
@@ -27210,7 +27231,6 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
     const oldPrice = oldParts.find((o: any) => o.name === 'smart_price' || o.name === 'price_value_text');
     const oldInt = oldParts.find((o: any) => o.name === 'price_integer_text');
     const oldDec = oldParts.find((o: any) => o.name === 'price_decimal_text');
-    const oldUnit = oldParts.find((o: any) => o.name === 'price_unit_text');
     const oldCurrency = oldParts.find((o: any) => o.name === 'price_currency_text');
     const oldRetailInt = oldParts.find((o: any) => o.name === 'retail_integer_text');
     const oldRetailDec = oldParts.find((o: any) => o.name === 'retail_decimal_text');
@@ -27239,10 +27259,9 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
         ? `${oldInt.text || '0'}${oldDec.text || ',00'}`
         : (hasVisibleAtacarejoTier ? undefined : oldPrice?.text);
     const oldCurrencyText = oldCurrency?.text;
-    const oldUnitText = oldUnit?.text;
-    const inferredUnit = (typeof oldUnitText === 'string' && oldUnitText.trim().length)
-        ? normalizeUnitForLabel(oldUnitText)
-        : inferUnitFromCard(card);
+    // Unit must come from product/card metadata. Reusing the previous label text
+    // leaks sample/template values like "UN" into products that did not configure it.
+    const inferredUnit = inferUnitFromCard(card);
 
     let newPg: any = null;
     try {
@@ -28350,13 +28369,11 @@ async function resetCardPriceGroupToDefault(card: any) {
     const oldPrice = oldParts.find((o: any) => o.name === 'smart_price' || o.name === 'price_value_text');
     const oldInt = oldParts.find((o: any) => o.name === 'price_integer_text');
     const oldDec = oldParts.find((o: any) => o.name === 'price_decimal_text');
-    const oldUnit = oldParts.find((o: any) => o.name === 'price_unit_text');
     const oldPriceText =
         (oldInt && oldDec)
             ? `${oldInt.text || '0'}${oldDec.text || ',00'}`
             : (typeof oldPrice?.text === 'string' ? oldPrice.text : '0,00');
-    const oldUnitText = typeof oldUnit?.text === 'string' ? oldUnit.text : undefined;
-    const inferredUnit = oldUnitText && oldUnitText.trim().length ? normalizeUnitForLabel(oldUnitText) : inferUnitFromCard(card);
+    const inferredUnit = inferUnitFromCard(card);
 
     const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0;
     const cardH = card._cardHeight ?? card.height ?? card.getScaledHeight?.() ?? 0;
