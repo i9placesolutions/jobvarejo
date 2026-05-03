@@ -1289,6 +1289,17 @@ const hasUsableProjectPreview = (project: any): boolean => {
   return !!getProjectPreviewSource(project)
 }
 
+const getProjectPreviewFrameStyle = (project: any) => {
+  const width = Number(project?.preview_width || 0)
+  const height = Number(project?.preview_height || 0)
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return {}
+  }
+  return {
+    aspectRatio: `${width} / ${height}`
+  }
+}
+
 const {
   rootEl: progressiveProjectPreviewRootEl,
   visibleIds: visibleProjectPreviewIds,
@@ -1764,7 +1775,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 >
                   <!-- Grid mode -->
                   <template v-if="viewMode === 'grid'">
-                    <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden rounded-t-[10px] dash-project-preview-frame">
+                    <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden rounded-t-[10px] dash-project-preview-frame" :style="getProjectPreviewFrameStyle(project)">
                       <DashboardProjectPreview
                         class="absolute inset-0"
                         :project="project"

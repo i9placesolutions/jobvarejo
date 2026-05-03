@@ -9,21 +9,50 @@ import { pgOneOrNull, pgQuery } from '../utils/postgres'
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
-const getFirstPageThumbnailRef = (canvasData: any): string | null => {
+const getProjectPages = (canvasData: any): any[] => {
   const pages = Array.isArray(canvasData)
     ? canvasData
     : (canvasData && typeof canvasData === 'object' && Array.isArray(canvasData.pages) ? canvasData.pages : [])
-  for (const page of pages) {
-    const thumb = String(page?.thumbnailUrl || page?.thumbnail_url || '').trim()
+  return Array.isArray(pages) ? pages : []
+}
+
+const getPageThumbnailRef = (page: any): string | null => {
+  const thumb = String(page?.thumbnailUrl || page?.thumbnail_url || '').trim()
+  return thumb || null
+}
+
+const getPrimaryPageMeta = (canvasData: any): any | null => {
+  return getProjectPages(canvasData).find((page) => !!page && typeof page === 'object') || null
+}
+
+const getFallbackPageThumbnailRef = (canvasData: any): string | null => {
+  for (const page of getProjectPages(canvasData)) {
+    const thumb = getPageThumbnailRef(page)
     if (thumb) return thumb
   }
   return null
 }
 
+const getProjectPreviewSize = (canvasData: any): { preview_width: number | null; preview_height: number | null } => {
+  const page = getPrimaryPageMeta(canvasData)
+  const width = Number(page?.width || 0)
+  const height = Number(page?.height || 0)
+  return {
+    preview_width: Number.isFinite(width) && width > 0 ? width : null,
+    preview_height: Number.isFinite(height) && height > 0 ? height : null
+  }
+}
+
 const resolveProjectPreviewUrl = async (project: any, userId: string): Promise<string | null> => {
+  // Prefer the current first-page thumbnail. Older projects may still have a
+  // stale `preview_url` generated before thumbnail scaling/panning fixes.
+  const primaryThumb = await resolveStorageReadUrl(getPageThumbnailRef(getPrimaryPageMeta(project?.canvas_data)), userId)
+  if (primaryThumb) return primaryThumb
+
   const explicitPreview = await resolveStorageReadUrl(project?.preview_url, userId)
   if (explicitPreview) return explicitPreview
-  return await resolveStorageReadUrl(getFirstPageThumbnailRef(project?.canvas_data), userId)
+
+  return await resolveStorageReadUrl(getFallbackPageThumbnailRef(project?.canvas_data), userId)
 }
 
 export default defineEventHandler(async (event) => {
@@ -57,6 +86,7 @@ export default defineEventHandler(async (event) => {
       return {
         ...row,
         preview_url: await resolveProjectPreviewUrl(row, user.id),
+        ...getProjectPreviewSize(row?.canvas_data),
         canvas_data: await resolveProjectCanvasDataReadUrls(row?.canvas_data, user.id)
       }
     } catch (error: any) {
@@ -83,7 +113,8 @@ export default defineEventHandler(async (event) => {
         const { canvas_data: _canvasData, ...rest } = p || {}
         return {
           ...rest,
-          preview_url: await resolveProjectPreviewUrl(p, user.id)
+          preview_url: await resolveProjectPreviewUrl(p, user.id),
+          ...getProjectPreviewSize(p?.canvas_data)
         }
       })
     )
