@@ -3800,7 +3800,9 @@ const isMobilePanel = (value: unknown): value is MobilePanel => (
     value === 'more'
 )
 const openMobilePanel = (panel: unknown) => {
-    mobilePanel.value = isMobilePanel(panel) ? panel : null
+    const nextPanel = isMobilePanel(panel) ? panel : null
+    mobilePanel.value = nextPanel
+    mobileNavRef.value?.setActive?.(nextPanel)
 }
 
 // ── Mobile template helpers (avoids Volar TS errors in large file) ──
@@ -5628,9 +5630,11 @@ const focusProductZoneFromDblClickTarget = (target: any): boolean => {
         // ignore selection focus failures
     }
     if (isMobile.value) {
-        mobilePanel.value = 'properties';
+        openMobilePanel('properties');
+        nextTick(() => focusProductZoneSettings());
+    } else {
+        focusProductZoneSettings();
     }
-    focusProductZoneSettings();
     return true;
 }
 
@@ -7250,13 +7254,13 @@ onMounted(async () => {
                     (canvas.value as any).perPixelTargetFind = false;
                     // Increase tolerance so taps select objects more reliably.
                     const prevTol = Number((canvas.value as any).targetFindTolerance || 0);
-                    (canvas.value as any).targetFindTolerance = Math.max(prevTol, 12);
+                    (canvas.value as any).targetFindTolerance = Math.max(prevTol, 18);
 
                     const Obj = (fabric as any)?.Object || (fabric as any)?.FabricObject;
                     if (Obj?.prototype) {
                         // Fabric uses touchCornerSize on touch devices; keep cornerSize untouched for desktop.
-                        if (typeof Obj.prototype.touchCornerSize !== 'number' || Obj.prototype.touchCornerSize < 22) {
-                            Obj.prototype.touchCornerSize = 22;
+                        if (typeof Obj.prototype.touchCornerSize !== 'number' || Obj.prototype.touchCornerSize < 36) {
+                            Obj.prototype.touchCornerSize = 36;
                         }
                         // Slightly stronger border scale helps on high-DPI tablets.
                         if (typeof Obj.prototype.borderScaleFactor !== 'number' || Obj.prototype.borderScaleFactor < 1.2) {
@@ -7345,6 +7349,23 @@ onMounted(async () => {
                         const target = info?.target ?? info;
                         const targetIsZone = !!(target && isLikelyProductZone(target));
                         const targetIsFrame = !!(target && isFrameLikeHitTarget(target));
+                        if (targetIsZone) {
+                            try {
+                                const active = this.getActiveObject?.();
+                                // When the user has already selected a product zone, touch interactions
+                                // must belong to that zone so move/resize handles keep working on mobile.
+                                if (active === target) return info;
+                                const point = typeof this.getViewportPoint === 'function' ? this.getViewportPoint(evt) : null;
+                                const isTouch = !!(evt?.touches?.length || evt?.changedTouches?.length || String(evt?.pointerType || '').toLowerCase() === 'touch');
+                                const controlHit = active === target && (
+                                    target.__corner ||
+                                    (point && typeof target.findControl === 'function' && target.findControl(point, isTouch))
+                                );
+                                if (controlHit) return info;
+                            } catch {
+                                if ((target as any)?.__corner) return info;
+                            }
+                        }
                         const shouldOverride = !target || targetIsZone || targetIsFrame;
                         if (!shouldOverride) return info;
 
@@ -29827,6 +29848,8 @@ const ensureZoneSanity = (zone: any) => {
         console.log('🔧 [ensureZoneSanity] Initialized zone dimensions:', { _zoneWidth: zone._zoneWidth, _zoneHeight: zone._zoneHeight });
     }
 
+    const isTouchEditor = !!(isMobile.value || isTablet.value);
+
     // Ensure stable interaction flags
     // NOTE: we intentionally do NOT set objectCaching/statefullCache here.
     // Those props are in CANVAS_CUSTOM_PROPS; forcing them to false on zones
@@ -29838,7 +29861,13 @@ const ensureZoneSanity = (zone: any) => {
         evented: true,
         hasControls: true,
         hasBorders: true,
-        subTargetCheck: false
+        subTargetCheck: false,
+        touchCornerSize: isTouchEditor ? 44 : Math.max(24, Number(zone.touchCornerSize || 24)),
+        cornerSize: isTouchEditor ? Math.max(14, Number(zone.cornerSize || 0)) : Math.max(10, Number(zone.cornerSize || 0)),
+        borderScaleFactor: isTouchEditor ? Math.max(1.4, Number(zone.borderScaleFactor || 0)) : Math.max(1, Number(zone.borderScaleFactor || 0)),
+        cornerColor: zone.cornerColor || '#8b5cf6',
+        cornerStrokeColor: zone.cornerStrokeColor || '#ffffff',
+        cornerStyle: zone.cornerStyle || 'circle'
     });
 
     // Normalize the inner rect scale so it always matches the group bounds while scaling.
@@ -32206,7 +32235,7 @@ const handleRecalculateLayout = () => {
                   </button>
                   <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
                   <!-- Properties -->
-                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Propriedades" @click="mobilePanel = 'properties'">
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Propriedades" @click="openMobilePanel('properties')">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>
                   </button>
                 </div>

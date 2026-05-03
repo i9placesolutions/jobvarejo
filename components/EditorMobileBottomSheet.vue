@@ -26,6 +26,7 @@ const isDragging = ref(false)
 const dragOffset = ref(0)
 
 const onDragStart = (e: TouchEvent) => {
+  e.preventDefault()
   isDragging.value = true
   startY = e.touches[0]?.clientY ?? 0
   startHeight = heights[level.value]
@@ -34,6 +35,7 @@ const onDragStart = (e: TouchEvent) => {
 
 const onDragMove = (e: TouchEvent) => {
   if (!isDragging.value) return
+  e.preventDefault()
   const deltaY = (e.touches[0]?.clientY ?? 0) - startY
   const deltaPct = (deltaY / Math.max(1, window.innerHeight)) * 100
   dragOffset.value = deltaPct
@@ -86,9 +88,9 @@ const currentHeight = computed(() => {
       >
         <!-- Drag handle -->
         <div
-          class="flex-shrink-0 flex items-center justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing"
-          @touchstart.passive="onDragStart"
-          @touchmove.passive="onDragMove"
+          class="flex-shrink-0 flex items-center justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing touch-none select-none"
+          @touchstart="onDragStart"
+          @touchmove="onDragMove"
           @touchend="onDragEnd"
         >
           <div class="w-10 h-1 rounded-full bg-white/20" />

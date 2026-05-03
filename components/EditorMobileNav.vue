@@ -31,7 +31,8 @@ const buttons = [
 
 // Limpar active quando o painel fecha externamente
 defineExpose({
-  clearActive: () => { activePanel.value = null }
+  clearActive: () => { activePanel.value = null },
+  setActive: (panel: string | null) => { activePanel.value = panel }
 })
 </script>
 
