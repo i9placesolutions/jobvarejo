@@ -190,7 +190,7 @@ const onTap = (pageId: string) => {
   <div
     v-if="pages && pages.length > 0"
     class="fixed left-0 right-0 z-[9989] bg-[#18181b]/95 backdrop-blur-md border-t border-white/10"
-    style="bottom: 56px;"
+    style="bottom: var(--editor-mobile-nav-h, calc(64px + env(safe-area-inset-bottom, 0px)));"
   >
     <!-- Contador de páginas (tipo Canva: "3 / 8") -->
     <div class="flex items-center justify-between px-3 pt-1.5 pb-0.5">

@@ -8,15 +8,16 @@ const EditorRightSidebar = defineAsyncComponent(() => import('./EditorRightSideb
 const PageNavigator = defineAsyncComponent(() => import('./PageNavigator.vue'))
 
 type MobilePanel = 'tools' | 'layers' | 'properties' | 'pages' | 'uploads' | 'more'
+type LayerSelectPayload = string | { id: string; additive?: boolean; toggle?: boolean; range?: boolean }
 
-defineProps<{
+const props = defineProps<{
   panel: MobilePanel
   title: string
   currentZoom: number
   pages: any[]
   currentPageId: string
   canvasObjects: any[]
-  selectedObjectId: string
+  selectedObjectId: string | null
   selectedObjectIds: string[]
   currentUser: any
   selectedObject: any
@@ -38,28 +39,31 @@ defineProps<{
   getInitial: (value: string) => string
 }>()
 
+const getMobileColorFromString = (value: string | null | undefined) => props.getColorFromString(String(value || ''))
+const getMobileInitial = (value: string | null | undefined) => props.getInitial(String(value || ''))
+
 const emit = defineEmits<{
   close: []
   setPanel: [panel: MobilePanel]
   command: [name: string, payload?: any]
   insertAsset: [asset: any]
-  selectLayer: [id: string]
+  selectLayer: [payload: LayerSelectPayload]
   toggleVisible: [id: string]
   toggleLock: [id: string]
   deleteLayer: [id: string]
   moveLayer: [id: string, direction: 'up' | 'down']
-  renameLayer: [payload: any]
+  renameLayer: [id: string, name: string]
   reorderLayer: [payload: any]
   updateProperty: [name: string, value: any]
   updateSmartGroup: [payload: any]
-  updatePageSettings: [payload: any]
+  updatePageSettings: [prop: string, value: any]
   addColorStyle: [color: string]
   applyColorStyle: [id: string]
-  updateZone: [payload: any]
-  updateGlobalStyles: [payload: any]
-  applyTemplateToZone: [payload: any]
+  updateZone: [prop: string, value: any, meta?: any]
+  updateGlobalStyles: [prop: string, value: any, meta?: any]
+  applyTemplateToZone: []
   applyPreset: [payload: any]
-  syncGaps: [payload: any]
+  syncGaps: [padding: number, meta?: any]
   recalculateLayout: []
   manageLabelTemplates: []
   openZoneReview: []
@@ -171,13 +175,13 @@ const emit = defineEmits<{
         :objects="canvasObjects"
         :selectedId="selectedObjectId"
         :selectedIds="selectedObjectIds"
-        @select="id => emit('selectLayer', id)"
-        @toggle-visible="id => emit('toggleVisible', id)"
-        @toggle-lock="id => emit('toggleLock', id)"
-        @delete="id => emit('deleteLayer', id)"
-        @move-up="id => emit('moveLayer', id, 'up')"
-        @move-down="id => emit('moveLayer', id, 'down')"
-        @rename="payload => emit('renameLayer', payload)"
+        @select="(payload: LayerSelectPayload) => emit('selectLayer', payload)"
+        @toggle-visible="(id: string) => emit('toggleVisible', id)"
+        @toggle-lock="(id: string) => emit('toggleLock', id)"
+        @delete="(id: string) => emit('deleteLayer', id)"
+        @move-up="(id: string) => emit('moveLayer', id, 'up')"
+        @move-down="(id: string) => emit('moveLayer', id, 'down')"
+        @rename="(id: string, name: string) => emit('renameLayer', id, name)"
         @reorder="payload => emit('reorderLayer', payload)"
       />
     </template>
@@ -188,8 +192,8 @@ const emit = defineEmits<{
         :current-user="currentUser"
         :show-zoom-menu="false"
         :current-zoom="currentZoom"
-        :get-color-from-string="getColorFromString"
-        :get-initial="getInitial"
+        :get-color-from-string="getMobileColorFromString"
+        :get-initial="getMobileInitial"
         :selected-object="selectedObject"
         :active-mode="activeMode"
         :page-settings="pageSettings"
@@ -208,15 +212,15 @@ const emit = defineEmits<{
         class="relative! w-full! shadow-none! border-0!"
         @update-property="(name, value) => emit('updateProperty', name, value)"
         @update-smart-group="payload => emit('updateSmartGroup', payload)"
-        @update-page-settings="payload => emit('updatePageSettings', payload)"
+        @update-page-settings="(prop: string, value: any) => emit('updatePageSettings', prop, value)"
         @action="payload => emit('command', 'sidebar-action', payload)"
         @add-color-style="color => emit('addColorStyle', color)"
         @apply-color-style="id => emit('applyColorStyle', id)"
-        @update-zone="payload => emit('updateZone', payload)"
-        @update-global-styles="payload => emit('updateGlobalStyles', payload)"
-        @apply-template-to-zone="payload => emit('applyTemplateToZone', payload)"
+        @update-zone="(prop, value, meta) => emit('updateZone', prop, value, meta)"
+        @update-global-styles="(prop, value, meta) => emit('updateGlobalStyles', prop, value, meta)"
+        @apply-template-to-zone="emit('applyTemplateToZone')"
         @apply-preset="payload => emit('applyPreset', payload)"
-        @sync-gaps="payload => emit('syncGaps', payload)"
+        @sync-gaps="(padding, meta) => emit('syncGaps', padding, meta)"
         @recalculate-layout="emit('recalculateLayout')"
         @manage-label-templates="emit('manageLabelTemplates')"
         @open-zone-review="emit('openZoneReview')"
@@ -228,11 +232,11 @@ const emit = defineEmits<{
       <PageNavigator
         :pages="pages || []"
         :active-page-id="currentPageId"
-        @select-page="id => emit('selectPage', id)"
+        @select-page="(id: string) => emit('selectPage', id)"
         @add-page="emit('addPage')"
-        @duplicate-page="id => emit('duplicatePage', id)"
-        @delete-page="idx => emit('deletePage', idx)"
-        @reorder-pages="payload => emit('reorderPages', payload)"
+        @duplicate-page="(id: string) => emit('duplicatePage', id)"
+        @delete-page="(idx: number) => emit('deletePage', idx)"
+        @reorder-pages="(payload: any) => emit('reorderPages', payload)"
       />
     </template>
 

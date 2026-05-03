@@ -1134,6 +1134,17 @@ const cancelRenameProject = () => {
   editingProjectName.value = ''
 }
 
+const clampFloatingMenuPosition = (x: number, y: number, opts: { width?: number; height?: number } = {}) => {
+  if (!import.meta.client) return { x, y }
+  const width = opts.width ?? 192
+  const height = opts.height ?? 260
+  const margin = 10
+  return {
+    x: Math.max(margin, Math.min(x, window.innerWidth - width - margin)),
+    y: Math.max(margin, Math.min(y, window.innerHeight - height - margin))
+  }
+}
+
 // Show project context menu
 const showProjectContextMenu = (projectId: string, event: MouseEvent) => {
   if (showCreateProject.value || showCreateFolder.value || showMoveProjectModal.value) return
@@ -1141,7 +1152,7 @@ const showProjectContextMenu = (projectId: string, event: MouseEvent) => {
   event.stopPropagation()
   showFolderMenu.value = null
   showNotifications.value = false
-  projectMenuPosition.value = { x: event.clientX, y: event.clientY }
+  projectMenuPosition.value = clampFloatingMenuPosition(event.clientX, event.clientY, { width: 210, height: 280 })
   showProjectMenu.value = projectId
 }
 
@@ -1257,7 +1268,7 @@ const showFolderContextMenu = (folderId: string, event: MouseEvent) => {
   event.stopPropagation()
   showProjectMenu.value = null
   showNotifications.value = false
-  folderMenuPosition.value = { x: event.clientX, y: event.clientY }
+  folderMenuPosition.value = clampFloatingMenuPosition(event.clientX, event.clientY, { width: 180, height: 140 })
   showFolderMenu.value = folderId
 }
 
@@ -1410,7 +1421,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 
 <template>
-  <div class="dash-root h-screen w-screen overflow-hidden flex flex-col">
+  <div :class="['dash-root h-screen w-screen overflow-hidden flex flex-col', dashMobile ? 'dash-root-mobile' : '']">
     <div class="flex-1 w-full h-full max-w-480 mx-auto overflow-hidden flex flex-col relative">
 
       <!-- Top Bar -->
@@ -1419,8 +1430,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <!-- Mobile hamburger -->
           <button
             v-if="dashMobile"
-            class="w-8 h-8 flex items-center justify-center hover:bg-black/5 rounded-lg transition-all text-slate-500 hover:text-slate-800 -ml-1"
+            class="w-11 h-11 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-slate-500 hover:text-slate-800 -ml-2 active:scale-95"
             @click="showMobileDrawer = true"
+            aria-label="Abrir menu"
           >
             <MenuIcon class="w-5 h-5" />
           </button>
@@ -1445,12 +1457,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <button
             ref="notificationButtonRef"
             @click.stop="toggleNotifications"
-            class="notification-button w-9 h-9 flex items-center justify-center hover:bg-black/5 rounded-xl transition-all text-slate-400 hover:text-slate-700 relative"
+            class="notification-button w-11 h-11 sm:w-9 sm:h-9 flex items-center justify-center hover:bg-black/5 rounded-2xl sm:rounded-xl transition-all text-slate-400 hover:text-slate-700 relative active:scale-95"
+            aria-label="Notificações"
           >
             <Bell class="w-[18px] h-[18px]" />
             <span v-if="unreadCount > 0" class="absolute top-1.5 right-1.5 w-2 h-2 bg-indigo-500 rounded-full ring-2 ring-white"></span>
           </button>
-          <div v-if="user" class="flex items-center gap-2 px-2.5 py-1.5 hover:bg-black/5 rounded-xl cursor-pointer transition-all group">
+          <div v-if="user" class="flex items-center gap-2 px-1.5 sm:px-2.5 py-1.5 hover:bg-black/5 rounded-2xl sm:rounded-xl cursor-pointer transition-all group">
             <div class="w-7 h-7 bg-linear-to-br from-indigo-500 to-violet-600 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden">
               <img v-if="user.avatar_url" :src="user.avatar_url" :alt="user.name" class="w-full h-full object-cover" />
               <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
@@ -1460,6 +1473,19 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
         </div>
       </header>
+
+      <div v-if="dashMobile" class="dash-mobile-search shrink-0 px-4 pt-3 pb-2">
+        <div class="relative">
+          <Search class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input
+            v-model="searchQuery"
+            type="search"
+            inputmode="search"
+            placeholder="Buscar projetos, pastas ou campanhas"
+            class="w-full h-11 bg-white border border-slate-200 rounded-2xl text-[14px] text-slate-800 pl-10 pr-4 shadow-sm shadow-slate-200/60 focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 placeholder:text-slate-400 transition-all"
+          />
+        </div>
+      </div>
 
       <!-- Layout -->
       <div class="dash-layout relative flex-1 flex overflow-hidden min-h-0">
@@ -1496,6 +1522,60 @@ const handleDropOnRoot = async (event: DragEvent) => {
               </button>
             </div>
             <div class="sidebar-divider mx-3 my-1"></div>
+            <div class="flex-1 min-h-0 overflow-y-auto px-2 py-2">
+              <div class="flex items-center justify-between px-2 mb-2">
+                <p class="sidebar-section-label">Pastas</p>
+                <button
+                  class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
+                  type="button"
+                  aria-label="Nova pasta"
+                  @click="showCreateFolder = true; showMobileDrawer = false"
+                >
+                  <FolderPlus class="w-4 h-4" />
+                </button>
+              </div>
+              <button
+                :class="['dash-nav-item dash-nav-item-mobile w-full', activeView === 'all' && !activeFolderId && !isNoFolderView ? 'active' : '']"
+                type="button"
+                @click="activeView = 'all'; setActiveFolder(null); filterFolderId = 'all'; showMobileDrawer = false"
+              >
+                <FolderOpen class="w-4 h-4 shrink-0 opacity-60" />
+                <span class="flex-1 text-left">Raiz</span>
+                <span class="nav-count">{{ safeProjects.length }}</span>
+              </button>
+              <button
+                :class="['dash-nav-item dash-nav-item-mobile w-full', isNoFolderView ? 'active' : '']"
+                type="button"
+                @click="goToNoFolder(); showMobileDrawer = false"
+              >
+                <Folder class="w-4 h-4 shrink-0 opacity-60" />
+                <span class="flex-1 text-left">Sem pasta</span>
+                <span v-if="rootProjects.length > 0" class="nav-count">{{ rootProjects.length }}</span>
+              </button>
+              <div class="folder-tree mt-1" v-if="isMounted">
+                <FolderTreeItem
+                  v-for="folder in folderTree"
+                  :key="folder.id"
+                  :folder="folder"
+                  :level="0"
+                  :is-active="activeFolderId === folder.id"
+                  :is-expanded="folder.isExpanded"
+                  :project-count="folder.projectCount"
+                  :is-editing="editingFolderId === folder.id"
+                  :editing-name="editingFolderName"
+                  :active-folder-id="activeFolderId"
+                  :editing-folder-id="editingFolderId"
+                  :expanded-folders="expandedFolders"
+                  @select="(id: string) => { openFolderFromSidebar(id); showMobileDrawer = false }"
+                  @toggle="(id: string) => toggleFolder(id)"
+                  @context-menu="(e: MouseEvent, id: string) => { e.stopPropagation(); showFolderContextMenu(id, e) }"
+                  @update-name="(name: string) => editingFolderName = name"
+                  @drop-on-folder="handleDropOnFolder"
+                  @save-edit="saveFolderName"
+                  @cancel-edit="cancelEditFolder"
+                />
+              </div>
+            </div>
             <!-- Bottom -->
             <div class="px-2 pb-3 mt-auto shrink-0">
               <div class="sidebar-divider mx-1 mb-2"></div>
@@ -1640,7 +1720,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
         <main class="dash-main flex-1 flex flex-col overflow-hidden relative z-10">
 
           <!-- Page Header -->
-          <div :class="['flex items-center justify-between gap-4 shrink-0', dashMobile ? 'px-4 pt-4 pb-3' : 'px-7 pt-5 pb-4']">
+          <div :class="['flex items-center justify-between gap-4 shrink-0', dashMobile ? 'px-4 pt-3 pb-2' : 'px-7 pt-5 pb-4']">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <h1 :class="['dash-page-title font-bold leading-tight text-slate-800 tracking-tight truncate', dashMobile ? 'text-[18px]' : 'text-[22px]']">{{ dashboardTitle }}</h1>
@@ -1668,7 +1748,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
 
           <!-- Toolbar -->
-          <div :class="['pb-3 flex items-center gap-3 shrink-0', dashMobile ? 'px-4 overflow-x-auto' : 'px-7']">
+          <div :class="['pb-3 flex items-center gap-3 shrink-0', dashMobile ? 'px-4 overflow-x-auto dash-mobile-toolbar' : 'px-7']">
             <div class="dash-tabs flex items-center gap-0.5 p-0.5 rounded-xl shrink-0">
               <button @click="activeView = 'recent'" :class="['dash-tab', activeView === 'recent' ? 'active' : '']">Recentes</button>
               <button @click="activeView = 'all'" :class="['dash-tab', activeView === 'all' ? 'active' : '']">Todos</button>
@@ -1686,13 +1766,37 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <button
             v-if="dashMobile"
             @click="showCreateProject = true"
-            class="fixed bottom-6 right-5 z-100 w-14 h-14 rounded-full bg-indigo-500 hover:bg-indigo-400 shadow-xl shadow-indigo-500/30 flex items-center justify-center text-white transition-all active:scale-95 safe-bottom"
+            class="fixed right-5 z-100 w-14 h-14 rounded-full bg-indigo-500 hover:bg-indigo-400 shadow-xl shadow-indigo-500/30 flex items-center justify-center text-white transition-all active:scale-95 dash-mobile-fab"
+            aria-label="Criar projeto"
           >
             <Plus class="w-6 h-6" />
           </button>
 
+          <nav v-if="dashMobile" class="dash-mobile-bottom-nav fixed left-0 right-0 bottom-0 z-90 px-3 pt-2 pb-[calc(0.55rem+env(safe-area-inset-bottom,0px))]">
+            <div class="mx-auto max-w-md rounded-3xl border border-slate-200/80 bg-white/94 shadow-2xl shadow-slate-900/12 backdrop-blur-xl">
+              <div class="grid grid-cols-4 gap-1 p-1.5">
+                <button @click="activeView = 'recent'" :class="['dash-mobile-nav-btn', activeView === 'recent' ? 'active' : '']">
+                  <Clock class="w-[18px] h-[18px]" />
+                  <span>Recentes</span>
+                </button>
+                <button @click="activeView = 'all'; setActiveFolder(null); filterFolderId = 'all'" :class="['dash-mobile-nav-btn', activeView === 'all' && !activeFolderId ? 'active' : '']">
+                  <FolderOpen class="w-[18px] h-[18px]" />
+                  <span>Todos</span>
+                </button>
+                <button @click="activeView = 'starred'" :class="['dash-mobile-nav-btn', activeView === 'starred' ? 'active starred' : '']">
+                  <Star class="w-[18px] h-[18px]" :class="{ 'fill-current': activeView === 'starred' }" />
+                  <span>Favoritos</span>
+                </button>
+                <button @click="showMobileDrawer = true" class="dash-mobile-nav-btn">
+                  <MenuIcon class="w-[18px] h-[18px]" />
+                  <span>Menu</span>
+                </button>
+              </div>
+            </div>
+          </nav>
+
           <!-- Active Filter Chips -->
-          <div v-if="activeFilterChips.length > 0" class="px-7 pb-3 flex items-center gap-2 flex-wrap shrink-0">
+          <div v-if="activeFilterChips.length > 0" :class="['pb-3 flex items-center gap-2 flex-wrap shrink-0', dashMobile ? 'px-4' : 'px-7']">
             <span class="text-[10px] uppercase tracking-[0.15em] text-slate-400 font-semibold">Filtros</span>
             <button
               v-for="chip in activeFilterChips"
@@ -1713,7 +1817,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
 
           <!-- Content Grid -->
-          <div ref="projectGridViewportEl" class="flex-1 overflow-y-auto px-7 pb-7">
+          <div ref="projectGridViewportEl" :class="['flex-1 overflow-y-auto', dashMobile ? 'px-4 pb-28 dash-mobile-scroll' : 'px-7 pb-7']">
             <div v-if="isLoadingProjects" class="flex items-center justify-center h-full">
               <div class="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin opacity-70"></div>
             </div>
@@ -1758,7 +1862,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <div
                 v-if="filteredProjects.length > 0"
                 class="grid gap-4"
-                :class="viewMode === 'grid' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' : 'grid-cols-1'"
+                :class="viewMode === 'grid' ? (dashMobile ? 'grid-cols-2 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5') : 'grid-cols-1'"
               >
                 <div
                   v-for="(project, projectIndex) in filteredProjects"
@@ -1790,13 +1894,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
                       <button
                         @pointerdown.stop @mousedown.stop @touchstart.stop
                         @click.stop="toggleStarred(project.id)"
-                        :class="['absolute top-2.5 left-2.5 w-8 h-8 rounded-lg backdrop-blur-md flex items-center justify-center border transition-all', project.is_starred ? 'bg-amber-50 text-amber-500 border-amber-300 opacity-100 shadow-sm' : 'bg-white/90 text-slate-400 border-slate-200 opacity-0 group-hover:opacity-100 hover:text-slate-700 shadow-sm']"
+                        :class="['absolute top-2.5 left-2.5 w-9 h-9 rounded-xl backdrop-blur-md flex items-center justify-center border transition-all active:scale-95', project.is_starred ? 'bg-amber-50 text-amber-500 border-amber-300 opacity-100 shadow-sm' : (dashMobile ? 'bg-white/92 text-slate-500 border-slate-200 opacity-100 shadow-sm' : 'bg-white/90 text-slate-400 border-slate-200 opacity-0 group-hover:opacity-100 hover:text-slate-700 shadow-sm')]"
                         title="Favoritar"
                       ><Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" /></button>
                       <button
                         @pointerdown.stop @mousedown.stop @touchstart.stop
                         @click.stop="showProjectContextMenu(project.id, $event)"
-                        class="absolute top-2.5 right-2.5 w-8 h-8 rounded-lg bg-white/90 backdrop-blur-md border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 shadow-sm"
+                        :class="['absolute top-2.5 right-2.5 w-9 h-9 rounded-xl bg-white/92 backdrop-blur-md border border-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-all active:scale-95 shadow-sm', dashMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100']"
                         title="Ações"
                       ><MoreVertical class="w-4 h-4" /></button>
                     </div>
@@ -1836,7 +1940,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                           {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
                         </p>
                       </div>
-                      <div class="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                      <div :class="['flex items-center gap-1.5 shrink-0 transition-all', dashMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100']">
                         <button @pointerdown.stop @mousedown.stop @touchstart.stop @click.stop="toggleStarred(project.id)" :class="['w-8 h-8 rounded-lg border flex items-center justify-center transition-all', project.is_starred ? 'bg-amber-50 text-amber-500 border-amber-300' : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-slate-600']"><Star class="w-4 h-4" :class="{ 'fill-current': project.is_starred }" /></button>
                         <button @pointerdown.stop @mousedown.stop @touchstart.stop @click.stop="showProjectContextMenu(project.id, $event)" class="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-all"><MoreVertical class="w-4 h-4" /></button>
                       </div>
@@ -1872,7 +1976,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </div>
 
     <!-- Create Project Modal -->
-    <div v-if="showCreateProject" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" @click.self="showCreateProject = false">
+    <div v-if="showCreateProject" :class="['fixed inset-0 z-500 flex bg-black/30 backdrop-blur-sm', dashMobile ? 'items-end justify-center p-2' : 'items-center justify-center p-4']" @click.self="showCreateProject = false">
       <div class="dash-modal w-full max-w-sm">
         <h3 class="text-[15px] font-semibold text-slate-800 mb-1">Novo Projeto</h3>
         <p class="text-[12px] text-slate-400 mb-5">
@@ -1888,7 +1992,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     </div>
 
     <!-- Create Folder Modal -->
-    <div v-if="showCreateFolder" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" @click.self="showCreateFolder = false">
+    <div v-if="showCreateFolder" :class="['fixed inset-0 z-500 flex bg-black/30 backdrop-blur-sm', dashMobile ? 'items-end justify-center p-2' : 'items-center justify-center p-4']" @click.self="showCreateFolder = false">
       <div class="dash-modal w-full max-w-sm">
         <h3 class="text-[15px] font-semibold text-slate-800 mb-1">Nova Pasta</h3>
         <p class="text-[12px] text-slate-400 mb-5">
@@ -1907,8 +2011,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showFolderMenu"
-        class="folder-context-menu fixed z-100 bg-white border border-slate-200 rounded-xl py-1.5 min-w-40 shadow-xl shadow-black/10"
-        :style="{ left: `${folderMenuPosition.x}px`, top: `${folderMenuPosition.y}px` }"
+        :class="['folder-context-menu fixed z-100 bg-white border border-slate-200 py-1.5 shadow-xl shadow-black/10', dashMobile ? 'left-3 right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] rounded-3xl p-2' : 'rounded-xl min-w-40']"
+        :style="dashMobile ? undefined : { left: `${folderMenuPosition.x}px`, top: `${folderMenuPosition.y}px` }"
       >
         <button @click="startEditFolder(folders.find(f => f.id === showFolderMenu))" class="ctx-menu-item w-full">
           <Pencil class="w-3.5 h-3.5" />
@@ -1925,8 +2029,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <teleport to="body">
       <div
         v-if="showProjectMenu"
-        class="project-context-menu fixed z-100 bg-white border border-slate-200 rounded-xl py-1.5 min-w-40 shadow-xl shadow-black/10"
-        :style="{ left: `${projectMenuPosition.x}px`, top: `${projectMenuPosition.y}px` }"
+        :class="['project-context-menu fixed z-100 bg-white border border-slate-200 py-1.5 shadow-xl shadow-black/10', dashMobile ? 'left-3 right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] rounded-3xl p-2' : 'rounded-xl min-w-40']"
+        :style="dashMobile ? undefined : { left: `${projectMenuPosition.x}px`, top: `${projectMenuPosition.y}px` }"
       >
         <button @click="startRenameProject(projects.find(p => p.id === showProjectMenu))" class="ctx-menu-item w-full">
           <Pencil class="w-3.5 h-3.5" />
@@ -1953,7 +2057,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
     </teleport>
 
     <!-- Move Project Modal -->
-    <div v-if="showMoveProjectModal" class="fixed inset-0 z-500 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" @click.self="closeMoveProjectModal">
+    <div v-if="showMoveProjectModal" :class="['fixed inset-0 z-500 flex bg-black/30 backdrop-blur-sm', dashMobile ? 'items-end justify-center p-2' : 'items-center justify-center p-4']" @click.self="closeMoveProjectModal">
       <div class="dash-modal w-full max-w-xl">
         <h3 class="text-[15px] font-semibold text-slate-800 mb-1">Mover projeto</h3>
         <p class="text-[12px] text-slate-400 mb-4">Escolha a pasta de destino.</p>
@@ -2021,8 +2125,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
         <div v-if="showNotifications" class="fixed inset-0 z-199 bg-black/20" @click="showNotifications = false"></div>
       </Transition>
       <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0 scale-95 translate-y-[-8px]" enter-to-class="opacity-100 scale-100 translate-y-0" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100 scale-100 translate-y-0" leave-to-class="opacity-0 scale-95 translate-y-[-8px]">
-        <div v-if="showNotifications && notificationButtonRef" class="notifications-modal fixed z-200" :style="notificationModalStyle" @click.stop>
-          <div class="w-80 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-black/8 overflow-hidden flex flex-col max-h-125">
+        <div v-if="showNotifications && notificationButtonRef" :class="['notifications-modal fixed z-200', dashMobile ? 'left-3 right-3 top-[calc(4.75rem+env(safe-area-inset-top,0px))]' : '']" :style="dashMobile ? undefined : notificationModalStyle" @click.stop>
+          <div :class="['bg-white border border-slate-200 rounded-2xl shadow-xl shadow-black/8 overflow-hidden flex flex-col', dashMobile ? 'w-full max-h-[72dvh]' : 'w-80 max-h-125']">
             <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <h3 class="text-[13px] font-semibold text-slate-800">Notificações</h3>
               <button v-if="unreadCount > 0" @click="markAllAsRead" class="text-[11px] text-indigo-500 hover:text-indigo-600 transition-colors">Marcar todas</button>
@@ -2086,6 +2190,148 @@ const handleDropOnRoot = async (event: DragEvent) => {
 .dash-root {
   background: #f8f9fb;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+}
+
+.dash-root-mobile {
+  height: 100dvh;
+  background:
+    radial-gradient(circle at 18% -10%, rgba(99, 102, 241, 0.12), transparent 34%),
+    #f6f7fb;
+}
+
+.dash-root-mobile .dash-topbar {
+  min-height: calc(56px + env(safe-area-inset-top, 0px));
+  height: auto;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.dash-mobile-search {
+  background: rgba(246, 247, 251, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.dash-mobile-toolbar {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+
+.dash-mobile-toolbar::-webkit-scrollbar,
+.dash-mobile-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.dash-mobile-fab {
+  bottom: calc(5.45rem + env(safe-area-inset-bottom, 0px));
+}
+
+.dash-mobile-bottom-nav {
+  pointer-events: none;
+}
+
+.dash-mobile-bottom-nav > div,
+.dash-mobile-fab {
+  pointer-events: auto;
+}
+
+.dash-mobile-nav-btn {
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 18px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.dash-mobile-nav-btn:active {
+  transform: scale(0.96);
+}
+
+.dash-mobile-nav-btn.active {
+  color: #4338ca;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.dash-mobile-nav-btn.active.starred {
+  color: #d97706;
+  background: rgba(251, 191, 36, 0.14);
+}
+
+.dash-root-mobile .dash-tabs {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.dash-root-mobile .dash-tab {
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  white-space: nowrap;
+  min-height: 38px;
+}
+
+.dash-root-mobile .dash-project-card {
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.dash-root-mobile .dash-project-card:hover {
+  transform: none;
+}
+
+.dash-root-mobile .dash-card-info {
+  padding: 10px 10px 11px;
+}
+
+.dash-root-mobile .dash-card-info h3 {
+  font-size: 13px;
+}
+
+.dash-root-mobile .dash-folder-card,
+.dash-root-mobile .dash-project-list-item {
+  border-radius: 18px;
+}
+
+.dash-nav-item-mobile,
+.dash-root-mobile .dash-nav-item {
+  min-height: 44px;
+  border-radius: 14px;
+}
+
+.dash-root-mobile .ctx-menu-item {
+  min-height: 46px;
+  border-radius: 16px;
+  padding-inline: 14px;
+  font-size: 14px;
+}
+
+.dash-root-mobile .dash-modal {
+  border-radius: 24px 24px 0 0;
+  width: calc(100vw - 16px);
+  max-width: none;
+  margin-top: auto;
+  margin-bottom: calc(-1rem + env(safe-area-inset-bottom, 0px));
+  padding: 22px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+}
+
+.dash-root-mobile .dash-modal-input {
+  height: 48px;
+  border-radius: 16px;
+  font-size: 15px;
+}
+
+.dash-root-mobile .dash-modal-btn-cancel,
+.dash-root-mobile .dash-modal-btn-confirm {
+  min-height: 46px;
+  border-radius: 16px;
+  font-size: 14px;
 }
 
 /* ─── Top Bar ─────────────────────────────────────────── */

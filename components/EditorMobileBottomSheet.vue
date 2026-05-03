@@ -16,8 +16,8 @@ const emit = defineEmits<{
 type SheetLevel = 'peek' | 'half' | 'full'
 const level = ref<SheetLevel>('half')
 
-const heights: Record<SheetLevel, number> = { peek: 40, half: 60, full: 90 }
-const sheetHeight = computed(() => `${heights[level.value]}vh`)
+const heights: Record<SheetLevel, number> = { peek: 42, half: 64, full: 92 }
+const sheetHeight = computed(() => `${heights[level.value]}dvh`)
 
 // Drag state
 let startY = 0
@@ -35,7 +35,7 @@ const onDragStart = (e: TouchEvent) => {
 const onDragMove = (e: TouchEvent) => {
   if (!isDragging.value) return
   const deltaY = (e.touches[0]?.clientY ?? 0) - startY
-  const deltaPct = (deltaY / window.innerHeight) * 100
+  const deltaPct = (deltaY / Math.max(1, window.innerHeight)) * 100
   dragOffset.value = deltaPct
 }
 
@@ -62,7 +62,7 @@ const onDragEnd = () => {
 const currentHeight = computed(() => {
   if (isDragging.value) {
     const h = heights[level.value] - dragOffset.value
-    return `${Math.max(10, Math.min(95, h))}vh`
+    return `${Math.max(18, Math.min(94, h))}dvh`
   }
   return sheetHeight.value
 })
@@ -81,8 +81,8 @@ const currentHeight = computed(() => {
     <!-- Sheet -->
     <Transition name="bottom-sheet">
       <div
-        class="fixed bottom-0 left-0 right-0 z-[9999] flex flex-col bg-[#18181b] rounded-t-2xl overflow-hidden safe-bottom"
-        :style="{ height: currentHeight, transition: isDragging ? 'none' : 'height 0.28s cubic-bezier(0.32,0.72,0,1)' }"
+        class="fixed bottom-0 left-0 right-0 z-[9999] flex flex-col bg-[#18181b] rounded-t-[28px] overflow-hidden border-t border-white/10 shadow-2xl shadow-black/40"
+        :style="{ height: currentHeight, maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px))', transition: isDragging ? 'none' : 'height 0.28s cubic-bezier(0.32,0.72,0,1)' }"
       >
         <!-- Drag handle -->
         <div
@@ -95,7 +95,7 @@ const currentHeight = computed(() => {
         </div>
 
         <!-- Header -->
-        <div v-if="props.title" class="flex-shrink-0 px-4 pb-2 flex items-center justify-between">
+        <div v-if="props.title" class="flex-shrink-0 px-4 pb-3 flex items-center justify-between">
           <h3 class="text-sm font-semibold text-white/80">{{ props.title }}</h3>
           <button
             class="touch-target flex items-center justify-center text-white/40 hover:text-white/70"
@@ -106,7 +106,7 @@ const currentHeight = computed(() => {
         </div>
 
         <!-- Content slot -->
-        <div class="flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+        <div class="flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
           <slot />
         </div>
       </div>

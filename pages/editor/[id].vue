@@ -25,6 +25,15 @@ definePageMeta({
   ssr: false, // Desabilita SSR para evitar erros no servidor
 })
 
+useHead({
+  meta: [
+    {
+      name: 'viewport',
+      content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+    }
+  ]
+})
+
 // Use project composable
 const {
   project,
@@ -489,9 +498,9 @@ const openPageHistory = () => {
 
 <template>
   <ClientOnly>
-  <div class="h-screen flex flex-col bg-[#0f0f0f]">
+  <div class="h-screen h-dvh flex flex-col bg-[#0f0f0f] overflow-hidden">
     <!-- Project Name Header -->
-    <div class="h-8 border-b border-white/5 flex items-center justify-between px-3 bg-[#1e1e1e] shrink-0 safe-top">
+    <div :class="['border-b border-white/5 flex items-center justify-between px-3 bg-[#1e1e1e] shrink-0', isMobile ? 'min-h-[calc(40px+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]' : 'h-8']">
       <div class="flex items-center gap-2 min-w-0">
         <button
           @click="navigateTo('/')"

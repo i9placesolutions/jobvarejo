@@ -7462,6 +7462,18 @@ onMounted(async () => {
 
       // Force workspace to dark
       wrapperEl.value.style.backgroundColor = '#121212';
+      try {
+          const upper = canvas.value.upperCanvasEl as HTMLCanvasElement | undefined;
+          const lower = canvas.value.lowerCanvasEl as HTMLCanvasElement | undefined;
+          const container = (canvas.value as any).wrapperEl as HTMLElement | undefined;
+          [upper, lower, container].forEach((el: any) => {
+              if (!el?.style) return;
+              el.style.touchAction = 'none';
+              el.style.overscrollBehavior = 'contain';
+          });
+      } catch {
+          // CSS covers the normal path; this is a mobile browser hardening fallback.
+      }
       
       // --- Frame Labels: update HTML overlay positions on every render ---
       // FIX #5: store the anonymous handler so we can call canvas.off() on unmount.
@@ -29744,6 +29756,31 @@ const ensureZoneSanity = (zone: any) => {
     if (!zone._customId) zone._customId = makeId();
     let needsBoundsUpdate = false;
 
+    const snapshotLayout = (zone as any)?._zoneStateSnapshot?.zone?.layout;
+    const finiteSnapshotNumber = (value: any): number | null => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+    };
+    const hasFiniteNumber = (value: any): boolean => Number.isFinite(Number(value));
+
+    // If an older/corrupted JSON lost direct zone layout props, recover the
+    // per-zone values from the canonical state snapshot before defaults run.
+    if (snapshotLayout && typeof snapshotLayout === 'object') {
+        const snapshotPadding = finiteSnapshotNumber(snapshotLayout.padding);
+        const snapshotGapH = finiteSnapshotNumber(snapshotLayout.gapHorizontal);
+        const snapshotGapV = finiteSnapshotNumber(snapshotLayout.gapVertical);
+
+        if (!hasFiniteNumber(zone._zonePadding) && snapshotPadding !== null) {
+            zone._zonePadding = Math.max(0, snapshotPadding);
+        }
+        if (!hasFiniteNumber(zone.gapHorizontal) && snapshotGapH !== null) {
+            zone.gapHorizontal = Math.max(0, snapshotGapH);
+        }
+        if (!hasFiniteNumber(zone.gapVertical) && snapshotGapV !== null) {
+            zone.gapVertical = Math.max(0, snapshotGapV);
+        }
+    }
+
     // CRITICAL: Product zones should NOT have clipPath as it causes rendering errors
     // Cards are added separately to canvas, not as children of the zone group
     if (zone.clipPath) {
@@ -30523,7 +30560,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
             gapY = clamp(gapY, 0, Math.max(0, maxGapByUsableHeight));
         }
 
-        const MIN_GAP = 2;
+        const MIN_GAP = 0;
         const MIN_PAD = 2;
         return {
             padding: Math.max(MIN_PAD, padding),
@@ -31906,7 +31943,7 @@ const handleRecalculateLayout = () => {
           </SidebarLeft>
 
           <!-- Canvas Stage -->
-          <main class="flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing" :style="isMobile ? ((project.pages?.length || 0) > 1 ? 'padding-bottom: 140px' : 'padding-bottom: 56px') : ''">
+          <main class="editor-canvas-stage flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing" :style="isMobile ? ((project.pages?.length || 0) > 1 ? 'padding-bottom: calc(var(--editor-mobile-nav-h) + var(--editor-mobile-pages-h))' : 'padding-bottom: var(--editor-mobile-nav-h)') : ''">
               <!-- Infinite Canvas Effect (Wrapper) -->
                   <div ref="wrapperEl" class="w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
@@ -32107,7 +32144,7 @@ const handleRecalculateLayout = () => {
               <div
                 v-if="isMobile && selectedObjectRef"
                 class="absolute left-0 right-0 z-200 flex items-center justify-center px-2"
-                :style="(project.pages?.length || 0) > 1 ? 'bottom: 148px' : 'bottom: 64px'"
+                :style="(project.pages?.length || 0) > 1 ? 'bottom: calc(var(--editor-mobile-nav-h) + var(--editor-mobile-pages-h) + 8px)' : 'bottom: calc(var(--editor-mobile-nav-h) + 8px)'"
               >
                 <div class="flex items-center gap-0.5 px-2 py-1.5 rounded-xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-xl overflow-x-auto max-w-full scrollbar-hide">
                   <!-- Copy -->
@@ -32443,16 +32480,33 @@ const handleRecalculateLayout = () => {
 
 <style scoped>
 /* Ensure canvas container handles canvas element correctly */
+:global(:root) {
+    --editor-mobile-nav-h: calc(64px + env(safe-area-inset-bottom, 0px));
+    --editor-mobile-pages-h: 88px;
+}
+
  :deep(.canvas-container) {
      background-color: transparent !important;
      box-shadow: 0 0 40px rgba(0,0,0,0.5); /* Figma-like page shadow */
+     touch-action: none;
+     overscroll-behavior: contain;
  }
+
+ :deep(.upper-canvas),
+ :deep(.lower-canvas) {
+     touch-action: none;
+ }
+
 main {
      background-color: #1a1a1a !important;
  }
 
 .canvas-touch-surface {
     touch-action: none;
+}
+
+.editor-canvas-stage {
+    overscroll-behavior: contain;
 }
 
 /* Keep floating toolbar from "jumping" near bottom (safe area / scrollbars) */
