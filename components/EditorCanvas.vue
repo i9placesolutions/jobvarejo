@@ -20512,8 +20512,14 @@ const importProductsToMultipleFrames = async (products: any[], opts?: ProductImp
         refreshCanvasObjects()
         safeRequestRenderAll()
         refreshSelectedRef()
-        saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid-multi-frame' })
-        flushPersistenceNow('simulate-smart-grid-multi-frame')
+        await saveCurrentState({
+            allowEmptyOverwrite: true,
+            reason: 'simulate-smart-grid-multi-frame',
+            source: 'user',
+            skipCoalesce: true,
+            skipIfUnchanged: false
+        })
+        await flushPersistenceNow('simulate-smart-grid-multi-frame', { force: true })
     }
 }
 
@@ -20614,8 +20620,14 @@ const importProductsToMultipleZones = async (products: any[], zones: any[], opts
         refreshCanvasObjects()
         safeRequestRenderAll()
         refreshSelectedRef()
-        saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid-multi-zone' })
-        flushPersistenceNow('simulate-smart-grid-multi-zone')
+        await saveCurrentState({
+            allowEmptyOverwrite: true,
+            reason: 'simulate-smart-grid-multi-zone',
+            source: 'user',
+            skipCoalesce: true,
+            skipIfUnchanged: false
+        })
+        await flushPersistenceNow('simulate-smart-grid-multi-zone', { force: true })
     }
 }
 
@@ -20781,7 +20793,7 @@ const addGridFrames = (cols: number = 2, rows: number = 2, gap: number = 8) => {
     saveCurrentState();
 }
 
-const addGridZone = () => {
+const addGridZone = async () => {
     if (!canvas.value) return;
 
     // Cada frame so pode ter uma zona de produtos vinculada — duplicar zonas no
@@ -20932,8 +20944,14 @@ const addGridZone = () => {
     updateSelection();
 
     safeRequestRenderAll();
-    saveCurrentState({ allowEmptyOverwrite: true, reason: 'add-grid-zone' });
-    flushPersistenceNow('add-grid-zone');
+    await saveCurrentState({
+        allowEmptyOverwrite: true,
+        reason: 'add-grid-zone',
+        source: 'user',
+        skipCoalesce: true,
+        skipIfUnchanged: false
+    });
+    await flushPersistenceNow('add-grid-zone', { force: true });
 }
 
 const simulateSmartGrid = async (
@@ -21653,8 +21671,14 @@ const simulateSmartGrid = async (
         updateScrollbars();
         safeRequestRenderAll();
         if (opts?.persist !== false) {
-            saveCurrentState({ allowEmptyOverwrite: true, reason: 'simulate-smart-grid' });
-            flushPersistenceNow('simulate-smart-grid');
+            await saveCurrentState({
+                allowEmptyOverwrite: true,
+                reason: 'simulate-smart-grid',
+                source: 'user',
+                skipCoalesce: true,
+                skipIfUnchanged: false
+            });
+            await flushPersistenceNow('simulate-smart-grid', { force: true });
         }
     }
 }
@@ -22117,6 +22141,12 @@ const handleZoneQuickActionFill = () => {
     const summary = selectedZoneQuickActions.value;
     if (!summary) return;
     openProductReviewForZone(summary.zone, { mode: 'replace' });
+}
+
+const handleZoneQuickActionImport = () => {
+    const summary = selectedZoneQuickActions.value;
+    if (!summary) return;
+    openProductReviewForZone(summary.zone, { mode: summary.isEmpty ? 'replace' : 'append' });
 }
 
 const handleZoneQuickActionAppend = () => {
@@ -32193,6 +32223,26 @@ const handleRecalculateLayout = () => {
                 :style="(project.pages?.length || 0) > 1 ? 'bottom: calc(var(--editor-mobile-nav-h) + var(--editor-mobile-pages-h) + 8px)' : 'bottom: calc(var(--editor-mobile-nav-h) + 8px)'"
               >
                 <div class="flex items-center gap-0.5 px-2 py-1.5 rounded-xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-xl overflow-x-auto max-w-full scrollbar-hide">
+                  <!-- Product Zone: Import -->
+                  <button
+                    v-if="selectedZoneQuickActions"
+                    class="touch-target flex items-center gap-1.5 justify-center rounded-lg bg-emerald-500/18 border border-emerald-400/25 text-emerald-100 hover:bg-emerald-500/28 active:bg-emerald-500/35 px-3 shrink-0"
+                    title="Importar produtos para a zona selecionada"
+                    @click="handleZoneQuickActionImport"
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/><path d="M4 3h16"/></svg>
+                    <span class="text-[11px] font-semibold">Importar</span>
+                  </button>
+                  <button
+                    v-if="selectedZoneQuickActions"
+                    class="touch-target flex items-center gap-1.5 justify-center text-white/70 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2.5 shrink-0"
+                    title="Editar layout da zona"
+                    @click="handleZoneQuickActionPreset"
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    <span class="text-[11px] font-semibold">Layout</span>
+                  </button>
+                  <div v-if="selectedZoneQuickActions" class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
                   <!-- Copy -->
                   <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Copiar" @click="triggerCopyShortcut">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
