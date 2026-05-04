@@ -63,6 +63,69 @@ type ScopedBlobExport = {
     reducedFromRequested: boolean
 }
 
+type ViewportCullExportSnapshot = {
+    obj: any
+    visible: any
+    evented: any
+    selectable: any
+    cullPrevVisible: any
+    cullPrevEvented: any
+    cullPrevSelectable: any
+    viewportCulled: any
+}
+
+const showViewportCulledObjectsForExport = (objects: any[]): ViewportCullExportSnapshot[] => {
+    const snapshots: ViewportCullExportSnapshot[] = []
+
+    objects.forEach((obj: any) => {
+        if (!obj || !(obj as any).__viewportCulled) return
+
+        snapshots.push({
+            obj,
+            visible: obj.visible,
+            evented: obj.evented,
+            selectable: obj.selectable,
+            cullPrevVisible: (obj as any).__viewportCullPrevVisible,
+            cullPrevEvented: (obj as any).__viewportCullPrevEvented,
+            cullPrevSelectable: (obj as any).__viewportCullPrevSelectable,
+            viewportCulled: (obj as any).__viewportCulled
+        })
+
+        const prevVisible = (obj as any).__viewportCullPrevVisible
+        const prevEvented = (obj as any).__viewportCullPrevEvented
+        const prevSelectable = (obj as any).__viewportCullPrevSelectable
+        obj.set?.('visible', prevVisible === undefined ? true : prevVisible)
+        obj.set?.('evented', prevEvented === undefined ? true : prevEvented)
+        obj.set?.('selectable', prevSelectable === undefined ? true : prevSelectable)
+        obj.visible = prevVisible === undefined ? true : prevVisible
+        obj.evented = prevEvented === undefined ? true : prevEvented
+        obj.selectable = prevSelectable === undefined ? true : prevSelectable
+        obj.dirty = true
+        obj.setCoords?.()
+    })
+
+    return snapshots
+}
+
+const restoreViewportCullExportSnapshot = (snapshots: ViewportCullExportSnapshot[]): void => {
+    snapshots.forEach((state) => {
+        const obj = state?.obj
+        if (!obj) return
+        obj.set?.('visible', state.visible)
+        obj.set?.('evented', state.evented)
+        obj.set?.('selectable', state.selectable)
+        obj.visible = state.visible
+        obj.evented = state.evented
+        obj.selectable = state.selectable
+        ;(obj as any).__viewportCullPrevVisible = state.cullPrevVisible
+        ;(obj as any).__viewportCullPrevEvented = state.cullPrevEvented
+        ;(obj as any).__viewportCullPrevSelectable = state.cullPrevSelectable
+        ;(obj as any).__viewportCulled = state.viewportCulled
+        obj.dirty = true
+        obj.setCoords?.()
+    })
+}
+
 const makeExportColorsVivid = async (
     dataUrl: string,
     format: 'png' | 'jpg' | 'jpeg',
@@ -114,12 +177,14 @@ const runWithNeutralViewport = async <T>(
     const prevVpt = Array.isArray(c.viewportTransform) ? [...c.viewportTransform] : [1, 0, 0, 1, 0, 0]
     const prevRenderOnAddRemove = c.renderOnAddRemove
     const prevSkipOffscreen = c.skipOffscreen
-    const cacheSnapshot = (c.getObjects?.() || []).map((obj: any) => ({
+    const canvasObjects = c.getObjects?.() || []
+    const cacheSnapshot = canvasObjects.map((obj: any) => ({
         obj,
         objectCaching: obj?.objectCaching,
         noScaleCache: obj?.noScaleCache,
         statefullCache: obj?.statefullCache
     }))
+    const viewportCullSnapshot = showViewportCulledObjectsForExport(canvasObjects)
 
     try {
         c.renderOnAddRemove = false
@@ -151,6 +216,7 @@ const runWithNeutralViewport = async <T>(
             obj.dirty = true
             obj.setCoords?.()
         })
+        restoreViewportCullExportSnapshot(viewportCullSnapshot)
         c.calcOffset?.()
         c.requestRenderAll?.()
     }
