@@ -193,7 +193,7 @@ const ATAC_VALUE_VARIANT_KEYS = ['tiny', 'normal', 'large'] as const
 type AtacValueVariantKey = (typeof ATAC_VALUE_VARIANT_KEYS)[number]
 type AtacValueVariantField = 'chainWidthRatio' | 'minScale' | 'intDecimalGap' | 'currencyGapRatio' | 'packWidthRatio'
 type AtacValueVariantConfig = Record<AtacValueVariantField, number>
-const PRICE_INTEGER_DECIMAL_GAP_PX = 1
+const PRICE_INTEGER_DECIMAL_GAP_PX = 6
 
 const DEFAULT_ATAC_VALUE_VARIANTS: Record<AtacValueVariantKey, AtacValueVariantConfig> = {
   tiny: {

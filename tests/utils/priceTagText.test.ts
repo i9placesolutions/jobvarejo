@@ -94,8 +94,8 @@ describe('normalizeUnitForLabel — chip da etiqueta (KG/UN/vazio)', () => {
 })
 
 describe('constantes', () => {
-  it('PRICE_INTEGER_DECIMAL_GAP_PX é 1px', () => {
-    expect(PRICE_INTEGER_DECIMAL_GAP_PX).toBe(1)
+  it('PRICE_INTEGER_DECIMAL_GAP_PX evita centavos colados no inteiro', () => {
+    expect(PRICE_INTEGER_DECIMAL_GAP_PX).toBe(6)
   })
 })
 

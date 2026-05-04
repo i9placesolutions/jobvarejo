@@ -244,7 +244,7 @@ describe('MANUAL_SINGLE_ANCHOR_VERSION', () => {
   it('e numero positivo (versao do snapshot dos anchors)', () => {
     expect(typeof MANUAL_SINGLE_ANCHOR_VERSION).toBe('number')
     expect(MANUAL_SINGLE_ANCHOR_VERSION).toBeGreaterThan(0)
-    expect(MANUAL_SINGLE_ANCHOR_VERSION).toBe(2)
+    expect(MANUAL_SINGLE_ANCHOR_VERSION).toBe(3)
   })
 })
 

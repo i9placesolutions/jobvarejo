@@ -166,6 +166,11 @@ import {
     isTransientPasteError
 } from '~/utils/pasteListErrorHelpers'
 import {
+    getMobilePanelTitle,
+    isMobilePanel,
+    type MobilePanel
+} from '~/utils/editorMobilePanel'
+import {
     DEBOUNCED_GLOBAL_STYLE_PROPS,
     isDebouncedGlobalStyleProp,
     LIGHTWEIGHT_GLOBAL_STYLE_PROPS,
@@ -3691,23 +3696,12 @@ watch(() => currentUser.value, () => {
 }, { immediate: true })
 
 const { isMobile, isTablet } = useResponsive()
-// Painel ativo no layout mobile. Tipo restrito para evitar string literals
-// divergentes espalhadas pelo template (antes era `string | null`).
-type MobilePanel = 'tools' | 'layers' | 'properties' | 'pages' | 'uploads' | 'more'
 const mobilePanel = ref<MobilePanel | null>(null)
 const mobileNavRef = ref<InstanceType<typeof import('./EditorMobileNav.vue').default> | null>(null)
 const closeMobilePanel = () => {
     mobilePanel.value = null
     mobileNavRef.value?.clearActive()
 }
-const getMobilePanelTitle = (panel: MobilePanel | null): string => (
-    panel === 'tools' ? 'Ferramentas'
-        : panel === 'layers' ? 'Camadas'
-            : panel === 'properties' ? 'Propriedades'
-                : panel === 'pages' ? 'Páginas'
-                    : panel === 'uploads' ? 'Imagens'
-                        : 'Mais'
-)
 const handleMobilePanelCommand = (name: string, payload?: any) => {
     const closeAfter = () => closeMobilePanel()
     switch (name) {
@@ -3791,14 +3785,6 @@ const handleMobilePanelCommand = (name: string, payload?: any) => {
             break
     }
 }
-const isMobilePanel = (value: unknown): value is MobilePanel => (
-    value === 'tools' ||
-    value === 'layers' ||
-    value === 'properties' ||
-    value === 'pages' ||
-    value === 'uploads' ||
-    value === 'more'
-)
 const openMobilePanel = (panel: unknown) => {
     const nextPanel = isMobilePanel(panel) ? panel : null
     mobilePanel.value = nextPanel
@@ -24089,7 +24075,7 @@ const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean }
         : fallbackPad;
 
 	    const intDecGap = (intBounds && decBounds)
-	        ? clamp(decBounds.left - intBounds.right, -12, 60)
+	        ? clamp(decBounds.left - intBounds.right, PRICE_INTEGER_DECIMAL_GAP_PX, 60)
 	        : PRICE_INTEGER_DECIMAL_GAP_PX;
 	    const currencyGap = (curBounds && chainBounds)
 	        ? clamp(chainBounds.left - curBounds.right, -8, 36)
@@ -24248,7 +24234,7 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
         : Math.max(20, bgW - padLeft - padRight);
 	    const rawIntDecGap = Number((anchors as any).intDecGap);
 	    const intDecGap = Number.isFinite(rawIntDecGap)
-	        ? clamp(rawIntDecGap, -12, 60)
+	        ? clamp(rawIntDecGap, PRICE_INTEGER_DECIMAL_GAP_PX, 60)
 	        : PRICE_INTEGER_DECIMAL_GAP_PX;
 	    const intX = Number.isFinite(Number((anchors as any).intX)) ? Number((anchors as any).intX) : 0;
 	    const intY = Number.isFinite(Number((anchors as any).intY)) ? Number((anchors as any).intY) : Number(integer.top || 0);

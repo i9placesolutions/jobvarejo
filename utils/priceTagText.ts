@@ -80,7 +80,7 @@ export const normalizeUnitForLabel = (raw: any): PriceUnitLabel => {
  * Gap padrao em pixels entre o inteiro e os centavos numa etiqueta.
  * Pode ser sobrescrito por variante via __atacValueVariants[key].intDecimalGap.
  */
-export const PRICE_INTEGER_DECIMAL_GAP_PX = 1;
+export const PRICE_INTEGER_DECIMAL_GAP_PX = 6;
 
 /**
  * Converte um preco arbitrario (string ou number, em qualquer formato) para

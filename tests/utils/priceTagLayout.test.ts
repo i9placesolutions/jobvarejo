@@ -88,10 +88,10 @@ describe('layoutPrice — posicionamento horizontal inteiro+centavos+unidade', (
         expect(result).not.toBeNull()
         expect(integer.left).toBe(100)
         expect(integer.top).toBe(50)
-        // centsX = intX(100) + intW(60) + gap(1) = 161
+        // centsX = intX(100) + intW(60) + gap padrao
         expect(decimal.left).toBe(100 + 60 + PRICE_INTEGER_DECIMAL_GAP_PX)
         expect(decimal.top).toBe(50)
-        expect(result!.centsX).toBe(161)
+        expect(result!.centsX).toBe(100 + 60 + PRICE_INTEGER_DECIMAL_GAP_PX)
         expect(result!.intW).toBe(60)
         expect(result!.decW).toBe(30)
     })
@@ -202,8 +202,8 @@ describe('layoutPrice — posicionamento horizontal inteiro+centavos+unidade', (
             intX: 100, intY: 50, decY: 50, unitY: 80
         })
 
-        // centsX = 161, decW = 30 → decCenterX = 176
-        expect(unit.left).toBe(176)
+        // centsX = 100 + 60 + gap, decW = 30 -> decCenterX = centsX + 15
+        expect(unit.left).toBe(100 + 60 + PRICE_INTEGER_DECIMAL_GAP_PX + 15)
         expect(unit.top).toBe(80)
         expect(unit.originX).toBe('center')
         expect(unit.visible).toBe(true)
@@ -319,10 +319,10 @@ describe('layoutPrice — posicionamento horizontal inteiro+centavos+unidade', (
             targetCenterX: 200
         })
 
-        // bloco original: integer.left=0 (left, w=60) → 0..60; decimal=61..91; centro = 45.5
-        // dx = 200 - 45.5 = 154.5
-        expect(integer.left).toBeCloseTo(154.5, 3)
-        expect(decimal.left).toBeCloseTo(154.5 + 60 + 1, 3)
+        // bloco original: integer.left=0 (left, w=60) -> 0..60; decimal=66..96; centro = 48
+        // dx = 200 - 48 = 152
+        expect(integer.left).toBeCloseTo(152, 3)
+        expect(decimal.left).toBeCloseTo(152 + 60 + PRICE_INTEGER_DECIMAL_GAP_PX, 3)
     })
 
     it('sem targetCenterX nao mexe nas posicoes originais', () => {
@@ -336,6 +336,6 @@ describe('layoutPrice — posicionamento horizontal inteiro+centavos+unidade', (
         })
 
         expect(integer.left).toBe(100)
-        expect(decimal.left).toBe(161)
+        expect(decimal.left).toBe(100 + 60 + PRICE_INTEGER_DECIMAL_GAP_PX)
     })
 })

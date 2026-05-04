@@ -114,7 +114,7 @@ export const LABEL_TEMPLATE_PREVIEW_RENDER_VERSION = 8
  * avanca, caches antigos sao invalidados — forca recomputacao com a
  * nova logica/coordenadas.
  */
-export const MANUAL_SINGLE_ANCHOR_VERSION = 2
+export const MANUAL_SINGLE_ANCHOR_VERSION = 3
 
 /**
  * Normaliza um group JSON de label template para o formato "manual"
