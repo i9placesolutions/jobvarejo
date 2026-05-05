@@ -46,6 +46,7 @@ export const useEditorLifecyclePersistence = ({
     const handleVisibilityChange = () => {
         if (document.visibilityState === 'hidden') {
             flushPersistenceNow('visibility-hidden')
+            emergencyBeaconSave()
         }
     }
 

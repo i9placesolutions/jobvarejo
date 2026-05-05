@@ -1816,15 +1816,25 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	                          <span class="text-[10px] font-bold text-pink-200 uppercase tracking-widest">Imagem</span>
 	                      </div>
 	                      <div class="flex items-center gap-1">
-	                          <button
-	                            type="button"
-	                            @click="$emit('action', 'ai-edit-image')"
+                          <button
+                            type="button"
+                            @click="$emit('action', 'ai-edit-image')"
 	                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
 	                            title="Editar imagem com IA"
 	                          >
-	                            <Sparkles class="w-2.5 h-2.5" />
-	                            IA
-	                          </button>
+                            <Sparkles class="w-2.5 h-2.5" />
+                            IA
+                          </button>
+                          <button
+                            type="button"
+                            @click="$emit('action', 'auto-trim-image')"
+                            class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
+                            title="Aparar espaço transparente da imagem"
+                            :disabled="!canRemoveImageBg"
+                            :class="{ 'opacity-50 cursor-not-allowed': !canRemoveImageBg }"
+                          >
+                            Trim
+                          </button>
                           <button
                             v-if="canReplaceProductCardImage"
                             type="button"

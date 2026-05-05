@@ -5,6 +5,7 @@ import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
 import { Sparkles, X, Check, AlertCircle, Loader2, Upload, Plus, Play, RefreshCw, ChevronDown, SlidersHorizontal, Settings2, Wand2 } from 'lucide-vue-next'
 import { useProductProcessor, type SmartProduct, type SmartProductImageCandidate } from '../composables/useProductProcessor'
+import { useResponsive } from '~/composables/useResponsive'
 import { toWasabiDirectUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
 
@@ -66,6 +67,7 @@ const emit = defineEmits<{
     (e: 'import', products: SmartProduct[], opts?: ProductImportOptions): void
 }>()
 
+const { isMobile } = useResponsive()
 const { getApiAuthHeaders } = useApiAuth()
 const fetchUntyped = $fetch as unknown as (url: string, options?: any) => Promise<any>
 
@@ -2591,8 +2593,10 @@ const getAssetDisplayName = (asset: any): string => {
         @update:model-value="$emit('update:modelValue', $event)"
         title="Importação Inteligente"
         width="1280px"
+        :fullscreen="isMobile"
+        content-class="w-full h-full min-h-0"
     >
-        <div class="flex flex-col gap-3 min-h-145 max-h-[84vh]">
+        <div :class="['flex flex-col gap-3 min-h-0', isMobile ? 'h-full max-h-none' : 'min-h-145 max-h-[84vh]']">
 
             <!-- STEP 1: INPUT -->
             <div v-if="step === 'input'" class="flex flex-col gap-4 flex-1">
@@ -2781,7 +2785,7 @@ const getAssetDisplayName = (asset: any): string => {
                     <div class="px-3 pb-3 pt-1 border-t border-zinc-800/60">
                         <div
                             class="grid gap-2"
-                            :class="props.showImportMode ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-5' : 'grid-cols-2 xl:grid-cols-4'"
+                            :class="props.showImportMode ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5' : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'"
                         >
                             <div v-if="props.showImportMode" class="space-y-1.5">
                                 <div class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Modo <span class="text-zinc-600 font-normal">({{ Math.max(0, Number(props.existingCount || 0)) }} itens)</span></div>
@@ -3007,9 +3011,9 @@ const getAssetDisplayName = (asset: any): string => {
 
                 <div
                     v-if="activeReviewRowMeta"
-                    class="grid gap-4 xl:grid-cols-[390px_minmax(0,1fr)] flex-1 min-h-0"
+                    class="grid gap-3 xl:gap-4 xl:grid-cols-[390px_minmax(0,1fr)] flex-1 min-h-0"
                 >
-                    <aside class="rounded-2xl border border-zinc-800 bg-zinc-950/55 shadow-2xl shadow-black/20 flex flex-col min-h-0 max-h-[68vh] overflow-hidden">
+                    <aside class="rounded-2xl border border-zinc-800 bg-zinc-950/55 shadow-2xl shadow-black/20 flex flex-col min-h-0 max-h-[38dvh] sm:max-h-80 xl:max-h-[68vh] overflow-hidden">
                         <div class="px-4 py-3 border-b border-zinc-800 bg-zinc-900/70 shrink-0">
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">

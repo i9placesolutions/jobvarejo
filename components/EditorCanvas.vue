@@ -615,6 +615,8 @@ const aiStudioUploads = ref<Array<{ id: string; name: string; url: string }>>([]
 const showProductImageUploadPicker = ref(false)
 const productImagePickerMode = ref<'replace' | 'add'>('replace')
 const productImagePickerSearch = ref('')
+const productImagePickerLoading = ref(false)
+const productImagePickerError = ref('')
 const productImagePickerTargetImageId = ref<string | null>(null)
 const productImagePickerTargetCardId = ref<string | null>(null)
 
@@ -648,12 +650,43 @@ const zoom = ref(1)
 const refreshAiStudioUploads = async () => {
     try {
         const headers = await getApiAuthHeaders()
-        const data: any = await $fetch('/api/assets', { headers, query: { limit: 80 } }).catch(() => [])
+        const data: any = await $fetch('/api/assets', { headers, query: { limit: 80, source: 'uploads' } }).catch(() => [])
         if (Array.isArray(data)) {
             aiStudioUploads.value = data.map((a: any) => ({ id: a.id, name: a.name, url: a.url }))
         }
     } catch (e) {
         console.warn('[ai-studio] Falha ao carregar uploads:', e)
+    }
+}
+
+const searchProductImagePickerUploads = async () => {
+    const query = String(productImagePickerSearch.value || '').trim()
+    if (!query) {
+        await refreshAiStudioUploads()
+        return
+    }
+
+    productImagePickerLoading.value = true
+    productImagePickerError.value = ''
+    try {
+        const headers = await getApiAuthHeaders()
+        const data: any = await $fetch('/api/assets', {
+            headers,
+            query: {
+                q: query,
+                limit: 120,
+                source: 'uploads',
+                fresh: '1'
+            }
+        })
+        aiStudioUploads.value = Array.isArray(data)
+            ? data.map((a: any) => ({ id: a.id, name: a.name, url: a.url }))
+            : []
+    } catch (e: any) {
+        productImagePickerError.value = String(e?.data?.statusMessage || e?.message || 'Falha ao buscar imagens.')
+        console.warn('[product-image-picker] Falha ao buscar uploads:', e)
+    } finally {
+        productImagePickerLoading.value = false
     }
 }
 
@@ -668,6 +701,13 @@ const filteredProductImageUploads = computed(() => {
         return hay.includes(q);
     });
 });
+
+watch(showProductImageUploadPicker, (open) => {
+    if (open) {
+        productImagePickerError.value = ''
+        productImagePickerLoading.value = false
+    }
+})
 
 // guessAiSizeFromObject extraido para utils/fabricMeasure.ts.
 
@@ -3807,25 +3847,53 @@ const getPageActionsContext = () => ({
     deletePage
 });
 const loadPageActionsController = () => import('~/utils/editorPageActionsController');
+const flushBeforePageStructureChange = async (reason: string) => {
+    try {
+        await flushPersistenceNow(reason, { force: true });
+        flushPendingLocalDrafts();
+    } catch (err) {
+        console.warn('[pages] Falha ao persistir página atual antes da navegação:', err);
+    }
+}
 const switchToPage = (pageId: string) => {
-    void loadPageActionsController().then(controller =>
-        controller.switchToPage(getPageActionsContext(), pageId)
-    );
+    void (async () => {
+        const idx = project.pages?.findIndex((p: any) => p.id === pageId);
+        if (idx == null || idx < 0 || idx === project.activePageIndex) return;
+        await flushBeforePageStructureChange('page-switch');
+        const controller = await loadPageActionsController();
+        controller.switchToPage(getPageActionsContext(), pageId);
+    })();
 }
 const addNewPage = () => {
-    void loadPageActionsController().then(controller =>
-        controller.addNewPage(getPageActionsContext())
-    );
+    void (async () => {
+        await flushBeforePageStructureChange('page-add');
+        const controller = await loadPageActionsController();
+        controller.addNewPage(getPageActionsContext());
+    })();
 }
 const duplicatePage = (pageId: string) => {
-    void loadPageActionsController().then(controller =>
-        controller.duplicatePage(getPageActionsContext(), pageId)
-    );
+    void (async () => {
+        await flushBeforePageStructureChange('page-duplicate');
+        const controller = await loadPageActionsController();
+        controller.duplicatePage(getPageActionsContext(), pageId);
+    })();
 }
 const reorderPages = (orderedIds: string[]) => {
-    void loadPageActionsController().then(controller =>
-        controller.reorderPages(getPageActionsContext(), orderedIds)
-    );
+    void (async () => {
+        await flushBeforePageStructureChange('page-reorder');
+        const controller = await loadPageActionsController();
+        controller.reorderPages(getPageActionsContext(), orderedIds);
+    })();
+}
+const deletePageAfterFlush = (pageIndex: number) => {
+    void (async () => {
+        await flushBeforePageStructureChange('page-delete');
+        deletePage(pageIndex);
+    })();
+}
+const deletePageByIdAfterFlush = (pageId: string) => {
+    const idx = project.pages?.findIndex((p: any) => p.id === pageId);
+    if (idx != null && idx >= 0) deletePageAfterFlush(idx);
 }
 
 // canvas / canvasEl / wrapperEl declarados no topo do setup (ver acima).
@@ -9141,6 +9209,8 @@ const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOption
             isZoneCascadeDelete = !!value
         },
         invokeSaveStateSafely,
+        shouldAutoSaveCanvasObjectChange: () => !!(isMobile.value || isTablet.value),
+        triggerAutoSaveAfterCanvasObjectChange: triggerAutoSave,
         handleObjectModified,
         isLikelyProductZone,
         isLikelyProductCard
@@ -17674,6 +17744,33 @@ const handleAction = async (action: string) => {
             applyMode: 'replace',
             replaceTargetId: String((img as any)._customId)
         });
+        return;
+    }
+
+    if (action === 'auto-trim-image') {
+        const found = findImageTargetInSelection(active);
+        if (!found?.img) {
+            notifyEditorError('Selecione uma imagem primeiro.');
+            return;
+        }
+
+        const img = found.img;
+        const trimBounds = detectImageTrimBounds(img);
+        if (!trimBounds) {
+            notifyEditorInfo('A imagem já está rente ou não tem transparência para aparar.');
+            return;
+        }
+
+        applyImageTrimBounds(img, trimBounds, { preserveVisualPosition: true });
+        img.dirty = true;
+        found.parent?.setCoords?.();
+        if (found.parent) safeAddWithUpdate(found.parent);
+        canvas.value.setActiveObject(img);
+        safeRequestRenderAll();
+        refreshCanvasObjects();
+        updateSelection();
+        saveCurrentState({ reason: 'auto-trim-image' });
+        notifyEditorInfo('Espaço transparente aparado.');
         return;
     }
 
@@ -27215,21 +27312,12 @@ async function applyLabelTemplateToCard(card: any, templateId: string) {
     const snapshotTemplateId = String((zone as any)?._zoneTemplateSnapshotId || '').trim();
     const snapshotGroup = zone ? (zone as any)?._zoneTemplateSnapshot : null;
 
-    let tpl: LabelTemplate | undefined = undefined;
-    if (snapshotGroup && typeof snapshotGroup === 'object' && snapshotTemplateId && snapshotTemplateId === String(templateId || '').trim()) {
-        tpl = {
-            id: snapshotTemplateId,
-            name: 'Zone Template Snapshot',
-            kind: 'priceGroup-v1',
-            group: snapshotGroup
-        } as any as LabelTemplate;
-    }
-    if (!tpl) {
-        tpl = labelTemplates.value.find(t => t.id === templateId);
-    }
+    // Prefer the current library template. Zone snapshots are immutable fallbacks for
+    // reload/race conditions; using them first makes Mini Editor updates look stale.
+    let tpl: LabelTemplate | undefined = labelTemplates.value.find(t => t.id === templateId);
     if (!tpl && snapshotGroup && typeof snapshotGroup === 'object') {
         // Fallback for reload/race conditions: use the immutable snapshot already
-        // stored on the zone so cards always follow the Mini Editor template.
+        // stored on the zone so cards still render when the library has not loaded.
         tpl = {
             id: String(templateId || snapshotTemplateId || 'zone-template-snapshot'),
             name: 'Zone Template Snapshot',
@@ -28434,6 +28522,28 @@ type ApplyLabelTemplateToZoneOptions = {
     cards?: any[];
 };
 
+const shouldReapplyLabelStylePropAfterTemplateApply = (
+    prop: keyof GlobalStyles,
+    rawStyles: Partial<GlobalStyles>,
+    effectiveStyles: GlobalStyles
+): boolean => {
+    const hasOwn = Object.prototype.hasOwnProperty.call(rawStyles || {}, prop);
+    const effective = (effectiveStyles as any)?.[prop];
+    const fallback = (DEFAULT_GLOBAL_STYLES as any)?.[prop];
+
+    if (effective === undefined || effective === null || effective === '') return false;
+    if (typeof effective === 'number') {
+        const base = Number(fallback);
+        if (!Number.isFinite(base)) return hasOwn;
+        return Math.abs(effective - base) > 0.0001;
+    }
+    if (typeof effective === 'string') {
+        const normalizeToken = (value: any) => String(value ?? '').trim().toLowerCase();
+        return hasOwn && normalizeToken(effective) !== normalizeToken(fallback);
+    }
+    return hasOwn && effective !== fallback;
+};
+
 async function applyLabelTemplateToZone(
     zone: any,
     templateId?: string,
@@ -28447,8 +28557,13 @@ async function applyLabelTemplateToZone(
             requestRender: options?.requestRender !== false,
             save: options?.save !== false,
             cards: Array.isArray(options?.cards) ? options.cards.filter(Boolean) : undefined
-        };
+    };
     const id = templateId || undefined;
+    const rawPrevZoneStyles = (
+        zone && typeof (zone as any)._zoneGlobalStyles === 'object' && (zone as any)._zoneGlobalStyles !== null
+    )
+        ? { ...((zone as any)._zoneGlobalStyles as Partial<GlobalStyles>) }
+        : {};
     const prev = getZoneGlobalStyles(zone);
     const nextZoneStyles = normalizeGlobalStyles({ ...prev, splashTemplateId: id });
     const tpl = id
@@ -28519,8 +28634,9 @@ async function applyLabelTemplateToZone(
             'splashRoundness',
             'splashScale',
             'splashOffsetY'
-        ];
+        ] as Array<keyof GlobalStyles>;
         labelStyleProps.forEach((prop) => {
+            if (!shouldReapplyLabelStylePropAfterTemplateApply(prop, rawPrevZoneStyles, nextZoneStyles)) return;
             applyGlobalStylesToCards(nextZoneStyles, zone, { cards, prop });
         });
     } else {
@@ -31948,17 +32064,32 @@ const handleRecalculateLayout = () => {
             </button>
           </div>
 
-          <div class="px-4 py-3 border-b border-white/10">
-            <input
-              v-model="productImagePickerSearch"
-              type="text"
-              placeholder="Buscar imagem no upload..."
-              class="w-full h-10 bg-zinc-900 border border-white/10 rounded px-3 text-sm text-white focus:outline-none focus:border-violet-500/50"
-            />
+          <div class="px-4 py-3 border-b border-white/10 space-y-2">
+            <div class="flex gap-2">
+              <input
+                v-model="productImagePickerSearch"
+                type="text"
+                placeholder="Buscar imagem no upload..."
+                class="min-w-0 flex-1 h-10 bg-zinc-900 border border-white/10 rounded px-3 text-sm text-white focus:outline-none focus:border-violet-500/50"
+                @keydown.enter.prevent="searchProductImagePickerUploads"
+              />
+              <button
+                type="button"
+                class="h-10 px-3 rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors"
+                :disabled="productImagePickerLoading"
+                @click="searchProductImagePickerUploads"
+              >
+                {{ productImagePickerLoading ? 'Buscando...' : 'Buscar' }}
+              </button>
+            </div>
+            <p v-if="productImagePickerError" class="text-[10px] text-rose-300">{{ productImagePickerError }}</p>
           </div>
 
           <div class="flex-1 overflow-y-auto p-4">
-            <div v-if="!filteredProductImageUploads.length" class="text-xs text-zinc-500">
+            <div v-if="productImagePickerLoading" class="text-xs text-zinc-500">
+              Buscando imagens no upload...
+            </div>
+            <div v-else-if="!filteredProductImageUploads.length" class="text-xs text-zinc-500">
               Nenhuma imagem encontrada no upload.
             </div>
             <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -32361,7 +32492,7 @@ const handleRecalculateLayout = () => {
         @select-page="switchToPage"
         @add-page="addNewPage"
         @duplicate-page="duplicatePage"
-        @delete-page="(id) => { const idx = project.pages?.findIndex((p: any) => p.id === id); if (idx != null && idx >= 0) deletePage(idx) }"
+        @delete-page="deletePageByIdAfterFlush"
       />
 
       <!-- Mobile Bottom Nav -->
@@ -32427,7 +32558,7 @@ const handleRecalculateLayout = () => {
         @select-page="switchToPage"
         @add-page="addNewPage"
         @duplicate-page="duplicatePage"
-        @delete-page="deletePage"
+        @delete-page="deletePageAfterFlush"
         @reorder-pages="reorderPages"
       />
 

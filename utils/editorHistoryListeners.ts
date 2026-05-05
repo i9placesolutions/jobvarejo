@@ -3,6 +3,8 @@ type SaveStateLikeOptions = {
   reason?: string
 }
 
+type SaveStateLikeResult = boolean | void | Promise<boolean | void>
+
 type RegisterHistorySaveListenersOptions = {
   canvas: any
   getCanvas: () => any
@@ -14,7 +16,9 @@ type RegisterHistorySaveListenersOptions = {
   isApplyingZoneUpdate: () => boolean
   getIsZoneCascadeDelete: () => boolean
   setIsZoneCascadeDelete: (value: boolean) => void
-  invokeSaveStateSafely: (opts?: SaveStateLikeOptions) => void
+  invokeSaveStateSafely: (opts?: SaveStateLikeOptions) => SaveStateLikeResult
+  shouldAutoSaveCanvasObjectChange?: () => boolean
+  triggerAutoSaveAfterCanvasObjectChange?: () => void
   handleObjectModified: (e: any) => void
   isLikelyProductZone: (obj: any) => boolean
   isLikelyProductCard: (obj: any) => boolean
@@ -23,6 +27,18 @@ type RegisterHistorySaveListenersOptions = {
 export const registerHistorySaveListeners = (
   opts: RegisterHistorySaveListenersOptions
 ): (() => void) => {
+  const saveObjectChange = (saveOpts: SaveStateLikeOptions) => {
+    const result = opts.invokeSaveStateSafely(saveOpts)
+    if (!opts.shouldAutoSaveCanvasObjectChange?.()) return
+
+    void Promise.resolve(result).then((didSave) => {
+      if (didSave === false) return
+      opts.triggerAutoSaveAfterCanvasObjectChange?.()
+    }).catch(() => {
+      // History save errors are handled by invokeSaveStateSafely.
+    })
+  }
+
   const onHistoryObjectAdded = (_e: any) => {
     opts.invalidateScrollbarBounds()
     opts.invalidateContainmentZoneCache()
@@ -34,7 +50,7 @@ export const registerHistorySaveListeners = (
       return
     }
     if (!opts.isHistoryProcessing()) {
-      opts.invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:added' })
+      saveObjectChange({ allowEmptyOverwrite: true, reason: 'object:added' })
     }
     opts.updateScrollbars()
   }
@@ -49,12 +65,12 @@ export const registerHistorySaveListeners = (
     const obj = e?.target
     if (obj && opts.isLikelyProductZone(obj)) {
       opts.handleObjectModified(e)
-      opts.invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:modified(zone)' })
+      saveObjectChange({ allowEmptyOverwrite: true, reason: 'object:modified(zone)' })
       return
     }
 
     opts.handleObjectModified(e)
-    opts.invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:modified' })
+    saveObjectChange({ allowEmptyOverwrite: true, reason: 'object:modified' })
   }
 
   const onHistoryObjectRemoved = (e: any) => {
@@ -100,13 +116,13 @@ export const registerHistorySaveListeners = (
         }
       }
 
-      opts.invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:removed(zone+cascade)' })
+      saveObjectChange({ allowEmptyOverwrite: true, reason: 'object:removed(zone+cascade)' })
       opts.updateScrollbars()
       return
     }
 
     if (!opts.getIsZoneCascadeDelete()) {
-      opts.invokeSaveStateSafely({ allowEmptyOverwrite: true, reason: 'object:removed' })
+      saveObjectChange({ allowEmptyOverwrite: true, reason: 'object:removed' })
     }
     opts.updateScrollbars()
   }

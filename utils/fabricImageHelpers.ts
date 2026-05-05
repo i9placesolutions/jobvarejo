@@ -101,9 +101,24 @@ export const getImageTrimmedDimensions = (img: any): { width: number; height: nu
  */
 export const applyImageTrimBounds = (
     img: any,
-    trimBounds: { left: number; top: number; width: number; height: number } | null
+    trimBounds: { left: number; top: number; width: number; height: number } | null,
+    opts: { preserveVisualPosition?: boolean } = {}
 ): { left: number; top: number; width: number; height: number } | null => {
     if (!img || !trimBounds) return null
+    const preserveVisualPosition = opts.preserveVisualPosition === true
+    const oldWidth = Math.max(1, Number(img.width || 0) || 1)
+    const oldHeight = Math.max(1, Number(img.height || 0) || 1)
+    const oldCenterX = Number(img.left || 0)
+    const oldCenterY = Number(img.top || 0)
+    const originX = String(img.originX || 'left')
+    const originY = String(img.originY || 'top')
+    const canPreserveCenter =
+        preserveVisualPosition &&
+        originX === 'center' &&
+        originY === 'center' &&
+        Number.isFinite(oldCenterX) &&
+        Number.isFinite(oldCenterY)
+
     img.set?.({
         cropX: trimBounds.left,
         cropY: trimBounds.top,
@@ -111,6 +126,24 @@ export const applyImageTrimBounds = (
         height: trimBounds.height,
         dirty: true
     })
+    if (canPreserveCenter) {
+        const localDx = (trimBounds.left + trimBounds.width / 2) - oldWidth / 2
+        const localDy = (trimBounds.top + trimBounds.height / 2) - oldHeight / 2
+        const scaleX = Number(img.scaleX ?? 1) || 1
+        const scaleY = Number(img.scaleY ?? 1) || 1
+        const flipX = img.flipX === true ? -1 : 1
+        const flipY = img.flipY === true ? -1 : 1
+        const angle = (Number(img.angle || 0) * Math.PI) / 180
+        const dx = localDx * scaleX * flipX
+        const dy = localDy * scaleY * flipY
+        const worldDx = (dx * Math.cos(angle)) - (dy * Math.sin(angle))
+        const worldDy = (dx * Math.sin(angle)) + (dy * Math.cos(angle))
+        img.set?.({
+            left: oldCenterX + worldDx,
+            top: oldCenterY + worldDy
+        })
+    }
+    img.setCoords?.()
     return trimBounds
 }
 

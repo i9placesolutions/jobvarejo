@@ -360,9 +360,19 @@ onMounted(() => {
     const id = String(route.params.id || '').trim()
     if (!id) return
     if (document.visibilityState === 'hidden') {
-      // Flush drafts e tenta salvar quando a aba vai para background
-      flushPendingLocalDrafts()
-      emergencySnapshotDirtyPages()
+      // No mobile o browser pode congelar a aba quase imediatamente.
+      // Primeiro capturamos edições debounced/texto ativo do canvas; depois
+      // gravamos o rascunho local e tentamos sincronizar remotamente.
+      const flush = editorCanvasRef.value?.flushPersistenceNow
+      if (typeof flush === 'function') {
+        void Promise.resolve(flush('page-visibility-hidden', { force: true })).finally(() => {
+          flushPendingLocalDrafts()
+          emergencySnapshotDirtyPages()
+        })
+      } else {
+        flushPendingLocalDrafts()
+        emergencySnapshotDirtyPages()
+      }
       if (hasUnsavedChanges.value) {
         void flushAutoSave().catch(() => { /* ignore */ })
       }

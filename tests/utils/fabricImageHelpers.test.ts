@@ -227,6 +227,55 @@ describe('applyImageTrimBounds', () => {
     expect(img.height).toBe(80)
     expect(img.dirty).toBe(true)
   })
+
+  it('preserva posicao visual quando origem e centralizada', () => {
+    const img = {
+      cropX: 0,
+      cropY: 0,
+      width: 300,
+      height: 200,
+      left: 150,
+      top: 100,
+      scaleX: 1,
+      scaleY: 1,
+      originX: 'center',
+      originY: 'center',
+      set(props: any) { Object.assign(this, props) },
+      setCoordsCalls: 0,
+      setCoords() { this.setCoordsCalls += 1 }
+    } as any
+    const trim = { left: 50, top: 20, width: 200, height: 160 }
+
+    applyImageTrimBounds(img, trim, { preserveVisualPosition: true })
+
+    expect(img.left).toBe(150)
+    expect(img.top).toBe(100)
+    expect(img.setCoordsCalls).toBe(1)
+  })
+
+  it('compensa corte assimetrico ao preservar posicao visual', () => {
+    const img = {
+      cropX: 0,
+      cropY: 0,
+      width: 300,
+      height: 200,
+      left: 150,
+      top: 100,
+      scaleX: 2,
+      scaleY: 1,
+      originX: 'center',
+      originY: 'center',
+      set(props: any) { Object.assign(this, props) },
+      setCoords() {}
+    } as any
+    const trim = { left: 80, top: 20, width: 200, height: 160 }
+
+    applyImageTrimBounds(img, trim, { preserveVisualPosition: true })
+
+    // crop center X moved from 150 to 180, with scaleX=2 -> +60 px.
+    expect(img.left).toBe(210)
+    expect(img.top).toBe(100)
+  })
 })
 
 describe('fitImageIntoSlot', () => {
