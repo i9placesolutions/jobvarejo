@@ -475,14 +475,17 @@ describe('computeViewportBoundsInWorld', () => {
 
   // Helpers que invertem um vpt simples [zoom, 0, 0, zoom, tx, ty]
   // inv = [1/z, 0, 0, 1/z, -tx/z, -ty/z]
-  const invertSimple = (m: number[]) => {
-    const [a, b, c, d, tx, ty] = m
+  const invertSimple = (m: number[]): number[] => {
+    const [a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0] = m
     return [1 / a, b, c, 1 / d, -tx / a, -ty / d]
   }
-  const transformAffine = (p: { x: number; y: number }, m: number[]) => ({
-    x: m[0] * p.x + m[2] * p.y + m[4],
-    y: m[1] * p.x + m[3] * p.y + m[5]
-  })
+  const transformAffine = (p: { x: number; y: number }, m: number[]) => {
+    const [a = 0, b = 0, c = 0, d = 0, tx = 0, ty = 0] = m
+    return {
+      x: a * p.x + c * p.y + tx,
+      y: b * p.x + d * p.y + ty
+    }
+  }
 
   it('vpt invalido (null/undefined): null', () => {
     expect(computeViewportBoundsInWorld(null, 800, 600, identity, transformIdentity)).toBeNull()

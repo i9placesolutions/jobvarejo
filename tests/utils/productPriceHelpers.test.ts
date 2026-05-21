@@ -96,15 +96,15 @@ describe('getAvailablePrices', () => {
   it('priceUnit + pricePack diferente: ambos exibidos', () => {
     const result = getAvailablePrices({ priceUnit: 5, pricePack: 24, packageLabel: 'CX' })
     expect(result.prices).toHaveLength(2)
-    expect(result.prices[0].type).toBe('main')
-    expect(result.prices[1].type).toBe('pack')
+    expect(result.prices[0]!.type).toBe('main')
+    expect(result.prices[1]!.type).toBe('pack')
     expect(result.mainPrice).toBe('5,00')
   })
 
   it('priceUnit + pricePack iguais: apenas main', () => {
     const result = getAvailablePrices({ priceUnit: 10, pricePack: 10, packageLabel: 'CX' })
     expect(result.prices).toHaveLength(1)
-    expect(result.prices[0].type).toBe('main')
+    expect(result.prices[0]!.type).toBe('main')
   })
 
   it('priceSpecialUnit (atacado especial): tipo special, sem label', () => {

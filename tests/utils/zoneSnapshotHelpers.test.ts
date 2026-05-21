@@ -1,9 +1,27 @@
 import { describe, it, expect } from 'vitest'
 import {
+  buildProductFromZoneSnapshotCard,
   clonePlainForZoneSnapshot,
   finiteZoneSnapshotNumber,
   firstDefinedZoneSnapshotValue
 } from '~/utils/zoneSnapshotHelpers'
+
+describe('buildProductFromZoneSnapshotCard', () => {
+  it('reconstroi imagem a partir de Product.images[]', () => {
+    const product = buildProductFromZoneSnapshotCard({
+      productData: {
+        name: 'Suco',
+        price: '6,99',
+        images: [{ id: 'img-suco', src: 'produtos/suco.webp' }]
+      },
+      product: {}
+    })
+
+    expect(product.imageUrl).toBe('produtos/suco.webp')
+    expect(product.image).toBe('produtos/suco.webp')
+    expect(product.image_wasabi_key).toBe('produtos/suco.webp')
+  })
+})
 
 describe('clonePlainForZoneSnapshot', () => {
   it('null/undefined retorna como esta', () => {

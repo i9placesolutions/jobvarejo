@@ -66,7 +66,14 @@ export const shouldSkipThumbnailForReason = (source: SaveSource, reason: string)
 
 export const getThumbnailMinIntervalMs = (reason: string): number => {
   const isModifiedReason = reason === 'object:modified' || reason === 'object:modified(zone)'
-  return isModifiedReason ? 8000 : 3000
+  const isHotProductZoneReason = reason === 'card-swap'
+    || reason === 'zone-resize'
+    || reason === 'preset-change'
+    || reason === 'simulate-smart-grid'
+    || reason.startsWith('global-style:')
+    || reason.startsWith('object:modified')
+    || reason.startsWith('zone-')
+  return isModifiedReason || isHotProductZoneReason ? 10_000 : 3000
 }
 
 export const canGenerateThumbnailNow = (opts: {

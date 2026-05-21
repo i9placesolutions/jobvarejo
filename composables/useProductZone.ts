@@ -31,6 +31,10 @@ import {
   calculateProductPosition,
   calculateOptimalImageSize
 } from '~/utils/product-zone-helpers';
+import {
+  buildAutoOfferLayoutPlan,
+  type AutoOfferPlanOptions
+} from '~/utils/autoOfferEngine';
 
 // Throttle state for saveToHistory (module-level so it persists across composable calls)
 let _lastHistorySaveMs = 0
@@ -360,6 +364,49 @@ export const useProductZone = () => {
     products.value = [];
     splashes.value = [];
     clearSelection();
+  };
+
+  /**
+   * Aplica o motor automatico de encarte no estado de dados da Product Zone.
+   * Esta camada nao cria objetos Fabric; ela deixa produtos/zona prontos para
+   * renderizacao leve ou materializacao posterior no canvas.
+   */
+  const applyAutoOfferLayout = (
+    productList: Partial<Product>[],
+    options: AutoOfferPlanOptions = {}
+  ) => {
+    saveToHistory();
+
+    const plan = buildAutoOfferLayoutPlan(productList, {
+      ...options,
+      zone: {
+        ...productZone.value,
+        ...(options.zone || {})
+      },
+      sourceMode: options.sourceMode ?? productZone.value.contentSource ?? 'manual',
+      overflowPolicy: options.overflowPolicy ?? productZone.value.overflowPolicy ?? 'warn'
+    });
+    const zonePlan = plan.zones[0];
+    if (!zonePlan) return plan;
+
+    productZone.value = migrateProductZone({
+      ...productZone.value,
+      ...zonePlan.zone
+    });
+
+    const nextProducts = zonePlan.products.map((product) => migrateProduct(product));
+    const nextSplashes: Splash[] = [];
+    nextProducts.forEach((product) => {
+      if (product.showPrice === false) return;
+      const splash = createDefaultSplash(product.id, product.price);
+      nextSplashes.push(splash);
+      product.splashId = splash.id;
+    });
+
+    products.value = nextProducts;
+    splashes.value = nextSplashes;
+    clearSelection();
+    return plan;
   };
 
   // ==========================================================================
@@ -738,6 +785,7 @@ export const useProductZone = () => {
     removeProduct,
     removeProducts,
     clearProducts,
+    applyAutoOfferLayout,
     
     // Layout
     recalculateLayout,

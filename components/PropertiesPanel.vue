@@ -59,6 +59,7 @@ const emit = defineEmits<{
   (e: 'apply-preset', presetId: string): void
   (e: 'sync-gaps', padding: number, meta?: ZoneUpdateTargetMeta): void
   (e: 'recalculate-layout'): void
+  (e: 'auto-offer-layout'): void
   (e: 'manage-label-templates'): void
   (e: 'open-zone-review'): void
   (e: 'apply-template-to-zone'): void
@@ -1829,11 +1830,12 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
                             type="button"
                             @click="$emit('action', 'auto-trim-image')"
                             class="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] bg-zinc-800 hover:bg-zinc-700 rounded transition-colors border border-white/10"
-                            title="Aparar espaço transparente da imagem"
+                            title="Cortar espaço transparente da imagem"
                             :disabled="!canRemoveImageBg"
                             :class="{ 'opacity-50 cursor-not-allowed': !canRemoveImageBg }"
                           >
-                            Trim
+                            <Scissors class="w-2.5 h-2.5" />
+                            Cortar
                           </button>
                           <button
                             v-if="canReplaceProductCardImage"
@@ -2123,6 +2125,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             @apply-preset="presetId => $emit('apply-preset', presetId)"
             @sync-gaps="(padding, meta) => $emit('sync-gaps', padding, meta)"
             @recalculate-layout="$emit('recalculate-layout')"
+            @auto-layout="$emit('auto-offer-layout')"
             @manage-label-templates="$emit('manage-label-templates')"
             @apply-template-to-zone="$emit('apply-template-to-zone')"
           />

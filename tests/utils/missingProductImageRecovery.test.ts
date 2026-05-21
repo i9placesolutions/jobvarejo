@@ -87,10 +87,10 @@ describe('compareMissingProductImageRecoveryCandidates', () => {
       makeCandidate({ selected: false, inView: true, coverage: 0.7 })    // 3 (mais coverage)
     ]
     const sorted = [...candidates].sort(compareMissingProductImageRecoveryCandidates)
-    expect(sorted[0].priority.selected).toBe(true)
-    expect(sorted[1].priority.coverage).toBe(0.7)  // inView + maior cov
-    expect(sorted[2].priority.coverage).toBe(0.5)
-    expect(sorted[3].priority.inView).toBe(false)
+    expect(sorted[0]!.priority.selected).toBe(true)
+    expect(sorted[1]!.priority.coverage).toBe(0.7)  // inView + maior cov
+    expect(sorted[2]!.priority.coverage).toBe(0.5)
+    expect(sorted[3]!.priority.inView).toBe(false)
   })
 })
 

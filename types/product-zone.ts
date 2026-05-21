@@ -29,6 +29,13 @@ export interface Product {
   name: string;
   uiPriority?: 'primary' | 'advanced';
   images: ProductImage[];
+  // Referencias top-level usadas por importadores, cache de imagem e restauração do canvas.
+  imageUrl?: string | null;
+  image?: string | null;
+  image_wasabi_key?: string | null;
+  image_url?: string | null;
+  url?: string | null;
+  custom_image?: string | null;
   emoji?: string;
   // Posição no canvas (calculada pelo grid ou free mode)
   x: number;

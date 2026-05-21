@@ -172,7 +172,7 @@ describe('assignNewCustomIdsDeep', () => {
   })
 
   it('desce recursivamente em getObjects()', () => {
-    const leaf = { _customId: 'leaf-old' }
+    const leaf: any = { _customId: 'leaf-old' }
     const inner = group({ _customId: 'inner-old' }, [leaf])
     const root = group({ _customId: 'root-old' }, [inner])
     assignNewCustomIdsDeep(root)
@@ -363,7 +363,7 @@ describe('clearInvalidClipPath', () => {
   })
 
   it('clipPath com _objects undefined ganha array vazio (fix-up)', () => {
-    const clip = { type: 'rect', render: () => {} }
+    const clip: any = { type: 'rect', render: () => {} }
     const o = makeObj({ clipPath: clip })
     clearInvalidClipPath(o)
     expect(clip._objects).toEqual([])

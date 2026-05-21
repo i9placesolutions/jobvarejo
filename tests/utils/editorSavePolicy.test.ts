@@ -129,10 +129,16 @@ describe('shouldSkipThumbnailForReason — thumbnail compartilha algumas regras 
   })
 })
 
-describe('getThumbnailMinIntervalMs — janela maior para object:modified', () => {
-  it('object:modified usa 8s para evitar regerar thumb a cada arraste', () => {
-    expect(getThumbnailMinIntervalMs('object:modified')).toBe(8000)
-    expect(getThumbnailMinIntervalMs('object:modified(zone)')).toBe(8000)
+describe('getThumbnailMinIntervalMs — janela maior para hot paths do editor', () => {
+  it('object:modified usa 10s para evitar regerar thumb a cada arraste', () => {
+    expect(getThumbnailMinIntervalMs('object:modified')).toBe(10000)
+    expect(getThumbnailMinIntervalMs('object:modified(zone)')).toBe(10000)
+  })
+
+  it('Product Zone hot paths usam 10s', () => {
+    expect(getThumbnailMinIntervalMs('card-swap')).toBe(10000)
+    expect(getThumbnailMinIntervalMs('zone-resize')).toBe(10000)
+    expect(getThumbnailMinIntervalMs('global-style:color')).toBe(10000)
   })
 
   it('outras razoes usam 3s', () => {
@@ -157,7 +163,7 @@ describe('canGenerateThumbnailNow — gate combinado (skip + interval)', () => {
       source: 'user',
       reason: 'object:modified',
       lastThumbnailAt: 0,
-      now: 9000
+      now: 11000
     })).toBe(true)
   })
 
@@ -167,7 +173,7 @@ describe('canGenerateThumbnailNow — gate combinado (skip + interval)', () => {
       reason: 'object:modified',
       lastThumbnailAt: 5000,
       now: 9000
-    })).toBe(false) // 4s < 8s
+    })).toBe(false) // 4s < 10s
   })
 
   it('aceita razoes com intervalo curto (3s)', () => {

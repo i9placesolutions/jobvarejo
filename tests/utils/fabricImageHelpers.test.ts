@@ -5,7 +5,8 @@ import {
   getImageSourceFromObject,
   findImageTargetInSelection,
   applyImageTrimBounds,
-  fitImageIntoSlot
+  fitImageIntoSlot,
+  detectImageTrimBounds
 } from '~/utils/fabricImageHelpers'
 
 const group = (children: any[]) => ({
@@ -275,6 +276,50 @@ describe('applyImageTrimBounds', () => {
     // crop center X moved from 150 to 180, with scaleX=2 -> +60 px.
     expect(img.left).toBe(210)
     expect(img.top).toBe(100)
+  })
+})
+
+describe('detectImageTrimBounds', () => {
+  const withFakeImageData = (width: number, height: number, data: Uint8ClampedArray, run: () => void) => {
+    const originalDocument = (globalThis as any).document
+    ;(globalThis as any).document = {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: () => ({
+          clearRect() {},
+          drawImage() {},
+          getImageData: () => ({ data })
+        })
+      })
+    }
+    try {
+      run()
+    } finally {
+      ;(globalThis as any).document = originalDocument
+    }
+  }
+
+  it('ignora alpha residual e corta pelo conteudo visivel', () => {
+    const width = 4
+    const height = 4
+    const data = new Uint8ClampedArray(width * height * 4)
+    const setAlpha = (x: number, y: number, alpha: number) => {
+      data[(y * width + x) * 4 + 3] = alpha
+    }
+    setAlpha(0, 0, 4)
+    setAlpha(1, 1, 255)
+    setAlpha(2, 1, 255)
+    setAlpha(1, 2, 255)
+    setAlpha(2, 2, 255)
+
+    withFakeImageData(width, height, data, () => {
+      const bounds = detectImageTrimBounds({
+        getElement: () => ({ width, height })
+      }, { alphaThreshold: 8, padding: 0 })
+
+      expect(bounds).toEqual({ left: 1, top: 1, width: 2, height: 2 })
+    })
   })
 })
 

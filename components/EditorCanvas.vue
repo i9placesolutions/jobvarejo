@@ -195,6 +195,7 @@ import {
     resolveZoneUpdatesPayload,
     resolveScalarUpdatePayload
 } from '~/utils/zoneUpdatesPayload'
+import { resolveProductImageRef as resolveSharedProductImageRef } from '~/utils/productImageRef'
 import {
     type ImageMatchMode
 } from '~/utils/imageMatchMode'
@@ -416,6 +417,7 @@ import {
     sanitizeFabricJsonTreeForLoad,
     buildProgressiveProductCardImageLoadPayload,
     normalizeLegacyProductCardImageTransformsInCanvasData,
+    CANVAS_IMAGE_PLACEHOLDER_DATA_URL as PLACEHOLDER_IMAGE_DATA_URL,
     sanitizeCanvasJsonBeforeLoad as sanitizeCanvasJsonBeforeLoadHelper
 } from '~/utils/canvasJsonClassifiers'
 import { layoutPrice } from '~/utils/priceTagLayout'
@@ -445,10 +447,7 @@ import {
     getSavedViewportTransform,
     setSavedViewportTransform
 } from '~/utils/editorCanvasState'
-import {
-    CANVAS_IMAGE_PLACEHOLDER_DATA_URL as PLACEHOLDER_IMAGE_DATA_URL,
-    normalizeCanvasAssetUrls
-} from '~/utils/canvasAssetUrls'
+import { normalizeCanvasAssetUrls } from '~/utils/canvasAssetUrls'
 import {
     canGenerateThumbnailNow,
     canAllowEmptyOverwrite,
@@ -2163,7 +2162,7 @@ const moveFrameDescendants = (frame: any, dx: number, dy: number, descendants?: 
 // Wrapper local: detecta trim bounds + aplica via helper puro extraido.
 const applyAutoTrimToProductImage = (img: any) => {
     if (!img) return null;
-    const trimBounds = detectImageTrimBounds(img);
+    const trimBounds = detectImageTrimBounds(img, { alphaThreshold: 12, padding: 2 });
     return applyImageTrimBounds(img, trimBounds);
 };
 
@@ -3595,6 +3594,10 @@ import {
     ensureZoneNamesDistinct,
     buildProductSlicesForZones as buildProductSlicesForZonesHelper
 } from '~/utils/product-zone-helpers'
+import {
+    buildAutoOfferLayoutPlan,
+    type AutoOfferDensity
+} from '~/utils/autoOfferEngine'
 import { DEFAULT_GLOBAL_STYLES, DEFAULT_PRODUCT_ZONE } from '~/types/product-zone'
 import type { ProductZone, GlobalStyles } from '~/types/product-zone'
 import { useProject } from '~/composables/useProject'
@@ -5497,6 +5500,7 @@ type ProductImportOptions = {
     targetMode?: ImportTargetMode
     targetZoneId?: string
     sourceMode?: 'manual' | 'paste-list' | 'file-import'
+    autoLayout?: boolean
     selectedFrameIds?: string[]
     frameAssignments?: FrameAssignment[]
     zoneAssignments?: ZoneAssignment[]
@@ -5512,9 +5516,7 @@ const findProductZoneById = (zoneIdRaw: any): any | null => {
     if (!canvas.value) return null
     const zoneId = String(zoneIdRaw || '').trim()
     if (!zoneId) return null
-    return (canvas.value.getObjects?.() || []).find((obj: any) =>
-        isLikelyProductZone(obj) && getProductZoneId(obj) === zoneId
-    ) || null
+    return getRuntimeProductZoneById(zoneId)
 }
 
 const setActiveProductZone = (zone: any, opts: { syncImportTarget?: boolean } = {}) => {
@@ -5535,6 +5537,8 @@ const setActiveProductZone = (zone: any, opts: { syncImportTarget?: boolean } = 
 type SmartGridRunOptions = {
     mode?: 'replace' | 'append'
     labelTemplateId?: string
+    sourceMode?: 'manual' | 'paste-list' | 'file-import' | 'multi-frame'
+    autoLayout?: boolean
     persist?: boolean
 }
 
@@ -5593,7 +5597,7 @@ const sortProductZonesByVisualOrder = (zones: any[]): any[] => {
 const resolveRelatedImportZones = (primaryZone: any): any[] => {
     if (!canvas.value || !primaryZone || !isLikelyProductZone(primaryZone)) return []
 
-    const allZones = (canvas.value.getObjects?.() || []).filter((obj: any) => isLikelyProductZone(obj))
+    const allZones = getRuntimeProductZones()
     if (!allZones.length) return []
 
     const primaryId = String((primaryZone as any)?._customId || '').trim()
@@ -6859,7 +6863,7 @@ const resolveCardParentZone = (card: any, opts: { allowNearest?: boolean } = {})
         if (slotZone && isZoneCompatibleWithCardFrame(slotZone)) return slotZone;
     }
 
-    const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o) && isZoneCompatibleWithCardFrame(o));
+    const zones = getRuntimeProductZones().filter((o: any) => isZoneCompatibleWithCardFrame(o));
     if (!zones.length) return null;
     if (zones.length === 1) return zones[0];
 
@@ -9353,9 +9357,6 @@ const _handleObjectModifiedInner = (e: any) => {
         const deltaH = Math.abs(newH - prevH);
         if (didResize && (deltaW > 2 || deltaH > 2)) {
             recalculateZoneLayout(obj, cachedChildren, { save: false, preserveStyles: true });
-            requestAnimationFrame(() => {
-                saveCurrentState({ reason: 'zone-resize', skipIfUnchanged: false });
-            });
         }
         return;
     }
@@ -9363,7 +9364,7 @@ const _handleObjectModifiedInner = (e: any) => {
     // Product zone: dragging a card reorders the grid (snap back into slots on drop).
     if ((obj.isSmartObject || obj.isProductCard || String(obj.name || '').startsWith('product-card') || isLikelyProductCard(obj)) && (obj as any).parentZoneId && canvas.value) {
         const zoneId = String((obj as any).parentZoneId || '').trim();
-        const zone = getContainmentZoneById(zoneId) || canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String(o?._customId || '').trim() === zoneId);
+        const zone = getContainmentZoneById(zoneId) || findProductZoneById(zoneId);
         if (zone) {
             ensureZoneSanity(zone);
             const cards = getZoneChildren(zone);
@@ -9438,16 +9439,16 @@ const _handleObjectModifiedInner = (e: any) => {
                     (card as any)._zoneSlot = { zoneId: zone._customId, left: slotLeft, top: slotTop, width: slotW, height: slotH };
 
                     if (card.isSmartObject || card.name?.startsWith('product-card')) {
-                        // preserveStyles: skip resize if dimensions unchanged to preserve template layout
                         const prevW = Number((card as any)._cardWidth) || card.width || 0;
                         const prevH = Number((card as any)._cardHeight) || card.height || 0;
                         const dimChanged = Math.abs(prevW - slotW) > 1 || Math.abs(prevH - slotH) > 1;
                         if (dimChanged) {
-                            resizeSmartObject(card, slotW, slotH, undefined);
+                            resizeSmartObject(card, slotW, slotH, stylesToApply);
                         } else {
-                            card.set({ width: slotW, height: slotH });
-                            (card as any)._cardWidth = slotW;
-                            (card as any)._cardHeight = slotH;
+                            // Fabric v7 can shift group internals when width/height are set
+                            // repeatedly. Same-size slot moves only need position/order updates.
+                            (card as any)._cardWidth = prevW || slotW;
+                            (card as any)._cardHeight = prevH || slotH;
                         }
                         card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
                     } else {
@@ -9465,49 +9466,43 @@ const _handleObjectModifiedInner = (e: any) => {
                 };
 
                 // Fast path: same slot index and no scaling => snap only this card back to its slot.
-	                if (!didScale && fromIndex !== -1 && toIndex === fromIndex) {
+                if (!didScale && fromIndex !== -1 && toIndex === fromIndex) {
                     const slot = (obj as any)?._zoneSlot;
                     const slotZoneId = String(slot?.zoneId || '').trim();
                     if (slot && slotZoneId === zoneId) {
                         const targetCx = slot.left + (slot.width / 2);
                         const targetCy = slot.top + (slot.height / 2);
                         const currentCenter = center || { x: Number(obj.left || 0), y: Number(obj.top || 0) };
-	                        if (Math.abs(currentCenter.x - targetCx) > 0.25 || Math.abs(currentCenter.y - targetCy) > 0.25) {
+                        if (Math.abs(currentCenter.x - targetCx) > 0.25 || Math.abs(currentCenter.y - targetCy) > 0.25) {
                             if (fabric?.Point && typeof obj.setPositionByOrigin === 'function') {
                                 obj.setPositionByOrigin(new fabric.Point(targetCx, targetCy), 'center', 'center');
                             } else {
                                 obj.set({ left: targetCx, top: targetCy, originX: 'center', originY: 'center' });
                             }
-	                            obj.setCoords?.();
-	                        }
+                            obj.setCoords?.();
+                        }
                         // Card voltou ao mesmo slot — não precisa recalcular toda a zona.
                         safeRequestRenderAll();
-	                        return;
-	                    }
-	                }
+                        return;
+                    }
+                }
 
                 // Fast path: simple 2-card swap in standard grid (no featured layout) without full zone relayout.
-                // applyCardToSlot ja reposiciona e (se necessario) redimensiona os dois cards afetados,
-                // portanto chamar recalculateZoneLayout para a zona inteira desfazia a otimizacao —
-                // o comentario prometia evitar o relayout completo mas o codigo anterior o chamava.
-	                if (!didScale && !hasFeaturedLayout && fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
+                // applyCardToSlot updates only the two affected cards; same-size slots become move-only.
+                if (!didScale && !hasFeaturedLayout && fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
                     const fromCard = ordered[fromIndex];
                     const toCard = ordered[toIndex];
                     const fromSlot = (fromCard as any)?._zoneSlot;
                     const toSlot = (toCard as any)?._zoneSlot;
-                    // Force relayout on both cards so they adopt the visual style of their new slot
-                    if (fromCard) (fromCard as any).__forceCardRelayout = true;
-                    if (toCard) (toCard as any).__forceCardRelayout = true;
-	                    if (
-	                        applyCardToSlot(fromCard, toSlot, toIndex) &&
-	                        applyCardToSlot(toCard, fromSlot, fromIndex)
-	                    ) {
-	                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
-	                        safeRequestRenderAll();
-	                        requestAnimationFrame(() => { saveCurrentState({ reason: 'card-swap' }); });
-	                        return;
-	                    }
-	                }
+                    if (
+                        applyCardToSlot(fromCard, toSlot, toIndex) &&
+                        applyCardToSlot(toCard, fromSlot, fromIndex)
+                    ) {
+                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
+                        safeRequestRenderAll();
+                        return;
+                    }
+                }
 
                 if (fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
                     // Swap: troca completa de posição — force relayout nos dois cards
@@ -9521,12 +9516,6 @@ const _handleObjectModifiedInner = (e: any) => {
 
                 // Snap everything back into the grid after drop.
                 recalculateZoneLayout(zone, ordered, { save: false, preserveStyles: true });
-                // Persistir APÓS render completar para evitar salvar estado intermediário
-                if (fromIndex !== toIndex) {
-                    requestAnimationFrame(() => {
-                        saveCurrentState({ reason: 'card-swap' });
-                    });
-                }
             }
         }
         return;
@@ -13933,6 +13922,9 @@ const setupReactivity = () => {
     trackOn('object:added', invalidateContainmentZoneCache);
     trackOn('object:removed', invalidateContainmentZoneCache);
     trackOn('object:modified', invalidateContainmentZoneCache);
+    trackOn('object:added', invalidateZoneRuntimeIndex);
+    trackOn('object:removed', invalidateZoneRuntimeIndex);
+    trackOn('object:modified', invalidateZoneRuntimeIndex);
     trackOn('object:added', (e: any) => {
         if (e?.target?.isFrame) markFrameLabelsDirty();
     });
@@ -13965,7 +13957,7 @@ const setupReactivity = () => {
         if (!canvas.value) return normalizeGlobalStyles(productZoneState.globalStyles.value);
         const zoneId = card?.parentZoneId;
         if (zoneId) {
-            const zone = canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && (o as any)._customId === zoneId);
+            const zone = findProductZoneById(zoneId);
             if (zone) return getZoneGlobalStyles(zone);
         }
         return normalizeGlobalStyles(productZoneState.globalStyles.value);
@@ -15028,7 +15020,7 @@ const setupReactivity = () => {
             syncZoneCardFrameBindings(obj);
         } else if (isLikelyProductCard(obj) && (obj as any).parentZoneId && canvas.value) {
             const zoneId = String((obj as any).parentZoneId || '').trim();
-            const zone = canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String((o as any)._customId || '') === zoneId);
+            const zone = findProductZoneById(zoneId);
             if (zone) {
                 const zoneFrameId = getResolvedZoneFrameId(zone);
                 applyCardFrameBinding(obj, zoneFrameId);
@@ -17330,9 +17322,7 @@ const updateSmartGroup = (keyOrUpdates: any, value?: any) => {
                  // 6. Reaplicar estilos da zona (escala, cor, fonte) no novo price group
                  //    Sem isso o novo price group perde escala e propriedades visuais da zona.
                  const parentZoneId = String((group as any)?.parentZoneId || '').trim();
-                 const parentZone = parentZoneId && canvas.value
-                     ? canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String((o as any)?._customId || '').trim() === parentZoneId)
-                     : null;
+                 const parentZone = parentZoneId ? findProductZoneById(parentZoneId) : null;
                  const zoneStyles = parentZone
                      ? getZoneGlobalStyles(parentZone)
                      : (typeof normalizeGlobalStyles === 'function' ? normalizeGlobalStyles(productZoneState.globalStyles.value) : null);
@@ -17755,7 +17745,7 @@ const handleAction = async (action: string) => {
         }
 
         const img = found.img;
-        const trimBounds = detectImageTrimBounds(img);
+        const trimBounds = detectImageTrimBounds(img, { alphaThreshold: 12, padding: 2 });
         if (!trimBounds) {
             notifyEditorInfo('A imagem já está rente ou não tem transparência para aparar.');
             return;
@@ -19903,6 +19893,10 @@ const clearCanvas = () => {
 // getAvailablePrices extraido para utils/productPriceHelpers.ts.
 
 // Smart Object Generator (Product Card)
+const resolveProductImageRef = (product: any): string | null => {
+    return resolveSharedProductImageRef(product);
+}
+
 const createSmartObject = async (
     product: any,
     x: number,
@@ -19936,7 +19930,7 @@ const createSmartObject = async (
         ? (effectiveStyles.cardBorderColor || '#000000')
         : undefined;
     const { cleanedName, extractedLimit } = extractLimitFromName(product?.name);
-    const limitTextValue = normalizeLimitText(product?.limit ?? extractedLimit);
+    const limitTextValue = normalizeLimitText(product?.limit ?? product?.limitText ?? extractedLimit);
     const persistedTitleWidth = Number((product as any)?.titleTextWidth);
     const persistedTitleWidthRatio = Number((product as any)?.titleTextWidthRatio);
     let initialTitleWidth = width - 20;
@@ -20040,8 +20034,8 @@ const createSmartObject = async (
 
     // 3. Product Image (Middle)
     let imgObj: any = null;
-    // Resolver URL: suporta image_wasabi_key (storage key), imageUrl, image e url
-    const rawImgRef = product.image_wasabi_key || product.imageUrl || product.image || product.url;
+    // Resolver URL: suporta image_wasabi_key, imageUrl/image/url e Product.images[].
+    const rawImgRef = resolveProductImageRef(product);
     const imageY = 0; // Centered vertically
 
     if (rawImgRef) {
@@ -20288,7 +20282,7 @@ const createSmartObject = async (
     (group as any).unitLabel = unitText;
     (group as any).limit = limitTextValue ?? null;
     // Image reference (para re-importação e review)
-    (group as any).imageUrl = (product as any).image_wasabi_key || (product as any).imageUrl || (product as any).image || null;
+    (group as any).imageUrl = resolveProductImageRef(product);
     // Store original product data for reference
     // Normaliza limitText a partir de limit (fluxo de importação inteligente) ou limitText (formato Product)
     (group as any)._productData = {
@@ -20583,6 +20577,8 @@ const importProductsToMultipleFrames = async (products: any[], opts?: ProductImp
             {
                 mode: 'replace',
                 labelTemplateId,
+                sourceMode: 'multi-frame',
+                autoLayout: opts?.autoLayout,
                 persist: false
             }
         )
@@ -20639,7 +20635,15 @@ const importProductsToMultipleZones = async (products: any[], zones: any[], opts
     if (validZones.length === 1) {
         const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined
         const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : productReviewInitialImportMode.value
-        await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, validZones[0], { mode, labelTemplateId })
+        const sourceMode = opts?.sourceMode === 'paste-list' || opts?.sourceMode === 'file-import'
+            ? opts.sourceMode
+            : 'manual'
+        await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, validZones[0], {
+            mode,
+            labelTemplateId,
+            sourceMode,
+            autoLayout: opts?.autoLayout
+        })
         return
     }
 
@@ -20692,6 +20696,8 @@ const importProductsToMultipleZones = async (products: any[], zones: any[], opts
         await simulateSmartGrid(slice, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, {
             mode,
             labelTemplateId,
+            sourceMode: nextSource,
+            autoLayout: opts?.autoLayout,
             persist: false
         })
         ;(zone as any).contentSource = nextSource
@@ -20757,10 +20763,15 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
                 // Add to canvas using the products received from the modal (with edits applied)
                 const mode = (opts?.mode === 'append' || opts?.mode === 'replace') ? opts.mode : 'replace'
                 const labelTemplateId = typeof opts?.labelTemplateId === 'string' ? opts.labelTemplateId : undefined
-                await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, { mode, labelTemplateId })
                 const nextSource = opts?.sourceMode === 'paste-list' || opts?.sourceMode === 'file-import'
                     ? opts.sourceMode
                     : 'manual'
+                await simulateSmartGrid(products, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, {
+                    mode,
+                    labelTemplateId,
+                    sourceMode: nextSource,
+                    autoLayout: opts?.autoLayout
+                })
                 ;(zone as any).contentSource = nextSource
                 syncZoneDerivedMetadata(zone)
             }
@@ -21037,6 +21048,107 @@ const addGridZone = async () => {
     await flushPersistenceNow('add-grid-zone', { force: true });
 }
 
+const getAutoOfferDensityForRuntime = (
+    productCount: number,
+    bounds: { width: number; height: number }
+): AutoOfferDensity => {
+    const shortSide = Math.min(Math.max(1, bounds.width), Math.max(1, bounds.height));
+    if (productCount >= 18 || shortSide < 520) return 'compact';
+    if (productCount <= 4 && shortSide >= 620) return 'premium';
+    return 'balanced';
+}
+
+const getProductDataForAutoOfferPlan = (card: any, index: number): any => {
+    const productData = (card as any)?._productData;
+    if (productData && typeof productData === 'object') return productData;
+    return {
+        id: (card as any)?._customId || `existing-card-${index + 1}`,
+        name: (card as any)?.name || `Produto ${index + 1}`,
+        price: (card as any)?.price ?? 0,
+        pricePack: (card as any)?.pricePack ?? undefined,
+        priceUnit: (card as any)?.priceUnit ?? undefined,
+        priceSpecial: (card as any)?.priceSpecial ?? undefined,
+        priceSpecialUnit: (card as any)?.priceSpecialUnit ?? undefined,
+        priceWholesale: (card as any)?.priceWholesale ?? undefined,
+        specialCondition: (card as any)?.specialCondition ?? undefined,
+        limitText: (card as any)?.limit ?? undefined,
+        imageUrl: resolveProductImageRef((card as any)?._productData || card) ?? undefined
+    };
+}
+
+const applyAutoOfferRuntimeLayout = (
+    targetZone: any,
+    incomingProducts: any[],
+    existingCards: any[],
+    bounds: { left: number; top: number; width: number; height: number },
+    mode: 'replace' | 'append',
+    opts: SmartGridRunOptions
+): any[] => {
+    if (!targetZone || opts?.autoLayout === false || !Array.isArray(incomingProducts)) {
+        return incomingProducts;
+    }
+
+    const existingProducts = mode === 'append'
+        ? existingCards.map((card: any, index: number) => getProductDataForAutoOfferPlan(card, index))
+        : [];
+    const productsForPlan = [...existingProducts, ...incomingProducts];
+    const sourceMode = opts.sourceMode || (targetZone as any).contentSource || 'manual';
+    const pad = typeof (targetZone as any)._zonePadding === 'number'
+        ? Number((targetZone as any)._zonePadding)
+        : Number((targetZone as any).padding ?? 20);
+    const plan = buildAutoOfferLayoutPlan(productsForPlan, {
+        zone: {
+            x: bounds.left,
+            y: bounds.top,
+            width: bounds.width,
+            height: bounds.height,
+            padding: pad,
+            gapHorizontal: Number((targetZone as any).gapHorizontal ?? pad),
+            gapVertical: Number((targetZone as any).gapVertical ?? pad),
+            layoutDirection: (targetZone as any).layoutDirection === 'vertical' ? 'vertical' : 'horizontal',
+            lastRowBehavior: (targetZone as any).lastRowBehavior || 'fill',
+            verticalAlign: (targetZone as any).verticalAlign || 'stretch',
+            cardAspectRatio: (targetZone as any).cardAspectRatio || 'fill',
+            overflowPolicy: (targetZone as any).overflowPolicy || 'warn'
+        },
+        density: getAutoOfferDensityForRuntime(productsForPlan.length, bounds),
+        sourceMode,
+        overflowPolicy: (targetZone as any).overflowPolicy || 'warn',
+        promoteHighlights: mode === 'replace'
+    });
+    const zonePlan = plan.zones[0];
+    if (!zonePlan) return incomingProducts;
+    const autoZone = zonePlan.zone;
+
+    (targetZone as any)._zonePadding = autoZone.padding;
+    (targetZone as any).role = autoZone.role;
+    (targetZone as any).contentSource = autoZone.contentSource;
+    (targetZone as any).contentStatus = autoZone.contentStatus;
+    (targetZone as any).overflowPolicy = autoZone.overflowPolicy;
+    (targetZone as any).highlightStyle = autoZone.highlightStyle;
+    targetZone.set?.({
+        padding: 0,
+        gapHorizontal: autoZone.gapHorizontal,
+        gapVertical: autoZone.gapVertical,
+        columns: autoZone.columns,
+        rows: autoZone.rows ?? 0,
+        layoutDirection: autoZone.layoutDirection,
+        cardAspectRatio: autoZone.cardAspectRatio,
+        lastRowBehavior: autoZone.lastRowBehavior,
+        verticalAlign: autoZone.verticalAlign,
+        highlightCount: autoZone.highlightCount,
+        highlightPos: autoZone.highlightPos,
+        highlightHeight: autoZone.highlightHeight,
+        isGridZone: true,
+        isProductZone: true,
+        dirty: true
+    });
+    targetZone.setCoords?.();
+
+    if (mode === 'replace') return zonePlan.products;
+    return zonePlan.products.slice(Math.max(0, zonePlan.products.length - incomingProducts.length));
+}
+
 const simulateSmartGrid = async (
     customData: any[] = [],
     config = { margin: 10, gap: 15, orphanBehavior: 'fill' },
@@ -21144,6 +21256,17 @@ const simulateSmartGrid = async (
         existingCount = existingZoneCardsAtStart.length;
     }
     const countForLayout = targetZone ? (existingCount + count) : count;
+
+    if (targetZone) {
+        products = applyAutoOfferRuntimeLayout(
+            targetZone,
+            products,
+            existingZoneCardsAtStart,
+            bounds,
+            mode,
+            opts
+        );
+    }
 
     // 4. Grid Configuration
     const gap = config.gap || 15;
@@ -21415,7 +21538,7 @@ const simulateSmartGrid = async (
 	                  let titleFound = false;
 	                  let priceFound = false;
 	                  const { cleanedName, extractedLimit } = extractLimitFromName(product?.name);
-	                  const limitTextValue = normalizeLimitText(product?.limit ?? extractedLimit);
+	                  const limitTextValue = normalizeLimitText(product?.limit ?? product?.limitText ?? extractedLimit);
 	                  let limitFound = false;
 	                  const objects = typeof cloned.getObjects === 'function' ? (cloned.getObjects() || []) : [];
 	                  const isTextNode = (node: any) => String(node?.type || '').toLowerCase().includes('text');
@@ -21482,7 +21605,7 @@ const simulateSmartGrid = async (
                  }
 
                  // Injetar imagem do produto no clone do template
-                 const productImgRef = product?.image_wasabi_key || product?.imageUrl || product?.image || product?.url;
+                 const productImgRef = resolveProductImageRef(product);
                  if (productImgRef) {
                      const existingImg = objects.find((o: any) => {
                          const t = String(o?.type || '').toLowerCase();
@@ -21814,9 +21937,7 @@ const getCurrentZoneObject = () => {
     if (active && isLikelyProductCard(active)) {
         const parentZoneId = (active as any).parentZoneId;
         if (parentZoneId) {
-            const zone = canvas.value.getObjects().find((o: any) => 
-                isLikelyProductZone(o) && o._customId === parentZoneId
-            );
+            const zone = findProductZoneById(parentZoneId);
             if (zone) return zone;
         }
     }
@@ -21832,9 +21953,7 @@ const getCurrentZoneObject = () => {
         const zoneId = selected._customId;
         if (zoneId) {
             // First try with full detection
-            let zone = canvas.value.getObjects().find((o: any) => 
-                isLikelyProductZone(o) && o._customId === zoneId
-            );
+            let zone = findProductZoneById(zoneId);
             if (zone) return zone;
             // Fallback: find by _customId alone and set flags if it's a group
             // (handles edge case where real object lost flags but snapshot preserved them)
@@ -21851,9 +21970,7 @@ const getCurrentZoneObject = () => {
     if (selected && isLikelyProductCard(selected)) {
         const parentZoneId = selected.parentZoneId;
         if (parentZoneId) {
-            const zone = canvas.value.getObjects().find((o: any) => 
-                isLikelyProductZone(o) && o._customId === parentZoneId
-            );
+            const zone = findProductZoneById(parentZoneId);
             if (zone) return zone;
         }
     }
@@ -21868,7 +21985,7 @@ const getCurrentZoneObject = () => {
     }
     
     // 6. LAST RESORT: only auto-pick when there is exactly one zone.
-    const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+    const zones = getRuntimeProductZones();
     if (zones.length === 1) return zones[0];
     
     console.log('[DEBUG getCurrentZoneObject] returning null. zones count:', zones.length);
@@ -21975,7 +22092,10 @@ const restoreZoneCardsFromStateSnapshot = async (zone: any, reason = 'rehydrate'
                 zoneInstanceId: zoneId,
                 reason: 'restore-zone-snapshot'
             });
-            (card as any).imageUrl = firstDefinedZoneSnapshotValue(product?.image_wasabi_key, product?.imageUrl, product?.image);
+            const restoredImageRef = resolveProductImageRef((card as any)._productData) || resolveProductImageRef(product);
+            if (restoredImageRef) {
+                (card as any).imageUrl = restoredImageRef;
+            }
             card.set?.({
                 left: x,
                 top: y,
@@ -22267,7 +22387,7 @@ type ZoneUpdateTargetMeta = {
 const resolveZoneTargetsForUpdates = (opts: { allowAllFallback?: boolean; targetId?: string | null } = {}) => {
     if (!canvas.value) return [] as any[];
 
-    const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+    const zones = getRuntimeProductZones();
     const byId = new Map<string, any>();
     zones.forEach((z: any) => {
         const id = String(z?._customId || '').trim();
@@ -22375,6 +22495,18 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
     ]);
 
     let shouldRelayout = false;
+    let hasRelayoutPropUpdate = false;
+    const markRelayoutIfChanged = (current: any, next: any, tolerance = 0.001) => {
+        const currentNum = Number(current);
+        const nextNum = Number(next);
+        const bothNumeric = Number.isFinite(currentNum) && Number.isFinite(nextNum);
+        hasRelayoutPropUpdate = true;
+        if (bothNumeric) {
+            if (Math.abs(currentNum - nextNum) > tolerance) shouldRelayout = true;
+            return;
+        }
+        if (String(current ?? '') !== String(next ?? '')) shouldRelayout = true;
+    };
 
     // FIX: Permanently disable Fabric v7 LayoutManager on zone groups.
     // Zone layout is fully managed by recalculateZoneLayout — Fabric's auto-layout
@@ -22395,9 +22527,9 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
             // (deixa cards muito pequenos). Clamp defensivo no handler evita JSON
             // injetado externamente corromper a zona.
             const n = Math.max(0, Math.min(200, Number(val) || 0));
+            markRelayoutIfChanged(zone._zonePadding, n);
             zone._zonePadding = n;
             zone.set('padding', 0);
-            shouldRelayout = true;
             return;
         }
 
@@ -22413,8 +22545,8 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
             // divergindo do que o composable armazenava.
             const cardCount = getZoneChildren(zone)?.length || 0;
             const n = Math.max(0, Math.min(cardCount, Number(val) || 0));
+            markRelayoutIfChanged((zone as any).highlightCount, n);
             zone.set('highlightCount', n);
-            shouldRelayout = true;
             return;
         }
 
@@ -22479,9 +22611,12 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
             return;
         }
 
+        if (relayoutProps.has(prop)) markRelayoutIfChanged((zone as any)?.[prop], val);
         zone.set(prop, val);
-        if (relayoutProps.has(prop)) shouldRelayout = true;
     });
+    if (opts.saveReason === 'preset-change' && hasRelayoutPropUpdate) {
+        shouldRelayout = true;
+    }
     } finally {
         // FIX: LayoutManager stays permanently disabled — no restore needed.
         // Restoring it allowed Fabric to re-trigger layout between the property set
@@ -23166,7 +23301,11 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
         return summary;
     }
     const effectiveStyles = normalizeGlobalStyles(styles);
-    const objs = canvas.value.getObjects();
+    let canvasObjectsCache: any[] | null = null;
+    const getCanvasObjects = (): any[] => {
+        if (!canvasObjectsCache) canvasObjectsCache = canvas.value?.getObjects?.() || [];
+        return canvasObjectsCache || [];
+    };
     const isCardCandidate = (o: any) => {
         if (!o || o.type !== 'group') return false;
         if ((o as any).excludeFromExport) return false;
@@ -23186,7 +23325,11 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
 
     // Product cards are top-level canvas objects by design. Avoid deep traversal to prevent
     // false positives on nested groups (e.g., priceGroup inside cards).
-    const allCards = objs.filter((o: any) => isCardCandidate(o));
+    let allCardsCache: any[] | null = null;
+    const getAllCards = (): any[] => {
+        if (!allCardsCache) allCardsCache = getCanvasObjects().filter((o: any) => isCardCandidate(o));
+        return allCardsCache || [];
+    };
     const dedupeCards = (arr: any[]) => {
         const map = new Map<any, any>();
         arr.forEach((c: any) => {
@@ -23213,7 +23356,7 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
         return hasPriceGroup && hasImage;
     };
 
-    let list: any[] = suppliedCards.length > 0 ? suppliedCards : allCards;
+    let list: any[] = suppliedCards.length > 0 ? suppliedCards : [];
     const zoneWarnKey = String((zone as any)?._customId || '').trim() || 'unknown-zone';
     const resolveCardsForZone = (zoneObj: any, pool: any[]) => {
         const zid = String((zoneObj as any)?._customId || '').trim();
@@ -23251,11 +23394,15 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
         return dedupeCards([...fromBinding, ...fromSlot, ...fromHeuristic, ...fromIntersection]);
     };
     if (!suppliedCards.length && zone && isLikelyProductZone(zone)) {
-        list = resolveCardsForZone(zone, allCards);
+        const runtimeIndex = ensureZoneRuntimeIndex();
+        list = runtimeIndex && !runtimeIndex.hasLegacyCandidates
+            ? getZoneChildren(zone)
+            : resolveCardsForZone(zone, getAllCards());
 
         // Multi-zone safety: never bleed a zone style into every card.
         if (!list.length) {
-            const zones = objs.filter((o: any) => isLikelyProductZone(o));
+            const zones = getRuntimeProductZones();
+            const allCards = getAllCards();
             if (!allCards.length) {
                 // Normal state: zone exists but still has no cards.
                 if (import.meta.dev) {
@@ -23364,6 +23511,8 @@ const applyGlobalStylesToCards = (styles: Partial<GlobalStyles>, zone?: any, opt
                 warnedMap.delete(zoneWarnKey);
             }
         }
+    } else if (!suppliedCards.length) {
+        list = getAllCards();
     }
     
     const fastProp = String(opts?.prop || '').trim();
@@ -23576,7 +23725,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     const perfStart = getEditorPerfNow();
 
     // Gather ALL zones in canvas first (for fallback).
-    const allZones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+    const allZones = getRuntimeProductZones();
 
     const targets = resolveZoneTargetsForUpdates({ allowAllFallback: false, targetId: meta?.targetId });
     const primaryZone = targets[0];
@@ -23586,9 +23735,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     if (!zone && !meta?.targetId && selectedObjectRef.value && isLikelyProductCard(selectedObjectRef.value)) {
         const parentZoneId = selectedObjectRef.value.parentZoneId;
         if (parentZoneId) {
-            zone = canvas.value.getObjects().find((o: any) =>
-                isLikelyProductZone(o) && o._customId === parentZoneId
-            );
+            zone = findProductZoneById(parentZoneId);
         }
     }
 
@@ -23597,9 +23744,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     if (!zone && !meta?.targetId && selectedObjectRef.value?._customId) {
         const selectedId = String(selectedObjectRef.value._customId).trim();
         if (selectedId) {
-            zone = canvas.value.getObjects().find((o: any) =>
-                String((o as any)?._customId || '').trim() === selectedId && isLikelyProductZone(o)
-            );
+            zone = findProductZoneById(selectedId);
         }
     }
 
@@ -27306,9 +27451,7 @@ async function duplicateLabelTemplateById(templateId: string) {
 async function applyLabelTemplateToCard(card: any, templateId: string) {
     if (!card || card.type !== 'group' || typeof card.getObjects !== 'function') return;
     const zoneId = String((card as any)?.parentZoneId || (card as any)?._zoneSlot?.zoneId || '').trim();
-    const zone = zoneId && canvas.value
-        ? canvas.value.getObjects().find((o: any) => isLikelyProductZone(o) && String((o as any)?._customId || '').trim() === zoneId)
-        : null;
+    const zone = zoneId ? findProductZoneById(zoneId) : null;
     const snapshotTemplateId = String((zone as any)?._zoneTemplateSnapshotId || '').trim();
     const snapshotGroup = zone ? (zone as any)?._zoneTemplateSnapshot : null;
 
@@ -28948,7 +29091,7 @@ async function handleUpdateTemplateFromMiniEditor(
 
         // If this template is in use by any zone, re-apply it to keep cards in sync.
         if (canvas.value) {
-            const zones = canvas.value.getObjects().filter((o: any) => isLikelyProductZone(o));
+            const zones = getRuntimeProductZones();
             for (const z of zones) {
                 const usedByStyle = String((z as any)?._zoneGlobalStyles?.splashTemplateId || '').trim();
                 const usedBySnapshot = String((z as any)?._zoneTemplateSnapshotId || '').trim();
@@ -30299,10 +30442,184 @@ const syncZoneCardFrameBindings = (zone: any, cards?: any[]) => {
     list.forEach((card: any) => applyCardFrameBinding(card, zoneFrameId));
 }
 
+type ZoneRuntimeIndex = {
+    canvas: any;
+    zonesById: Map<string, any>;
+    cardsByZoneId: Map<string, any[]>;
+    hasLegacyCandidates: boolean;
+};
+
+let zoneRuntimeIndex: ZoneRuntimeIndex | null = null;
+
+const invalidateZoneRuntimeIndex = () => {
+    zoneRuntimeIndex = null;
+};
+
+const appendUniqueZoneRuntimeObject = (target: any[], value: any) => {
+    if (!value || target.includes(value)) return;
+    target.push(value);
+};
+
+const getZoneRuntimeCardCandidates = (topLevel: any[]) => {
+    const candidates: any[] = [];
+    const isCandidateGroup = (o: any) => {
+        if (!o) return false;
+        const hasZoneBinding = !!(
+            String((o as any)?.parentZoneId || '').trim() ||
+            String((o as any)?._zoneSlot?.zoneId || '').trim()
+        );
+        if (o.visible === false && !hasZoneBinding) return false;
+        if ((o as any).excludeFromExport) return false;
+        if ((o as any).isFrame) return false;
+        if (isLikelyProductZone(o)) return false;
+        if (o.type !== 'group' || typeof o.getObjects !== 'function') return false;
+        if (isStandalonePriceGroup(o)) return false;
+        return true;
+    };
+
+    topLevel.forEach((obj: any) => {
+        if (isCandidateGroup(obj)) appendUniqueZoneRuntimeObject(candidates, obj);
+    });
+
+    const seen = new Set<any>();
+    const stack = [...topLevel];
+    while (stack.length > 0) {
+        const cur = stack.pop();
+        if (!cur || seen.has(cur)) continue;
+        seen.add(cur);
+        if (cur.type !== 'group' || typeof cur.getObjects !== 'function') continue;
+        if (isCandidateGroup(cur)) appendUniqueZoneRuntimeObject(candidates, cur);
+        const children = cur.getObjects() || [];
+        for (const child of children) {
+            if (child?.type === 'group') stack.push(child);
+        }
+    }
+
+    return candidates;
+};
+
+const ensureZoneRuntimeIndex = (): ZoneRuntimeIndex | null => {
+    if (!canvas.value) return null;
+    if (zoneRuntimeIndex && zoneRuntimeIndex.canvas === canvas.value) return zoneRuntimeIndex;
+
+    const topLevel = canvas.value.getObjects?.() || [];
+    const zonesById = new Map<string, any>();
+    topLevel.forEach((obj: any) => {
+        if (!obj || !isLikelyProductZone(obj)) return;
+        const id = String((obj as any)?._customId || '').trim();
+        if (id) zonesById.set(id, obj);
+    });
+
+    const cardsByZoneId = new Map<string, any[]>();
+    let hasLegacyCandidates = false;
+
+    getZoneRuntimeCardCandidates(topLevel).forEach((card: any) => {
+        const explicitCard = !!(card.isProductCard || card.isSmartObject || String(card.name || '').startsWith('product-card'));
+        const likelyCard = explicitCard ? true : isLikelyProductCard(card);
+        if (!likelyCard) return;
+
+        const boundId = String((card as any)?.parentZoneId || '').trim();
+        const slotZoneId = String((card as any)?._zoneSlot?.zoneId || '').trim();
+        const boundExists = !!(boundId && zonesById.has(boundId));
+        const slotExists = !!(slotZoneId && zonesById.has(slotZoneId));
+        const hasFrameMismatch = (zoneId: string) => {
+            const zone = zonesById.get(zoneId);
+            if (!zone) return false;
+            const cardFrameId = String((card as any)?.parentFrameId || '').trim();
+            const zoneFrameId = String(getResolvedZoneFrameId(zone) || (zone as any)?.parentFrameId || '').trim();
+            return !!(cardFrameId && zoneFrameId && cardFrameId !== zoneFrameId);
+        };
+
+        if (boundExists && (!slotZoneId || slotZoneId === boundId) && !hasFrameMismatch(boundId)) {
+            const list = cardsByZoneId.get(boundId) || [];
+            appendUniqueZoneRuntimeObject(list, card);
+            cardsByZoneId.set(boundId, list);
+            return;
+        }
+
+        if (!boundId && slotExists && !hasFrameMismatch(slotZoneId)) {
+            const list = cardsByZoneId.get(slotZoneId) || [];
+            appendUniqueZoneRuntimeObject(list, card);
+            cardsByZoneId.set(slotZoneId, list);
+            return;
+        }
+
+        // Keep legacy/corruption recovery on the old geometric path.
+        hasLegacyCandidates = true;
+    });
+
+    zoneRuntimeIndex = {
+        canvas: canvas.value,
+        zonesById,
+        cardsByZoneId,
+        hasLegacyCandidates
+    };
+    return zoneRuntimeIndex;
+};
+
+const getRuntimeProductZones = (): any[] => {
+    if (!canvas.value) return [];
+    const runtimeIndex = ensureZoneRuntimeIndex();
+    if (runtimeIndex && runtimeIndex.canvas === canvas.value) {
+        return Array.from(runtimeIndex.zonesById.values()).filter((zone: any) => (
+            zone && isLikelyProductZone(zone) && (!zone.canvas || zone.canvas === canvas.value)
+        ));
+    }
+    return (canvas.value.getObjects?.() || []).filter((obj: any) => isLikelyProductZone(obj));
+};
+
+const getRuntimeProductZoneById = (zoneIdRaw: any): any | null => {
+    if (!canvas.value) return null;
+    const zoneId = String(zoneIdRaw || '').trim();
+    if (!zoneId) return null;
+
+    const runtimeIndex = ensureZoneRuntimeIndex();
+    const cached = runtimeIndex && runtimeIndex.canvas === canvas.value
+        ? runtimeIndex.zonesById.get(zoneId)
+        : null;
+    if (cached && isLikelyProductZone(cached) && (!cached.canvas || cached.canvas === canvas.value)) {
+        return cached;
+    }
+
+    return (canvas.value.getObjects?.() || []).find((obj: any) => (
+        isLikelyProductZone(obj) && String((obj as any)?._customId || (obj as any)?.id || '').trim() === zoneId
+    )) || null;
+};
+
+const normalizeZoneRuntimeCard = (card: any, explicitCard: boolean) => {
+    if (!card) return;
+    if (!explicitCard) {
+        card.isProductCard = true;
+        card.isSmartObject = true;
+    }
+
+    card.subTargetCheck = true;
+    card.interactive = true;
+    card.selectable = true;
+    card.evented = true;
+
+    if (typeof card.getObjects === 'function') {
+        card.getObjects().forEach((child: any) => {
+            const n = String(child?.name || '');
+            const isBackground = n === 'offerBackground' || n === 'price_bg' || n === 'price_bg_image' || n === 'splash_image';
+            child.selectable = !isBackground;
+            child.evented = !isBackground;
+            child.hasControls = !isBackground;
+            child.hasBorders = !isBackground;
+        });
+    }
+    if (typeof card.setCoords === 'function') card.setCoords();
+};
+
 const getZoneChildCandidates = (zone: any) => {
     if (!canvas.value || !zone) return [];
-    const topLevel = canvas.value.getObjects() || [];
     const zoneId = String((zone as any)?._customId || '').trim();
+    const runtimeIndex = ensureZoneRuntimeIndex();
+    if (zoneId && runtimeIndex && !runtimeIndex.hasLegacyCandidates) {
+        return (runtimeIndex.cardsByZoneId.get(zoneId) || []).filter(Boolean);
+    }
+
+    const topLevel = canvas.value.getObjects() || [];
     const isCandidateGroup = (o: any) => {
         if (!o || o === zone) return false;
         // FIX: Do NOT skip invisible objects when they are explicitly bound to
@@ -30356,11 +30673,28 @@ const getZoneChildCandidates = (zone: any) => {
 
 const getZoneChildren = (zone: any) => {
     if (!canvas.value || !zone) return [];
+    const zoneId = String((zone as any)?._customId || '').trim();
+    const runtimeIndex = ensureZoneRuntimeIndex();
+    if (zoneId && runtimeIndex && !runtimeIndex.hasLegacyCandidates) {
+        const zoneFrameId = getResolvedZoneFrameId(zone);
+        return (runtimeIndex.cardsByZoneId.get(zoneId) || [])
+            .filter(Boolean)
+            .filter((card: any) => {
+                const cardFrameId = String((card as any)?.parentFrameId || '').trim();
+                return !zoneFrameId || !cardFrameId || cardFrameId === zoneFrameId;
+            })
+            .map((card: any) => {
+                const explicitCard = !!(card.isProductCard || card.isSmartObject || String(card.name || '').startsWith('product-card'));
+                normalizeZoneRuntimeCard(card, explicitCard);
+                applyCardFrameBinding(card, zoneFrameId);
+                return card;
+            });
+    }
+
     const candidates = getZoneChildCandidates(zone);
 
     const zoneBounds = getZoneMetrics(zone) ?? zone.getBoundingRect(true);
     const zoneFrameId = getResolvedZoneFrameId(zone);
-    const zoneId = String((zone as any)?._customId || '').trim();
     const zonesByIdForFrameRepair = new Map<string, any>();
     try {
         (canvas.value.getObjects?.() || []).forEach((obj: any) => {
@@ -30447,35 +30781,18 @@ const getZoneChildren = (zone: any) => {
     };
 
     const normalizeLegacyCard = (o: any, explicitCard: boolean) => {
-        if (!explicitCard) {
-            // Upgrade legacy card objects (old saves) so the rest of the engine can rely on flags.
-            o.isProductCard = true;
-            o.isSmartObject = true;
-        }
-
-        // Always normalize interactivity for cards (legacy and explicit cards alike).
-        o.subTargetCheck = true;
-        o.interactive = true;
-        o.selectable = true;
-        o.evented = true;
-
-        // Ensure inner elements are selectable with controls
-        if (typeof o.getObjects === 'function') {
-            o.getObjects().forEach((child: any) => {
-                const n = String(child?.name || '');
-                const isBackground = n === 'offerBackground' || n === 'price_bg' || n === 'price_bg_image' || n === 'splash_image';
-                child.selectable = !isBackground;
-                child.evented = !isBackground;
-                child.hasControls = !isBackground;
-                child.hasBorders = !isBackground;
-            });
-        }
-        if (typeof o.setCoords === 'function') o.setCoords();
+        normalizeZoneRuntimeCard(o, explicitCard);
     };
 
     const explicitBound: any[] = [];
     const slotBound: any[] = [];
     const legacyCandidates: any[] = [];
+    let zoneRuntimeBindingsMutated = false;
+
+    const finalizeZoneChildren = (children: any[]) => {
+        if (zoneRuntimeBindingsMutated) invalidateZoneRuntimeIndex();
+        return children;
+    };
 
     const hasStrongCardSignature = (o: any) => {
         if (!o || typeof o.getObjects !== 'function') return false;
@@ -30521,6 +30838,7 @@ const getZoneChildren = (zone: any) => {
             }
             normalizeLegacyCard(o, explicitCard);
             o.parentZoneId = zoneId;
+            zoneRuntimeBindingsMutated = true;
             applyCardFrameBinding(o, zoneFrameId);
             slotBound.push(o);
             return;
@@ -30539,6 +30857,7 @@ const getZoneChildren = (zone: any) => {
             normalizeLegacyCard(o, explicitCard);
             o.parentZoneId = zoneId;
             (o as any)._zoneSlot = null;
+            zoneRuntimeBindingsMutated = true;
             applyCardFrameBinding(o, zoneFrameId);
             explicitBound.push(o);
             return;
@@ -30564,6 +30883,7 @@ const getZoneChildren = (zone: any) => {
         const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
         normalizeLegacyCard(o, explicitCard);
         o.parentZoneId = zoneId || zone._customId;
+        zoneRuntimeBindingsMutated = true;
         applyCardFrameBinding(o, zoneFrameId);
         return true;
     });
@@ -30571,11 +30891,11 @@ const getZoneChildren = (zone: any) => {
     // If the zone already has explicit bindings, keep strict mode but include recovered unbound cards.
     // This prevents false positives while fixing detached cards from legacy/buggy states.
     if (explicitBound.length > 0 || slotBound.length > 0) {
-        return [...explicitBound, ...slotBound, ...recoveredUnbound];
+        return finalizeZoneChildren([...explicitBound, ...slotBound, ...recoveredUnbound]);
     }
 
     // Legacy rescue mode: only when no explicit cards exist for the zone.
-    return legacyCandidates.filter((o: any) => {
+    return finalizeZoneChildren(legacyCandidates.filter((o: any) => {
         // Legacy rescue should only capture truly unbound cards with a strong card signature.
         const boundId = String((o as any)?.parentZoneId || '').trim();
         const slotZoneId = String((o as any)?._zoneSlot?.zoneId || '').trim();
@@ -30586,9 +30906,10 @@ const getZoneChildren = (zone: any) => {
         const explicitCard = !!(o.isProductCard || o.isSmartObject || String(o.name || '').startsWith('product-card'));
         normalizeLegacyCard(o, explicitCard);
         o.parentZoneId = zoneId || zone._customId;
+        zoneRuntimeBindingsMutated = true;
         applyCardFrameBinding(o, zoneFrameId);
         return true;
-    });
+    }));
 }
 
 const moveZoneChildren = (zone: any, dx: number, dy: number, children?: any[]) => {
@@ -32021,6 +32342,86 @@ const handleRecalculateLayout = () => {
     refreshSelectedRef();
 }
 
+const handleAutoOfferLayout = async () => {
+    const zone = getCurrentZoneObject();
+    if (!zone) {
+        notifyEditorInfo('Selecione uma Zona de Produtos primeiro.');
+        return;
+    }
+    ensureZoneSanity(zone);
+
+    const cards = getZoneChildren(zone);
+    if (!cards.length) {
+        notifyEditorInfo('Importe produtos antes de aplicar o layout automático.');
+        return;
+    }
+
+    const zoneBounds = getZoneMetrics(zone) ?? zone.getBoundingRect?.(true);
+    const bounds = {
+        left: Number(zoneBounds?.left ?? 0),
+        top: Number(zoneBounds?.top ?? 0),
+        width: Math.max(1, Number(zoneBounds?.width ?? (zone as any)._zoneWidth ?? 900)),
+        height: Math.max(1, Number(zoneBounds?.height ?? (zone as any)._zoneHeight ?? 600))
+    };
+
+    const plannedProducts = applyAutoOfferRuntimeLayout(
+        zone,
+        cards.map((card: any, index: number) => getProductDataForAutoOfferPlan(card, index)),
+        [],
+        bounds,
+        'replace',
+        {
+            sourceMode: (zone as any).contentSource || 'manual',
+            autoLayout: true,
+            persist: false
+        }
+    );
+
+    const orderByProductId = new Map<string, number>();
+    plannedProducts.forEach((product: any, index: number) => {
+        orderByProductId.set(String(product?.id || product?.productInstanceId || '').trim(), index);
+    });
+
+    cards.forEach((card: any, index: number) => {
+        const productId = String(
+            (card as any)?._productData?.id ||
+            (card as any)?._productData?.productInstanceId ||
+            (card as any)?.productId ||
+            (card as any)?._customId ||
+            ''
+        ).trim();
+        const nextOrder = orderByProductId.get(productId);
+        (card as any)._zoneOrder = typeof nextOrder === 'number' ? nextOrder : index;
+        card.dirty = true;
+    });
+
+    const orderedCards = cards.slice().sort((a: any, b: any) => {
+        const ao = Number((a as any)?._zoneOrder);
+        const bo = Number((b as any)?._zoneOrder);
+        return (Number.isFinite(ao) ? ao : 0) - (Number.isFinite(bo) ? bo : 0);
+    });
+
+    syncZoneCardFrameBindings(zone, orderedCards);
+    recalculateZoneLayout(zone, orderedCards, {
+        save: false,
+        requestRender: false,
+        trustCachedChildren: true
+    });
+    syncZoneDerivedMetadata(zone);
+    refreshCanvasObjects();
+    refreshSelectedRef();
+    safeRequestRenderAll();
+    await saveCurrentState({
+        allowEmptyOverwrite: true,
+        reason: 'auto-offer-layout',
+        source: 'user',
+        skipCoalesce: true,
+        skipIfUnchanged: false
+    });
+    await flushPersistenceNow('auto-offer-layout', { force: true });
+    notifyEditorInfo('Layout automático aplicado.');
+}
+
 
 </script>
 
@@ -32360,6 +32761,24 @@ const handleRecalculateLayout = () => {
                     <span class="text-[11px] font-semibold">Layout</span>
                   </button>
                   <div v-if="selectedZoneQuickActions" class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
+                  <!-- Layer stepper: easy access on mobile without opening Layers -->
+                  <button
+                    class="touch-target flex items-center gap-1.5 justify-center rounded-lg bg-violet-500/18 border border-violet-400/20 text-violet-100 hover:bg-violet-500/28 active:bg-violet-500/35 px-3 shrink-0"
+                    title="Subir uma camada"
+                    @click="arrangeActiveObjects('bring-forward')"
+                  >
+                    <ArrowUp class="w-4 h-4" />
+                    <span class="text-[11px] font-semibold">Subir</span>
+                  </button>
+                  <button
+                    class="touch-target flex items-center gap-1.5 justify-center rounded-lg bg-violet-500/18 border border-violet-400/20 text-violet-100 hover:bg-violet-500/28 active:bg-violet-500/35 px-3 shrink-0"
+                    title="Descer uma camada"
+                    @click="arrangeActiveObjects('send-backward')"
+                  >
+                    <ArrowDown class="w-4 h-4" />
+                    <span class="text-[11px] font-semibold">Descer</span>
+                  </button>
+                  <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
                   <!-- Copy -->
                   <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Copiar" @click="triggerCopyShortcut">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
@@ -32478,6 +32897,7 @@ const handleRecalculateLayout = () => {
             @apply-preset="handleApplyZonePreset"
             @sync-gaps="handleSyncZoneGaps"
             @recalculate-layout="handleRecalculateLayout"
+            @auto-offer-layout="handleAutoOfferLayout"
             @manage-label-templates="showLabelTemplatesModal = true"
             @open-zone-review="handleZoneQuickActionFill"
             @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"
@@ -32552,6 +32972,7 @@ const handleRecalculateLayout = () => {
         @apply-preset="handleApplyZonePreset"
         @sync-gaps="handleSyncZoneGaps"
         @recalculate-layout="handleRecalculateLayout"
+        @auto-offer-layout="handleAutoOfferLayout"
         @manage-label-templates="showLabelTemplatesModal = true; closeMobilePanel()"
         @open-zone-review="handleZoneQuickActionFill"
         @change-mode="(mode: 'design' | 'prototype') => activeMode = mode"

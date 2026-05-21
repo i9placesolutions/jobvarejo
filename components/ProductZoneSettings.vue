@@ -13,7 +13,8 @@ import {
   CreditCard,
   Type,
   Tag,
-  PackagePlus
+  PackagePlus,
+  Sparkles
 } from 'lucide-vue-next';
 import { LAYOUT_PRESETS, SPLASH_STYLES, type LayoutPreset } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
@@ -74,6 +75,7 @@ const emit = defineEmits<{
   (e: 'manage-label-templates'): void;
   (e: 'apply-template-to-zone'): void;
   (e: 'open-review'): void;
+  (e: 'auto-layout'): void;
 }>();
 
 const showCardColorPicker = ref(false);
@@ -950,6 +952,15 @@ onBeforeUnmount(() => {
               <button type="button" class="primary-button" @click="emit('open-review')">
                 <PackagePlus class="h-4 w-4" />
                 Importar produtos
+              </button>
+              <button
+                type="button"
+                class="secondary-button"
+                :disabled="(zone.productCount ?? 0) <= 0"
+                @click="emit('auto-layout')"
+              >
+                <Sparkles class="h-4 w-4" />
+                Auto layout
               </button>
             </div>
           </div>
@@ -3324,6 +3335,14 @@ onBeforeUnmount(() => {
 .secondary-button:hover,
 .dock-button:hover {
   transform: translateY(-1px);
+}
+
+.ghost-button:disabled,
+.secondary-button:disabled,
+.dock-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
 }
 
 .ghost-button {

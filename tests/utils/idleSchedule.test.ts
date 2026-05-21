@@ -10,7 +10,7 @@ describe('scheduleIdleWork', () => {
   })
 
   it('com requestIdleCallback: agenda via rIC com timeout', () => {
-    const ricFn = vi.fn((cb: any) => cb())
+    const ricFn = vi.fn((cb: any, _opts?: IdleRequestOptions) => cb())
     const fakeWindow: any = {
       requestIdleCallback: ricFn,
       setTimeout: vi.fn()
@@ -29,7 +29,7 @@ describe('scheduleIdleWork', () => {
   })
 
   it('sem requestIdleCallback: cai em setTimeout com min(1200, timeoutMs)', () => {
-    const setTimeoutFn = vi.fn((cb: any) => cb())
+    const setTimeoutFn = vi.fn((cb: any, _delay?: number) => cb())
     const fakeWindow: any = {
       setTimeout: setTimeoutFn
     }
@@ -48,7 +48,7 @@ describe('scheduleIdleWork', () => {
   })
 
   it('timeoutMs < 1200 usa o valor passado', () => {
-    const setTimeoutFn = vi.fn()
+    const setTimeoutFn = vi.fn((_cb: any, _delay?: number) => undefined)
     const fakeWindow: any = {
       setTimeout: setTimeoutFn
     }
@@ -63,7 +63,7 @@ describe('scheduleIdleWork', () => {
   })
 
   it('default timeoutMs e 2200', () => {
-    const ricFn = vi.fn()
+    const ricFn = vi.fn((_cb: any, _opts?: IdleRequestOptions) => undefined)
     ;(globalThis as any).window = { requestIdleCallback: ricFn }
     try {
       scheduleIdleWork(() => {})

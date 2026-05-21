@@ -65,6 +65,7 @@ const emit = defineEmits<{
   applyPreset: [payload: any]
   syncGaps: [padding: number, meta?: any]
   recalculateLayout: []
+  autoOfferLayout: []
   manageLabelTemplates: []
   openZoneReview: []
   changeMode: [mode: 'design' | 'prototype']
@@ -222,6 +223,7 @@ const emit = defineEmits<{
         @apply-preset="payload => emit('applyPreset', payload)"
         @sync-gaps="(padding, meta) => emit('syncGaps', padding, meta)"
         @recalculate-layout="emit('recalculateLayout')"
+        @auto-offer-layout="emit('autoOfferLayout')"
         @manage-label-templates="emit('manageLabelTemplates')"
         @open-zone-review="emit('openZoneReview')"
         @change-mode="mode => emit('changeMode', mode)"

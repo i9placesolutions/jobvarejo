@@ -684,11 +684,12 @@ describe('computeFrameLabels', () => {
       formatDimension: fmtInt
     })
     expect(labels).toHaveLength(1)
-    expect(labels[0].id).toBe('frame-1')
-    expect(labels[0].name).toBe('My Frame')
-    expect(labels[0].dims).toBe('100 × 100')
-    expect(labels[0].isSelected).toBe(false)
-    expect(labels[0].frameRef).toBe(frame)
+    const label = labels[0]!
+    expect(label.id).toBe('frame-1')
+    expect(label.name).toBe('My Frame')
+    expect(label.dims).toBe('100 × 100')
+    expect(label.isSelected).toBe(false)
+    expect(label.frameRef).toBe(frame)
   })
 
   it('frame invisivel: pulado', () => {
@@ -749,8 +750,8 @@ describe('computeFrameLabels', () => {
       transformPoint: identityTransform,
       formatDimension: fmtInt
     })
-    expect(labels[0].x).toBe(4) // Math.max(4, -10) = 4
-    expect(labels[0].y).toBe(4) // Math.max(4, -10 - 22) = 4
+    expect(labels[0]!.x).toBe(4) // Math.max(4, -10) = 4
+    expect(labels[0]!.y).toBe(4) // Math.max(4, -10 - 22) = 4
   })
 
   it('isSelected=true quando activeObj === frame', () => {
@@ -764,7 +765,7 @@ describe('computeFrameLabels', () => {
       transformPoint: identityTransform,
       formatDimension: fmtInt
     })
-    expect(labels[0].isSelected).toBe(true)
+    expect(labels[0]!.isSelected).toBe(true)
   })
 
   it('name fallback chain: layerName > name > "Frame"', () => {
@@ -776,7 +777,7 @@ describe('computeFrameLabels', () => {
       activeObj: null,
       transformPoint: identityTransform,
       formatDimension: fmtInt
-    })[0].name).toBe('fallback')
+    })[0]!.name).toBe('fallback')
 
     expect(computeFrameLabels({
       frames: [makeFrame({ layerName: '', name: '' })],
@@ -786,7 +787,7 @@ describe('computeFrameLabels', () => {
       activeObj: null,
       transformPoint: identityTransform,
       formatDimension: fmtInt
-    })[0].name).toBe('Frame')
+    })[0]!.name).toBe('Frame')
   })
 
   it('frame sem getBoundingRect: pulado silenciosamente', () => {
@@ -831,8 +832,8 @@ describe('computeFrameLabels', () => {
       formatDimension: fmtInt
     })
     expect(labels).toHaveLength(2)
-    expect(labels[0].id).toBe('f1')
-    expect(labels[1].id).toBe('f2')
+    expect(labels[0]!.id).toBe('f1')
+    expect(labels[1]!.id).toBe('f2')
   })
 
   it('formatDimension recebe width/height escalados (w*scaleX, h*scaleY)', () => {
@@ -849,6 +850,6 @@ describe('computeFrameLabels', () => {
       formatDimension: fmtInt
     })
     // 100 * 1.5 = 150, 200 * 0.5 = 100
-    expect(labels[0].dims).toBe('150 × 100')
+    expect(labels[0]!.dims).toBe('150 × 100')
   })
 })

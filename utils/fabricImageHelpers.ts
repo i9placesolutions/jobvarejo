@@ -147,6 +147,15 @@ export const applyImageTrimBounds = (
     return trimBounds
 }
 
+export type ImageTrimDetectOptions = {
+    alphaThreshold?: number
+    padding?: number
+    maxDim?: number
+}
+
+const clampNumber = (value: number, min: number, max: number): number =>
+    Math.min(max, Math.max(min, value))
+
 /**
  * Encaixa uma imagem dentro de um slot retangular (proporcional, sem
  * deformar). Calcula a escala necessaria para que a imagem caiba no
@@ -242,7 +251,8 @@ export const imageHasTransparency = (img: HTMLImageElement | HTMLCanvasElement):
  * Usa sampling 512px max para performance.
  */
 export const detectImageTrimBounds = (
-    fabricImg: any
+    fabricImg: any,
+    opts: ImageTrimDetectOptions = {}
 ): { left: number; top: number; width: number; height: number } | null => {
     try {
         const el = fabricImg?.getElement?.() || fabricImg?._element
@@ -251,10 +261,12 @@ export const detectImageTrimBounds = (
         const h = (el as any).naturalHeight || el.height || fabricImg.height
         if (!w || !h || w < 2 || h < 2) return null
 
-        const maxDim = 512
+        const maxDim = clampNumber(Math.round(Number(opts.maxDim ?? 512) || 512), 64, 2048)
         const scale = Math.min(1, maxDim / Math.max(w, h))
         const sw = Math.max(1, Math.ceil(w * scale))
         const sh = Math.max(1, Math.ceil(h * scale))
+        const alphaThreshold = clampNumber(Math.round(Number(opts.alphaThreshold ?? 8) || 0), 0, 254)
+        const padding = Math.max(0, Math.round(Number(opts.padding ?? 2) || 0))
 
         const oc = document.createElement('canvas')
         oc.width = sw
@@ -266,7 +278,7 @@ export const detectImageTrimBounds = (
         ctx.drawImage(el, 0, 0, sw, sh)
         const data = ctx.getImageData(0, 0, sw, sh).data
 
-        const isContent = (i: number) => data[i + 3]! > 0
+        const isContent = (i: number) => data[i + 3]! > alphaThreshold
 
         let minX = sw
         let minY = sh
@@ -285,10 +297,10 @@ export const detectImageTrimBounds = (
 
         if (maxX < minX || maxY < minY) return null
 
-        const finalLeft = Math.max(0, Math.floor(minX / scale))
-        const finalTop = Math.max(0, Math.floor(minY / scale))
-        const finalRight = Math.min(w, Math.ceil((maxX + 1) / scale))
-        const finalBottom = Math.min(h, Math.ceil((maxY + 1) / scale))
+        const finalLeft = Math.max(0, Math.floor(minX / scale) - padding)
+        const finalTop = Math.max(0, Math.floor(minY / scale) - padding)
+        const finalRight = Math.min(w, Math.ceil((maxX + 1) / scale) + padding)
+        const finalBottom = Math.min(h, Math.ceil((maxY + 1) / scale) + padding)
         const finalWidth = Math.max(1, finalRight - finalLeft)
         const finalHeight = Math.max(1, finalBottom - finalTop)
 

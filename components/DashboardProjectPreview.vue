@@ -14,7 +14,7 @@ const props = withDefaults(defineProps<{
   loading?: 'eager' | 'lazy'
   fetchpriority?: 'high' | 'low' | 'auto'
 }>(), {
-  src: '',
+  src: () => '',
   imageClass: '',
   fallbackClass: 'items-end justify-start',
   loading: 'lazy',

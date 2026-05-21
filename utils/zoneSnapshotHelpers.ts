@@ -5,6 +5,8 @@
  * Cobertura: tests/utils/zoneSnapshotHelpers.test.ts
  */
 
+import { resolveProductImageRef } from '~/utils/productImageRef'
+
 /**
  * Clona um valor plain (JSON-safe) recursivamente, removendo funcoes
  * e referencias circulares. Estrategia em 2 camadas:
@@ -108,7 +110,7 @@ export const buildZoneCardStateSnapshot = (
         product: {
             name: String(firstDefinedZoneSnapshotValue(productData?.name, productData?.title, card?.productName, titleText?.text) || '').trim(),
             description: String(firstDefinedZoneSnapshotValue(productData?.description, productData?.subtitle, '') || '').trim(),
-            imageUrl: firstDefinedZoneSnapshotValue(card?.imageUrl, productData?.imageUrl, productData?.image),
+            imageUrl: firstDefinedZoneSnapshotValue(card?.imageUrl, resolveProductImageRef(productData)),
             priceMode: firstDefinedZoneSnapshotValue(productData?.priceMode, productData?.price_mode),
             price: firstDefinedZoneSnapshotValue(productData?.price, card?.price),
             pricePack: firstDefinedZoneSnapshotValue(productData?.pricePack, card?.pricePack),
@@ -241,7 +243,7 @@ export const buildProductFromZoneSnapshotCard = (cardSnapshot: any): any => {
     const product = cardSnapshot?.product && typeof cardSnapshot.product === 'object'
         ? cardSnapshot.product
         : {}
-    const imageUrl = firstDefinedZoneSnapshotValue(product?.imageUrl, productData?.imageUrl, productData?.image, productData?.image_wasabi_key)
+    const imageUrl = firstDefinedZoneSnapshotValue(resolveProductImageRef(product), resolveProductImageRef(productData))
 
     return {
         ...productData,

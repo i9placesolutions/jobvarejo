@@ -5,6 +5,7 @@
 
 import type { Product, ProductImage, Splash, ProductZone, GlobalStyles } from '~/types/product-zone';
 import { DEFAULT_PRODUCT_ZONE, DEFAULT_GLOBAL_STYLES, DEFAULT_SPLASH } from '~/types/product-zone';
+import { resolveProductImageRef } from '~/utils/productImageRef';
 
 // =============================================================================
 // CALCULATE OPTIMAL IMAGE SIZE (CORE ALGORITHM - DO NOT MODIFY)
@@ -453,6 +454,7 @@ export const calculateProductPosition = (
  */
 export const migrateProduct = (oldProduct: any): Product => {
   const id = oldProduct.id ?? `prod_${Date.now()}_${makeId()}`;
+  const imageRef = resolveProductImageRef(oldProduct);
   const hasValue = (value: unknown): boolean => {
     if (value === undefined || value === null) return false;
     if (typeof value === 'string') return value.trim() !== '';
@@ -463,24 +465,24 @@ export const migrateProduct = (oldProduct: any): Product => {
   let images: ProductImage[] = [];
   if (Array.isArray(oldProduct.images)) {
     images = oldProduct.images.map((img: any, idx: number) => ({
-      id: img.id ?? `img_${id}_${idx}`,
-      src: img.src ?? img.url ?? '',
-      x: img.x ?? 0,
-      y: img.y ?? 0,
-      scale: img.scale ?? 1,
-      rotation: img.rotation ?? 0,
-      imgWidth: img.imgWidth ?? img.width,
-      imgHeight: img.imgHeight ?? img.height,
-      imgCropTop: img.imgCropTop ?? 0,
-      imgCropRight: img.imgCropRight ?? 0,
-      imgCropBottom: img.imgCropBottom ?? 0,
-      imgCropLeft: img.imgCropLeft ?? 0,
-      imgEffect: img.imgEffect ?? 'none'
+      id: (typeof img === 'object' && img?.id) ? img.id : `img_${id}_${idx}`,
+      src: resolveProductImageRef({ images: [img] }) ?? '',
+      x: (typeof img === 'object' ? img.x : 0) ?? 0,
+      y: (typeof img === 'object' ? img.y : 0) ?? 0,
+      scale: (typeof img === 'object' ? img.scale : 1) ?? 1,
+      rotation: (typeof img === 'object' ? img.rotation : 0) ?? 0,
+      imgWidth: typeof img === 'object' ? (img.imgWidth ?? img.width) : undefined,
+      imgHeight: typeof img === 'object' ? (img.imgHeight ?? img.height) : undefined,
+      imgCropTop: (typeof img === 'object' ? img.imgCropTop : 0) ?? 0,
+      imgCropRight: (typeof img === 'object' ? img.imgCropRight : 0) ?? 0,
+      imgCropBottom: (typeof img === 'object' ? img.imgCropBottom : 0) ?? 0,
+      imgCropLeft: (typeof img === 'object' ? img.imgCropLeft : 0) ?? 0,
+      imgEffect: (typeof img === 'object' ? img.imgEffect : 'none') ?? 'none'
     }));
-  } else if (oldProduct.imageUrl || oldProduct.image || oldProduct.url) {
+  } else if (imageRef) {
     images = [{
       id: `img_${id}_0`,
-      src: oldProduct.imageUrl ?? oldProduct.image ?? oldProduct.url ?? '',
+      src: imageRef,
       x: 0,
       y: 0,
       scale: 1
@@ -505,6 +507,9 @@ export const migrateProduct = (oldProduct: any): Product => {
     id,
     name: oldProduct.name ?? 'Produto',
     images,
+    imageUrl: imageRef ?? undefined,
+    image: oldProduct.image ?? imageRef ?? undefined,
+    image_wasabi_key: oldProduct.image_wasabi_key ?? oldProduct.s3_key ?? undefined,
     x: oldProduct.x ?? 0,
     y: oldProduct.y ?? 0,
     width: oldProduct.width ?? 200,

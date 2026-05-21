@@ -76,6 +76,7 @@ const emit = defineEmits<{
   (e: 'apply-preset', presetId: string): void
   (e: 'sync-gaps', padding: number, meta?: any): void
   (e: 'recalculate-layout'): void
+  (e: 'auto-offer-layout'): void
   (e: 'manage-label-templates'): void
   (e: 'open-zone-review'): void
   (e: 'change-mode', mode: 'design' | 'prototype'): void
@@ -150,6 +151,7 @@ const emit = defineEmits<{
         @apply-preset="(payload) => emit('apply-preset', payload)"
         @sync-gaps="(padding, meta) => emit('sync-gaps', padding, meta)"
         @recalculate-layout="emit('recalculate-layout')"
+        @auto-offer-layout="emit('auto-offer-layout')"
         @manage-label-templates="emit('manage-label-templates')"
         @open-zone-review="emit('open-zone-review')"
         @change-mode="(mode: 'design' | 'prototype') => emit('change-mode', mode)"

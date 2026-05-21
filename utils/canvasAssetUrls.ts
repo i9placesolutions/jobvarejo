@@ -3,7 +3,6 @@ import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 export const CANVAS_ASSET_URLS_NORMALIZED_KEY = '__assetUrlsNormalized' as const
 const CANVAS_ASSET_URLS_NORMALIZED_VERSION = 1
-export const CANVAS_IMAGE_PLACEHOLDER_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
 type NormalizeCanvasAssetUrlsOptions = {
   clone?: boolean

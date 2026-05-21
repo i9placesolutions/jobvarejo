@@ -6,12 +6,39 @@ import {
   getPackPrice,
   getPromoPrice,
   getProductImportIdentityKey,
+  migrateProduct,
   isDefaultProductZoneName,
   BASE_PRODUCT_ZONE_NAME,
   getNextProductZoneIndexName,
   ensureZoneNamesDistinct,
   buildProductSlicesForZones
 } from '~/utils/product-zone-helpers'
+
+describe('migrateProduct — imagens de importadores', () => {
+  it('preserva image_wasabi_key como imagem principal', () => {
+    const product = migrateProduct({
+      id: 'leite',
+      name: 'Leite',
+      price: '4,99',
+      image_wasabi_key: 'produtos/leite.webp'
+    })
+
+    expect(product.imageUrl).toBe('produtos/leite.webp')
+    expect(product.images[0]?.src).toBe('produtos/leite.webp')
+  })
+
+  it('preserva Product.images[] quando nao ha imageUrl top-level', () => {
+    const product = migrateProduct({
+      id: 'suco',
+      name: 'Suco',
+      price: '6,99',
+      images: [{ id: 'img-suco', key: 'produtos/suco.webp' }]
+    })
+
+    expect(product.imageUrl).toBe('produtos/suco.webp')
+    expect(product.images[0]?.src).toBe('produtos/suco.webp')
+  })
+})
 
 describe('buildProductSlicesForZones', () => {
   const constCount = (n: number) => () => n

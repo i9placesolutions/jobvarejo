@@ -315,8 +315,8 @@ describe('cloneTemplateGroupJson — clone profundo de template', () => {
     const cloned = cloneTemplateGroupJson(original)
     cloned.objects[0].text = 'modified-clone'
     cloned.objects[1].objects[0].id = 'modified-leaf'
-    expect(original.objects[0].text).toBe('old') // original intacto
-    expect(original.objects[1].objects[0].id).toBe('leaf')
+    expect(original.objects[0]!.text).toBe('old') // original intacto
+    expect((original.objects[1] as any).objects[0].id).toBe('leaf')
   })
 
   it('REGRESSAO: arrays e objetos aninhados nao sao compartilhados por ref', () => {
@@ -775,7 +775,7 @@ describe('clonePlainMetadata', () => {
     const cloned = clonePlainMetadata(original)
     expect(cloned).toEqual(original)
     cloned[0].a = 999
-    expect(original[0].a).toBe(1)
+    expect(original[0]!.a).toBe(1)
   })
 
   it('fallback descarta funcoes (nao-serializavel)', () => {
@@ -875,7 +875,7 @@ describe('cloneCanvasDataForLoad', () => {
     expect(cloned).toEqual(original)
     expect(cloned).not.toBe(original)
     cloned.objects[0].id = 'modified'
-    expect(original.objects[0].id).toBe('a') // intacto
+    expect(original.objects[0]!.id).toBe('a') // intacto
   })
 
   it('aceita primitivos sem quebrar', () => {
@@ -990,9 +990,9 @@ describe('decodeContaboUrls', () => {
         { type: 'image', src: 'https://eu2.contabostorage.com/x%3Ay/k.png' }
       ]
     }
-    const originalSrc = input.objects[0].src
+    const originalSrc = input.objects[0]!.src
     decodeContaboUrls(input)
-    expect(input.objects[0].src).toBe(originalSrc)
+    expect(input.objects[0]!.src).toBe(originalSrc)
   })
 
   it('canvasData sem objects retorna copia', () => {
@@ -1308,16 +1308,16 @@ describe('replaceContaboImagesWithPlaceholder', () => {
 
   it('clona por default (nao muta input)', () => {
     const data = { objects: [{ type: 'image', src: 'https://example.com/x.png' }] }
-    const original = data.objects[0].src
+    const original = data.objects[0]!.src
     replaceContaboImagesWithPlaceholder(data)
-    expect(data.objects[0].src).toBe(original) // intacto
+    expect(data.objects[0]!.src).toBe(original) // intacto
   })
 
   it('opts.clone=false: mutacao in-place', () => {
     const data = { objects: [{ type: 'image', src: 'https://example.com/x.png' }] }
     replaceContaboImagesWithPlaceholder(data, { clone: false })
-    expect(data.objects[0].src).not.toBe('https://example.com/x.png')
-    expect((data.objects[0] as any).__originalSrc).toBe('https://example.com/x.png')
+    expect(data.objects[0]!.src).not.toBe('https://example.com/x.png')
+    expect((data.objects[0]! as any).__originalSrc).toBe('https://example.com/x.png')
   })
 
   it('preserva __originalSrc se ja existir (nao sobrescreve)', () => {
@@ -1553,7 +1553,7 @@ describe('repairHiddenPriceGroupTexts', () => {
     }
     const repaired = repairHiddenPriceGroupTexts(json)
     expect(repaired).toBeGreaterThan(0)
-    const pg = json.objects[0].objects[1] as any
+    const pg = json.objects[0]!.objects[1] as any
     expect(pg.objects[1].visible).toBe(true)
   })
 
@@ -1577,7 +1577,7 @@ describe('repairHiddenPriceGroupTexts', () => {
       ]
     }
     repairHiddenPriceGroupTexts(json)
-    const pg = json.objects[0].objects[1] as any
+    const pg = json.objects[0]!.objects[1] as any
     expect(pg.objects[0].visible).toBe(true)
   })
 
@@ -1677,7 +1677,7 @@ describe('repairHiddenPriceGroupTexts', () => {
       ]
     }
     repairHiddenPriceGroupTexts(json)
-    const pg = json.objects[0].objects[1] as any
+    const pg = json.objects[0]!.objects[1] as any
     expect(pg.objects[1].visible).toBe(false)
   })
 })

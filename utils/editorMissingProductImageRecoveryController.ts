@@ -32,14 +32,26 @@ export type EditorMissingProductImageRecoveryContext = {
     addImageToProductCardByUrl: (card: any, newUrl: string, opts?: { save?: boolean; setActive?: boolean }) => Promise<boolean>
     refreshCanvasObjects: () => void
     safeRequestRenderAll: () => void
-    saveCurrentState: (opts?: any) => void | Promise<void>
+    saveCurrentState: (opts?: any) => boolean | void | Promise<boolean | void>
     makeCanvasObjectId: () => string
 }
 
 let isRecoveringMissingProductImages = false
 
+const getConfiguredStorageBucket = (): string => {
+    try {
+        return String(useRuntimeConfig?.()?.public?.wasabi?.bucket || 'jobvarejo')
+    } catch {
+        return 'jobvarejo'
+    }
+}
+
 const normalizeRecoveryImageUrl = (src: string): string =>
-    normalizeRecoveryImageUrlHelper(src, toWasabiProxyUrl, extractContaboBucketAndKey)
+    normalizeRecoveryImageUrlHelper(
+        src,
+        toWasabiProxyUrl,
+        (value: string) => extractContaboBucketAndKey(value, getConfiguredStorageBucket())
+    )
 
 const fetchRecoveryImageUrlForCard = async (
     card: any,
