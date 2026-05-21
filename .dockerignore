@@ -6,3 +6,17 @@ node_modules
 .env.*
 *.log
 dist
+.DS_Store
+.agent
+.claude
+.gemini-clipboard
+.vscode
+coverage
+.vitest
+playwright-report
+test-results
+/.prettierignore
+/.prettierrc
+/*.md
+/*.sql
+/bun.lockb
