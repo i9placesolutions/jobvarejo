@@ -16,6 +16,9 @@ import {
   LABEL_TEMPLATE_PREVIEW_RENDER_VERSION,
   MANUAL_SINGLE_ANCHOR_VERSION,
   isLabelTypographyStyleProp,
+  isLabelStyleOverridableProp,
+  LABEL_STYLE_OVERRIDABLE_PROPS,
+  LABEL_TEMPLATE_TYPOGRAPHY_STYLE_PROPS,
   normalizeLabelTemplateGroupAsManual,
   normalizeLabelTemplateRecordAsManual
 } from '~/utils/labelTemplateHelpers'
@@ -211,6 +214,28 @@ describe('isLabelTypographyStyleProp', () => {
     expect(isLabelTypographyStyleProp('splashFill')).toBe(false)
     expect(isLabelTypographyStyleProp('priceTextColor')).toBe(false)
     expect(isLabelTypographyStyleProp('splashScale')).toBe(false)
+  })
+})
+
+describe('isLabelStyleOverridableProp', () => {
+  it('aceita props de estilo editaveis pelo painel (tipografia e cor)', () => {
+    expect(isLabelStyleOverridableProp('priceFont')).toBe(true)
+    expect(isLabelStyleOverridableProp('priceFontSize')).toBe(true)
+    expect(isLabelStyleOverridableProp('splashFill')).toBe(true)
+    expect(isLabelStyleOverridableProp('priceTextColor')).toBe(true)
+    expect(isLabelStyleOverridableProp('splashScale')).toBe(true)
+  })
+
+  it('rejeita props que nao sao estilo de etiqueta', () => {
+    expect(isLabelStyleOverridableProp('splashTemplateId')).toBe(false)
+    expect(isLabelStyleOverridableProp('')).toBe(false)
+    expect(isLabelStyleOverridableProp(undefined)).toBe(false)
+  })
+
+  it('tipografia e subconjunto das props sobrescreviveis', () => {
+    for (const p of LABEL_TEMPLATE_TYPOGRAPHY_STYLE_PROPS) {
+      expect(LABEL_STYLE_OVERRIDABLE_PROPS).toContain(p)
+    }
   })
 })
 

@@ -119,6 +119,10 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     '_zoneHeight',
     '_zonePadding',
     '_zoneGlobalStyles',
+    // Overrides explicitos de estilo de etiqueta (modelo "ultima edicao vence"):
+    // marca quais props o usuario sobrescreveu pelo painel para nao reverterem
+    // em (re)aplicacao de template / swap / refresh. Ver labelTemplateHelpers.
+    '_zoneStyleOverrides',
     '_zoneTemplateSnapshotId',
     '_zoneTemplateSnapshot',
     '_zoneStateSnapshot',

@@ -370,6 +370,8 @@ import {
     LABEL_TEMPLATE_PREVIEW_RENDER_VERSION,
     MANUAL_SINGLE_ANCHOR_VERSION,
     isLabelTypographyStyleProp,
+    isLabelStyleOverridableProp,
+    LABEL_TEMPLATE_TYPOGRAPHY_STYLE_PROPS,
     normalizeLabelTemplateGroupAsManual as normalizeLabelTemplateGroupAsManualHelper,
     normalizeLabelTemplateRecordAsManual as normalizeLabelTemplateRecordAsManualHelper
 } from '~/utils/labelTemplateHelpers'
@@ -21926,6 +21928,31 @@ function getZoneGlobalStyles(zone?: any): GlobalStyles {
     return normalizeGlobalStyles(productZoneState.globalStyles.value);
 }
 
+// === Overrides explicitos de estilo de etiqueta (modelo "ultima edicao vence") ===
+// Quando o usuario muda uma prop de estilo pelo painel global da zona, marcamos
+// um override explicito na zona (`_zoneStyleOverrides`). Esse override e' SEMPRE
+// reaplicado por cima do template em (re)aplicacao/refresh — evitando que a
+// edicao reverta sozinha. Editar a mesma prop no Mini Editor limpa o override
+// (o template volta a ser a fonte de verdade). Persistido via CANVAS_CUSTOM_PROPS.
+const getZoneStyleOverrides = (zone: any): Record<string, true> => {
+    const o = zone && (zone as any)._zoneStyleOverrides;
+    return o && typeof o === 'object' ? o as Record<string, true> : {};
+};
+const zoneHasStyleOverride = (zone: any, prop: any): boolean =>
+    !!getZoneStyleOverrides(zone)[String(prop || '').trim()];
+const markZoneStyleOverride = (zone: any, prop: any) => {
+    if (!zone || !isLabelStyleOverridableProp(prop)) return;
+    const current = (zone as any)._zoneStyleOverrides;
+    const map: Record<string, true> = current && typeof current === 'object' ? current : {};
+    map[String(prop).trim()] = true;
+    (zone as any)._zoneStyleOverrides = map;
+};
+const clearZoneStyleOverrides = (zone: any, props: Iterable<string>) => {
+    const map = (zone as any)?._zoneStyleOverrides;
+    if (!map || typeof map !== 'object') return;
+    for (const p of props) delete map[String(p || '').trim()];
+};
+
 // DEBOUNCED_GLOBAL_STYLE_PROPS e isDebouncedGlobalStyleProp extraidos para
 // utils/globalStylePropClassifiers.ts.
 
@@ -23795,6 +23822,9 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
             const prev = getZoneGlobalStyles(z);
             previousZoneStylesByTarget.set(z, prev);
             (z as any)._zoneGlobalStyles = normalizeGlobalStyles({ ...prev, [prop]: value });
+            // "Ultima edicao vence": edicao explicita pelo painel marca override,
+            // que sobrevive a (re)aplicacao de template / swap / refresh.
+            markZoneStyleOverride(z, prop);
         });
     }
 
@@ -28691,12 +28721,19 @@ type ApplyLabelTemplateToZoneOptions = {
 const shouldReapplyLabelStylePropAfterTemplateApply = (
     prop: keyof GlobalStyles,
     rawStyles: Partial<GlobalStyles>,
-    effectiveStyles: GlobalStyles
+    effectiveStyles: GlobalStyles,
+    zone?: any
 ): boolean => {
+    if (zoneHasStyleOverride(zone, prop)) {
+        // "Ultima edicao vence": o usuario sobrescreveu esta prop explicitamente
+        // pelo painel. Reaplicar sempre por cima do template — inclusive
+        // tipografia — para a edicao nao reverter em refresh/swap.
+        return true;
+    }
     if (isLabelTypographyStyleProp(prop)) {
-        // Mini Editor typography belongs to the template. Reapplying stale zone
-        // font settings here is what made saved labels look "unsaved" after
-        // template refresh/product replacement.
+        // Sem override explicito, a tipografia do Mini Editor (template) e' a
+        // verdade. Reaplicar config de fonte da zona aqui era o que fazia
+        // etiquetas salvas parecerem "nao salvas" apos refresh/troca de produto.
         return false;
     }
 
@@ -28809,7 +28846,7 @@ async function applyLabelTemplateToZone(
             'splashOffsetY'
         ] as Array<keyof GlobalStyles>;
         labelStyleProps.forEach((prop) => {
-            if (!shouldReapplyLabelStylePropAfterTemplateApply(prop, rawPrevZoneStyles, nextZoneStyles)) return;
+            if (!shouldReapplyLabelStylePropAfterTemplateApply(prop, rawPrevZoneStyles, nextZoneStyles, zone)) return;
             applyGlobalStylesToCards(nextZoneStyles, zone, { cards, prop });
         });
     } else {
@@ -29126,6 +29163,11 @@ async function handleUpdateTemplateFromMiniEditor(
                 const usedByStyle = String((z as any)?._zoneGlobalStyles?.splashTemplateId || '').trim();
                 const usedBySnapshot = String((z as any)?._zoneTemplateSnapshotId || '').trim();
                 if (usedByStyle === templateId || usedBySnapshot === templateId) {
+                    // "Ultima edicao vence": editar a tipografia no Mini Editor torna o
+                    // template a verdade para fonte/peso/estilo/tamanho/escala. Limpamos
+                    // os overrides de tipografia da zona para nao mascararem a edicao.
+                    // Overrides de cor (tints por zona feitos no painel) sao preservados.
+                    clearZoneStyleOverrides(z, LABEL_TEMPLATE_TYPOGRAPHY_STYLE_PROPS);
                     // Template edited in mini editor: refresh existing cards that already use it.
                     await applyLabelTemplateToZone(z, templateId, true);
                 }

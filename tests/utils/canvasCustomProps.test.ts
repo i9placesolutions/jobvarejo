@@ -47,6 +47,7 @@ describe('CANVAS_CUSTOM_PROPS', () => {
     expect(CANVAS_CUSTOM_PROPS).toContain('_zoneHeight')
     expect(CANVAS_CUSTOM_PROPS).toContain('_zonePadding')
     expect(CANVAS_CUSTOM_PROPS).toContain('_zoneGlobalStyles')
+    expect(CANVAS_CUSTOM_PROPS).toContain('_zoneStyleOverrides')
   })
 
   it('contem props de price/pricing', () => {

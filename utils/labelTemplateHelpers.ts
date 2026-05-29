@@ -103,6 +103,38 @@ export const isLabelTypographyStyleProp = (prop: any): boolean =>
     LABEL_TEMPLATE_TYPOGRAPHY_STYLE_PROPS.has(String(prop || '').trim())
 
 /**
+ * Props de estilo de etiqueta que o usuario pode sobrescrever explicitamente
+ * pelo painel global da zona. Modelo "ultima edicao vence": ao mudar uma
+ * destas pelo painel, a zona marca um override que e' SEMPRE reaplicado por
+ * cima do template (em aplicar/reaplicar/refresh/swap) — nunca reverte
+ * sozinho. Editar a mesma prop no Mini Editor limpa o override (o template
+ * volta a ser a fonte de verdade).
+ */
+export const LABEL_STYLE_OVERRIDABLE_PROPS: ReadonlyArray<string> = [
+    'splashColor',
+    'accentColor',
+    'splashFill',
+    'splashTextColor',
+    'priceTextColor',
+    'priceCurrencyColor',
+    'priceFont',
+    'priceFontWeight',
+    'priceFontStyle',
+    'currencySymbol',
+    'priceFontSize',
+    'splashTextScale',
+    'splashStrokeWidth',
+    'splashRoundness',
+    'splashScale',
+    'splashOffsetY'
+]
+
+const LABEL_STYLE_OVERRIDABLE_PROPS_SET: ReadonlySet<string> = new Set(LABEL_STYLE_OVERRIDABLE_PROPS)
+
+export const isLabelStyleOverridableProp = (prop: any): boolean =>
+    LABEL_STYLE_OVERRIDABLE_PROPS_SET.has(String(prop || '').trim())
+
+/**
  * Versao do seed do template Atacarejo. Incrementado quando o template
  * built-in muda — projetos antigos que ja seedearam uma versao anterior
  * vao re-seed automaticamente quando esse valor avanca.
