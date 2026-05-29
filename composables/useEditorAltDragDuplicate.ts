@@ -608,6 +608,13 @@ export function useEditorAltDragDuplicate(deps: EditorAltDragDuplicateDeps): Edi
                 }
             }
 
+            // O clone foi criado a partir do original que esta' TEMPORARIAMENTE
+            // travado (lockMovementX/Y=true aplicado p/ ele nao se mover durante o
+            // clone async). Sem resetar, a COPIA nasce com cadeado e nao arrasta.
+            // Restaura o lock do clone para o estado real do original (origLockX/Y).
+            cloned.set({ lockMovementX: !!state.origLockX, lockMovementY: !!state.origLockY });
+            cloned.setCoords?.();
+
             // FIGMA/CANVA BEHAVIOR: original stays in place, CLONE follows mouse.
             // Swap Fabric's internal transform target from original → clone.
             const tr: any = (canvasInstance as any)._currentTransform;
