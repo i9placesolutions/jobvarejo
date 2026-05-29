@@ -86,6 +86,23 @@ export const shouldUseIncomingTemplateSnapshot = (prev: any, incoming: any): boo
 export const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
 
 /**
+ * Props de tipografia da zona que nao devem ser reaplicadas automaticamente
+ * quando um template manual e' aplicado/reaplicado. A fonte/tamanho/peso do
+ * Mini Editor sao a fonte de verdade; controles globais ainda podem atuar via
+ * fast-path explicito quando o usuario muda esses campos.
+ */
+export const LABEL_TEMPLATE_TYPOGRAPHY_STYLE_PROPS: ReadonlySet<string> = new Set([
+    'priceFont',
+    'priceFontWeight',
+    'priceFontStyle',
+    'priceFontSize',
+    'splashTextScale'
+])
+
+export const isLabelTypographyStyleProp = (prop: any): boolean =>
+    LABEL_TEMPLATE_TYPOGRAPHY_STYLE_PROPS.has(String(prop || '').trim())
+
+/**
  * Versao do seed do template Atacarejo. Incrementado quando o template
  * built-in muda — projetos antigos que ja seedearam uma versao anterior
  * vao re-seed automaticamente quando esse valor avanca.
@@ -182,8 +199,18 @@ export const LABEL_TEMPLATE_EXTRA_PROPS: ReadonlyArray<string> = [
     '_customId',
     'name',
     'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fontStyle',
+    'underline',
+    'linethrough',
+    'overline',
+    'textAlign',
+    'lineHeight',
     'visible',
     'charSpacing',
+    '__rawText',
+    '__textCase',
     '__preserveManualLayout',
     '__forceAtacarejoCanonical',
     '__atacValueVariants',
@@ -197,6 +224,7 @@ export const LABEL_TEMPLATE_EXTRA_PROPS: ReadonlyArray<string> = [
     '__originalWidth',
     '__originalHeight',
     '__originalFontSize',
+    '__originalFontFamily',
     '__originalLeft',
     '__originalTop',
     '__originalOriginX',

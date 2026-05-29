@@ -102,6 +102,7 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
 
     // Text transform (preserva texto original antes de upper/lower case)
     '__rawText',
+    '__textCase',
 
     // Price text scaling base (referência para splashTextScale)
     '__fontSizeBase',

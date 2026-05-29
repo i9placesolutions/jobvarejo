@@ -42,6 +42,11 @@ const FINGERPRINT_IGNORED_KEYS = new Set([
   '_savedAt',
   'savedAt',
   'updatedAt',
+  // A viewport (pan/zoom) NAO e' conteudo: incluir no fingerprint fazia
+  // pan/zoom serem tratados como mudanca real, impedindo o skip-if-unchanged
+  // e gerando saves/historico desnecessarios. Mudar a vista nunca deve marcar
+  // o documento como alterado.
+  CANVAS_VIEWPORT_JSON_KEY,
   '__assetUrlsNormalized',
   'crossOrigin',
   '__originalSrc',

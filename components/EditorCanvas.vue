@@ -369,6 +369,7 @@ import {
     BUILTIN_RED_BURST_SEED_VERSION,
     LABEL_TEMPLATE_PREVIEW_RENDER_VERSION,
     MANUAL_SINGLE_ANCHOR_VERSION,
+    isLabelTypographyStyleProp,
     normalizeLabelTemplateGroupAsManual as normalizeLabelTemplateGroupAsManualHelper,
     normalizeLabelTemplateRecordAsManual as normalizeLabelTemplateRecordAsManualHelper
 } from '~/utils/labelTemplateHelpers'
@@ -4897,14 +4898,35 @@ const updateZoomState = (opts?: { immediate?: boolean }) => {
     }
 }
 
-const persistViewportStateNow = (reason: string = 'change') => {
+const persistViewportStateNow = (_reason: string = 'change') => {
     if (!canvas.value || isCanvasDestroyed.value) return;
     try {
-        saveCurrentState({
-            reason: `viewport:${String(reason || 'change')}`,
-            source: 'system',
-            skipIfUnchanged: true
-        });
+        // PERF: pan/zoom mudam apenas a viewport (6 numeros). Antes isto chamava
+        // saveCurrentState, que re-serializava TODOS os objetos + calculava
+        // fingerprint + anexava no historico de undo a cada gesto — causando o
+        // travamento ao mover/dar zoom em projetos grandes (e permitindo
+        // "desfazer" um pan, o que e' incorreto).
+        // Agora carimbamos a viewport viva no snapshot em-memoria da pagina
+        // (custo O(1), sem serializacao) e marcamos a pagina como suja: o
+        // periodic-save sobe a viewport ao banco no proximo ciclo, junto de
+        // qualquer outra mudanca. A viewport tambem e' capturada na serializacao
+        // do proximo save de conteudo / flush de saida.
+        const inst = canvas.value as any;
+        const pageId = getActiveProjectPageId();
+        const idx = pageId ? resolvePageIndexById(pageId) : -1;
+        if (idx < 0) return;
+        const page = project.pages?.[idx];
+        const data = page?.canvasData;
+        if (!page || !data || typeof data !== 'object') return;
+        const vpt = inst?.viewportTransform;
+        setSavedViewportTransform(
+            data as Record<string, unknown>,
+            vpt,
+            inst?.getZoom?.() || (Array.isArray(vpt) ? vpt[0] : 1)
+        );
+        // Marca para upload no periodic-save SEM acionar o indicador "nao salvo":
+        // pan/zoom nunca contou como alteracao de conteudo do usuario.
+        page.dirty = true;
     } catch (err) {
         console.warn('[viewport] Falha ao persistir estado de viewport:', err);
     }
@@ -21397,9 +21419,10 @@ const simulateSmartGrid = async (
             return null;
         };
 
-        if (targetZone && !requestedTplId && existingZoneCardsAtStart.length > 0) {
-            // Without an explicit template choice, keep using the label that is visibly
-            // applied to the current zone cards instead of potentially stale zone metadata.
+        if (targetZone && !requestedTplId && existingZoneCardsAtStart.length > 0 && !liveZoneTpl) {
+            // Prefer the live library template when the zone points to one. Donor card
+            // snapshots are only a fallback for legacy/metadata-less zones; otherwise a
+            // replace operation can resurrect the old label after Mini Editor saves.
             const donorTpl = getDonorTemplateFromExistingCards();
             if (donorTpl) effectiveZoneTpl = donorTpl;
         } else if (!effectiveZoneTpl && targetZone && existingZoneCardsAtStart.length > 0) {
@@ -28670,6 +28693,13 @@ const shouldReapplyLabelStylePropAfterTemplateApply = (
     rawStyles: Partial<GlobalStyles>,
     effectiveStyles: GlobalStyles
 ): boolean => {
+    if (isLabelTypographyStyleProp(prop)) {
+        // Mini Editor typography belongs to the template. Reapplying stale zone
+        // font settings here is what made saved labels look "unsaved" after
+        // template refresh/product replacement.
+        return false;
+    }
+
     const hasOwn = Object.prototype.hasOwnProperty.call(rawStyles || {}, prop);
     const effective = (effectiveStyles as any)?.[prop];
     const fallback = (DEFAULT_GLOBAL_STYLES as any)?.[prop];
@@ -29544,7 +29574,6 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     if (!raw) return '';
                     return raw.startsWith('#') ? raw : `#${raw}`;
                 };
-                const defaultPriceFont = String(DEFAULT_GLOBAL_STYLES.priceFont || '').trim().toLowerCase();
                 const defaultSplashTextColor = normalizeColorToken(DEFAULT_GLOBAL_STYLES.splashTextColor || '');
                 const defaultSplashFill = normalizeColorToken(DEFAULT_GLOBAL_STYLES.splashFill || '');
                 const defaultAccentColor = normalizeColorToken(
@@ -29563,17 +29592,6 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                     Math.abs(Number(styles.splashRoundness) - Number(DEFAULT_GLOBAL_STYLES.splashRoundness ?? 1)) > 0.0001
                 );
                 const hasExplicitStrokeWidth = typeof styles.splashStrokeWidth === 'number' && Number.isFinite(styles.splashStrokeWidth);
-                const hasExplicitPriceFont = typeof styles.priceFont === 'string' && styles.priceFont.trim().length > 0 && (
-                    !preserveTemplateVisual || styles.priceFont.trim().toLowerCase() !== defaultPriceFont
-                );
-                const hasExplicitPriceWeight = styles.priceFontWeight !== undefined && (
-                    !preserveTemplateVisual ||
-                    String(styles.priceFontWeight) !== String(DEFAULT_GLOBAL_STYLES.priceFontWeight ?? '')
-                );
-                const hasExplicitPriceStyle = typeof styles.priceFontStyle === 'string' && styles.priceFontStyle.trim().length > 0 && (
-                    !preserveTemplateVisual ||
-                    styles.priceFontStyle !== (DEFAULT_GLOBAL_STYLES.priceFontStyle ?? 'normal')
-                );
                 const hasExplicitPriceTextColor = typeof styles.priceTextColor === 'string' && styles.priceTextColor.trim().length > 0;
                 const hasExplicitSplashTextColor = typeof styles.splashTextColor === 'string' && styles.splashTextColor.trim().length > 0 && (
                     !preserveTemplateVisual || normalizeColorToken(styles.splashTextColor) !== defaultSplashTextColor
@@ -29612,33 +29630,18 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
 
                 const applyTextShared = (t: any) => {
                     if (!t || !String(t.type || '').includes('text')) return;
-                    // Always apply font and weight if explicitly set (overrides template)
-                    if ((!preserveTemplateVisual || hasExplicitPriceFont) && styles.priceFont) t.set('fontFamily', styles.priceFont);
-                    if ((!preserveTemplateVisual || hasExplicitPriceWeight) && styles.priceFontWeight !== undefined) {
+                    // Automatic resize/replacement must not overwrite typography authored
+                    // in the Mini Editor. Explicit toolbar changes still use the fast path.
+                    if (!preserveTemplateVisual && styles.priceFont) t.set('fontFamily', styles.priceFont);
+                    if (!preserveTemplateVisual && styles.priceFontWeight !== undefined) {
                         t.set('fontWeight', styles.priceFontWeight as any);
                     }
-                    if (!preserveTemplateVisual || hasExplicitPriceStyle) {
+                    if (!preserveTemplateVisual) {
                         t.set('fontStyle', styles.priceFontStyle === 'italic' ? 'italic' : 'normal');
                     }
 
-                    const mult = typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
-                    if (preserveTemplateVisual) {
-                        const originalFont = Number((t as any).__originalFontSize);
-                        const currentFont = Number(t.fontSize || 0);
-                        const baseFont = Number((t as any).__fontSizeBase);
-                        const fallbackBase = Number.isFinite(originalFont) && originalFont > 0
-                            ? originalFont
-                            : (Number.isFinite(currentFont) && currentFont > 0 ? currentFont : 0);
-                        const sourceBase = Number.isFinite(baseFont) && baseFont > 0 ? baseFont : fallbackBase;
-                        if (sourceBase > 0) {
-                            (t as any).__fontSizeBase = sourceBase;
-                            t.set({
-                                fontSize: sourceBase * mult,
-                                scaleX: 1,
-                                scaleY: 1
-                            });
-                        }
-                    } else if (typeof t.__fontScale === 'number') {
+                    const mult = !preserveTemplateVisual && typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
+                    if (!preserveTemplateVisual && typeof t.__fontScale === 'number') {
                         if (typeof t.__fontScaleBase !== 'number') t.__fontScaleBase = t.__fontScale;
                         t.__fontScale = t.__fontScaleBase * mult;
                     }
@@ -29671,7 +29674,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                         if (typeof ct.initDimensions === 'function') ct.initDimensions();
                     });
                 }
-                if (typeof styles.priceFontSize === 'number' && Number.isFinite(styles.priceFontSize) && styles.priceFontSize > 0) {
+                if (!preserveTemplateVisual && typeof styles.priceFontSize === 'number' && Number.isFinite(styles.priceFontSize) && styles.priceFontSize > 0) {
                     const baseFontSize = styles.priceFontSize;
                     (splash as any).__priceFontSizeOverride = baseFontSize;
                     integerTexts.forEach((txt: any) => {
@@ -29683,14 +29686,12 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                         if (typeof txt.initDimensions === 'function') txt.initDimensions();
                     });
                 }
-                if (preserveTemplateVisual) {
-                    // Keep authored geometry, but expand the manual template when typography grows.
-                    refreshManualTemplateAfterTypographyChange(splash);
-                }
             }
 
             // Propagar splashTextScale como metadado para as funções de layout.
-            (splash as any).__splashTextScale = typeof styles?.splashTextScale === 'number' ? styles!.splashTextScale! : 1;
+            (splash as any).__splashTextScale = preserveTemplateVisual
+                ? 1
+                : (typeof styles?.splashTextScale === 'number' ? styles!.splashTextScale! : 1);
 
             // Use reference cell dimensions (from zone layout) so that pill size
             // is uniform across highlight and normal cards.

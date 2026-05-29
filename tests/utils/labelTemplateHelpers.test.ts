@@ -15,6 +15,7 @@ import {
   BUILTIN_RED_BURST_SEED_VERSION,
   LABEL_TEMPLATE_PREVIEW_RENDER_VERSION,
   MANUAL_SINGLE_ANCHOR_VERSION,
+  isLabelTypographyStyleProp,
   normalizeLabelTemplateGroupAsManual,
   normalizeLabelTemplateRecordAsManual
 } from '~/utils/labelTemplateHelpers'
@@ -153,8 +154,19 @@ describe('LABEL_TEMPLATE_EXTRA_PROPS', () => {
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('_customId')
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('name')
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('fontFamily')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('fontSize')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('fontWeight')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('fontStyle')
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('charSpacing')
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__preserveManualLayout')
+  })
+
+  it('contem estado custom de texto do mini editor', () => {
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__rawText')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__textCase')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('underline')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('linethrough')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('textAlign')
   })
 
   it('contem manual template flags (__manual*)', () => {
@@ -169,6 +181,7 @@ describe('LABEL_TEMPLATE_EXTRA_PROPS', () => {
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalWidth')
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalHeight')
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalFontSize')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalFontFamily')
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__originalScaleX')
   })
 
@@ -182,6 +195,22 @@ describe('LABEL_TEMPLATE_EXTRA_PROPS', () => {
 
   it('todas as strings unicas', () => {
     expect(new Set(LABEL_TEMPLATE_EXTRA_PROPS).size).toBe(LABEL_TEMPLATE_EXTRA_PROPS.length)
+  })
+})
+
+describe('isLabelTypographyStyleProp', () => {
+  it('detecta props de tipografia da etiqueta', () => {
+    expect(isLabelTypographyStyleProp('priceFont')).toBe(true)
+    expect(isLabelTypographyStyleProp('priceFontWeight')).toBe(true)
+    expect(isLabelTypographyStyleProp('priceFontStyle')).toBe(true)
+    expect(isLabelTypographyStyleProp('priceFontSize')).toBe(true)
+    expect(isLabelTypographyStyleProp('splashTextScale')).toBe(true)
+  })
+
+  it('nao classifica cor/posicao como tipografia', () => {
+    expect(isLabelTypographyStyleProp('splashFill')).toBe(false)
+    expect(isLabelTypographyStyleProp('priceTextColor')).toBe(false)
+    expect(isLabelTypographyStyleProp('splashScale')).toBe(false)
   })
 })
 
