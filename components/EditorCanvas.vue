@@ -29571,6 +29571,13 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
 	        const marginBottom = h * 0.05;
 	        const splashManual = isManual(splash);
 	        let preserveTemplateVisual = false;
+	        // "Ultima edicao vence": props sobrescritas explicitamente pelo painel da
+	        // zona reaplicam mesmo em resize/swap com layout manual preservado. Resolve
+	        // a zona pelo card (group); cards novos sem zona => sem override.
+	        // allowTypoApply le `preserveTemplateVisual` em tempo de chamada.
+	        const __ovZoneId = String((group as any)?.parentZoneId || '').trim();
+	        const zoneStyleOverrides = __ovZoneId ? getZoneStyleOverrides(findProductZoneById(__ovZoneId)) : {};
+	        const allowTypoApply = (prop: string) => !preserveTemplateVisual || !!(zoneStyleOverrides as any)[prop];
 	        let layoutScaleX = 1;
 	        let layoutScaleY = 1;
 	        const manualScaleX = Math.abs(Number((splash as any)?.__manualScaleX ?? 1)) || 1;
@@ -29672,18 +29679,19 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
 
                 const applyTextShared = (t: any) => {
                     if (!t || !String(t.type || '').includes('text')) return;
-                    // Automatic resize/replacement must not overwrite typography authored
-                    // in the Mini Editor. Explicit toolbar changes still use the fast path.
-                    if (!preserveTemplateVisual && styles.priceFont) t.set('fontFamily', styles.priceFont);
-                    if (!preserveTemplateVisual && styles.priceFontWeight !== undefined) {
+                    // Resize/troca automatica nao sobrescreve a tipografia autorada no
+                    // Mini Editor — EXCETO quando o usuario sobrescreveu a prop pelo
+                    // painel (override explicito: "ultima edicao vence").
+                    if (allowTypoApply('priceFont') && styles.priceFont) t.set('fontFamily', styles.priceFont);
+                    if (allowTypoApply('priceFontWeight') && styles.priceFontWeight !== undefined) {
                         t.set('fontWeight', styles.priceFontWeight as any);
                     }
-                    if (!preserveTemplateVisual) {
+                    if (allowTypoApply('priceFontStyle')) {
                         t.set('fontStyle', styles.priceFontStyle === 'italic' ? 'italic' : 'normal');
                     }
 
-                    const mult = !preserveTemplateVisual && typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
-                    if (!preserveTemplateVisual && typeof t.__fontScale === 'number') {
+                    const mult = allowTypoApply('splashTextScale') && typeof styles.splashTextScale === 'number' ? styles.splashTextScale : 1;
+                    if (allowTypoApply('splashTextScale') && typeof t.__fontScale === 'number') {
                         if (typeof t.__fontScaleBase !== 'number') t.__fontScaleBase = t.__fontScale;
                         t.__fontScale = t.__fontScaleBase * mult;
                     }
@@ -29716,7 +29724,7 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
                         if (typeof ct.initDimensions === 'function') ct.initDimensions();
                     });
                 }
-                if (!preserveTemplateVisual && typeof styles.priceFontSize === 'number' && Number.isFinite(styles.priceFontSize) && styles.priceFontSize > 0) {
+                if (allowTypoApply('priceFontSize') && typeof styles.priceFontSize === 'number' && Number.isFinite(styles.priceFontSize) && styles.priceFontSize > 0) {
                     const baseFontSize = styles.priceFontSize;
                     (splash as any).__priceFontSizeOverride = baseFontSize;
                     integerTexts.forEach((txt: any) => {
@@ -29731,9 +29739,11 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
             }
 
             // Propagar splashTextScale como metadado para as funções de layout.
-            (splash as any).__splashTextScale = preserveTemplateVisual
-                ? 1
-                : (typeof styles?.splashTextScale === 'number' ? styles!.splashTextScale! : 1);
+            // Com layout manual preservado mantemos escala 1, salvo override explicito
+            // de splashTextScale pelo painel ("ultima edicao vence").
+            (splash as any).__splashTextScale = allowTypoApply('splashTextScale')
+                ? (typeof styles?.splashTextScale === 'number' ? styles!.splashTextScale! : 1)
+                : 1;
 
             // Use reference cell dimensions (from zone layout) so that pill size
             // is uniform across highlight and normal cards.
