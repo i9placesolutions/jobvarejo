@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { defineAsyncComponent, ref } from 'vue'
 import EditorMobileBottomSheet from './EditorMobileBottomSheet.vue'
+
+// Busca de imagens do upload no painel mobile. O AssetsPanel recebe a query
+// como prop (igual ao desktop em SidebarLeft); sem este campo o mobile ficava
+// sem como buscar no upload.
+const uploadsSearch = ref('')
 
 const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
 const LayersPanel = defineAsyncComponent(() => import('./LayersPanel.vue'))
@@ -169,7 +174,17 @@ const emit = defineEmits<{
     </div>
 
     <template v-if="panel === 'uploads'">
-      <AssetsPanel class="-mx-4 -mb-4 flex-1 min-h-0" @insert-asset="asset => emit('insertAsset', asset)" />
+      <div class="relative mb-2 shrink-0">
+        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input
+          v-model="uploadsSearch"
+          type="text"
+          inputmode="search"
+          placeholder="Buscar imagem no upload..."
+          class="w-full h-10 bg-[#2a2a2a]/60 border border-white/10 rounded-md text-[13px] text-zinc-100 pl-8 pr-3 focus:outline-none focus:border-violet-500/50 focus:bg-[#2a2a2a] placeholder:text-zinc-500"
+        />
+      </div>
+      <AssetsPanel class="-mx-4 -mb-4 flex-1 min-h-0" :search-query="uploadsSearch" @insert-asset="asset => emit('insertAsset', asset)" />
     </template>
 
     <template v-if="panel === 'layers'">
