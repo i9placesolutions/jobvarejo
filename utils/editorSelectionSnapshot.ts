@@ -175,6 +175,24 @@ export const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>
   if (obj.isSmartObject != null) snap.isSmartObject = obj.isSmartObject
   if (obj.isProductCard != null) snap.isProductCard = obj.isProductCard
   if (obj.parentZoneId != null) snap.parentZoneId = obj.parentZoneId
+  // Resolve o card de produto ancestral para edicao "so este card": clicar numa
+  // etiqueta seleciona um sub-objeto (ex: price_bg), entao subimos a cadeia de
+  // grupos ate achar o card. Expomos parentCardId + os overrides do card.
+  const isCardLike = (o: any) => !!o && (o.isProductCard === true
+    || (typeof o.parentZoneId === 'string' && o.parentZoneId.trim().length > 0))
+  let cardAncestor: any = isCardLike(obj) ? obj : null
+  if (!cardAncestor) {
+    let p: any = obj.group
+    let guard = 0
+    while (p && guard++ < 12) {
+      if (isCardLike(p)) { cardAncestor = p; break }
+      p = p.group
+    }
+  }
+  if (cardAncestor) {
+    snap.parentCardId = cardAncestor._customId
+    if (cardAncestor._cardStyleOverrides != null) snap._cardStyleOverrides = cardAncestor._cardStyleOverrides
+  }
 
   if (obj.lockMovementX != null) snap.lockMovementX = obj.lockMovementX
   if (obj.lockMovementY != null) snap.lockMovementY = obj.lockMovementY

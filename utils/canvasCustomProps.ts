@@ -47,6 +47,10 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     '_zoneOrder',
     '_cardWidth',
     '_cardHeight',
+    // Override de estilo de etiqueta POR CARD ("editar so esta etiqueta"):
+    // mapa prop->valor que vence os estilos da zona. Ver labelTemplateHelpers /
+    // getEffectiveStylesForCard em EditorCanvas.
+    '_cardStyleOverrides',
     '_productData',
     'imageUrl',
     'subTargetCheck',

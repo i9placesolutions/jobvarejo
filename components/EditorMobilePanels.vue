@@ -61,6 +61,8 @@ const emit = defineEmits<{
   applyColorStyle: [id: string]
   updateZone: [prop: string, value: any, meta?: any]
   updateGlobalStyles: [prop: string, value: any, meta?: any]
+  updateCardStyle: [prop: string, value: any, cardId?: string]
+  resetCardStyle: [cardId?: string]
   applyTemplateToZone: []
   applyPreset: [payload: any]
   syncGaps: [padding: number, meta?: any]
@@ -219,6 +221,8 @@ const emit = defineEmits<{
         @apply-color-style="id => emit('applyColorStyle', id)"
         @update-zone="(prop, value, meta) => emit('updateZone', prop, value, meta)"
         @update-global-styles="(prop, value, meta) => emit('updateGlobalStyles', prop, value, meta)"
+        @update-card-style="(prop, value, cardId) => emit('updateCardStyle', prop, value, cardId)"
+        @reset-card-style="(cardId) => emit('resetCardStyle', cardId)"
         @apply-template-to-zone="emit('applyTemplateToZone')"
         @apply-preset="payload => emit('applyPreset', payload)"
         @sync-gaps="(padding, meta) => emit('syncGaps', padding, meta)"

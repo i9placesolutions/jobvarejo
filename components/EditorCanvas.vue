@@ -21953,6 +21953,88 @@ const clearZoneStyleOverrides = (zone: any, props: Iterable<string>) => {
     for (const p of props) delete map[String(p || '').trim()];
 };
 
+// === Override de estilo POR CARD ("editar so esta etiqueta") ===
+// Precedencia: template < estilos da zona (_zoneGlobalStyles) < override do card.
+// `_cardStyleOverrides` e' um mapa prop->valor no proprio card (presenca = override).
+// Vence a zona, persiste (CANVAS_CUSTOM_PROPS) e e' respeitado em reaplicar/resize/swap.
+const getCardStyleOverrides = (card: any): Record<string, any> => {
+    const o = card && (card as any)._cardStyleOverrides;
+    return o && typeof o === 'object' ? o as Record<string, any> : {};
+};
+const cardHasStyleOverride = (card: any, prop: any): boolean =>
+    Object.prototype.hasOwnProperty.call(getCardStyleOverrides(card), String(prop || '').trim());
+const setCardStyleOverride = (card: any, prop: any, value: any) => {
+    if (!card || !isLabelStyleOverridableProp(prop)) return;
+    const current = (card as any)._cardStyleOverrides;
+    const map: Record<string, any> = current && typeof current === 'object' ? current : {};
+    map[String(prop).trim()] = value;
+    (card as any)._cardStyleOverrides = map;
+};
+const clearCardStyleOverrides = (card: any, props?: Iterable<string>) => {
+    const map = (card as any)?._cardStyleOverrides;
+    if (!map || typeof map !== 'object') return;
+    if (!props) { (card as any)._cardStyleOverrides = {}; return; }
+    for (const p of props) delete map[String(p || '').trim()];
+};
+// Estilos efetivos do card = estilos da zona + overrides do card por cima.
+const getEffectiveStylesForCard = (card: any, zone?: any): GlobalStyles => {
+    const base = getZoneGlobalStyles(zone);
+    const cardOv = getCardStyleOverrides(card);
+    return Object.keys(cardOv).length ? normalizeGlobalStyles({ ...base, ...cardOv }) : base;
+};
+// Resolve o card alvo: por _customId, senao a selecao atual (se for card de produto).
+const resolveSelectedProductCard = (cardId?: string): any => {
+    if (cardId) {
+        for (const z of getRuntimeProductZones()) {
+            const found = (getZoneChildren(z) || []).find((c: any) => String(c?._customId || '') === String(cardId));
+            if (found) return found;
+        }
+    }
+    const sel = selectedObjectRef.value;
+    return (sel && isLikelyProductCard(sel)) ? sel : null;
+};
+// UI "editar so este card": grava override no card, aplica so nele e persiste.
+const handleUpdateCardStyle = async (prop: string, value: any, cardId?: string) => {
+    if (!canvas.value) return;
+    const card = resolveSelectedProductCard(cardId);
+    if (!card || !isLabelStyleOverridableProp(prop)) return;
+    setCardStyleOverride(card, prop, value);
+    const zoneId = String((card as any)?.parentZoneId || '').trim();
+    const zone = zoneId ? findProductZoneById(zoneId) : null;
+    const eff = getEffectiveStylesForCard(card, zone);
+    (card as any).__forceCardRelayout = true;
+    applyGlobalStylesToCards(eff, zone, { cards: [card], prop });
+    safeRequestRenderAll();
+    refreshSelectedRef();
+    await saveCurrentState({ reason: `card-style:${prop}`, skipIfUnchanged: false });
+};
+// UI "voltar ao padrao da zona": remove os overrides do card e reaplica a zona.
+const handleResetCardStyle = async (cardId?: string) => {
+    if (!canvas.value) return;
+    const card = resolveSelectedProductCard(cardId);
+    if (!card) return;
+    const hadProps = Object.keys(getCardStyleOverrides(card));
+    if (!hadProps.length) return;
+    clearCardStyleOverrides(card);
+    const zoneId = String((card as any)?.parentZoneId || '').trim();
+    const zone = zoneId ? findProductZoneById(zoneId) : null;
+    (card as any).__forceCardRelayout = true;
+    // Reconstroi o card a partir do template da zona (para ficar igual aos irmaos),
+    // depois reaplica apenas os overrides EXPLICITOS da zona por cima.
+    const tplId = String((zone as any)?._zoneTemplateSnapshotId || '').trim();
+    try {
+        if (tplId) await applyLabelTemplateToCard(card, tplId);
+    } catch (err) {
+        console.warn('[card-style] Falha ao reconstruir card do template no reset:', err);
+    }
+    const zoneStyles = getZoneGlobalStyles(zone);
+    const zoneOv = getZoneStyleOverrides(zone);
+    Object.keys(zoneOv).forEach((prop) => applyGlobalStylesToCards(zoneStyles, zone, { cards: [card], prop }));
+    safeRequestRenderAll();
+    refreshSelectedRef();
+    await saveCurrentState({ reason: 'card-style:reset', skipIfUnchanged: false });
+};
+
 // DEBOUNCED_GLOBAL_STYLE_PROPS e isDebouncedGlobalStyleProp extraidos para
 // utils/globalStylePropClassifiers.ts.
 
@@ -23854,7 +23936,15 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
             let totalFastApplied = 0;
             effectiveTargets.forEach((z: any) => {
                 const zStyles = getZoneGlobalStyles(z);
-                const stats = applyGlobalStylesToCards(zStyles, z, { prop });
+                // Nao sobrescrever cards com override proprio desta prop ("editar so
+                // este card" vence a zona). Demais cards recebem o estilo da zona.
+                const zoneCards = getZoneChildren(z) || [];
+                const overridden = zoneCards.filter((c: any) => cardHasStyleOverride(c, prop));
+                const cardsForZoneApply = overridden.length
+                    ? zoneCards.filter((c: any) => !cardHasStyleOverride(c, prop))
+                    : undefined;
+                if (overridden.length && !cardsForZoneApply!.length) return; // todos com override
+                const stats = applyGlobalStylesToCards(zStyles, z, cardsForZoneApply ? { prop, cards: cardsForZoneApply } : { prop });
                 totalCardsTouched += Number(stats?.cardsTouched || 0);
                 totalFastApplied += Number(stats?.fastApplied || 0);
                 totalFullRelayout += Number(stats?.fullRelayout || 0);
@@ -28849,6 +28939,17 @@ async function applyLabelTemplateToZone(
             if (!shouldReapplyLabelStylePropAfterTemplateApply(prop, rawPrevZoneStyles, nextZoneStyles, zone)) return;
             applyGlobalStylesToCards(nextZoneStyles, zone, { cards, prop });
         });
+        // "Editar so este card": overrides POR CARD vencem a zona e sao reaplicados
+        // POR ULTIMO, para o loop de estilos da zona acima nao sobrescrever o card.
+        for (const card of cards) {
+            const cardOv = getCardStyleOverrides(card);
+            const cardProps = Object.keys(cardOv);
+            if (!cardProps.length) continue;
+            const effForCard = getEffectiveStylesForCard(card, zone);
+            cardProps.forEach((prop) => {
+                applyGlobalStylesToCards(effForCard, zone, { cards: [card], prop });
+            });
+        }
     } else {
         (zone as any)._zoneGlobalStyles = nextZoneStyles;
         if (id) {
@@ -29198,6 +29299,14 @@ async function handleUpdateTemplateFromMiniEditor(
 // resolvePriceGroupBaseScale extraido para utils/cardRelayoutSignature.ts.
 
 const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<GlobalStyles>) => {
+    // Override POR CARD ("editar so esta etiqueta"): mescla os valores do card por
+    // cima dos estilos da zona logo no inicio, para que TODO o pipeline (tipografia,
+    // cor, layout, signature) ja use os valores do card. Sem override de card o
+    // objeto `styles` permanece intacto (zero mudanca de comportamento).
+    const __cardStyleOv = getCardStyleOverrides(group);
+    if (Object.keys(__cardStyleOv).length && styles && typeof styles === 'object') {
+        styles = { ...styles, ...__cardStyleOv } as Partial<GlobalStyles>;
+    }
     // FIX: Permanently disable Fabric v7 LayoutManager on product card groups.
     // Card layout is fully managed by resizeSmartObject — Fabric's auto-layout
     // only causes corruption by recalculating bounds from children at stale positions.
@@ -29577,7 +29686,10 @@ const resizeSmartObject = (group: any, w: number, h: number, styles?: Partial<Gl
 	        // allowTypoApply le `preserveTemplateVisual` em tempo de chamada.
 	        const __ovZoneId = String((group as any)?.parentZoneId || '').trim();
 	        const zoneStyleOverrides = __ovZoneId ? getZoneStyleOverrides(findProductZoneById(__ovZoneId)) : {};
-	        const allowTypoApply = (prop: string) => !preserveTemplateVisual || !!(zoneStyleOverrides as any)[prop];
+	        const allowTypoApply = (prop: string) =>
+	            !preserveTemplateVisual
+	            || !!(zoneStyleOverrides as any)[prop]
+	            || Object.prototype.hasOwnProperty.call(__cardStyleOv, prop);
 	        let layoutScaleX = 1;
 	        let layoutScaleY = 1;
 	        const manualScaleX = Math.abs(Number((splash as any)?.__manualScaleX ?? 1)) || 1;
@@ -32946,6 +33058,8 @@ const handleAutoOfferLayout = async () => {
             @apply-color-style="applyColorStyle"
             @update-zone="handleUpdateZone"
             @update-global-styles="handleUpdateGlobalStyles"
+            @update-card-style="handleUpdateCardStyle"
+            @reset-card-style="handleResetCardStyle"
             @apply-template-to-zone="handleApplyTemplateToZone"
             @apply-preset="handleApplyZonePreset"
             @sync-gaps="handleSyncZoneGaps"
@@ -33021,6 +33135,8 @@ const handleAutoOfferLayout = async () => {
         @apply-color-style="applyColorStyle"
         @update-zone="handleUpdateZone"
         @update-global-styles="handleUpdateGlobalStyles"
+        @update-card-style="handleUpdateCardStyle"
+        @reset-card-style="handleResetCardStyle"
         @apply-template-to-zone="handleApplyTemplateToZone"
         @apply-preset="handleApplyZonePreset"
         @sync-gaps="handleSyncZoneGaps"

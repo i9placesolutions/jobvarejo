@@ -72,6 +72,8 @@ const emit = defineEmits<{
   (e: 'apply-color-style', styleId: string): void
   (e: 'update-zone', prop: string, value: any, meta?: any): void
   (e: 'update-global-styles', prop: string, value: any, meta?: any): void
+  (e: 'update-card-style', prop: string, value: any, cardId?: string): void
+  (e: 'reset-card-style', cardId?: string): void
   (e: 'apply-template-to-zone'): void
   (e: 'apply-preset', presetId: string): void
   (e: 'sync-gaps', padding: number, meta?: any): void
@@ -147,6 +149,8 @@ const emit = defineEmits<{
         @add-interaction="() => {}"
         @update-zone="(prop, value, meta) => emit('update-zone', prop, value, meta)"
         @update-global-styles="(prop, value, meta) => emit('update-global-styles', prop, value, meta)"
+        @update-card-style="(prop, value, cardId) => emit('update-card-style', prop, value, cardId)"
+        @reset-card-style="(cardId) => emit('reset-card-style', cardId)"
         @apply-template-to-zone="emit('apply-template-to-zone')"
         @apply-preset="(payload) => emit('apply-preset', payload)"
         @sync-gaps="(padding, meta) => emit('sync-gaps', padding, meta)"
