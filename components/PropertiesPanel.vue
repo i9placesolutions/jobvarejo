@@ -879,6 +879,78 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       <!-- DESIGN TAB (Figma-style design properties) -->
       <div v-else class="pp-design-panel">
 
+      <!-- "Editar so este card": override de etiqueta por card (vence a zona).
+           Fica no TOPO para aparecer assim que o usuario seleciona uma etiqueta. -->
+      <div v-if="isSingleProductCard" class="bg-[#18181b] border border-violet-500/25 rounded-xl mb-2 shadow-sm relative overflow-hidden">
+          <button
+              type="button"
+              class="w-full px-3 py-2.5 flex items-center justify-between gap-3 hover:bg-white/5 transition-colors text-left"
+              :class="{ 'border-b border-white/5': cardLabelSectionOpen }"
+              @click="cardLabelSectionOpen = !cardLabelSectionOpen"
+          >
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] font-semibold text-violet-300 tracking-wide uppercase">Etiqueta deste card</span>
+                <span v-if="cardHasOverrides" class="rounded-full border border-violet-500/30 bg-violet-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-violet-200">personalizado</span>
+              </div>
+              <p class="mt-1 text-[10px] text-zinc-400 leading-snug">Ajustes só desta etiqueta, sem afetar os outros cards da zona.</p>
+            </div>
+            <ChevronsDown v-if="cardLabelSectionOpen" class="w-3.5 h-3.5 text-violet-300 shrink-0" />
+            <ChevronsUp v-else class="w-3.5 h-3.5 text-violet-300 shrink-0" />
+          </button>
+          <div v-show="cardLabelSectionOpen" class="p-3 pt-2 space-y-3">
+            <div>
+              <label class="block text-[10px] font-semibold text-zinc-400 mb-1">Fonte do preço</label>
+              <select
+                :value="cardStyleOverrides.priceFont ?? ''"
+                class="w-full bg-[#0f0f11] border border-white/10 rounded-lg px-2 py-1.5 text-[12px] text-zinc-200"
+                @change="onCardStyle('priceFont', ($event.target as HTMLSelectElement).value)"
+              >
+                <option value="">Herdado da zona</option>
+                <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-semibold text-zinc-400 mb-1">Tamanho do preço</label>
+              <input
+                type="number" min="8" max="400" step="1"
+                :value="cardStyleOverrides.priceFontSize ?? ''"
+                placeholder="Herdado da zona"
+                class="w-full bg-[#0f0f11] border border-white/10 rounded-lg px-2 py-1.5 text-[12px] text-zinc-200"
+                @change="onCardStyle('priceFontSize', Number(($event.target as HTMLInputElement).value) || undefined)"
+              />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] font-semibold text-zinc-400 mb-1">Cor do preço</label>
+                <input
+                  type="color"
+                  :value="cardStyleOverrides.priceTextColor ?? '#000000'"
+                  class="w-full h-8 bg-[#0f0f11] border border-white/10 rounded-lg cursor-pointer"
+                  @input="onCardStyle('priceTextColor', ($event.target as HTMLInputElement).value)"
+                />
+              </div>
+              <div>
+                <label class="block text-[10px] font-semibold text-zinc-400 mb-1">Cor do fundo</label>
+                <input
+                  type="color"
+                  :value="cardStyleOverrides.splashFill ?? '#ffffff'"
+                  class="w-full h-8 bg-[#0f0f11] border border-white/10 rounded-lg cursor-pointer"
+                  @input="onCardStyle('splashFill', ($event.target as HTMLInputElement).value)"
+                />
+              </div>
+            </div>
+            <button
+              v-if="cardHasOverrides"
+              type="button"
+              class="w-full mt-1 px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-[11px] font-semibold text-zinc-300 transition-colors"
+              @click="onResetCardStyle"
+            >
+              Voltar ao padrão da zona
+            </button>
+          </div>
+      </div>
+
       <!-- Ações Rápidas (Visibilidade, Bloquear, Excluir) -->
       <div class="bg-[#18181b] border border-white/5 rounded-xl p-2 mb-2 flex items-center justify-between shadow-sm">
         <div class="flex items-center gap-1.5">
@@ -2092,77 +2164,6 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- 9. Zona de Produtos -->
-      <!-- "Editar so este card": override de etiqueta por card (vence a zona) -->
-      <div v-if="isSingleProductCard" class="bg-[#18181b] border border-violet-500/25 rounded-xl mb-2 shadow-sm relative overflow-hidden">
-          <button
-              type="button"
-              class="w-full px-3 py-2.5 flex items-center justify-between gap-3 hover:bg-white/5 transition-colors text-left"
-              :class="{ 'border-b border-white/5': cardLabelSectionOpen }"
-              @click="cardLabelSectionOpen = !cardLabelSectionOpen"
-          >
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="text-[11px] font-semibold text-violet-300 tracking-wide uppercase">Etiqueta deste card</span>
-                <span v-if="cardHasOverrides" class="rounded-full border border-violet-500/30 bg-violet-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-violet-200">personalizado</span>
-              </div>
-              <p class="mt-1 text-[10px] text-zinc-400 leading-snug">Ajustes só desta etiqueta, sem afetar os outros cards da zona.</p>
-            </div>
-            <ChevronsDown v-if="cardLabelSectionOpen" class="w-3.5 h-3.5 text-violet-300 shrink-0" />
-            <ChevronsUp v-else class="w-3.5 h-3.5 text-violet-300 shrink-0" />
-          </button>
-          <div v-show="cardLabelSectionOpen" class="p-3 pt-2 space-y-3">
-            <div>
-              <label class="block text-[10px] font-semibold text-zinc-400 mb-1">Fonte do preço</label>
-              <select
-                :value="cardStyleOverrides.priceFont ?? ''"
-                class="w-full bg-[#0f0f11] border border-white/10 rounded-lg px-2 py-1.5 text-[12px] text-zinc-200"
-                @change="onCardStyle('priceFont', ($event.target as HTMLSelectElement).value)"
-              >
-                <option value="">Herdado da zona</option>
-                <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-[10px] font-semibold text-zinc-400 mb-1">Tamanho do preço</label>
-              <input
-                type="number" min="8" max="400" step="1"
-                :value="cardStyleOverrides.priceFontSize ?? ''"
-                placeholder="Herdado da zona"
-                class="w-full bg-[#0f0f11] border border-white/10 rounded-lg px-2 py-1.5 text-[12px] text-zinc-200"
-                @change="onCardStyle('priceFontSize', Number(($event.target as HTMLInputElement).value) || undefined)"
-              />
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="block text-[10px] font-semibold text-zinc-400 mb-1">Cor do preço</label>
-                <input
-                  type="color"
-                  :value="cardStyleOverrides.priceTextColor ?? '#000000'"
-                  class="w-full h-8 bg-[#0f0f11] border border-white/10 rounded-lg cursor-pointer"
-                  @input="onCardStyle('priceTextColor', ($event.target as HTMLInputElement).value)"
-                />
-              </div>
-              <div>
-                <label class="block text-[10px] font-semibold text-zinc-400 mb-1">Cor do fundo</label>
-                <input
-                  type="color"
-                  :value="cardStyleOverrides.splashFill ?? '#ffffff'"
-                  class="w-full h-8 bg-[#0f0f11] border border-white/10 rounded-lg cursor-pointer"
-                  @input="onCardStyle('splashFill', ($event.target as HTMLInputElement).value)"
-                />
-              </div>
-            </div>
-            <button
-              v-if="cardHasOverrides"
-              type="button"
-              class="w-full mt-1 px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-[11px] font-semibold text-zinc-300 transition-colors"
-              @click="onResetCardStyle"
-            >
-              Voltar ao padrão da zona
-            </button>
-          </div>
-      </div>
-
       <div v-show="isProductZone" class="bg-[#18181b] border border-emerald-500/20 rounded-xl mb-2 shadow-sm relative overflow-hidden">
           <div class="absolute inset-0 bg-emerald-500/5 mix-blend-overlay pointer-events-none"></div>
           <button
