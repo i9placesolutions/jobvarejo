@@ -534,6 +534,7 @@ import {
   Frame, // New Icon
   Group, // Group icon
   Ungroup, // Ungroup icon
+  Copy, // Duplicate icon
 } from 'lucide-vue-next'
 
 const isDrawing = ref(false)
@@ -1380,6 +1381,8 @@ const layersContextMenu = ref({
 });
 
 const canvasContextMenuItems = computed(() => ([
+    { label: 'Duplicar (Ctrl+D)', action: 'duplicate', icon: Copy },
+    { divider: true },
     { label: 'Trazer para frente', action: 'arrange-bring-to-front', icon: ChevronsUp },
     { label: 'Avancar (uma camada)', action: 'arrange-bring-forward', icon: ArrowUp },
     { label: 'Recuar (uma camada)', action: 'arrange-send-backward', icon: ArrowDown },
@@ -1392,6 +1395,7 @@ const canvasContextMenuItems = computed(() => ([
 ]));
 
 const handleCanvasContextMenuSelect = (action: string) => {
+    if (action === 'duplicate') void handleAction('duplicate');
     if (action === 'arrange-bring-to-front') arrangeActiveObjects('bring-to-front');
     if (action === 'arrange-bring-forward') arrangeActiveObjects('bring-forward');
     if (action === 'arrange-send-backward') arrangeActiveObjects('send-backward');
@@ -1402,6 +1406,8 @@ const handleCanvasContextMenuSelect = (action: string) => {
 };
 
 const layersContextMenuItems = computed(() => ([
+    { label: 'Duplicar (Ctrl+D)', action: 'duplicate', icon: Copy },
+    { divider: true },
     { label: 'Mascarar', action: 'mask-selection', icon: Frame },
     { divider: true },
     { label: 'Agrupar (Ctrl+G)', action: 'group-selection', icon: Group },
@@ -1409,6 +1415,7 @@ const layersContextMenuItems = computed(() => ([
 ]));
 
 const handleLayersContextMenuSelect = (action: string) => {
+    if (action === 'duplicate') void handleAction('duplicate');
     if (action === 'mask-selection') void handleAction('toggle-mask');
     if (action === 'group-selection') groupSelection();
     if (action === 'ungroup-selection') ungroupSelection();
@@ -10199,7 +10206,41 @@ const duplicateFrameWithContents = async (frame: any, opts: { offset?: number } 
         } catch (err) {
             console.warn('[duplicateFrameWithContents] clone failed', err);
         }
-        if (!cloned) continue;
+        // Fallback robusto: o clone() do Fabric falha/retorna null para alguns
+        // objetos (imagens com proxy/cross-origin, grupos complexos) e o elemento
+        // era SILENCIOSAMENTE descartado -> a copia do frame perdia conteudo e o
+        // layout ficava infiel. Serializa+enliven (mais confiavel) para nao perder.
+        if (!cloned) {
+            try {
+                const rawJson = typeof original.toObject === 'function' ? original.toObject(extraProps) : null;
+                if (rawJson) {
+                    // CAUSA RAIZ: o Fabric v6 falha ao reenlivar o `layoutManager`
+                    // serializado de Groups (ex: zona de produtos -> "No class
+                    // registered for undefined"), derrubando o clone e fazendo a
+                    // copia do frame PERDER a zona inteira (layout quebrado). O app
+                    // ja' desativa o layoutManager das zonas/cards.
+                    // Normalizamos para objeto puro (JSON round-trip remove instancias
+                    // de classe / getters que tambem quebram o enliven) e removemos o
+                    // layoutManager (recursivo) antes de reviver.
+                    const json = JSON.parse(JSON.stringify(rawJson));
+                    const stripLayoutManager = (node: any) => {
+                        if (!node || typeof node !== 'object') return;
+                        delete node.layoutManager;
+                        if (Array.isArray(node.objects)) node.objects.forEach(stripLayoutManager);
+                        if (node.clipPath && typeof node.clipPath === 'object') stripLayoutManager(node.clipPath);
+                    };
+                    stripLayoutManager(json);
+                    const enlivened = await enlivenObjectsAsync([json]);
+                    cloned = Array.isArray(enlivened) ? enlivened[0] : null;
+                }
+            } catch (err2) {
+                console.warn('[duplicateFrameWithContents] fallback enliven failed', err2);
+            }
+        }
+        if (!cloned) {
+            console.warn('[duplicateFrameWithContents] objeto NAO duplicado (clone+enliven falharam):', (original as any)?.name, (original as any)?._customId);
+            continue;
+        }
 
         const oldId = String(original._customId || '');
         const newId = makeId();
