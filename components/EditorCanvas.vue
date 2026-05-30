@@ -21908,6 +21908,37 @@ const simulateSmartGrid = async (
                 console.warn('Grid layout recalc error:', calcErr);
             }
 
+            // SUBSTITUIR PRODUTOS deve MANTER a tipografia/estilos atuais da zona.
+            // Os cards novos vem do template e, sob layout manual, a tipografia da
+            // zona (fonte/peso/estilo/escala, marcadas como override no painel) NAO
+            // e' reaplicada automaticamente — fazendo a etiqueta "perder a fonte/
+            // tamanho" ao trocar produtos (o usuario tinha que mudar a fonte e voltar
+            // para reaplicar). Reaplicamos aqui os estilos da zona aos cards
+            // recem-criados, com o MESMO gate de override de applyLabelTemplateToZone.
+            try {
+                const zoneStylesAfterReplace = getZoneGlobalStyles(targetZone);
+                const rawZoneStylesAfterReplace = (targetZone as any)?._zoneGlobalStyles || {};
+                const labelStyleReapplyProps = [
+                    'splashColor', 'accentColor', 'splashFill', 'splashTextColor', 'priceTextColor',
+                    'priceCurrencyColor', 'priceFont', 'priceFontWeight', 'priceFontStyle', 'currencySymbol',
+                    'priceFontSize', 'splashTextScale', 'splashStrokeWidth', 'splashRoundness', 'splashScale', 'splashOffsetY'
+                ] as Array<keyof GlobalStyles>;
+                labelStyleReapplyProps.forEach((prop) => {
+                    if (!shouldReapplyLabelStylePropAfterTemplateApply(prop, rawZoneStylesAfterReplace, zoneStylesAfterReplace, targetZone)) return;
+                    applyGlobalStylesToCards(zoneStylesAfterReplace, targetZone, { cards: smartObjects, prop });
+                });
+                // Overrides POR CARD (editar so um card) tambem devem sobreviver a troca.
+                for (const card of smartObjects) {
+                    const cardOv = getCardStyleOverrides(card);
+                    const cardProps = Object.keys(cardOv);
+                    if (!cardProps.length) continue;
+                    const effForCard = getEffectiveStylesForCard(card, targetZone);
+                    cardProps.forEach((prop) => applyGlobalStylesToCards(effForCard, targetZone, { cards: [card], prop }));
+                }
+            } catch (typoErr) {
+                console.warn('[replace-products] Falha ao reaplicar estilos da zona nos cards:', typoErr);
+            }
+
             // Select the first created object
             if (smartObjects.length > 0) {
                 canvas.value.setActiveObject(smartObjects[0]);
