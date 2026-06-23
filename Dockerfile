@@ -51,7 +51,7 @@ ENV NODE_ENV=production \
     NPM_CONFIG_PROGRESS=false \
     NPM_CONFIG_UPDATE_NOTIFIER=false
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat curl
 
 WORKDIR /app
 
@@ -63,5 +63,7 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked npm install --omit=dev -
 COPY --from=builder /app/.output ./.output
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD curl -fsS "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null || exit 1
 
 CMD ["node", ".output/server/index.mjs"]
