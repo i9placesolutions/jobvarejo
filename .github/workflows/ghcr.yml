@@ -75,7 +75,7 @@ jobs:
             -H "Authorization: Bearer $COOLIFY_TOKEN" \
             -H "Content-Type: application/json" \
             "$COOLIFY_URL/api/v1/applications/$COOLIFY_APPLICATION_UUID" \
-            -d "{\"build_pack\":\"dockerimage\",\"docker_registry_image_name\":\"${IMAGE}\",\"docker_registry_image_tag\":\"${IMAGE_TAG}\"}"
+            -d "{\"docker_registry_image_name\":\"${IMAGE}\",\"docker_registry_image_tag\":\"${IMAGE_TAG}\"}"
 
           curl -fsS \
             -H "Authorization: Bearer $COOLIFY_TOKEN" \
