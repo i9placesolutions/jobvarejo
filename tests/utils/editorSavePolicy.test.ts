@@ -121,11 +121,9 @@ describe('shouldSkipThumbnailForReason — thumbnail compartilha algumas regras 
     expect(shouldSkipThumbnailForReason('user', 'post-load-cleanup')).toBe(true)
   })
 
-  it('object:* PASSA para thumbnail (diferente do autosave)', () => {
-    // object:modified é razao tipica de gerar thumbnail novo, embora nao
-    // dispare autosave. Garante que esse comportamento divergente eh mantido.
-    expect(shouldSkipThumbnailForReason('user', 'object:modified')).toBe(false)
-    expect(shouldSkipThumbnailForReason('user', 'object:added')).toBe(false)
+  it('object:* pula thumbnail no caminho quente do canvas', () => {
+    expect(shouldSkipThumbnailForReason('user', 'object:modified')).toBe(true)
+    expect(shouldSkipThumbnailForReason('user', 'object:added')).toBe(true)
   })
 })
 
@@ -158,37 +156,40 @@ describe('canGenerateThumbnailNow — gate combinado (skip + interval)', () => {
     })).toBe(false)
   })
 
-  it('libera quando intervalo passou', () => {
+  it('libera quando intervalo passou para razao nao pulada', () => {
     expect(canGenerateThumbnailNow({
       source: 'user',
-      reason: 'object:modified',
+      reason: 'properties-panel',
       lastThumbnailAt: 0,
-      now: 11000
+      now: 3500
     })).toBe(true)
   })
 
   it('bloqueia quando intervalo nao passou', () => {
     expect(canGenerateThumbnailNow({
       source: 'user',
-      reason: 'object:modified',
+      reason: 'properties-panel',
       lastThumbnailAt: 5000,
-      now: 9000
-    })).toBe(false) // 4s < 10s
+      now: 7000
+    })).toBe(false) // 2s < 3s
+  })
+
+  it('bloqueia object:* mesmo quando intervalo passou', () => {
+    expect(canGenerateThumbnailNow({
+      source: 'user',
+      reason: 'object:added',
+      lastThumbnailAt: 0,
+      now: 100_000
+    })).toBe(false)
   })
 
   it('aceita razoes com intervalo curto (3s)', () => {
     expect(canGenerateThumbnailNow({
       source: 'user',
-      reason: 'object:added',
+      reason: 'user-typed',
       lastThumbnailAt: 0,
       now: 3500
     })).toBe(true)
-    expect(canGenerateThumbnailNow({
-      source: 'user',
-      reason: 'object:added',
-      lastThumbnailAt: 0,
-      now: 2999
-    })).toBe(false)
   })
 })
 

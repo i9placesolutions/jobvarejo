@@ -51,7 +51,7 @@ const hasUnsavedChanges = ref(false)
 const isProjectLoaded = ref(false) // Flag para indicar quando o projeto foi carregado do banco
 const unsavedRevision = ref(0)
 const queuedSaveAfterCurrent = ref(false)
-const SAVE_WATCHDOG_MS = 120_000
+const SAVE_WATCHDOG_MS = 360_000
 // Soft timeout para upload do canvas.
 // Worst case por tentativa: presigned (6s+12s) + proxy (35s) ~= 53s.
 // Com CORS bloqueado, usamos 1 tentativa de proxy; nos demais casos deixamos
@@ -123,6 +123,8 @@ const LOCAL_DRAFT_FLUSH_IDLE_TIMEOUT_MS = 2000
 const makePageId = (): string => makeId()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const isUuid = (value: unknown): boolean => UUID_RE.test(String(value || '').trim())
+const hasPagePendingRemoteSync = (page: Page | null | undefined): boolean => !!(page?.dirty || page?.thumbnailDirty)
+const hasAnyPagePendingRemoteSync = (): boolean => Array.isArray(project.pages) && project.pages.some(hasPagePendingRemoteSync)
 
 const ensureUniquePageId = (wanted: unknown, used: Set<string>): string => {
     const raw = String(wanted || '').trim()
@@ -1493,7 +1495,7 @@ export const useProject = () => {
 		            return
 		        }
 
-	        const hasDirtyPages = Array.isArray(project.pages) && project.pages.some((page) => !!page?.dirty || !!page?.thumbnailDirty)
+		        const hasDirtyPages = hasAnyPagePendingRemoteSync()
 		        const requiresInitialPersist = !project.id || project.id.startsWith('proj_')
 		        if (!hasUnsavedChanges.value && !hasDirtyPages && !requiresInitialPersist) {
 		            return
@@ -1523,24 +1525,19 @@ export const useProject = () => {
                 saveDebugStage.value = stage
             }
 
-	        // Watchdog: se a operação travar (await preso), força reset cedo o
-            // bastante para o usuário não ficar preso olhando "Salvando..." por muito tempo.
-            // FIX: the watchdog now only logs + sets error status but does NOT reset
-            // isSaving/queuedSave — that's the `finally` block's job.  Previously the
-            // watchdog could fire at the exact same time as the `finally` block,
-            // causing a race that cleared `queuedSaveAfterCurrent` and dropped the
-            // queued follow-up save, leading to data loss.
+		        // Watchdog: apenas sinaliza travamento. Nunca libera isSaving aqui.
+            // O timeout do upload de canvas pode chegar a 240s; liberar isSaving antes
+            // do await real terminar permite saves concorrentes para a mesma página.
             let _saveWatchdogFired = false
 	        let _saveWatchdog: ReturnType<typeof setTimeout> | null = setTimeout(() => {
 	            _saveWatchdog = null
                 _saveWatchdogFired = true
 	            if (isSaving.value) {
-	                console.error(`[saveProjectDB] Watchdog: save travado por ${Math.round(SAVE_WATCHDOG_MS / 1000)}s na etapa "${currentSaveStage}", forçando reset de estado.`)
-	                saveLastError.value = `Salvamento travou em "${currentSaveStage}". Clique em "Tentar novamente".`
-	                saveStatus.value = 'error'
-	                isSaving.value = false
-	                // NOTE: intentionally NOT clearing queuedSaveAfterCurrent here —
-	                // the finally block will handle it and schedule the follow-up.
+		                console.error(`[saveProjectDB] Watchdog: save em andamento por ${Math.round(SAVE_WATCHDOG_MS / 1000)}s na etapa "${currentSaveStage}". Aguardando conclusão/timeout do fluxo atual.`)
+		                saveLastError.value = `Salvamento demorando em "${currentSaveStage}". Aguarde a tentativa atual terminar.`
+		                saveStatus.value = 'error'
+		                // NOTE: intentionally NOT clearing queuedSaveAfterCurrent here —
+		                // the finally block will handle it and schedule the follow-up.
 	            }
 	        }, SAVE_WATCHDOG_MS)
 	        const abortIfStaleSaveContext = (): boolean => {
@@ -2088,7 +2085,7 @@ export const useProject = () => {
             // Não auto-salvar projetos não criados ainda
             return
         }
-        if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) {
+	        if (!hasUnsavedChanges.value && !hasAnyPagePendingRemoteSync()) {
             return
         }
 
@@ -2112,7 +2109,7 @@ export const useProject = () => {
             scheduledAutoSaveRevision = -1
             scheduledAutoSaveProjectId = ''
             if (_moduleDisposed) return
-            if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) return
+	            if (!hasUnsavedChanges.value && !hasAnyPagePendingRemoteSync()) return
             saveProjectDB()
         }, AUTO_SAVE_DELAY)
         _pendingSaveTimers.add(saveTimeout)
@@ -2160,7 +2157,7 @@ export const useProject = () => {
             ;(project as any).__uploadFailed = false
         }
 
-        if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) return
+	        if (!hasUnsavedChanges.value && !hasAnyPagePendingRemoteSync()) return
         if (!project.id || project.id.startsWith('proj_')) return
 
         // If a save is already in flight, queue this flush and wait for completion.
@@ -2170,7 +2167,7 @@ export const useProject = () => {
             if (!idle) return
         }
 
-        if (!hasUnsavedChanges.value && !project.pages.some((p) => p?.dirty)) return
+	        if (!hasUnsavedChanges.value && !hasAnyPagePendingRemoteSync()) return
         await saveProjectDB()
 
         // Ensure callers that depend on durability (e.g. mini editor save) only

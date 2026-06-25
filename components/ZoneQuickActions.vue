@@ -70,7 +70,10 @@ const btnStyle = computed(() => {
   return { top: `${Math.round(y)}px`, left: `${Math.round(x)}px` };
 });
 
-const onPrimaryClick = () => emit(props.isEmpty ? 'fill' : 'append');
+const onPrimaryClick = () => {
+  if (props.isEmpty) emit('fill');
+  else emit('append');
+};
 </script>
 
 <template>

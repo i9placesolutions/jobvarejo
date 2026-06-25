@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeExportPreflightCounts,
-  buildExportPreflightWarnings
+  buildExportPreflightWarnings,
+  buildExportPreflightWarningsFromZoneDiagnostics
 } from '~/utils/exportPreflightChecks'
 
 const isProdZone = (obj: any) => !!obj?.isProductZone
@@ -139,5 +140,60 @@ describe('buildExportPreflightWarnings', () => {
     expect(buildExportPreflightWarnings({
       brokenImages: 1, emptyProductCards: 1, emptyZones: 1
     })).toHaveLength(3)
+  })
+})
+
+describe('buildExportPreflightWarningsFromZoneDiagnostics', () => {
+  it('sem diagnosticos: array vazio', () => {
+    expect(buildExportPreflightWarningsFromZoneDiagnostics([])).toEqual([])
+  })
+
+  it('ignora diagnosticos informativos', () => {
+    const warnings = buildExportPreflightWarningsFromZoneDiagnostics([
+      {
+        zoneName: 'Hortifruti',
+        diagnostics: [
+          {
+            id: 'text-risk',
+            severity: 'info',
+            title: 'Texto longo',
+            message: 'Mensagem informativa'
+          }
+        ]
+      }
+    ])
+    expect(warnings).toEqual([])
+  })
+
+  it('formata warning comercial com nome da zona', () => {
+    const warnings = buildExportPreflightWarningsFromZoneDiagnostics([
+      {
+        zoneName: 'Acougue',
+        diagnostics: [
+          {
+            id: 'image-review',
+            severity: 'warning',
+            title: 'Imagens precisam de revisão',
+            message: 'Há produtos com imagem ausente.'
+          }
+        ]
+      }
+    ])
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('Atencao em Acougue')
+    expect(warnings[0]).toContain('Imagens precisam de revisão')
+  })
+
+  it('remove mensagens duplicadas', () => {
+    const diagnostic = {
+      id: 'template-risk' as const,
+      severity: 'warning' as const,
+      title: 'Template pode não representar o preço',
+      message: 'A zona tem itens pack/unit.'
+    }
+    const warnings = buildExportPreflightWarningsFromZoneDiagnostics([
+      { zoneName: 'Bebidas', diagnostics: [diagnostic, diagnostic] }
+    ])
+    expect(warnings).toHaveLength(1)
   })
 })

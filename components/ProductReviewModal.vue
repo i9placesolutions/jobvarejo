@@ -24,6 +24,7 @@ type ProductImportOptions = {
     targetMode?: ImportTargetMode
     targetZoneId?: string
     sourceMode?: ImportSourceMode
+    autoLayout?: boolean
     selectedFrameIds?: string[]
     frameAssignments?: FrameAssignment[]
     zoneAssignments?: ZoneAssignment[]
@@ -84,6 +85,7 @@ const zoneAssignmentsMap = ref<Record<string, string | null>>({})
 const lockedTargetZoneId = ref<string>('')
 // Importacao inteligente: por padrao, queremos remover o fundo das imagens encontradas.
 const imageBgPolicy = ref<ImageBgPolicy>('always')
+const autoLayoutEnabled = ref(true)
 const isSubmittingImport = ref(false)
 const appendBaseProducts = ref<SmartProduct[] | null>(null)
 const reviewFilter = ref<ReviewFilter>('all')
@@ -665,6 +667,7 @@ const handleImport = () => {
             ? (String(lockedTargetZoneId.value || primaryZoneId.value || '').trim() || undefined)
             : undefined,
         sourceMode: importSource.value,
+        autoLayout: autoLayoutEnabled.value,
         imageMatchMode: imageMatchMode.value,
         imageConcurrency: clampImageConcurrency(imageConcurrency.value)
     }
@@ -1241,6 +1244,7 @@ const selectedTargetModeLabel = computed(() => {
     return canUseMultiZone.value ? 'Zonas' : 'Zona atual'
 })
 const selectedLabelTemplateSummary = computed(() => selectedLabelTemplate.value?.name || 'Padrão da zona')
+const autoLayoutSummary = computed(() => autoLayoutEnabled.value ? 'Layout auto' : 'Layout manual')
 const importImpactSummary = computed(() => {
     const totalProducts = products.value.length
     if (targetMode.value === 'multi-frame') {
@@ -2778,14 +2782,14 @@ const getAssetDisplayName = (asset: any): string => {
                         <div class="flex items-center gap-2 text-[10px] font-medium text-zinc-400">
                             <Settings2 class="w-3.5 h-3.5" />
                             Configurações
-                            <span class="text-zinc-600 group-open:hidden">{{ selectedImportModeLabel }} • {{ selectedTargetModeLabel }} • {{ selectedLabelTemplateSummary }}</span>
+                            <span class="text-zinc-600 group-open:hidden">{{ selectedImportModeLabel }} • {{ selectedTargetModeLabel }} • {{ selectedLabelTemplateSummary }} • {{ autoLayoutSummary }}</span>
                         </div>
                         <ChevronDown class="w-3.5 h-3.5 text-zinc-600 transition-transform group-open:rotate-180" />
                     </summary>
                     <div class="px-3 pb-3 pt-1 border-t border-zinc-800/60">
                         <div
                             class="grid gap-2"
-                            :class="props.showImportMode ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5' : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'"
+                            :class="props.showImportMode ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6' : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-5'"
                         >
                             <div v-if="props.showImportMode" class="space-y-1.5">
                                 <div class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Modo <span class="text-zinc-600 font-normal">({{ Math.max(0, Number(props.existingCount || 0)) }} itens)</span></div>
@@ -2809,6 +2813,13 @@ const getAssetDisplayName = (asset: any): string => {
                                 <div class="grid grid-cols-2 gap-0.5 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800">
                                     <button type="button" class="h-7 rounded text-[9px] font-bold uppercase tracking-widest transition-all" :class="targetMode === 'zone' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'" @click="targetMode = 'zone'">Zona</button>
                                     <button type="button" class="h-7 rounded text-[9px] font-bold uppercase tracking-widest transition-all disabled:opacity-50" :class="targetMode === 'multi-frame' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'" :disabled="!canUseMultiFrame" @click="targetMode = 'multi-frame'">Multi-frame</button>
+                                </div>
+                            </div>
+                            <div class="space-y-1.5">
+                                <div class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Layout</div>
+                                <div class="grid grid-cols-2 gap-0.5 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800">
+                                    <button type="button" class="h-7 rounded text-[9px] font-bold uppercase tracking-widest transition-all" :class="autoLayoutEnabled ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'" @click="autoLayoutEnabled = true">Auto</button>
+                                    <button type="button" class="h-7 rounded text-[9px] font-bold uppercase tracking-widest transition-all" :class="!autoLayoutEnabled ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'" @click="autoLayoutEnabled = false">Manual</button>
                                 </div>
                             </div>
                             <div class="space-y-1.5">

@@ -12,6 +12,7 @@ type ProductImportOptions = {
   targetMode?: ImportTargetMode
   targetZoneId?: string
   sourceMode?: 'manual' | 'paste-list' | 'file-import'
+  autoLayout?: boolean
   selectedFrameIds?: string[]
   frameAssignments?: FrameAssignment[]
   zoneAssignments?: ZoneAssignment[]

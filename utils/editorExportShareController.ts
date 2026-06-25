@@ -6,9 +6,11 @@ import {
     shareFileFromDataUrl
 } from '~/utils/editorFileTransfer'
 import {
+    buildExportPreflightWarningsFromZoneDiagnostics,
     buildExportPreflightWarnings,
     computeExportPreflightCounts
 } from '~/utils/exportPreflightChecks'
+import type { ExportZoneDiagnosticGroup } from '~/utils/exportPreflightChecks'
 import { getSelectedObjectExportFileBaseName } from '~/utils/exportSelectionHelpers'
 import {
     EXPORT_COLOR_BRIGHTNESS,
@@ -42,6 +44,7 @@ export type EditorExportShareContext = {
     getAllFrames: () => any[]
     getFrameById: (id: string) => any
     isLikelyProductZone: (obj: any) => boolean
+    getExportZoneDiagnostics?: () => ExportZoneDiagnosticGroup[]
     resolveExportableSelectedObject: (preferred?: any) => any | null
     sanitizeAllClipPaths: () => void
     safeRequestRenderAll: () => void
@@ -572,7 +575,15 @@ const runExportPreflightChecks = (ctx: EditorExportShareContext): string[] => {
         objects: ctx.canvas.value.getObjects?.() || [],
         isLikelyProductZone: ctx.isLikelyProductZone
     })
-    return buildExportPreflightWarnings(counts)
+    const warnings = buildExportPreflightWarnings(counts)
+    if (typeof ctx.getExportZoneDiagnostics === 'function') {
+        try {
+            warnings.push(...buildExportPreflightWarningsFromZoneDiagnostics(ctx.getExportZoneDiagnostics()))
+        } catch (err) {
+            console.warn('[export-preflight] Falha ao montar diagnosticos de zona:', err)
+        }
+    }
+    return Array.from(new Set(warnings))
 }
 
 export const performExport = async (ctx: EditorExportShareContext) => {

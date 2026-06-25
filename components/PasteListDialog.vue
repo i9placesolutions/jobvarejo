@@ -21,15 +21,12 @@ const emit = defineEmits<{
   (e: 'submit-file', file: File): void
 }>()
 
-const { getApiAuthHeaders } = useApiAuth()
-
-const listImageInput = ref<HTMLInputElement | null>(null)
 const listFileInput = ref<HTMLInputElement | null>(null)
 const analyzeError = ref<string | null>(null)
 const uploadedFileName = ref<string | null>(null)
 const pendingFile = ref<File | null>(null)
 
-const LIST_FILE_ACCEPT = 'image/*,.csv,.tsv,.xlsx,.xls,.pdf,text/plain'
+const LIST_FILE_ACCEPT = '.csv,.tsv,.xlsx,.xls,.pdf,.txt,text/csv,text/tab-separated-values,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel'
 
 const open = computed({
   get: () => props.modelValue,
@@ -45,20 +42,6 @@ const listText = computed({
   get: () => props.pasteListText,
   set: (v: string) => emit('update:pasteListText', v)
 })
-
-const image = computed({
-  get: () => props.pastedImage,
-  set: (v: string | null) => emit('update:pastedImage', v)
-})
-
-const analyzing = computed({
-  get: () => props.isAnalyzingImage,
-  set: (v: boolean) => emit('update:isAnalyzingImage', v)
-})
-
-const triggerListImageUpload = () => {
-  listImageInput.value?.click()
-}
 
 const triggerFileUpload = () => {
   listFileInput.value?.click()
@@ -87,101 +70,17 @@ const handleFileUpload = (event: Event) => {
   analyzeError.value = null
 
   if (isImageFile(file)) {
-    // Image: show preview for AI extraction
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      image.value = (e.target?.result as string) || null
-      uploadedFileName.value = file.name
-      pendingFile.value = null
-    }
-    reader.readAsDataURL(file)
+    pendingFile.value = null
+    uploadedFileName.value = null
+    emit('update:pastedImage', null)
+    analyzeError.value = 'Importação por imagem está desativada neste momento. Use texto, PDF, Excel, CSV, TSV ou TXT.'
   } else if (isDocumentFile(file)) {
     // Document (Excel, PDF, CSV): store for direct submission
     pendingFile.value = file
     uploadedFileName.value = file.name
-    image.value = null
+    emit('update:pastedImage', null)
   } else {
-    analyzeError.value = 'Formato de arquivo nao suportado. Use imagem, Excel, PDF ou CSV.'
-  }
-}
-
-const handleListImageUpload = (event: Event) => {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    image.value = (e.target?.result as string) || null
-  }
-  reader.readAsDataURL(file)
-}
-
-const analyzeImageWithAI = async () => {
-  if (!image.value) return
-  analyzing.value = true
-  analyzeError.value = null
-
-  try {
-    const headers = await getApiAuthHeaders()
-
-    let result: { products?: any[] } | null = null
-    let lastFetchErr: any = null
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        result = await $fetch<{ products?: any[] }>('/api/parse-products', {
-          method: 'POST',
-          headers,
-          body: { image: image.value },
-          timeout: 70_000
-        })
-        break
-      } catch (fetchErr: any) {
-        lastFetchErr = fetchErr
-        const status = Number(fetchErr?.status || fetchErr?.statusCode || fetchErr?.data?.statusCode || 0)
-        const isTransient = status === 502 || status === 503 || status === 504 || status === 408
-        if (!isTransient || attempt === 1) throw fetchErr
-        await new Promise(r => setTimeout(r, 1500))
-      }
-    }
-    if (!result) throw lastFetchErr || new Error('Falha ao processar imagem')
-
-    if (result?.products && result.products.length > 0) {
-      // Convert parsed products to text format for the text tab
-      const lines = result.products.map((p: any) => {
-        const parts: string[] = []
-        const name = String(p.name || '').trim()
-        if (!name) return null
-
-        let line = name
-        if (p.brand) line = `${p.brand} ${line}`
-        if (p.weight) line += ` ${p.weight}`
-
-        const price = p.price || p.pricePack || p.priceUnit || ''
-        if (price) line += ` - ${price}`
-
-        return line
-      }).filter(Boolean)
-
-      if (lines.length > 0) {
-        listText.value = lines.join('\n')
-        tab.value = 'text'
-      } else {
-        analyzeError.value = 'Nenhum produto foi identificado na imagem. Tente uma imagem mais nitida.'
-      }
-    } else {
-      analyzeError.value = 'Nenhum produto foi identificado na imagem. Tente uma imagem mais nitida.'
-    }
-  } catch (err: any) {
-    console.error('[PasteListDialog] AI analysis failed:', err)
-    const status = Number(err?.statusCode ?? err?.status ?? err?.response?.status ?? 0)
-    if (status === 429) {
-      analyzeError.value = 'Muitas tentativas. Aguarde alguns segundos e tente novamente.'
-    } else if (status === 413) {
-      analyzeError.value = 'A imagem e muito grande. Tente uma imagem menor.'
-    } else {
-      analyzeError.value = String(err?.data?.message || err?.message || 'Falha ao analisar imagem. Tente novamente.')
-    }
-  } finally {
-    analyzing.value = false
+    analyzeError.value = 'Formato de arquivo nao suportado. Use Excel, PDF, CSV, TSV ou TXT.'
   }
 }
 
@@ -196,13 +95,13 @@ const handleSubmit = () => {
 const clearFile = () => {
   pendingFile.value = null
   uploadedFileName.value = null
-  image.value = null
+  emit('update:pastedImage', null)
   analyzeError.value = null
 }
 
 const canSubmit = computed(() => {
   if (tab.value === 'text') return !!listText.value
-  return !!pendingFile.value || !!image.value
+  return !!pendingFile.value
 })
 
 const handleImagePaste = (event: ClipboardEvent) => {
@@ -212,14 +111,13 @@ const handleImagePaste = (event: ClipboardEvent) => {
     if (item.type.indexOf('image') === -1) continue
     const blob = item.getAsFile()
     if (!blob) continue
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      image.value = (e.target?.result as string) || null
-      tab.value = 'image'
-      pendingFile.value = null
-      uploadedFileName.value = null
-    }
-    reader.readAsDataURL(blob)
+    event.preventDefault()
+    tab.value = 'image'
+    pendingFile.value = null
+    uploadedFileName.value = null
+    emit('update:pastedImage', null)
+    analyzeError.value = 'Importação por imagem está desativada neste momento. Cole o texto da lista ou envie PDF, Excel, CSV, TSV ou TXT.'
+    return
   }
 }
 </script>
@@ -239,7 +137,7 @@ const handleImagePaste = (event: ClipboardEvent) => {
             @click="tab = 'image'"
             :class="['flex-1 px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded transition-all', tab === 'image' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200']"
           >
-            Arquivo/Imagem
+            Arquivo
           </button>
         </div>
 
@@ -267,7 +165,7 @@ const handleImagePaste = (event: ClipboardEvent) => {
 
           <!-- Upload area when no file/image selected -->
           <div
-            v-if="!image && !pendingFile"
+            v-if="!pendingFile"
             class="relative border-2 border-dashed border-violet-400/40 rounded-2xl p-6 bg-gradient-to-br from-violet-500/5 to-pink-500/5 hover:border-violet-400/70 hover:bg-violet-500/10 transition-all duration-300 cursor-pointer group flex flex-col items-center gap-3"
             @click="triggerFileUpload"
           >
@@ -276,14 +174,13 @@ const handleImagePaste = (event: ClipboardEvent) => {
             </div>
             <div class="text-center">
               <p class="text-[13px] font-bold text-white">Clique para Upload ou Cole (Ctrl+V)</p>
-              <p class="text-[11px] text-zinc-400 mt-1">Suporta Excel, PDF, CSV, Imagens e Texto</p>
+              <p class="text-[11px] text-zinc-400 mt-1">Suporta Excel, PDF, CSV, TSV e TXT</p>
             </div>
             <input ref="listFileInput" type="file" hidden :accept="LIST_FILE_ACCEPT" @change="handleFileUpload" />
-            <input ref="listImageInput" type="file" hidden accept="image/*" @change="handleListImageUpload" />
           </div>
 
           <!-- Document file preview (Excel, PDF, CSV) -->
-          <div v-else-if="pendingFile && !image" class="relative rounded-2xl overflow-hidden border border-border bg-black/2 p-4">
+          <div v-else class="relative rounded-2xl overflow-hidden border border-border bg-black/2 p-4">
             <div class="flex items-center gap-3">
               <div class="w-12 h-12 rounded-xl bg-violet-500/15 flex items-center justify-center shrink-0">
                 <FileSpreadsheet class="w-6 h-6 text-violet-400" />
@@ -296,20 +193,6 @@ const handleImagePaste = (event: ClipboardEvent) => {
                 <X class="w-4 h-4" />
               </button>
             </div>
-          </div>
-
-          <!-- Image preview -->
-          <div v-else-if="image" class="relative rounded-2xl overflow-hidden border border-border bg-black/2 p-2">
-            <div class="aspect-video w-full rounded-xl overflow-hidden bg-black/5 flex items-center justify-center relative group">
-              <img :src="image" class="max-w-full max-h-full object-contain shadow-2xl" />
-              <button @click="clearFile" class="absolute top-2 right-2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full backdrop-blur-sm transition-all">
-                <X class="w-4 h-4" />
-              </button>
-            </div>
-            <Button class="w-full mt-2" :disabled="analyzing" @click="analyzeImageWithAI">
-              <span v-if="analyzing" class="flex items-center gap-2"><div class="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin"></div> Analisando com IA...</span>
-              <span v-else>Extrair Produtos com IA</span>
-            </Button>
           </div>
         </div>
       </div>

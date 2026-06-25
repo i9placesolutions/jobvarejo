@@ -23,7 +23,7 @@ export const useEditorPeriodicSave = ({
         intervalId = setInterval(() => {
             if (isCanvasDestroyed.value) return
             if (!project.id || project.id.startsWith('proj_')) return
-            if (!hasUnsavedChanges.value && !project.pages.some((p: any) => !!p?.dirty)) return
+            if (!hasUnsavedChanges.value && !project.pages.some((p: any) => !!p?.dirty || !!p?.thumbnailDirty)) return
             void flushAutoSave().catch(() => {
                 // Periodic save is best-effort; explicit save paths still report errors.
             })

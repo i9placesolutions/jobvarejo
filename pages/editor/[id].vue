@@ -56,6 +56,8 @@ const {
   realtimeClientId
 } = useProject()
 
+const hasPendingProjectSync = () => hasUnsavedChanges.value || project.pages.some((p: any) => !!p?.dirty || !!p?.thumbnailDirty)
+
 const realtimeStatus = ref<'idle' | 'connecting' | 'connected' | 'error'>('idle')
 const remoteUpdatePending = ref(false)
 const realtimeForcePolling = ref(false)
@@ -187,7 +189,7 @@ const scheduleRealtimePoll = (id: string, delayMs = 20_000) => {
       const remoteUpdatedAt = getIsoTimeMs(latestUpdatedAt)
 
       if (remoteUpdatedAt > knownUpdatedAt) {
-        if (hasUnsavedChanges.value) {
+        if (hasPendingProjectSync()) {
           remoteUpdatePending.value = true
         } else {
           scheduleRemoteReload(projectId)
@@ -212,7 +214,7 @@ const handleRealtimeProjectChange = (rawPayload: string) => {
     const activeRouteProjectId = String(route.params.id || '').trim()
     if (!changedProjectId || !activeRouteProjectId || changedProjectId !== activeRouteProjectId) return
 
-    if (hasUnsavedChanges.value) {
+    if (hasPendingProjectSync()) {
       remoteUpdatePending.value = true
       return
     }
@@ -315,7 +317,7 @@ onBeforeRouteLeave(async () => {
   flushPendingLocalDrafts()
   emergencySnapshotDirtyPages()
 
-  if (!hasUnsavedChanges.value && !isSaving.value && !project.pages.some((p: any) => !!p?.dirty)) {
+  if (!hasPendingProjectSync() && !isSaving.value) {
     return true
   }
 
@@ -373,7 +375,7 @@ onMounted(() => {
         flushPendingLocalDrafts()
         emergencySnapshotDirtyPages()
       }
-      if (hasUnsavedChanges.value) {
+      if (hasPendingProjectSync()) {
         void flushAutoSave().catch(() => { /* ignore */ })
       }
       closeProjectRealtime()
@@ -391,7 +393,7 @@ onMounted(() => {
     // força um snapshot de emergência com limite mais generoso.
     emergencySnapshotDirtyPages()
     // Disparar save remoto (fire-and-forget — browser pode cancelar, mas drafts locais já cobrem)
-    if (hasUnsavedChanges.value) {
+    if (hasPendingProjectSync()) {
       void flushAutoSave().catch(() => {})
       // Pedir confirmação ao usuário se há mudanças não salvas
       e.preventDefault()

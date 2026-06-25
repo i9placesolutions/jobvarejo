@@ -27,6 +27,19 @@ const ensureCanvasDataNotEmpty = (value: unknown) => {
   }
 }
 
+const MAX_NOOP_COMPARE_BYTES = 250_000
+
+const stringifyForNoopCompare = (value: unknown): string | null => {
+  try {
+    const serialized = JSON.stringify(value)
+    if (typeof serialized !== 'string') return null
+    if (serialized.length > MAX_NOOP_COMPARE_BYTES) return null
+    return serialized
+  } catch {
+    return null
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   await enforceRateLimit(event, `projects-post:${user.id}`, 90, 60_000)
@@ -86,26 +99,52 @@ export default defineEventHandler(async (event) => {
 
   try {
     if (projectId) {
-      // Simple UPDATE: always write the new data and return the updated row.
-      // Previous approach used `canvas_data IS DISTINCT FROM $2::jsonb` which
-      // caused PostgreSQL to decompress and compare multi-MB JSONB blobs,
-      // routinely exceeding 60s on large canvas payloads with inline backups.
-      const row = await pgOneOrNull<any>(
-        `update public.projects
-         set name = $1,
-             canvas_data = $2::jsonb,
-             preview_url = $3,
-             user_id = $4,
-             updated_at = $5
-         where id = $6
-           and user_id = $7
-         returning *`,
-        [name, canvasDataJson, previewUrl, user.id, updatedAt, projectId, user.id]
+      const nextCanvasComparable = canvasDataJson.length <= MAX_NOOP_COMPARE_BYTES ? canvasDataJson : null
+      const existing = await pgOneOrNull<any>(
+        nextCanvasComparable
+          ? `select *
+               from public.projects
+              where id = $1
+                and user_id = $2`
+          : `select id
+               from public.projects
+              where id = $1
+                and user_id = $2`,
+        [projectId, user.id]
       )
 
-      if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
-      didPersistMutation = true
-      result = row
+      if (!existing) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+
+      const existingCanvasComparable = nextCanvasComparable ? stringifyForNoopCompare(existing.canvas_data) : null
+      const isNoopUpdate = !!nextCanvasComparable
+        && !!existingCanvasComparable
+        && existing.name === name
+        && normalizeStoredStorageRef(existing.preview_url) === previewUrl
+        && existingCanvasComparable === nextCanvasComparable
+
+      if (isNoopUpdate) {
+        result = existing
+      } else {
+        // Simple UPDATE when data changed. We intentionally avoid
+        // `canvas_data IS DISTINCT FROM $2::jsonb` because comparing large JSONB
+        // in Postgres previously made autosaves exceed request timeouts.
+        const row = await pgOneOrNull<any>(
+          `update public.projects
+           set name = $1,
+               canvas_data = $2::jsonb,
+               preview_url = $3,
+               user_id = $4,
+               updated_at = $5
+           where id = $6
+             and user_id = $7
+           returning *`,
+          [name, canvasDataJson, previewUrl, user.id, updatedAt, projectId, user.id]
+        )
+
+        if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+        didPersistMutation = true
+        result = row
+      }
     } else {
       const { rows } = await pgQuery<any>(
         `insert into public.projects

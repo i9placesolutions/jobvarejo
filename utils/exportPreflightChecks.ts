@@ -1,3 +1,5 @@
+import type { ProductZoneDiagnostic } from '~/utils/product-zone-diagnostics'
+
 /**
  * Preflight checks puros para exportacao do canvas. Detecta problemas
  * comerciais antes de gerar PNG/JPG (imagens quebradas, zonas vazias,
@@ -22,6 +24,11 @@ export type ExportPreflightCounts = {
     brokenImages: number
     emptyProductCards: number
     emptyZones: number
+}
+
+export type ExportZoneDiagnosticGroup = {
+    zoneName?: string | null
+    diagnostics: ProductZoneDiagnostic[]
 }
 
 /**
@@ -93,5 +100,32 @@ export const buildExportPreflightWarnings = (counts: ExportPreflightCounts): str
     if (counts.emptyProductCards > 0) {
         warnings.push(`${counts.emptyProductCards} card(s) de produto sem nome/preco — informacoes comerciais podem estar incompletas.`)
     }
+    return warnings
+}
+
+export const buildExportPreflightWarningsFromZoneDiagnostics = (
+    groups: ReadonlyArray<ExportZoneDiagnosticGroup>
+): string[] => {
+    if (!Array.isArray(groups) || groups.length === 0) return []
+
+    const warnings: string[] = []
+    const seen = new Set<string>()
+
+    groups.forEach((group, groupIndex) => {
+        const zoneName = String(group?.zoneName || '').trim() || `Zona ${groupIndex + 1}`
+        const diagnostics: ProductZoneDiagnostic[] = Array.isArray(group?.diagnostics) ? group.diagnostics : []
+        diagnostics.forEach((diagnostic) => {
+            if (!diagnostic || diagnostic.severity === 'info') return
+            const title = String(diagnostic.title || '').trim()
+            const message = String(diagnostic.message || '').trim()
+            if (!title && !message) return
+            const key = `${zoneName}:${diagnostic.id}:${diagnostic.severity}:${title}:${message}`
+            if (seen.has(key)) return
+            seen.add(key)
+            const prefix = diagnostic.severity === 'critical' ? 'Critico' : 'Atencao'
+            warnings.push(`${prefix} em ${zoneName}: ${title || message}${title && message ? ` — ${message}` : ''}`)
+        })
+    })
+
     return warnings
 }

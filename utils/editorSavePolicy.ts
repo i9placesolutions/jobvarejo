@@ -62,6 +62,7 @@ export const shouldSkipThumbnailForReason = (source: SaveSource, reason: string)
     || reason === 'post-load-cleanup'
     || reason.startsWith('lifecycle:')
     || reason.startsWith('viewport:')
+    || reason.startsWith('object:')
 }
 
 export const getThumbnailMinIntervalMs = (reason: string): number => {

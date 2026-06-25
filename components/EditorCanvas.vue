@@ -4249,15 +4249,11 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     scheduleImageProgressFlush()
     try {
         sanitizeCanvasJsonBeforeLoad(json)
-        // Pré-aquecer cache de imagens com concorrência limitada (6 simultâneas).
-        // O timeout de 4s garante que o canvas nunca espera indefinidamente.
-        await prewarmCanvasImages(json, 6, 4000)
-        // FIX: Check if this load session is still the active one after the prewarm delay.
-        // A page switch during the 4s prewarm could cause stale data to be loaded.
+        void prewarmCanvasImages(json, 6, 4000)
         if (sessionId !== activePageLoadSessionId || isCanvasDestroyed.value) {
-            throw new Error('Load session became stale during image prewarm')
+            throw new Error('Load session became stale')
         }
-        if (!canvas.value) throw new Error('Canvas indisponível após prewarm')
+        if (!canvas.value) throw new Error('Canvas indisponível para loadFromJSON')
         await canvas.value.loadFromJSON(json)
     } finally {
         // Ensure the UI shows the final numbers for this attempt before we clear tracker.
@@ -4922,7 +4918,7 @@ const persistViewportStateNow = (_reason: string = 'change') => {
         // do proximo save de conteudo / flush de saida.
         const inst = canvas.value as any;
         const pageId = getActiveProjectPageId();
-        const idx = pageId ? resolvePageIndexById(pageId) : -1;
+        const idx = pageId ? findPageIndexById(project.pages, pageId, Number(project.activePageIndex || 0)) : -1;
         if (idx < 0) return;
         const page = project.pages?.[idx];
         const data = page?.canvasData;
@@ -4933,9 +4929,9 @@ const persistViewportStateNow = (_reason: string = 'change') => {
             vpt,
             inst?.getZoom?.() || (Array.isArray(vpt) ? vpt[0] : 1)
         );
-        // Marca para upload no periodic-save SEM acionar o indicador "nao salvo":
-        // pan/zoom nunca contou como alteracao de conteudo do usuario.
-        page.dirty = true;
+        // Pan/zoom nao e alteracao de conteudo. Mantemos a viewport no snapshot
+        // em memoria para ser persistida no proximo save real, sem acionar upload
+        // remoto completo apenas porque o usuario navegou pelo canvas.
     } catch (err) {
         console.warn('[viewport] Falha ao persistir estado de viewport:', err);
     }
@@ -5321,7 +5317,7 @@ const flushPersistenceNow = async (reason: string, opts: { force?: boolean } = {
         const hadPendingViewportSave = !!viewportStateSaveTimer;
         const hadPendingCoalescedSave = hasPendingCoalescedSave;
         const hadActiveTextEditing = hasActiveTextEditingForPersist();
-        const hadPendingProjectSync = hasUnsavedChanges.value || project.pages.some((page: any) => !!page?.dirty);
+        const hadPendingProjectSync = hasUnsavedChanges.value || project.pages.some((page: any) => !!page?.dirty || !!page?.thumbnailDirty);
         const shouldPersistLocalState = hadPendingPropertySave
             || hadPendingTextEditSave
             || hadPendingGlobalStylesSave
@@ -7158,7 +7154,11 @@ onMounted(async () => {
   // Dynamic import to avoid SSR issues
 	  try {
 	    const fabricModule = await import('fabric');
-	    fabric = fabricModule; 
+	    fabric = fabricModule;
+	    try {
+	        const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1
+	        if (fabric?.config) fabric.config.devicePixelRatio = Math.min(dpr, 1.5)
+	    } catch { /* config pode ser frozen em alguns builds */ }
         // Patch Fabric image loader once so we can report real image-load progress on tablets/slow networks.
         patchFabricLoadImageProgress()
         isFabricReady.value = true
@@ -8703,8 +8703,36 @@ const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOption
     let pendingCoalescedSaveOpts: SaveStateOptions | null = null;
     let pendingCoalescedSavePageId = '';
     let invokeSaveStateSafely: (opts?: SaveStateOptions) => Promise<boolean> = async () => false;
-    // BUG #30 FIX: Mutex para evitar saves concorrentes no historyStack
+    // Saves no editor precisam ser single-flight para proteger o historyStack.
+    // Chamadas recebidas durante um save em andamento ficam em fila "latest wins",
+    // em vez de serem descartadas.
     let _isSaveInProgress = false;
+    let queuedSaveStateOpts: SaveStateOptions | null = null;
+    const queuedSaveStateWaiters: Array<(didSave: boolean) => void> = [];
+
+    const queueSaveStateWhileInProgress = (opts: SaveStateOptions): Promise<boolean> => {
+        queuedSaveStateOpts = {
+            ...(queuedSaveStateOpts || {}),
+            ...opts,
+            allowEmptyOverwrite: !!queuedSaveStateOpts?.allowEmptyOverwrite || !!opts.allowEmptyOverwrite,
+            forceEmptyOverwrite: !!queuedSaveStateOpts?.forceEmptyOverwrite || !!opts.forceEmptyOverwrite,
+            markUnsaved: typeof opts.markUnsaved === 'boolean'
+                ? opts.markUnsaved
+                : queuedSaveStateOpts?.markUnsaved,
+            skipCoalesce: true
+        };
+        return new Promise<boolean>((resolve) => {
+            queuedSaveStateWaiters.push(resolve);
+        });
+    };
+
+    const resolveQueuedSaveStateWaiters = (didSave: boolean) => {
+        const waiters = queuedSaveStateWaiters.splice(0);
+        waiters.forEach((resolve) => {
+            try { resolve(didSave); } catch { /* ignore */ }
+        });
+    };
+
     const clearPendingCoalescedSave = () => {
         if (pendingCoalescedSaveTimer) {
             clearTimeout(pendingCoalescedSaveTimer)
@@ -9106,7 +9134,7 @@ const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOption
         historyIndex.value = historyAppend.historyIndex
 
         if (saveReason === 'initial-history-capture') {
-            return
+            return true
         }
 
         const reason = String(opts.reason || '')
@@ -9127,7 +9155,7 @@ const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOption
             shouldSkipAutoSave,
             triggerAutoSave
         })
-        if (!persistence.didUpdate || persistence.targetPageIndex < 0) return
+        if (!persistence.didUpdate || persistence.targetPageIndex < 0) return false
 
         if (canGenerateThumbnailNow({
             source,
@@ -9152,6 +9180,7 @@ const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOption
                 lastThumbnailAt = Date.now()
             }
         }
+        return true
     }
     
     invokeSaveStateSafely = async (opts: SaveStateOptions = {}) => {
@@ -9171,24 +9200,31 @@ const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOption
             return false
         }
 
-        // BUG #30 FIX: Evitar saves concorrentes que mutam historyStack em paralelo.
-        // Se um save já está em andamento, ignorar esta chamada para prevenir corrupção.
-        if (_isSaveInProgress) {
-            return false
-        }
-
         const nextOpts: SaveStateOptions = { ...(opts || {}) };
         if (!nextOpts.expectedPageId) {
             const pageId = getActiveProjectPageId();
             if (pageId) nextOpts.expectedPageId = pageId;
         }
+        if (_isSaveInProgress) {
+            return await queueSaveStateWhileInProgress(nextOpts);
+        }
+
         _isSaveInProgress = true;
+        let didAnySave = false;
         try {
-            await saveState(nextOpts);
-            return true;
+            let currentOpts: SaveStateOptions | null = nextOpts;
+            while (currentOpts) {
+                const didSave = await saveState(currentOpts);
+                didAnySave = didSave === true || didAnySave;
+                currentOpts = queuedSaveStateOpts;
+                queuedSaveStateOpts = null;
+            }
+            resolveQueuedSaveStateWaiters(didAnySave);
+            return didAnySave;
         } catch (err: any) {
             console.error('❌ [saveState] Falha ao salvar estado:', err);
             if (canvas.value) sanitizeCanvasObjectStack(canvas.value as any, 'saveState-catch');
+            resolveQueuedSaveStateWaiters(false);
             return false;
         } finally {
             _isSaveInProgress = false;
@@ -15555,10 +15591,6 @@ const setupReactivity = () => {
             const prevW = obj._zoneWidth ?? 0;
             const prevH = obj._zoneHeight ?? 0;
 
-            // CRITICAL: Cache children BEFORE updating zone dimensions
-            // This prevents losing cards that may fall outside new bounds during resize
-            const cachedChildren = getZoneChildren(obj);
-
             ensureZoneSanity(obj);
             obj.setCoords();
             // Durante scaling (tempo real), calcular dimensões combinando rect + scale do grupo.
@@ -15575,12 +15607,10 @@ const setupReactivity = () => {
                 obj._zoneHeight = Math.abs(obj.getScaledHeight?.() ?? obj._zoneHeight ?? 0);
             }
 
-            // Só recalcular layout se houve mudança real de tamanho (> 2px).
-            // Evita que clique acidental na zona reposicione todos os cards.
             const deltaW = Math.abs((obj._zoneWidth || 0) - prevW);
             const deltaH = Math.abs((obj._zoneHeight || 0) - prevH);
             if (deltaW > 2 || deltaH > 2) {
-                recalculateZoneLayout(obj, cachedChildren, { save: false, preserveStyles: true });
+                obj.dirty = true;
             }
         }
 
@@ -18996,6 +19026,20 @@ const resolveExportableSelectedObject = (preferred?: any): any | null => {
 
 const hasExportableSelectedObject = computed(() => !!resolveExportableSelectedObject());
 
+const getExportZoneDiagnostics = () => {
+    if (!canvas.value) return [];
+    return canvas.value
+        .getObjects()
+        .filter((obj: any) => isLikelyProductZone(obj))
+        .map((zone: any, index: number) => {
+            const synced = syncZoneDerivedMetadata(zone);
+            return {
+                zoneName: String((zone as any)?.zoneName || '').trim() || `Zona ${index + 1}`,
+                diagnostics: synced?.diagnostics || []
+            };
+        });
+};
+
 const getExportShareContext = () => ({
     canvas,
     exportSettings,
@@ -19006,6 +19050,7 @@ const getExportShareContext = () => ({
     getAllFrames,
     getFrameById,
     isLikelyProductZone,
+    getExportZoneDiagnostics,
     resolveExportableSelectedObject,
     sanitizeAllClipPaths,
     safeRequestRenderAll,
