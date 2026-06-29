@@ -14,6 +14,27 @@ type ThumbnailBounds = {
   height: number
 }
 
+const countImageObjectsDeep = (node: any): number => {
+  if (!node || typeof node !== 'object') return 0
+  let total = String(node.type || '').toLowerCase() === 'image' ? 1 : 0
+  for (const value of Object.values(node)) {
+    if (!value) continue
+    if (Array.isArray(value)) {
+      total += value.reduce((sum, item) => sum + countImageObjectsDeep(item), 0)
+    } else if (typeof value === 'object') {
+      total += countImageObjectsDeep(value)
+    }
+  }
+  return total
+}
+
+const resolveThumbnailTimeoutMs = (sourceJson: any): number => {
+  const imageCount = countImageObjectsDeep(sourceJson)
+  // Remote images dominate loadFromJSON time. Keep simple pages fast while giving
+  // product-heavy flyers enough room before falling back.
+  return Math.min(18_000, 6_000 + imageCount * 800)
+}
+
 const stripClipPathsRecursively = (node: any): void => {
   if (!node || typeof node !== 'object') return
   if (Object.prototype.hasOwnProperty.call(node, 'clipPath')) {
@@ -181,15 +202,23 @@ export const generateThumbnailFromCanvasJson = async (
     stripClipPathsRecursively(thumbJson)
     thumbJson.background = undefined
     thumbJson.backgroundColor = '#ffffff'
-    // Timeout reduzido de 10s para 4s: loadFromJSON offscreen so refaz o canvas
-    // em memoria; o gargalo e o download de imagens do proxy. Se o proxy esta
-    // lento/504 (caso de dev tunnels), nao adianta esperar 10s — melhor falhar
-    // rapido e nao travar o fluxo de save.
-    const THUMBNAIL_TIMEOUT_MS = 4_000
-    const loadPromise = sc.loadFromJSON(thumbJson)
+    const timeoutMs = resolveThumbnailTimeoutMs(thumbJson)
+    const abortController = typeof AbortController !== 'undefined'
+      ? new AbortController()
+      : null
+    const loadPromise = abortController
+      ? sc.loadFromJSON(thumbJson, undefined, { signal: abortController.signal })
+      : sc.loadFromJSON(thumbJson)
     let timeoutId: ReturnType<typeof setTimeout> | null = null
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Thumbnail generation timed out')), THUMBNAIL_TIMEOUT_MS)
+      timeoutId = setTimeout(() => {
+        try {
+          abortController?.abort('thumbnail-generation-timeout')
+        } catch {
+          // ignore abort failures
+        }
+        reject(new Error(`Thumbnail generation timed out after ${Math.round(timeoutMs / 1000)}s`))
+      }, timeoutMs)
     })
     try {
       await Promise.race([loadPromise, timeoutPromise])

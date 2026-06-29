@@ -1,8 +1,8 @@
-import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "crypto";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
-import { getPublicUrl } from "../utils/s3";
+import { getPublicUrl, getS3Client, resetS3Client } from "../utils/s3";
 import { resolveStorageReadUrl } from "../utils/project-storage-refs";
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15MB
@@ -31,6 +31,18 @@ const inferImageMimeFromExt = (ext: string): string => {
   return 'application/octet-stream'
 }
 
+const isRetryableS3Error = (err: any): boolean => {
+  const statusCode = Number(err?.$metadata?.httpStatusCode || err?.statusCode || 0)
+  const name = String(err?.name || err?.constructor?.name || '')
+  const message = String(err?.message || '')
+  return (
+    !statusCode ||
+    statusCode >= 500 ||
+    name === 'AbortError' ||
+    /timeout|socket|econn|reset|network/i.test(message)
+  )
+}
+
 /**
  * API Route para upload de arquivos para Wasabi Storage
  *
@@ -43,11 +55,10 @@ export default defineEventHandler(async (event) => {
 
   // Check for configuration - Wasabi
   const config = useRuntimeConfig();
-  const endpoint = config.wasabiEndpoint;
-  const region = config.wasabiRegion || "us-east-1";
-  const accessKeyId = config.wasabiAccessKey;
-  const secretAccessKey = config.wasabiSecretKey;
-  const bucketName = config.wasabiBucket;
+  const endpoint = config.wasabiEndpoint || process.env.WASABI_ENDPOINT || process.env.NUXT_WASABI_ENDPOINT;
+  const accessKeyId = config.wasabiAccessKey || process.env.WASABI_ACCESS_KEY || process.env.NUXT_WASABI_ACCESS_KEY;
+  const secretAccessKey = config.wasabiSecretKey || process.env.WASABI_SECRET_KEY || process.env.NUXT_WASABI_SECRET_KEY;
+  const bucketName = config.wasabiBucket || process.env.WASABI_BUCKET || process.env.NUXT_WASABI_BUCKET;
 
   if (!accessKeyId || !secretAccessKey || !endpoint || !bucketName) {
     const missing: string[] = []
@@ -61,16 +72,6 @@ export default defineEventHandler(async (event) => {
         statusMessage: `Wasabi Storage configuration missing (${missing.join(', ')})`
     });
   }
-
-  const s3Client = new S3Client({
-    region: region,
-    endpoint: `https://${endpoint}`,
-    credentials: {
-      accessKeyId,
-      secretAccessKey
-    },
-    forcePathStyle: true // Necessário para Wasabi
-  });
 
   const files = await readMultipartFormData(event);
   if (!files || files.length === 0) {
@@ -140,7 +141,7 @@ export default defineEventHandler(async (event) => {
   try {
     // Se já existe, evita duplicar.
     try {
-      await s3Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
+      await getS3Client().send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
       const canonicalUrl = getPublicUrl(key)
       const readUrl = await resolveStorageReadUrl(key, user.id)
       return {
@@ -152,8 +153,15 @@ export default defineEventHandler(async (event) => {
         dedup: true,
         contentType
       };
-    } catch {
-      // Not found -> proceed to upload
+    } catch (headErr: any) {
+      const statusCode = Number(headErr?.$metadata?.httpStatusCode || headErr?.statusCode || 0)
+      if (statusCode && statusCode !== 404) {
+        console.warn('[upload] HeadObject falhou; seguindo para upload:', {
+          statusCode,
+          name: headErr?.name,
+          message: headErr?.message
+        })
+      }
     }
 
     const command = new PutObjectCommand({
@@ -164,9 +172,25 @@ export default defineEventHandler(async (event) => {
       ACL: 'public-read'
     });
 
-    const abortSignal = getAbortSignal(90_000)
-    if (abortSignal) await s3Client.send(command, { abortSignal })
-    else await s3Client.send(command)
+    const MAX_ATTEMPTS = 2
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const abortSignal = getAbortSignal(90_000)
+        if (abortSignal) await getS3Client().send(command, { abortSignal })
+        else await getS3Client().send(command)
+        break
+      } catch (putErr: any) {
+        if (isRetryableS3Error(putErr)) resetS3Client()
+        if (attempt < MAX_ATTEMPTS && isRetryableS3Error(putErr)) {
+          console.warn(`[upload] PutObject falhou na tentativa ${attempt}; tentando novamente com novo cliente S3.`, {
+            name: putErr?.name,
+            message: putErr?.message
+          })
+          continue
+        }
+        throw putErr
+      }
+    }
 
     console.log('✅ File uploaded to Wasabi:', key);
     const canonicalUrl = getPublicUrl(key)
@@ -185,6 +209,6 @@ export default defineEventHandler(async (event) => {
     };
   } catch (error) {
     console.error("Upload Error to Wasabi:", error);
-    throw createError({ statusCode: 500, statusMessage: "Failed to upload to Wasabi" });
+    throw createError({ statusCode: 502, statusMessage: "Failed to upload to Wasabi" });
   }
 });
