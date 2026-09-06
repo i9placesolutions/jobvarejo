@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import {
+  Download,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
@@ -42,6 +43,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (event: 'export'): void
   (event: 'zoom-in'): void
   (event: 'zoom-out'): void
   (event: 'zoom-fit'): void
@@ -194,13 +196,14 @@ const onZoomInput = (event: Event) => {
     @pointerdown.stop
     @keydown.esc="closePanel"
   >
+    <button type="button" class="quick-export-button" aria-label="Exportar encarte" @click="emit('export')"><Download :size="18" /><span>Exportar</span></button>
     <div class="quick-mode-canvas-controls__group quick-mode-canvas-controls__zoom" aria-label="Zoom">
       <button type="button" class="quick-mode-canvas-controls__icon-button" aria-label="Diminuir zoom" title="Diminuir zoom" @click="emit('zoom-out')">
         <ZoomOut :size="15" aria-hidden="true" />
       </button>
       <label class="quick-mode-canvas-controls__zoom-value" title="Escolha o nível de zoom">
         <span>{{ zoomLabel }}</span>
-        <input :value="zoomValue" type="range" min="15" max="400" step="1" aria-label="Nível de zoom" @input="onZoomInput" />
+        <input :style="{ '--zoom-progress': `${(zoomValue - 15) / 385 * 100}%` }" :value="zoomValue" type="range" min="15" max="400" step="1" aria-label="Nível de zoom" @input="onZoomInput" />
       </label>
       <button type="button" class="quick-mode-canvas-controls__icon-button" aria-label="Aumentar zoom" title="Aumentar zoom" @click="emit('zoom-in')">
         <ZoomIn :size="15" aria-hidden="true" />
@@ -850,4 +853,16 @@ const onZoomInput = (event: Event) => {
  .quick-mode-canvas-controls__font-popover, .quick-mode-canvas-controls__color-popover { position:fixed; left:8px; right:8px; bottom:76px; width:auto; max-height:60dvh; overflow-y:auto; overscroll-behavior:contain; }
  .font-number input, .font-search { font-size:16px; min-height:44px; }
 }
+</style>
+
+<style scoped>
+.quick-export-button { display:flex; align-items:center; gap:7px; min-height:40px; padding:0 12px; border-radius:9px; background:#7c3aed; color:white; font-size:12px; font-weight:600; }
+.quick-export-button:hover { background:#8b5cf6; }
+.quick-mode-canvas-controls__zoom-value { gap:10px; }
+.quick-mode-canvas-controls__zoom-value > span { min-width:38px; font-size:12px; font-weight:600; }
+.quick-mode-canvas-controls__zoom-value input { appearance:none; -webkit-appearance:none; width:110px; flex:0 0 110px; height:5px; border-radius:8px; background:linear-gradient(to right,#a78bfa var(--zoom-progress),#474952 var(--zoom-progress)); }
+.quick-mode-canvas-controls__zoom-value input::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#f5f3ff; border:2px solid #a78bfa; box-shadow:0 1px 5px #0005; }
+.quick-mode-canvas-controls__zoom-value input::-moz-range-thumb { width:12px; height:12px; border-radius:50%; background:#f5f3ff; border:2px solid #a78bfa; }
+.quick-mode-canvas-controls__zoom-value input:focus-visible { outline:2px solid #c4b5fd; outline-offset:6px; }
+@media(max-width:767px) { .quick-export-button span { display:none; } .quick-mode-canvas-controls__zoom-value input { width:64px; flex-basis:64px; } .quick-mode-canvas-controls__zoom-value { gap:5px; } }
 </style>

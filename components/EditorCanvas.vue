@@ -21842,6 +21842,17 @@ const exportDesign = () => {
     showExportModal.value = true;
 }
 
+const exportQuickDesign = () => {
+    exportDesign()
+    // Na edição rápida exportamos o encarte, mesmo com um produto selecionado.
+    exportSettings.value.format = 'png'
+    exportSettings.value.qualityPreset = DEFAULT_EXPORT_QUALITY_PRESET
+    if (availableFramesForExport.value.length) {
+        exportSettings.value.exportScope = 'selected-frame'
+        exportSettings.value.selectedFrameId = String(availableFramesForExport.value[0]?.id || '')
+    }
+}
+
 // isExportableSelectionObject extraido para utils/exportSelectionHelpers.ts.
 
 const resolveExportableSelectedObject = (preferred?: any): any | null => {
@@ -39271,6 +39282,7 @@ const handleAutoOfferLayout = async () => {
                 :selected-text="!!selectedObjectRef && quickModeNativeTextObjects.length === 1"
                 :apply-all-label="quickFontApplyAllLabel"
                 :busy="isParsingProducts || isProcessing"
+                @export="exportQuickDesign"
                 @zoom-in="quickModeZoomIn"
                 @zoom-out="quickModeZoomOut"
                 @zoom-fit="quickModeZoomFit"
