@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import {
   Download,
   ArrowDown,
@@ -57,6 +57,13 @@ const emit = defineEmits<{
   (event: 'clear-color', targetId: string): void
   (event: 'apply-opacity', payload: { targetId: string; value: number }): void
 }>()
+
+const controlsRoot = ref<HTMLElement | null>(null)
+const handleOutsidePointer = (event: PointerEvent) => {
+  if (controlsRoot.value && !event.composedPath().includes(controlsRoot.value)) closePanel()
+}
+onMounted(() => document.addEventListener('pointerdown', handleOutsidePointer, true))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', handleOutsidePointer, true))
 
 const openPanel = ref<'pan' | 'font' | 'color' | null>(null)
 const customColor = ref('#ef4444')
@@ -188,6 +195,7 @@ const onZoomInput = (event: Event) => {
 
 <template>
   <div
+    ref="controlsRoot"
     class="quick-mode-canvas-controls"
     role="toolbar"
     aria-label="Controles da pré-visualização"
