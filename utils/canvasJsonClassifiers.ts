@@ -1272,6 +1272,9 @@ export const normalizeLegacyProductCardImageTransformsInCanvasData = (
             if (String(node?.type || '').toLowerCase() !== 'image') return
 
             imagesScanned += 1
+            // Transformação manual válida é conteúdo do projeto, não corrupção legada.
+            if (node.__manualTransform && Number.isFinite(Number(node.scaleX)) && Number(node.scaleX) !== 0 &&
+                Number.isFinite(Number(node.scaleY)) && Number(node.scaleY) !== 0) return
             let changed = false
 
             let nextScaleX = Number(node.scaleX ?? 1)

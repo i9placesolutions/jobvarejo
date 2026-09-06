@@ -66,8 +66,9 @@ export const computeExportPreflightCounts = (input: ExportPreflightInput): Expor
                 if (cards.length === 0) emptyZones++
             }
             if ((obj as any).isProductCard) {
-                const name = String((obj as any).productName || '').trim()
-                const price = String((obj as any).productPrice || '').trim()
+                const children = obj.getObjects?.() || obj.objects || []
+                const name = String(obj.productName || obj._productData?.name || children.find((child: any) => child.name === 'smart_title')?.text || '').trim()
+                const price = String(obj.productPrice ?? obj._productData?.price ?? '').trim()
                 if (!name && !price) emptyProductCards++
             }
             if (typeof obj.getObjects === 'function') {

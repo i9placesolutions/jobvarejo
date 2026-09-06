@@ -1,5 +1,5 @@
 export const fitResponsiveProductName = (title: any, width: number, height: number, nameScale = 1) => {
-  if (title && title.visible !== false) {
+  if (title && !title.__manualTypography && title.visible !== false) {
     const top = title.getPointByOrigin?.('center', 'top')
     const maxFont = Math.max(1, Math.min(width, height) * 0.085 * nameScale)
     // Fontes por caractere vindas da importação não podem bloquear o tamanho automático.
@@ -56,7 +56,7 @@ export const harmonizeProductCardTypography = (cards: any[]) => {
     groups.set(key, group)
   }
   for (const cards of groups.values()) {
-    const titles = cards.flatMap(card => (card.getObjects?.() || []).filter((o: any) => o.name === 'smart_title' && o.visible !== false))
+    const titles = cards.flatMap(card => (card.getObjects?.() || []).filter((o: any) => o.name === 'smart_title' && !o.__manualTypography && o.visible !== false))
     const font = Math.min(...titles.map((o: any) => Number(o.fontSize)).filter((n: number) => n > 0))
     for (const title of titles) {
       if (!Number.isFinite(font)) continue

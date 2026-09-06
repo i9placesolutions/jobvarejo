@@ -6548,6 +6548,8 @@ const applyQuickTypographyToAll = async () => {
                 for (const style of Object.values(line) as any[]) properties.forEach(key => delete style[key])
             }
         }
+        object.__manualTypography = true
+        object.__manualTransform = true
         object.set(values)
         applyDynamicBusinessTextCase(object, textCase)
         object.initDimensions?.()
@@ -6584,6 +6586,8 @@ const applyQuickTypography = (change: { property: string; value: number | string
     if (property !== 'textCase' && (!Number.isFinite(Number(value)) ||
         (property !== 'charSpacing' && Number(value) <= 0))) return
     for (const object of getQuickFontTargets()) {
+        object.__manualTypography = true
+        object.__manualTransform = true
         if (property === 'textCase') applyDynamicBusinessTextCase(object, value)
         else {
             object.set(property, Number(value))
@@ -6608,6 +6612,8 @@ const applyQuickFontSize = async (value: number) => {
     for (const object of getQuickFontTargets()) {
         const top = object.getPointByOrigin?.('center', 'top')
         object.dynamicFieldAutoHeight = true
+        object.__manualTypography = true
+        object.__manualTransform = true
         object.set({ fontSize: value })
         // Imported rich text may carry a size per character that overrides
         // the Textbox size. An explicit whole-text edit replaces those sizes.
@@ -6696,6 +6702,8 @@ const applyQuickModeNativeFont = async (fontFamily: string) => {
     const targets = getQuickFontTargets()
     if (!targets.length) return
     targets.forEach((object: any) => {
+        object.__manualTypography = true
+        object.__manualTransform = true
         object.set?.({ fontFamily: normalizedFont })
         object.initDimensions?.()
         object.setCoords?.()
@@ -11389,7 +11397,7 @@ const _handleObjectModifiedInner = (e: any) => {
         members.forEach((member: any) => {
             if (!member) return;
             // Filhos selecionados continuam no card; não os reparentar para o frame.
-            if (isProductNameText(member) || member.name === 'priceGroup' || member.isPriceGroup) {
+            if (isProductNameText(member) || String(member.type).toLowerCase() === 'image' || member.name === 'priceGroup' || member.isPriceGroup) {
                 if (member.name === 'priceGroup' || member.isPriceGroup) markPriceGroupTransformAsManual(member);
                 else member.__manualTransform = true;
                 member.dirty = true;
@@ -18268,7 +18276,7 @@ const setupReactivity = () => {
             // so establish the manual marker synchronously from the transform
             // action before any legacy centering/relayout code can run.
             const modifiedAction = String(e?.transform?.action || '').trim().toLowerCase();
-            const isCardTextbox = String(obj?.type || '').toLowerCase() === 'textbox' &&
+            const isCardTextbox = ['textbox', 'image'].includes(String(obj?.type || '').toLowerCase()) &&
                 obj.group &&
                 (obj.group.isSmartObject || obj.group.isProductCard || isLikelyProductCard(obj.group));
             if (isCardTextbox && (modifiedAction.includes('drag') || modifiedAction.includes('move') || modifiedAction.includes('scale'))) {

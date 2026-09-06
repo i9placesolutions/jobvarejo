@@ -622,13 +622,8 @@ const runExportPreflightChecks = (ctx: EditorExportShareContext): string[] => {
         isLikelyProductZone: ctx.isLikelyProductZone
     })
     const warnings = buildExportPreflightWarnings(counts)
-    if (typeof ctx.getExportZoneDiagnostics === 'function') {
-        try {
-            warnings.push(...buildExportPreflightWarningsFromZoneDiagnostics(ctx.getExportZoneDiagnostics()))
-        } catch (err) {
-            console.warn('[export-preflight] Falha ao montar diagnosticos de zona:', err)
-        }
-    }
+    // Diagnósticos da receita são recomendações do painel de layout, não
+    // falhas verificadas no desenho atual. O download usa a inspeção real acima.
     return Array.from(new Set(warnings))
 }
 

@@ -96,6 +96,7 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     '__lastCardRelayoutSignature',
     // When true on a child object, prevents auto-layout from overriding user placement (persisted).
     '__manualTransform',
+    '__manualTypography',
     // Price labels have a separate marker for an explicit outer-card move.
     // Editing the artwork/text inside a label must not freeze its position;
     // the card configuration remains responsible for the label slot.
