@@ -1575,6 +1575,8 @@ const layersContextMenu = ref({
 });
 
 const canvasContextMenuItems = computed(() => ([
+    { label: 'Copiar (Ctrl/Cmd+C)', action: 'copy', icon: Copy },
+    { label: 'Colar (Ctrl/Cmd+V)', action: 'paste', icon: Copy },
     { label: 'Duplicar (Ctrl+D)', action: 'duplicate', icon: Copy },
     { divider: true },
     { label: 'Trazer para frente', action: 'arrange-bring-to-front', icon: ChevronsUp },
@@ -1589,6 +1591,7 @@ const canvasContextMenuItems = computed(() => ([
 ]));
 
 const handleCanvasContextMenuSelect = (action: string) => {
+    if (action === 'copy' || action === 'paste') void handleAction(action);
     if (action === 'duplicate') void handleAction('duplicate');
     if (action === 'arrange-bring-to-front') arrangeActiveObjects('bring-to-front');
     if (action === 'arrange-bring-forward') arrangeActiveObjects('bring-forward');
@@ -1600,6 +1603,8 @@ const handleCanvasContextMenuSelect = (action: string) => {
 };
 
 const layersContextMenuItems = computed(() => ([
+    { label: 'Copiar (Ctrl/Cmd+C)', action: 'copy', icon: Copy },
+    { label: 'Colar (Ctrl/Cmd+V)', action: 'paste', icon: Copy },
     { label: 'Duplicar (Ctrl+D)', action: 'duplicate', icon: Copy },
     { divider: true },
     { label: 'Mascarar', action: 'mask-selection', icon: Frame },
@@ -1609,6 +1614,7 @@ const layersContextMenuItems = computed(() => ([
 ]));
 
 const handleLayersContextMenuSelect = (action: string) => {
+    if (action === 'copy' || action === 'paste') void handleAction(action);
     if (action === 'duplicate') void handleAction('duplicate');
     if (action === 'mask-selection') void handleAction('toggle-mask');
     if (action === 'group-selection') groupSelection();
@@ -13996,7 +14002,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
     } catch {}
 
     // Ignore input fields so we don't trigger shortcuts while typing
-    const target = e.target as HTMLElement;
+    const target = (e.target as HTMLElement | null) || document.body;
     if (target.tagName === 'INPUT' ||
         target.tagName === 'TEXTAREA' ||
         target.isContentEditable ||
@@ -14270,6 +14276,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                     };
                     (window as any)._clipboard = runtimeClipboard;
                     persistRuntimeClipboardForCrossTab(runtimeClipboard);
+                    notifyEditorInfo('Elemento copiado. Abra a página de destino e use Colar ou Ctrl/Cmd+V.');
                 }
             } catch (err) {
                 console.warn('[clipboard] Falha ao copiar (clone)', err);
@@ -20588,6 +20595,11 @@ const applyObjectMaskFromSingleTarget = async (target: any): Promise<boolean> =>
 const handleAction = async (action: string) => {
     if (!canvas.value) return;
     const active = canvas.value.getActiveObject();
+
+    if (action === 'copy' || action === 'paste') {
+        await handleKeyDown(new KeyboardEvent('keydown', { key: action === 'copy' ? 'c' : 'v', ctrlKey: true }));
+        return;
+    }
 
     // Delete (button/menu, important for touch/tablet where keyboard delete is unavailable)
     if (action === 'delete') {
