@@ -1,4 +1,7 @@
 <script setup lang="ts">
+const mobileWorkspace = ref('canvas')
+const openToolbarMenu = ref<'presets' | 'elements' | null>(null)
+
 import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
 
 import type { CardTemplateElement } from '~/types/builder'
@@ -225,7 +228,7 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
 
     <!-- ═══ EDITOR ═══ -->
     <template v-else>
-      <div class="h-screen flex flex-col overflow-hidden bg-white">
+      <div :data-mobile-panel="mobileWorkspace" class="admin-visual-editor h-dvh flex flex-col overflow-hidden bg-white">
 
         <!-- Toolbar -->
         <header class="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shrink-0 shadow-sm">
@@ -267,8 +270,8 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
 
           <!-- Presets -->
           <div class="relative group">
-            <button class="px-3 py-1.5 rounded-md text-xs bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100">Presets</button>
-            <div class="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-1.5 hidden group-hover:block z-50 w-44">
+            <button :aria-expanded="openToolbarMenu === 'presets'" @click="openToolbarMenu = openToolbarMenu === 'presets' ? null : 'presets'" class="px-3 py-1.5 rounded-md text-xs bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100">Presets</button>
+            <div v-if="openToolbarMenu === 'presets'" class="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-1.5 z-50 w-44">
               <button v-for="(p, key) in presets" :key="key" @click="applyPreset(String(key))" class="w-full text-left px-3 py-1.5 rounded text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700">
                 {{ p.name }}
               </button>
@@ -277,8 +280,8 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
 
           <!-- Adicionar -->
           <div class="relative group">
-            <button class="px-3 py-1.5 rounded-md text-xs bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100">+ Elemento</button>
-            <div class="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-1.5 hidden group-hover:block z-50 w-40">
+            <button :aria-expanded="openToolbarMenu === 'elements'" @click="openToolbarMenu = openToolbarMenu === 'elements' ? null : 'elements'" class="px-3 py-1.5 rounded-md text-xs bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100">+ Elemento</button>
+            <div v-if="openToolbarMenu === 'elements'" class="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-1.5 z-50 w-40">
               <button @click="addElement('text')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-blue-500 font-bold mr-1.5">T</span> Nome</button>
               <button @click="addElement('image')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-emerald-500 font-bold mr-1.5">◻</span> Imagem</button>
               <button @click="addElement('price')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-red-500 font-bold mr-1.5">$</span> Preco</button>
@@ -301,11 +304,14 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
           </button>
         </header>
 
+        <nav class="admin-workspace-tabs" aria-label="Ferramentas do card">
+          <button v-for="tab in [{id:'canvas',label:'Editar card'},{id:'properties',label:'Propriedades'},{id:'preview',label:'Prévia'}]" :key="tab.id" :aria-pressed="mobileWorkspace === tab.id" @click="mobileWorkspace = tab.id; showPreview = tab.id === 'preview'">{{ tab.label }}</button>
+        </nav>
         <!-- Conteudo principal -->
-        <div class="flex-1 flex min-h-0 overflow-hidden">
+        <div class="admin-workspace-body flex-1 flex min-h-0 overflow-hidden">
 
           <!-- ══ CANVAS DE EDICAO (centro) ══ -->
-          <div class="flex-1 bg-gray-100 flex items-center justify-center p-8 overflow-auto" @click="selectElement(null)">
+          <div class="admin-workspace-canvas flex-1 bg-gray-100 flex items-center justify-center p-8 overflow-auto" @click="selectElement(null)">
             <div class="flex flex-col items-center gap-3">
               <span class="text-[10px] text-gray-400 font-medium tracking-wide uppercase">Arraste e redimensione os elementos</span>
 
@@ -341,6 +347,7 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
                     height: el.h || '20%',
                     zIndex: el.zIndex || (el.type === 'image' ? 1 : el.type === 'shape' ? 0 : 3),
                     cursor: isDragging ? 'grabbing' : 'grab',
+                    touchAction: 'none',
                   }"
                   @pointerdown="startDrag(el.id, $event)"
                   @click.stop="selectElement(el.id)"
@@ -407,7 +414,7 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
           </div>
 
           <!-- ══ PAINEL DIREITO ══ -->
-          <div class="w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto">
+          <div class="admin-workspace-properties w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto">
 
             <!-- Nada selecionado: card style -->
             <template v-if="!selectedElement">
@@ -670,7 +677,7 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
           </div>
 
           <!-- ══ PREVIEW AO VIVO — formato real ══ -->
-          <div v-if="showPreview" class="w-80 shrink-0 bg-gray-50 border-l border-gray-200 flex flex-col overflow-hidden">
+          <div v-if="showPreview" class="admin-workspace-preview w-80 shrink-0 bg-gray-50 border-l border-gray-200 flex flex-col overflow-hidden">
             <div class="h-9 flex items-center justify-between px-3 border-b border-gray-200 shrink-0">
               <span class="text-[10px] text-gray-400 font-medium">{{ activeFormat.label }} {{ activeFormat.desc }}</span>
               <div class="flex gap-1">

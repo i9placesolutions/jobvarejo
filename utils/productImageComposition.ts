@@ -431,3 +431,19 @@ export const getProductImageCompositionSummary = (card: any) => {
     })
   }
 }
+
+/** Fabric não procura nos filhos quando o clique fica fora dos limites do grupo. */
+export const findOverflowingProductImageAtPoint = (cards: any[], point: any): any | null => {
+  if (!point) return null
+  for (const card of [...cards].reverse()) {
+    if (!card || card.visible === false || Number(card.opacity ?? 1) <= 0) continue
+    card.setCoords?.()
+    if (card.containsPoint?.(point)) continue
+    for (const image of [...collectDirectProductCardImages(card)].reverse()) {
+      if (image.visible === false || Number(image.opacity ?? 1) <= 0) continue
+      image.setCoords?.()
+      if (image.containsPoint?.(point)) return image
+    }
+  }
+  return null
+}

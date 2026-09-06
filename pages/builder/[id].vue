@@ -110,7 +110,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-white overflow-hidden">
+  <div class="h-dvh flex flex-col bg-white overflow-hidden">
     <!-- Top bar: back + title -->
     <header class="h-10 shrink-0 bg-gray-50 border-b border-gray-200 flex items-center px-3 gap-3">
       <button
@@ -129,7 +129,7 @@ onUnmounted(() => {
     <BuilderToolbar @export="showExportDialog = true" @preview="showPreview = true" />
 
     <!-- Body: Sidebar + Canvas + Product Editor -->
-    <div class="flex-1 flex min-h-0 overflow-hidden">
+    <div class="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
       <!-- Left Sidebar (72px icons + 360px panel) -->
       <BuilderSidebar />
 

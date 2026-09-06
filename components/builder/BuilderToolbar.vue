@@ -200,7 +200,7 @@ const D = 'w-px h-4 bg-gray-200 mx-0.5'
 </script>
 
 <template>
-  <div class="shrink-0 bg-gray-50 border-b border-gray-200">
+  <div class="builder-responsive-toolbar shrink-0 bg-gray-50 border-b border-gray-200">
     <!-- LINHA 1: Layout + Acoes -->
     <div class="h-9 flex items-center px-2 gap-1 flex-wrap">
       <!-- Modelo -->
@@ -435,3 +435,12 @@ const D = 'w-px h-4 bg-gray-200 mx-0.5'
     </div>
 </div>
 </template>
+
+<style scoped>
+@media(max-width:767px) {
+ .builder-responsive-toolbar > div { height: auto; min-height:44px; flex-wrap:nowrap; overflow-x:auto; padding:4px 8px; }
+ .builder-responsive-toolbar > div > * { flex-shrink:0; }
+ .builder-responsive-toolbar button, .builder-responsive-toolbar select { min-height:44px; }
+ .builder-responsive-toolbar select { font-size:16px; }
+}
+</style>

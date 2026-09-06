@@ -20,7 +20,7 @@ const isActive = (item: typeof navItems[0]) => {
   <div class="min-h-screen bg-white text-gray-900">
     <!-- Top Navigation -->
     <header class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur-xl">
-      <div class="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="max-w-7xl mx-auto px-2 sm:px-4 min-h-14 flex items-center justify-between gap-1">
         <!-- Logo -->
         <NuxtLink to="/builder" class="inline-flex items-center gap-3 group">
           <div class="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-200 group-hover:bg-emerald-100 transition-colors">
@@ -35,11 +35,11 @@ const isActive = (item: typeof navItems[0]) => {
             v-for="item in navItems"
             :key="item.to"
             :to="item.to"
-            class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
+            class="flex flex-col sm:flex-row items-center gap-1 px-2 py-2 min-h-11 rounded-lg text-[10px] sm:text-sm transition-colors"
             :class="isActive(item) ? 'bg-emerald-50 text-emerald-600' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'"
           >
             <component :is="item.icon" class="w-4 h-4" />
-            <span class="hidden sm:inline">{{ item.label }}</span>
+            <span>{{ item.label }}</span>
           </NuxtLink>
         </nav>
 
@@ -49,6 +49,7 @@ const isActive = (item: typeof navItems[0]) => {
             {{ auth.tenant.value?.name }}
           </span>
           <button
+            aria-label="Sair da conta"
             @click="auth.signOut()"
             class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
           >

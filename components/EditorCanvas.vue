@@ -215,6 +215,7 @@ import {
     collectDirectProductCardImages,
     getProductImageDuplicatePlacement,
     replaceProductImageCopies,
+    findOverflowingProductImageAtPoint,
     isNamedProductCardImage,
     isStackedDuplicateImageComposition,
     resolveProductImageCompositionLayout,
@@ -4239,6 +4240,10 @@ const closeMobilePanel = () => {
 const handleMobilePanelCommand = (name: string, payload?: any) => {
     const closeAfter = () => closeMobilePanel()
     switch (name) {
+        case 'open-projects':
+            showProjectManager.value = true
+            closeAfter()
+            break
         case 'add-frame':
             addFrame()
             closeAfter()
@@ -4279,6 +4284,15 @@ const handleMobilePanelCommand = (name: string, payload?: any) => {
             break
         case 'zoom-200':
             handleZoom200()
+            break
+        case 'zoom-400':
+            handleZoom400()
+            break
+        case 'zoom-selection':
+            handleZoomToSelection()
+            break
+        case 'set-grid-size':
+            setGridSize(payload)
             break
         case 'zoom-fit':
             zoomToFit()
@@ -9432,7 +9446,21 @@ onMounted(async () => {
                     };
                     c.findTarget = function (evt: any, skipGroup?: boolean) {
                         const info = originalFindTarget(evt, skipGroup) || {};
-                        const target = info?.target ?? info;
+                        const target = info?.target ?? (info?.type ? info : null);
+                        // Imagens antigas podem extrapolar o card. O hit test do
+                        // Fabric para no pai e tornava esses pixels inacessíveis.
+                        const active = this.getActiveObject?.();
+                        const controlHit = active?.findControl?.(this.getViewportPoint(evt));
+                        if (!controlHit && !this.skipTargetFind) {
+                            const cards = collectObjectsDeep(this.getObjects()).filter(isProductCardGroup);
+                            const overflowImage = findOverflowingProductImageAtPoint(cards, this.getScenePoint(evt));
+                            if (overflowImage) {
+                                overflowImage.set({ selectable: true, evented: true });
+                                return { target: overflowImage, currentTarget: overflowImage,
+                                    container: overflowImage.group, currentContainer: overflowImage.group,
+                                    subTargets: [], currentSubTargets: [] };
+                            }
+                        }
                         const targetIsZone = !!(target && isLikelyProductZone(target));
                         const targetIsFrame = !!(target && isFrameLikeHitTarget(target));
                         if (targetIsZone) {
@@ -28142,6 +28170,16 @@ const handleProductImageFill = async (count: number, direction = 'auto') => {
     await saveCurrentState({ reason: 'product-image-fill', skipIfUnchanged: false })
 }
 
+const handleProductImageRemove = () => {
+    const context = resolveSelectedProductImageActionContext();
+    if (!context || !canvas.value) return;
+    const remaining = collectDirectProductCardImages(context.card).filter((image: any) => image !== context.image);
+    const source = remaining[0]?.__originalSrc || remaining[0]?.getSrc?.() || '';
+    context.card._productData = { ...context.card._productData, imageUrl: source, image: source, autoFillImages: false, imageFillInitialized: true };
+    canvas.value.setActiveObject(context.image);
+    deleteActiveSelectionFromCanvas();
+};
+
 const handleProductImageDuplicate = async () => {
     if (!canvas.value) return
     const context = resolveSelectedProductImageActionContext()
@@ -39562,6 +39600,7 @@ const handleAutoOfferLayout = async () => {
                      :selected-template-id="selectedProductImageQuickActions.selectedTemplateId"
                      :fill-count="selectedProductImageQuickActions.card._productData?.autoFillImages ? (selectedProductImageQuickActions.card._productData.imageFillCount || 0) : 1"
                      :fill-direction="selectedProductImageQuickActions.card._productData?.imageFillDirection || 'auto'"
+                     @remove="handleProductImageRemove"
                      @replace="handleAction('replace-product-image-upload')"
                      @duplicate="handleProductImageDuplicate"
                      @fill="handleProductImageFill"
@@ -39889,6 +39928,8 @@ const handleAutoOfferLayout = async () => {
         @set-panel="mobilePanel = $event"
         @command="handleMobilePanelCommand"
         @insert-asset="asset => { insertAssetToCanvas(asset); closeMobilePanel(); }"
+        @insert-element="element => { insertElementToCanvas(element); closeMobilePanel(); }"
+        @generate-institutional="payload => { handleGenerateInstitutional(payload); closeMobilePanel(); }"
         @select-layer="selectObject"
         @toggle-visible="toggleVisible"
         @toggle-lock="toggleLock"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ChevronDown, Copy, ImagePlus, Minus, Plus, Tag } from 'lucide-vue-next'
+import { ChevronDown, Copy, ImagePlus, Minus, Plus, Tag, Trash2 } from 'lucide-vue-next'
 
 type TemplateOption = {
   id: string
@@ -26,6 +26,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'duplicate'): void
   (e: 'replace'): void
+  (e: 'remove'): void
   (e: 'fill', count: number, direction?: string): void
   (e: 'resize', direction: 'smaller' | 'larger'): void
   (e: 'template', templateId: string): void
@@ -79,6 +80,8 @@ watch(() => props.visible, (visible) => {
         title="Trocar imagem e suas cópias neste produto" @click="emit('replace')">
         <ImagePlus class="h-3.5 w-3.5" /> Substituir imagem
       </button>
+      <button type="button" class="flex h-7 w-7 items-center justify-center rounded-md text-rose-300 hover:bg-white/10"
+        title="Remover imagem" aria-label="Remover imagem" @click="emit('remove')"><Trash2 class="h-3.5 w-3.5" /></button>
       <select aria-label="Preenchimento de imagens" :value="fillCount ?? 1" class="max-w-28 rounded bg-zinc-800 text-white text-[10px] p-1" @change="emit('fill', Number(($event.target as HTMLSelectElement).value), fillDirection)">
         <option value="0">Automático</option>
         <option value="1">Só 1 imagem</option>

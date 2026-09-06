@@ -3371,7 +3371,6 @@ const useTemplateModel = (modelId: string) => {
   }
 
   .quick-mode-sidebar__eyebrow,
-  .quick-mode-sidebar__zone-picker,
   .quick-mode-search-hint {
     display: none;
   }
@@ -3446,5 +3445,11 @@ const useTemplateModel = (modelId: string) => {
  .quick-mode-sidebar, .quick-mode-pages-rail { width:100%; flex:1; min-height:0; border:0; border-radius:0 0 18px 18px; }
  .quick-mode-controls-layout input:not([type=checkbox]), .quick-mode-controls-layout textarea, .quick-mode-controls-layout select { font-size:16px; }
  .quick-mode-controls-layout button { min-height:44px; }
+}
+</style>
+
+<style scoped>
+@media(max-width:767px) {
+ .quick-mode-controls-layout { bottom:calc(116px + env(safe-area-inset-bottom, 0px)); }
 }
 </style>

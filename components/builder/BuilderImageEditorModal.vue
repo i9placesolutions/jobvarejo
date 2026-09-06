@@ -221,7 +221,7 @@ const close = () => emit('update:modelValue', false)
         </div>
 
         <!-- Body: canvas + controls -->
-        <div :style="{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }">
+        <div class="image-editor-responsive-body" :style="{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }">
 
           <!-- Painel esquerdo: Canvas de edicao -->
           <div :style="{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px', minWidth: 0 }">
@@ -384,3 +384,12 @@ const close = () => emit('update:modelValue', false)
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+@media(max-width:767px) {
+ .image-editor-responsive-body { flex-direction:column; overflow-y:auto !important; }
+ .image-editor-responsive-body > div { width:100% !important; flex-shrink:0 !important; }
+ .image-editor-responsive-body input { min-width:0; }
+ .image-editor-responsive-body button { min-height:44px; }
+}
+</style>

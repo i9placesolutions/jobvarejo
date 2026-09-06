@@ -14,6 +14,7 @@ const props = defineProps<{
      * atrás de um segundo clique em Arquivo.
      */
     startInResources?: boolean
+    embedded?: boolean
 }>()
 const leftExpanded = ref(false)
 
@@ -101,11 +102,11 @@ const commitPageRename = (index: number) => {
   <aside
     :class="[
       'border-r border-white/5 bg-[#18181b] flex flex-col z-10 text-white h-full select-none transition-all duration-200',
-      isTablet && !leftExpanded ? 'w-12 shrink-0' : isTablet && leftExpanded ? 'w-60 absolute inset-y-0 left-0 z-50 shadow-2xl' : 'w-60 shrink-0'
+      embedded ? 'w-full min-h-0' : isTablet && !leftExpanded ? 'w-12 shrink-0' : isTablet && leftExpanded ? 'w-60 absolute inset-y-0 left-0 z-50 shadow-2xl' : 'w-60 shrink-0'
     ]"
   >
     <!-- Tablet collapsed: icon-only strip -->
-    <div v-if="isTablet && !leftExpanded" class="flex flex-col items-center py-3 gap-4">
+    <div v-if="!embedded && isTablet && !leftExpanded" class="flex flex-col items-center py-3 gap-4">
       <button class="touch-target flex items-center justify-center text-zinc-400 hover:text-white" title="Menu" @click="$emit('open-menu')">
         <Menu :size="18" />
       </button>
@@ -121,7 +122,7 @@ const commitPageRename = (index: number) => {
     </div>
 
     <!-- Full sidebar content (desktop + tablet expanded) -->
-    <template v-if="!isTablet || leftExpanded">
+    <template v-if="embedded || !isTablet || leftExpanded">
        <!-- Top: Menu, File Name & Tabs -->
        <div class="border-b border-white/5 shrink-0 bg-[#18181b]/50 backdrop-blur-md">
          <!-- Menu & File Name -->
@@ -232,7 +233,7 @@ const commitPageRename = (index: number) => {
                      >{{ project.isTemplate ? (page.templateFormatLabel || page.name) : page.name }}</span>
                      
                      <!-- Actions (Hover) -->
-                     <div v-if="editingPageId !== page.id" class="hidden group-hover:flex items-center gap-0.5 ml-auto">
+                     <div v-if="editingPageId !== page.id" class="flex sm:hidden sm:group-hover:flex items-center gap-0.5 ml-auto">
                        <button @click.stop="duplicatePage(index)" title="Duplicar" class="w-6 h-6 hover:bg-white/10 rounded flex items-center justify-center text-zinc-400 hover:text-white transition-all"><Copy class="w-3 h-3" /></button>
                        <button @click.stop="deletePage(index)" title="Excluir" class="w-6 h-6 hover:bg-red-500/10 rounded flex items-center justify-center text-zinc-400 hover:text-red-400 transition-all"><Trash2 class="w-3 h-3" /></button>
                      </div>

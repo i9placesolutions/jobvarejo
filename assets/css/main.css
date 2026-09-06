@@ -157,3 +157,28 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* The same administrative tools are switched between full-width panels on touch screens. */
+.admin-workspace-tabs { display: none; }
+.admin-visual-editor [data-draggable], .admin-visual-editor [style*="cursor: move"] { touch-action: none; }
+@media (max-width: 767px) {
+  .admin-visual-editor > header { height: auto; max-height: 30dvh; overflow: auto; flex-wrap: wrap; padding: 8px; gap: 8px; }
+  .admin-visual-editor button, .admin-visual-editor select, .admin-visual-editor input:not([type="checkbox"]):not([type="color"]) { min-height: 44px; }
+  .admin-visual-editor input:not([type="checkbox"]), .admin-visual-editor select { font-size: 16px; max-width: 100%; }
+  .admin-workspace-tabs { display: flex; flex-shrink: 0; gap: 4px; padding: 6px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+  .admin-workspace-tabs button { flex: 1; border-radius: 8px; font-size: 13px; color: #475569; }
+  .admin-workspace-tabs button[aria-pressed="true"] { background: #ecfdf5; color: #047857; font-weight: 600; }
+  .admin-workspace-body > * { display: none; }
+  .admin-visual-editor[data-mobile-panel="elements"] .admin-workspace-elements,
+  .admin-visual-editor[data-mobile-panel="canvas"] .admin-workspace-canvas,
+  .admin-visual-editor[data-mobile-panel="properties"] .admin-workspace-properties,
+  .admin-visual-editor[data-mobile-panel="preview"] .admin-workspace-preview { display: flex; flex-direction: column; width: 100%; min-width: 0; overflow: auto; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .admin-workspace-canvas { justify-content: flex-start; align-items: flex-start; padding: 16px; }
+  .admin-visual-editor .group:focus-within > .hidden { display: block; }
+}
+
+@media(max-width:767px) {
+ .admin-template-canvas { width:100% !important; height:auto !important; aspect-ratio:5 / 2; flex-shrink:0; }
+ .admin-visual-editor > header:has([aria-expanded="true"]) { max-height:55dvh; }
+ .admin-visual-editor > header .relative > div { position:fixed; top:25dvh; left:8px; right:8px; width:auto; max-height:55dvh; overflow:auto; }
+}

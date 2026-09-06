@@ -24,6 +24,7 @@ describe('editorMobilePanel', () => {
       properties: 'Propriedades',
       pages: 'Páginas',
       uploads: 'Imagens',
+      resources: 'Recursos e IA',
       more: 'Mais'
     }
 

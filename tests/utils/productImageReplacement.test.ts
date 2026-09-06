@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { replaceProductImageCopies } from '~/utils/productImageComposition'
+import { replaceProductImageCopies, findOverflowingProductImageAtPoint } from '~/utils/productImageComposition'
 
 const image = (id: string, src = '/api/storage/proxy?key=products%2Frice.png') => ({
   type: 'image', name: 'smart_image', _customId: id, src,
@@ -67,4 +67,14 @@ it('mantém o encaixe e o vínculo em um Group real do Fabric após serializar',
   expect(savedImage.width * savedImage.scaleX).toBeLessThanOrEqual(115)
   expect(savedImage.__originalSrc).toBe('/new.png')
   expect(savedImage.__manualTransform).toBe(true)
+})
+
+it('seleciona pixels da imagem fora do card, sem tomar cliques dentro do card', () => {
+  const product = image('overflow') as any
+  product.containsPoint = () => true
+  const card = { getObjects: () => [product], containsPoint: (point: any) => point.x < 100 }
+  expect(findOverflowingProductImageAtPoint([card], { x: 200, y: 0 })).toBe(product)
+  expect(findOverflowingProductImageAtPoint([card], { x: 50, y: 0 })).toBeNull()
+  product.visible = false
+  expect(findOverflowingProductImageAtPoint([card], { x: 200, y: 0 })).toBeNull()
 })

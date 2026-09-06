@@ -188,7 +188,7 @@ onMounted(() => {
 	                  </div>
 	              </div>
               
-              <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div class="flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                   <button 
                       @click.stop="deleteProject(project.id)"
                       class="p-2.5 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"

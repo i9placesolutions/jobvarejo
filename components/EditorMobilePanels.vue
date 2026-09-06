@@ -6,13 +6,16 @@ import EditorMobileBottomSheet from './EditorMobileBottomSheet.vue'
 // como prop (igual ao desktop em SidebarLeft); sem este campo o mobile ficava
 // sem como buscar no upload.
 const uploadsSearch = ref('')
+const showZoomMenu = ref(false)
 
 const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
 const LayersPanel = defineAsyncComponent(() => import('./LayersPanel.vue'))
 const EditorRightSidebar = defineAsyncComponent(() => import('./EditorRightSidebar.vue'))
 const PageNavigator = defineAsyncComponent(() => import('./PageNavigator.vue'))
 
-type MobilePanel = 'tools' | 'layers' | 'properties' | 'pages' | 'uploads' | 'more'
+import type { MobilePanel } from '~/utils/editorMobilePanel'
+const SidebarLeft = defineAsyncComponent(() => import('./SidebarLeft.vue'))
+const multipleLayers = ref(false)
 type LayerSelectPayload = string | { id: string; additive?: boolean; toggle?: boolean; range?: boolean }
 
 const props = defineProps<{
@@ -53,6 +56,8 @@ const emit = defineEmits<{
   setPanel: [panel: MobilePanel]
   command: [name: string, payload?: any]
   insertAsset: [asset: any]
+  insertElement: [element: any]
+  generateInstitutional: [payload: any]
   selectLayer: [payload: LayerSelectPayload]
   toggleVisible: [id: string]
   toggleLock: [id: string]
@@ -92,6 +97,10 @@ const emit = defineEmits<{
     @close="emit('close')"
   >
     <div v-if="panel === 'tools'" class="space-y-4">
+      <button class="w-full rounded-xl border border-violet-400/30 bg-violet-500/15 p-4 text-left text-white" @click="emit('setPanel', 'resources')">
+        <strong class="block">Todos os recursos e IA</strong>
+        <span class="text-sm text-zinc-300">Elementos, dados da loja, molduras, imagens e inspirações</span>
+      </button>
       <div>
         <div class="text-[11px] text-white/40 uppercase tracking-wider mb-2 px-1">Formas</div>
         <div class="grid grid-cols-4 gap-2">
@@ -171,6 +180,10 @@ const emit = defineEmits<{
       </div>
     </div>
 
+    <SidebarLeft v-if="panel === 'resources'" embedded start-in-resources class="min-h-[50dvh]"
+      @insert-asset="emit('insertAsset', $event)" @insert-element="emit('insertElement', $event)"
+      @generate-institutional="emit('generateInstitutional', $event)" @open-menu="emit('command', 'open-projects')" />
+
     <template v-if="panel === 'uploads'">
       <div class="relative mb-2 shrink-0">
         <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -186,12 +199,15 @@ const emit = defineEmits<{
     </template>
 
     <template v-if="panel === 'layers'">
+      <button class="mb-3 w-full rounded-xl border border-white/20 px-3 py-2 text-white" :aria-pressed="multipleLayers" @click="multipleLayers = !multipleLayers">
+        {{ multipleLayers ? 'Concluir seleção múltipla' : 'Selecionar vários elementos' }}
+      </button>
       <LayersPanel
         class="flex-1 min-h-0"
         :objects="canvasObjects"
         :selectedId="selectedObjectId"
         :selectedIds="selectedObjectIds"
-        @select="(payload: LayerSelectPayload) => emit('selectLayer', payload)"
+        @select="(payload: LayerSelectPayload) => emit('selectLayer', multipleLayers ? { ...(typeof payload === 'string' ? { id: payload } : payload), additive: true, toggle: true } : payload)"
         @toggle-visible="(id: string) => emit('toggleVisible', id)"
         @toggle-lock="(id: string) => emit('toggleLock', id)"
         @delete="(id: string) => emit('deleteLayer', id)"
@@ -206,7 +222,8 @@ const emit = defineEmits<{
       <EditorRightSidebar
         :collaborators="[]"
         :current-user="currentUser"
-        :show-zoom-menu="false"
+        :show-zoom-menu="showZoomMenu"
+        @update:show-zoom-menu="showZoomMenu = $event"
         :current-zoom="currentZoom"
         :get-color-from-string="getMobileColorFromString"
         :get-initial="getMobileInitial"
@@ -227,6 +244,21 @@ const emit = defineEmits<{
         :snap-to-grid="snapToGrid"
         :grid-size="gridSize"
         class="relative! w-full! shadow-none! border-0!"
+        @present="emit('command', 'presentation', $event)"
+        @open-share="emit('command', 'share', $event)"
+        @zoom-50="emit('command', 'zoom-50', $event)"
+        @zoom-100="emit('command', 'zoom-100', $event)"
+        @zoom-200="emit('command', 'zoom-200', $event)"
+        @zoom-400="emit('command', 'zoom-400', $event)"
+        @zoom-fit="emit('command', 'zoom-fit', $event)"
+        @zoom-selection="emit('command', 'zoom-selection', $event)"
+        @toggle-grid="emit('command', 'toggle-grid', $event)"
+        @toggle-rulers="emit('command', 'toggle-rulers', $event)"
+        @toggle-guides="emit('command', 'toggle-guides', $event)"
+        @toggle-snap-objects="emit('command', 'toggle-snap-objects', $event)"
+        @toggle-snap-guides="emit('command', 'toggle-snap-guides', $event)"
+        @toggle-snap-grid="emit('command', 'toggle-snap-grid', $event)"
+        @set-grid-size="emit('command', 'set-grid-size', $event)"
         @update-property="(name, value) => emit('updateProperty', name, value)"
         @update-smart-group="payload => emit('updateSmartGroup', payload)"
         @update-page-settings="(prop: string, value: any) => emit('updatePageSettings', prop, value)"

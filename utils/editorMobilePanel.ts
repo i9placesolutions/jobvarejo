@@ -1,4 +1,4 @@
-export const MOBILE_PANELS = ['tools', 'layers', 'properties', 'pages', 'uploads', 'more'] as const
+export const MOBILE_PANELS = ['tools', 'layers', 'properties', 'pages', 'uploads', 'resources', 'more'] as const
 
 export type MobilePanel = typeof MOBILE_PANELS[number]
 
@@ -8,6 +8,7 @@ const MOBILE_PANEL_TITLES: Record<MobilePanel, string> = {
   properties: 'Propriedades',
   pages: 'Páginas',
   uploads: 'Imagens',
+  resources: 'Recursos e IA',
   more: 'Mais'
 }
 

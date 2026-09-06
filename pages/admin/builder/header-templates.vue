@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const mobileWorkspace = ref('canvas')
+
 import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
 
 import type { CardTemplateElement, CardTemplateStyle } from '~/types/builder'
@@ -225,7 +227,7 @@ const updateEl = (field: string, value: any) => {
 // ── Drag & drop no canvas ──
 const parsePercent = (val: string): number => parseFloat(val) || 0
 
-const startDrag = (e: MouseEvent, elId: string) => {
+const startDrag = (e: PointerEvent, elId: string) => {
   e.preventDefault(); e.stopPropagation()
   const el = elements.value.find(e => e.id === elId)
   if (!el) return
@@ -235,11 +237,12 @@ const startDrag = (e: MouseEvent, elId: string) => {
   dragStartY.value = e.clientY
   dragStartElX.value = parsePercent(el.x)
   dragStartElY.value = parsePercent(el.y)
-  document.addEventListener('mousemove', onDrag)
-  document.addEventListener('mouseup', stopDrag)
+  document.addEventListener('pointermove', onDrag)
+  document.addEventListener('pointerup', stopDrag)
+  document.addEventListener('pointercancel', stopDrag)
 }
 
-const onDrag = (e: MouseEvent) => {
+const onDrag = (e: PointerEvent) => {
   if (!isDragging.value || !canvasRef.value) return
   const el = elements.value.find(e => e.id === selectedElementId.value)
   if (!el) return
@@ -252,12 +255,13 @@ const onDrag = (e: MouseEvent) => {
 
 const stopDrag = () => {
   isDragging.value = false
-  document.removeEventListener('mousemove', onDrag)
-  document.removeEventListener('mouseup', stopDrag)
+  document.removeEventListener('pointermove', onDrag)
+  document.removeEventListener('pointerup', stopDrag)
+  document.removeEventListener('pointercancel', stopDrag)
 }
 
 // ── Resize no canvas ──
-const startResize = (e: MouseEvent, elId: string) => {
+const startResize = (e: PointerEvent, elId: string) => {
   e.preventDefault(); e.stopPropagation()
   const el = elements.value.find(e => e.id === elId)
   if (!el) return
@@ -267,11 +271,12 @@ const startResize = (e: MouseEvent, elId: string) => {
   dragStartY.value = e.clientY
   dragStartElW.value = parsePercent(el.w)
   dragStartElH.value = parsePercent(el.h)
-  document.addEventListener('mousemove', onResize)
-  document.addEventListener('mouseup', stopResize)
+  document.addEventListener('pointermove', onResize)
+  document.addEventListener('pointerup', stopResize)
+  document.addEventListener('pointercancel', stopResize)
 }
 
-const onResize = (e: MouseEvent) => {
+const onResize = (e: PointerEvent) => {
   if (!isResizing.value || !canvasRef.value) return
   const el = elements.value.find(e => e.id === selectedElementId.value)
   if (!el) return
@@ -284,9 +289,12 @@ const onResize = (e: MouseEvent) => {
 
 const stopResize = () => {
   isResizing.value = false
-  document.removeEventListener('mousemove', onResize)
-  document.removeEventListener('mouseup', stopResize)
+  document.removeEventListener('pointermove', onResize)
+  document.removeEventListener('pointerup', stopResize)
+  document.removeEventListener('pointercancel', stopResize)
 }
+
+onBeforeUnmount(() => { stopDrag(); stopResize() })
 
 // ── Mock content para preview ──
 const mockContent = (el: CardTemplateElement): string => {
@@ -391,7 +399,7 @@ onMounted(fetchData)
     <!-- MODO EDITOR VISUAL -->
     <!-- ════════════════════════════════════════════════ -->
     <template v-else>
-      <div class="h-screen flex flex-col overflow-hidden">
+      <div :data-mobile-panel="mobileWorkspace" class="admin-visual-editor h-dvh flex flex-col overflow-hidden">
 
         <!-- Toolbar topo -->
         <header class="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shrink-0">
@@ -409,11 +417,14 @@ onMounted(fetchData)
           <button @click="saveItem" class="px-4 py-1.5 rounded-lg text-sm bg-emerald-600 text-white hover:bg-emerald-500 font-medium">Salvar</button>
         </header>
 
+        <nav class="admin-workspace-tabs" aria-label="Ferramentas do modelo">
+          <button v-for="tab in [{id:'elements',label:'Elementos'},{id:'canvas',label:'Prévia'},{id:'properties',label:'Propriedades'}]" :key="tab.id" :aria-pressed="mobileWorkspace === tab.id" @click="mobileWorkspace = tab.id">{{ tab.label }}</button>
+        </nav>
         <!-- Corpo: sidebar esquerda + canvas + sidebar direita -->
-        <div class="flex-1 flex min-h-0 overflow-hidden">
+        <div class="admin-workspace-body flex-1 flex min-h-0 overflow-hidden">
 
           <!-- ── SIDEBAR ESQUERDA: Elementos ── -->
-          <div class="w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+          <div class="admin-workspace-elements w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
             <!-- Adicionar elemento -->
             <div class="p-3 border-b border-gray-100">
               <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Adicionar Elemento</p>
@@ -451,10 +462,10 @@ onMounted(fetchData)
           </div>
 
           <!-- ── CANVAS CENTRAL ── -->
-          <div class="flex-1 bg-gray-100 flex items-center justify-center overflow-auto p-8">
+          <div class="admin-workspace-canvas flex-1 bg-gray-100 flex items-center justify-center overflow-auto p-8">
             <div
               ref="canvasRef"
-              class="relative shadow-2xl"
+              class="admin-template-canvas relative shadow-2xl"
               :style="{
                 width: CANVAS_W + 'px', height: CANVAS_H + 'px',
                 background: cardStyle.bg || '#ffffff',
@@ -474,7 +485,7 @@ onMounted(fetchData)
                   opacity: el.opacity ?? 1,
                   cursor: isDragging ? 'grabbing' : 'grab',
                 }"
-                @mousedown="startDrag($event, el.id)"
+                style="touch-action: none" @pointerdown="startDrag($event, el.id)"
                 @click.stop="selectedElementId = el.id"
               >
                 <!-- Conteudo visual do elemento -->
@@ -493,15 +504,15 @@ onMounted(fetchData)
                 <!-- Handle de resize (canto inferior direito) -->
                 <div
                   v-if="selectedElementId === el.id"
-                  @mousedown.stop="startResize($event, el.id)"
-                  :style="{ position: 'absolute', right: '-4px', bottom: '-4px', width: '10px', height: '10px', background: '#10b981', borderRadius: '2px', cursor: 'se-resize', zIndex: 999 }"
+                  @pointerdown.stop="startResize($event, el.id)"
+                  :style="{ position: 'absolute', right: '-4px', bottom: '-4px', width: '24px', height: '24px', touchAction: 'none', background: '#10b981', borderRadius: '2px', cursor: 'se-resize', zIndex: 999 }"
                 />
               </div>
             </div>
           </div>
 
           <!-- ── SIDEBAR DIREITA: Propriedades ── -->
-          <div class="w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto">
+          <div class="admin-workspace-properties w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto">
             <!-- Propriedades do elemento selecionado -->
             <template v-if="selectedElement">
               <div class="p-3 border-b border-gray-100">

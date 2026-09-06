@@ -100,7 +100,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="overflow-hidden rounded-lg border border-zinc-800">
+        <div class="overflow-x-auto rounded-lg border border-zinc-800" role="region" aria-label="Tabela de registros — deslize para ver todas as colunas" tabindex="0">
           <table class="w-full text-left text-sm">
             <thead class="bg-zinc-900">
               <tr>

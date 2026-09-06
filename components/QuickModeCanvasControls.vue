@@ -893,3 +893,14 @@ const onZoomInput = (event: Event) => {
 .quick-mode-canvas-controls__zoom-value input:focus-visible { outline:2px solid #c4b5fd; outline-offset:6px; }
 @media(max-width:767px) { .quick-export-button span { display:none; } .quick-mode-canvas-controls__zoom-value input { width:64px; flex-basis:64px; } .quick-mode-canvas-controls__zoom-value { gap:5px; } }
 </style>
+
+<style scoped>
+@media(max-width:767px) {
+ .quick-mode-canvas-controls { width:calc(100vw - 16px); }
+ .quick-mode-canvas-controls__zoom { flex:1 1 100%; justify-content:center; }
+ .quick-mode-canvas-controls__tool-group { flex:1; justify-content:space-around; }
+ .quick-mode-canvas-controls__tool-button { width:auto; padding:0 8px; gap:4px; }
+ .quick-mode-canvas-controls__tool-button span { display:inline; font-size:12px; }
+ .quick-export-button { padding:0 12px; }
+}
+</style>

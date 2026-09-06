@@ -599,7 +599,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 </script>
 
 <template>
-  <div class="flex h-full shrink-0">
+  <div class="builder-responsive-sidebar flex h-full shrink-0">
     <!-- Icon column (72px) -->
     <div class="w-18 shrink-0 bg-white border-r border-gray-200 flex flex-col items-center py-2 gap-0.5 overflow-y-auto">
       <button
@@ -622,8 +622,9 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
     <!-- Panel content (360px) -->
     <div
       v-if="activePanel"
-      class="w-90 shrink-0 bg-gray-50 border-r border-gray-200 overflow-y-auto"
+      class="builder-responsive-panel w-90 shrink-0 bg-gray-50 border-r border-gray-200 overflow-y-auto"
     >
+      <button class="builder-panel-close" @click="activePanel = null">Concluir e voltar ao encarte</button>
       <!-- PRODUTOS -->
       <template v-if="activePanel === 'products'">
         <div class="p-3">
@@ -1936,3 +1937,16 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
     @close="showProductLayoutModal = false"
   />
 </template>
+
+<style scoped>
+.builder-panel-close { display: none; }
+@media(max-width:767px) {
+ .builder-responsive-sidebar { position: relative; height: auto; width: 100%; }
+ .builder-responsive-sidebar > div:first-child { flex-direction: row; width: 100%; overflow-x: auto; padding: 4px; border-bottom: 1px solid #e5e7eb; }
+ .builder-responsive-sidebar > div:first-child button { flex-shrink: 0; }
+ .builder-responsive-panel { position: fixed; z-index: 80; inset: 20dvh 0 0; width: 100%; border-radius: 16px 16px 0 0; box-shadow: 0 -10px 40px #0003; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+ .builder-panel-close { display: block; position: sticky; top: 0; width: 100%; min-height: 48px; z-index: 2; background: #ecfdf5; color: #047857; font-weight: 600; }
+ .builder-responsive-panel button, .builder-responsive-panel select { min-height:44px; }
+ .builder-responsive-panel input:not([type="checkbox"]):not([type="color"]), .builder-responsive-panel textarea, .builder-responsive-panel select { font-size:16px; min-width:0; }
+}
+</style>

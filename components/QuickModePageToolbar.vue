@@ -354,3 +354,11 @@ watch(() => props.currentPageId, closeMenus)
   }
 }
 </style>
+
+<style scoped>
+@media(max-width:767px) {
+ .quick-mode-page-toolbar button { min-height:44px; }
+ .quick-mode-page-toolbar__menu strong { font-size:12px; }
+ .quick-mode-page-toolbar__menu small { font-size:10px; }
+}
+</style>
