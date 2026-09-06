@@ -22,6 +22,9 @@ const isPicking = ref(false)
 const errorMessage = ref('')
 const templates = ref<FlyerTemplateSummary[]>([])
 const usingTemplateId = ref('')
+const existingProjects = ref<any[]>([])
+const projectSearch = ref('')
+const filteredProjects = computed(() => existingProjects.value.filter(p => String(p.name || '').toLocaleLowerCase().includes(projectSearch.value.toLocaleLowerCase())))
 
 const openExistingProject = async (projectId: string) => {
   await router.replace(`/editor/${projectId}?quick=1`)
@@ -43,7 +46,9 @@ const loadPicker = async () => {
   errorMessage.value = ''
   try {
     const headers = await getApiAuthHeaders()
-    templates.value = await listFlyerTemplates(headers)
+    const [models, saved] = await Promise.all([listFlyerTemplates(headers), $fetch<any[]>('/api/projects', { headers })])
+    templates.value = models
+    existingProjects.value = Array.isArray(saved) ? saved : []
   } catch (error: any) {
     errorMessage.value = String(
       error?.data?.statusMessage ||
@@ -125,9 +130,21 @@ onMounted(() => {
     <section class="mx-auto max-w-5xl px-4 py-10 sm:px-6">
       <div class="max-w-2xl">
         <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">Edição rápida</p>
-        <h1 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Escolha o modelo e jogue os produtos.</h1>
-        <p class="mt-3 text-sm leading-6 text-slate-500">O layout já foi montado no editor avançado. Aqui você só preenche a lista de ofertas sobre o encarte pronto.</p>
+        <h1 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Continue seu encarte ou comece um novo.</h1>
+        <p class="mt-3 text-sm leading-6 text-slate-500">Abra um projeto salvo para continuar de onde parou. Escolher um modelo abaixo cria um novo encarte.</p>
       </div>
+
+      <section v-if="!isOpening && existingProjects.length" class="mt-8 rounded-2xl border border-indigo-200 bg-white p-5" aria-label="Continuar encarte salvo">
+        <h2 class="text-lg font-bold text-slate-900">Continuar editando</h2>
+        <p class="mt-1 text-sm text-slate-500">Mantém os produtos, as páginas e as alterações do projeto.</p>
+        <input v-model="projectSearch" type="search" placeholder="Pesquisar seus encartes" aria-label="Pesquisar encartes salvos" class="mt-4 w-full rounded-xl border border-slate-200 p-3 text-base" />
+        <div class="mt-3 grid max-h-80 gap-2 overflow-y-auto sm:grid-cols-2">
+          <button v-for="saved in filteredProjects" :key="saved.id" type="button" class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 text-left hover:border-indigo-400 hover:bg-indigo-50" @click="openExistingProject(saved.id)">
+            <span class="min-w-0 truncate text-sm font-semibold text-slate-800">{{ saved.name }}</span><span class="text-sm font-semibold text-indigo-600">Continuar</span>
+          </button>
+          <p v-if="!filteredProjects.length" class="p-3 text-sm text-slate-500">Nenhum encarte com esse nome.</p>
+        </div>
+      </section>
 
       <div v-if="isOpening" class="mt-8 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
         <Loader2 class="h-4 w-4 animate-spin text-indigo-500" />
