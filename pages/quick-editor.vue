@@ -42,7 +42,7 @@ const openFromTemplate = async (templateId: string, name?: string) => {
 
 const loadPicker = async () => {
   isPicking.value = true
-  isOpening.value = false
+  isOpening.value = true
   errorMessage.value = ''
   try {
     const headers = await getApiAuthHeaders()
@@ -53,8 +53,10 @@ const loadPicker = async () => {
     errorMessage.value = String(
       error?.data?.statusMessage ||
       error?.message ||
-      'Não foi possível carregar os modelos de encarte.'
+      'Não foi possível carregar os encartes. Tente novamente.'
     )
+  } finally {
+    isOpening.value = false
   }
 }
 
@@ -151,7 +153,7 @@ onMounted(() => {
         Preparando o encarte...
       </div>
 
-      <div v-else-if="errorMessage && !isPicking" class="mt-8 max-w-md space-y-4">
+      <div v-else-if="errorMessage" class="mt-8 max-w-md space-y-4">
         <p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-5 text-red-700" role="alert">{{ errorMessage }}</p>
         <div class="flex gap-2">
           <button type="button" class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500" @click="openQuickEditor">
