@@ -24,7 +24,17 @@ const templates = ref<FlyerTemplateSummary[]>([])
 const usingTemplateId = ref('')
 const existingProjects = ref<any[]>([])
 const projectSearch = ref('')
-const filteredProjects = computed(() => existingProjects.value.filter(p => String(p.name || '').toLocaleLowerCase().includes(projectSearch.value.toLocaleLowerCase())))
+const filteredProjects = computed(() => {
+  // A lista de retomada mostra o último projeto por nome, sem apagar os anteriores.
+  const latestByName = new Map<string, any>()
+  const ordered = [...existingProjects.value].sort((a, b) =>
+    (Date.parse(b.updated_at || '') || 0) - (Date.parse(a.updated_at || '') || 0))
+  for (const project of ordered) {
+    const key = String(project.name || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR') || project.id
+    if (!latestByName.has(key)) latestByName.set(key, project)
+  }
+  return [...latestByName.values()].filter(p => String(p.name || '').toLocaleLowerCase('pt-BR').includes(projectSearch.value.toLocaleLowerCase('pt-BR')))
+})
 
 const openExistingProject = async (projectId: string) => {
   await router.replace(`/editor/${projectId}?quick=1`)
@@ -138,7 +148,7 @@ onMounted(() => {
 
       <section v-if="!isOpening && existingProjects.length" class="mt-8 rounded-2xl border border-indigo-200 bg-white p-5" aria-label="Continuar encarte salvo">
         <h2 class="text-lg font-bold text-slate-900">Continuar editando</h2>
-        <p class="mt-1 text-sm text-slate-500">Mantém os produtos, as páginas e as alterações do projeto.</p>
+        <p class="mt-1 text-sm text-slate-500">Abre o encarte mais recente de cada nome, com seus produtos e alterações.</p>
         <input v-model="projectSearch" type="search" placeholder="Pesquisar seus encartes" aria-label="Pesquisar encartes salvos" class="mt-4 w-full rounded-xl border border-slate-200 p-3 text-base" />
         <div class="mt-3 grid max-h-80 gap-2 overflow-y-auto sm:grid-cols-2">
           <button v-for="saved in filteredProjects" :key="saved.id" type="button" class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 text-left hover:border-indigo-400 hover:bg-indigo-50" @click="openExistingProject(saved.id)">
