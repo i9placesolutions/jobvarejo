@@ -15,6 +15,18 @@ const emit = defineEmits<{
 
 type SheetLevel = 'peek' | 'half' | 'full'
 const level = ref<SheetLevel>('half')
+const sheetEl = ref<HTMLElement | null>(null)
+let previousFocus: HTMLElement | null = null
+const handleKey = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') { event.stopPropagation(); emit('close'); return }
+  if (event.key !== 'Tab') return
+  const elements = Array.from(sheetEl.value?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]') || []).filter(el => el.getClientRects().length)
+  const first = elements[0], last = elements[elements.length - 1]
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+}
+onMounted(() => { previousFocus = document.activeElement as HTMLElement; sheetEl.value?.focus() })
+onBeforeUnmount(() => { previousFocus?.focus?.() })
 
 const heights: Record<SheetLevel, number> = { peek: 42, half: 64, full: 92 }
 const sheetHeight = computed(() => `${heights[level.value]}dvh`)
@@ -83,7 +95,8 @@ const currentHeight = computed(() => {
     <!-- Sheet -->
     <Transition name="bottom-sheet">
       <div
-        class="fixed bottom-0 left-0 right-0 z-[9999] flex flex-col bg-[#18181b] rounded-t-[28px] overflow-hidden border-t border-white/10 shadow-2xl shadow-black/40"
+        ref="sheetEl" role="dialog" aria-modal="true" :aria-label="props.title || 'Opções do editor'" tabindex="-1" @keydown="handleKey"
+        class="editor-mobile-sheet fixed bottom-0 left-0 right-0 z-[9999] flex flex-col bg-[#18181b] rounded-t-[28px] overflow-hidden border-t border-white/10 shadow-2xl shadow-black/40"
         :style="{ height: currentHeight, maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px))', transition: isDragging ? 'none' : 'height 0.28s cubic-bezier(0.32,0.72,0,1)' }"
       >
         <!-- Drag handle -->
@@ -98,8 +111,9 @@ const currentHeight = computed(() => {
 
         <!-- Header -->
         <div v-if="props.title" class="flex-shrink-0 px-4 pb-3 flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-white/80">{{ props.title }}</h3>
-          <button
+          <h3 class="text-base font-semibold text-white">{{ props.title }}</h3>
+          <button type="button" class="px-3 min-h-11 text-xs text-violet-200" @click="level = level === 'full' ? 'half' : 'full'">{{ level === 'full' ? 'Recolher' : 'Expandir' }}</button>
+          <button aria-label="Fechar painel" type="button"
             class="touch-target flex items-center justify-center text-white/40 hover:text-white/70"
             @click="emit('close')"
           >
@@ -115,3 +129,11 @@ const currentHeight = computed(() => {
     </Transition>
   </Teleport>
 </template>
+
+<style scoped>
+.editor-mobile-sheet { outline:none; }
+.editor-mobile-sheet :deep(input:not([type=checkbox]):not([type=range])), .editor-mobile-sheet :deep(textarea), .editor-mobile-sheet :deep(select) { font-size:16px; min-height:44px; }
+.editor-mobile-sheet :deep(button) { min-height:44px; }
+.editor-mobile-sheet :deep(:focus-visible) { outline:2px solid #a78bfa; outline-offset:2px; }
+@media (prefers-reduced-motion: reduce) { .editor-mobile-sheet { transition:none !important; } }
+</style>

@@ -67,7 +67,7 @@ const thumbStyle = (page: Page) => {
   const w = Number(page.width) || 1080
   const h = Number(page.height) || 1080
   const ratio = Math.min(1.6, Math.max(0.55, h / w))
-  const HEIGHT = 64
+  const HEIGHT = 48
   const width = Math.round(HEIGHT / ratio)
   return {
     width: `${width}px`,
@@ -141,41 +141,7 @@ onMounted(async () => {
   scrollToActive(false)
 })
 
-// ─── Detecta scroll para swipe entre páginas (sem clique) ────────────
-// Quando o usuário para de scrollar, ativa a página mais próxima do centro.
-let scrollIdleTimer: ReturnType<typeof setTimeout> | null = null
-let isUserScrolling = false
-
-const onScroll = () => {
-  isUserScrolling = true
-  if (scrollIdleTimer) clearTimeout(scrollIdleTimer)
-  scrollIdleTimer = setTimeout(() => {
-    isUserScrolling = false
-    snapToNearestPage()
-  }, 120)
-}
-
-const snapToNearestPage = () => {
-  const host = stripEl.value
-  if (!host) return
-  const hostCenter = host.getBoundingClientRect().left + host.clientWidth / 2
-  let bestId: string | null = null
-  let bestDist = Infinity
-  const items = host.querySelectorAll<HTMLElement>('[data-page-id]')
-  items.forEach(el => {
-    const r = el.getBoundingClientRect()
-    const c = r.left + r.width / 2
-    const d = Math.abs(c - hostCenter)
-    if (d < bestDist) {
-      bestDist = d
-      bestId = el.dataset.pageId || null
-    }
-  })
-  if (bestId && bestId !== props.activePageId) {
-    emit('select-page', bestId)
-  }
-}
-
+// A faixa pode ser explorada sem iniciar outro carregamento; apenas o toque troca a página.
 const activeIndex = computed(() => {
   return props.pages.findIndex(p => p.id === props.activePageId)
 })
@@ -207,7 +173,7 @@ const onTap = (pageId: string) => {
       ref="stripEl"
       class="flex items-center gap-2 px-[50%] py-2 overflow-x-auto snap-x snap-mandatory scrollbar-hide"
       style="scroll-behavior: smooth; -webkit-overflow-scrolling: touch;"
-      @scroll.passive="onScroll"
+      aria-label="Páginas do encarte"
       @click="closeMenu"
     >
       <div
@@ -231,6 +197,8 @@ const onTap = (pageId: string) => {
             ? 'ring-2 ring-violet-400 ring-offset-1 ring-offset-[#18181b] shadow-lg'
             : 'ring-1 ring-white/15 opacity-70 active:opacity-100'"
           :style="thumbStyle(page)"
+          :aria-label="`Abrir página ${pages.indexOf(page) + 1}: ${page.name || 'Sem nome'}`"
+          :aria-current="page.id === activePageId ? 'page' : undefined"
           @click.stop="onTap(page.id)"
         >
           <img

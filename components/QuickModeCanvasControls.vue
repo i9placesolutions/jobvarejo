@@ -842,3 +842,12 @@ const onZoomInput = (event: Event) => {
 .font-apply-all:disabled { opacity: .4; cursor: not-allowed; }
 .font-apply-all:not(:disabled):hover { background: #6d28d9; }
 </style>
+
+<style scoped>
+@media(max-width:767px) {
+ .quick-mode-canvas-controls button { min-width:44px; min-height:44px; }
+ .quick-mode-canvas-controls { max-width:calc(100vw - 16px); border-radius:14px; background:#242528; }
+ .quick-mode-canvas-controls__font-popover, .quick-mode-canvas-controls__color-popover { position:fixed; left:8px; right:8px; bottom:76px; width:auto; max-height:60dvh; overflow-y:auto; overscroll-behavior:contain; }
+ .font-number input, .font-search { font-size:16px; min-height:44px; }
+}
+</style>

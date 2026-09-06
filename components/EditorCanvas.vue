@@ -39353,10 +39353,10 @@ const handleAutoOfferLayout = async () => {
                   <!-- Storage degraded banner (missing/blocked images) -->
                   <div
                     v-show="showStorageDegradedBanner"
-                    class="absolute top-3 left-1/2 -translate-x-1/2"
+                    class="editor-storage-notice absolute top-3 left-1/2 -translate-x-1/2"
                     style="z-index: 210;"
                   >
-                    <div class="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-950/60 border border-amber-300/20 text-amber-100 shadow-lg">
+                    <div class="editor-storage-notice-content flex items-center gap-2 px-3 py-2 rounded-full bg-amber-950/60 border border-amber-300/20 text-amber-100 shadow-lg">
                       <span class="text-xs">{{ storageDegradedHint || 'Algumas imagens nao carregaram.' }}</span>
                       <button
                         type="button"
@@ -39946,10 +39946,16 @@ const handleAutoOfferLayout = async () => {
 </template>
 
 <style scoped>
+@media (max-width: 767px) {
+ .editor-storage-notice { top:64px; width:calc(100% - 24px); max-width:460px; }
+ .editor-storage-notice-content { border-radius:14px; background:#382919; display:flex; flex-wrap:wrap; gap:8px; padding:12px; }
+ .editor-storage-notice-content > span { flex-basis:100%; line-height:1.4; }
+ .editor-storage-notice-content > button { min-height:44px; flex:1; border-radius:8px; }
+}
 /* Ensure canvas container handles canvas element correctly */
 :global(:root) {
     --editor-mobile-nav-h: calc(64px + env(safe-area-inset-bottom, 0px));
-    --editor-mobile-pages-h: 88px;
+    --editor-mobile-pages-h: 76px;
 }
 
  :deep(.canvas-container) {

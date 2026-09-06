@@ -127,6 +127,7 @@ const emit = defineEmits<{
   (event: 'use-template-model', modelId: string): void
 }>()
 
+const mobileSection = ref<'products' | 'pages' | 'preview'>('preview')
 const activeTab = ref<'search' | 'mine'>('search')
 const listText = ref('')
 const autoFillImages = ref(false)
@@ -524,7 +525,12 @@ const useTemplateModel = (modelId: string) => {
     @confirm="applyValidityPrompt"
   />
 
-  <div class="quick-mode-controls-layout">
+  <div class="quick-mode-controls-layout" :data-mobile-section="mobileSection">
+    <nav class="quick-mobile-sections" aria-label="Edição rápida">
+      <button type="button" :aria-pressed="mobileSection === 'preview'" @click="mobileSection = 'preview'">Ver encarte</button>
+      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection = 'products'">Produtos</button>
+      <button type="button" :aria-pressed="mobileSection === 'pages'" @click="mobileSection = 'pages'">Páginas</button>
+    </nav>
     <aside class="quick-mode-sidebar" aria-label="Produtos da edição rápida">
     <div class="quick-mode-sidebar__content">
       <div class="quick-mode-sidebar__topbar">
@@ -3423,5 +3429,22 @@ const useTemplateModel = (modelId: string) => {
   .quick-mode-pages-rail__header small {
     display: none;
   }
+}
+</style>
+
+<style scoped>
+.quick-mobile-sections { display:none; }
+@media (max-width:767px) {
+ .quick-mode-controls-layout { flex-direction:column; left:8px; right:8px; border-radius:18px; background:#242528; backdrop-filter:none; }
+ .quick-mobile-sections { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; padding:6px; flex-shrink:0; border-bottom:1px solid #3a3b40; }
+ .quick-mobile-sections button { min-height:44px; border-radius:11px; color:#c4c4ce; font-size:13px; font-weight:600; }
+ .quick-mobile-sections button[aria-pressed=true] { background:#3d355b; color:#e8ddff; }
+ .quick-mode-controls-layout[data-mobile-section=preview] { top:auto; height:58px; }
+ .quick-mode-controls-layout[data-mobile-section=preview] .quick-mode-sidebar, .quick-mode-controls-layout[data-mobile-section=preview] .quick-mode-pages-rail,
+ .quick-mode-controls-layout[data-mobile-section=products] .quick-mode-pages-rail,
+ .quick-mode-controls-layout[data-mobile-section=pages] .quick-mode-sidebar { display:none; }
+ .quick-mode-sidebar, .quick-mode-pages-rail { width:100%; flex:1; min-height:0; border:0; border-radius:0 0 18px 18px; }
+ .quick-mode-controls-layout input:not([type=checkbox]), .quick-mode-controls-layout textarea, .quick-mode-controls-layout select { font-size:16px; }
+ .quick-mode-controls-layout button { min-height:44px; }
 }
 </style>
