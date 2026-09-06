@@ -95,6 +95,11 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Uma página nova ainda não possui uma versão anterior para arquivar.
+  if (!pageMeta?.canvasDataPath && !pageMeta?.canvasSavedAt) {
+    return { ok: false, skipped: true, reason: 'no-previous-version' }
+  }
+
   const s3 = getS3Client()
 
   try {

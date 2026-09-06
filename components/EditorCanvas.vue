@@ -5277,40 +5277,6 @@ const scheduleImageProgressFlush = () => {
 
 // collectTrackableImageSrcCounts extraido para utils/canvasImageTracking.ts.
 
-/**
- * Pré-aquece o cache do browser para as imagens do canvas antes de loadFromJSON.
- * Carrega as URLs em lotes de CONCURRENCY para respeitar o pool HTTP/2 (6 conn/host).
- * Tem timeout de TIMEOUT_MS para não atrasar o carregamento do canvas.
- */
-const prewarmCanvasImages = (canvasData: any, concurrency = 6, timeoutMs = 4000): Promise<void> => {
-    const urls = [...collectTrackableImageSrcCounts(canvasData).keys()]
-    if (!urls.length) return Promise.resolve()
-
-    return new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, timeoutMs)
-        let pending = urls.length
-        let cursor = 0
-
-        const done = () => {
-            if (--pending <= 0) { clearTimeout(timer); resolve() }
-        }
-
-        // Each call to next() starts exactly ONE image.
-        // When it finishes it calls next() again → sliding window of `concurrency` images.
-        const next = () => {
-            if (cursor >= urls.length) return
-            const url = urls[cursor++]!
-            const img = new Image()
-            img.onload = img.onerror = () => { done(); next() }
-            img.src = url
-        }
-
-        // Seed the initial batch (up to concurrency)
-        const initial = Math.min(concurrency, urls.length)
-        for (let i = 0; i < initial; i++) next()
-    })
-}
-
 const startImageLoadTracking = (sessionId: number, canvasData: any) => {
     const counts = collectTrackableImageSrcCounts(canvasData)
     let expected = 0
@@ -5570,7 +5536,7 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     let loadTimedOut = false
     try {
         sanitizeCanvasJsonBeforeLoad(json)
-        void prewarmCanvasImages(json, 6, 4000)
+        // Fabric carrega as imagens com CORS; um preloader paralelo duplicava as requisições.
         if (sessionId !== activePageLoadSessionId || isCanvasDestroyed.value) {
             throw new Error('Load session became stale')
         }
