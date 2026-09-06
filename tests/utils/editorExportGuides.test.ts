@@ -40,11 +40,13 @@ describe('Exportação sem perda e sem guias', () => {
     }
     await withProductZonesHiddenForOutput(ctx, () => {
       expect(outline.visible).toBe(false)
+      expect((outline as any).excludeFromExport).toBe(true)
       expect(zone.visible).toBe(true)
       expect(card.visible).toBe(true)
       expect(decoration.visible).toBe(true)
     })
     expect(outline.visible).toBe(true)
+    expect((outline as any).excludeFromExport).toBeUndefined()
   })
 
   it('recompressão preserva cada canal RGBA, inclusive semitransparência', async () => {

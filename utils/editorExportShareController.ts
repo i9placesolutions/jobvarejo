@@ -264,11 +264,13 @@ export const withProductZonesHiddenForOutput = async <T>(
 
     const prevVisibility = zones.map((obj: any) => ({
         obj,
-        visible: obj?.visible !== false
+        visible: obj?.visible !== false,
+        excludeFromExport: obj.excludeFromExport
     }))
 
     zones.forEach((obj: any) => {
         obj?.set?.('visible', false)
+        obj?.set?.('excludeFromExport', true)
         obj?.setCoords?.()
     })
     ctx.safeRequestRenderAll()
@@ -277,8 +279,9 @@ export const withProductZonesHiddenForOutput = async <T>(
     try {
         return await action()
     } finally {
-        prevVisibility.forEach(({ obj, visible }: any) => {
+        prevVisibility.forEach(({ obj, visible, excludeFromExport }: any) => {
             obj?.set?.('visible', visible)
+            obj?.set?.('excludeFromExport', excludeFromExport)
             obj?.setCoords?.()
         })
         ctx.safeRequestRenderAll()
@@ -303,7 +306,7 @@ export const exportSelectedObject = async (
     const shouldDownload = options.download !== false
 
     if (format === 'svg') {
-        const svgContent = active.toSVG()
+        const svgContent = await withProductZonesHiddenForOutput(ctx, () => active.toSVG())
         const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' })
         const url = URL.createObjectURL(blob)
         if (shouldDownload) downloadFile(url, `${fileName}.svg`)
