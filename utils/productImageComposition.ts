@@ -160,6 +160,32 @@ export const collectDirectProductCardImages = (card: any): any[] => {
   })
 }
 
+/** Substitui a textura das cópias sem recriar objetos ou redistribuir o card. */
+export const replaceProductImageCopies = (card: any, target: any, replacement: any, source: string): any[] => {
+  const originalSource = normalizeComparableSource(getProductImageObjectSource(target))
+  const images = collectDirectProductCardImages(card).filter(image =>
+    image === target || (!!originalSource && normalizeComparableSource(getProductImageObjectSource(image)) === originalSource)
+  )
+  if (!images.includes(target) || !replacement?.getElement?.()) return []
+  const width = Math.max(1, Number(replacement.width) || 1)
+  const height = Math.max(1, Number(replacement.height) || 1)
+  for (const image of images) {
+    const scaleX = Number(image.width) * Number(image.scaleX ?? 1) / width
+    const scaleY = Number(image.height) * Number(image.scaleY ?? 1) / height
+    image.setElement(replacement.getElement())
+    image.set({ width, height, scaleX, scaleY,
+      cropX: Number(replacement.cropX || 0), cropY: Number(replacement.cropY || 0),
+      src: source, __originalSrc: source, dirty: true,
+      __manualTransform: true,
+      __manualTransformCardW: Number(card._cardWidth || card.width),
+      __manualTransformCardH: Number(card._cardHeight || card.height)
+    })
+    image.setCoords?.()
+  }
+  card.dirty = true
+  return images
+}
+
 export const resolveProductImageCompositionLayout = (
   imageCount: number,
   requested: ProductImageCompositionLayout | 'auto' | null | undefined = 'auto'

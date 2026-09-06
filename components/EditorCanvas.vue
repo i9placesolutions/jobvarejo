@@ -214,6 +214,7 @@ import {
     buildProductImageCompositionPlan,
     collectDirectProductCardImages,
     getProductImageDuplicatePlacement,
+    replaceProductImageCopies,
     isNamedProductCardImage,
     isStackedDuplicateImageComposition,
     resolveProductImageCompositionLayout,
@@ -22654,6 +22655,25 @@ const replaceImageByCustomId = async (
     if (String(target?.type || '').toLowerCase() !== 'image') return false;
 
     try {
+        if (found.parent && (isProductCardContainer(found.parent) || isLikelyProductCard(found.parent))) {
+            const card = found.parent;
+            // Carrega uma vez. O crop referencia a mesma imagem persistente,
+            // evitando salvar dimensões de um arquivo aparado com a URL antiga.
+            const source = toWasabiProxyUrl(newUrl) || newUrl;
+            const replacement = await fabric.Image.fromURL(source, { crossOrigin: 'anonymous' });
+            await autoTrimFabricImageAsync(replacement, { preserveVisualPosition: true });
+            const images = replaceProductImageCopies(card, target, replacement, source);
+            if (!images.length) return false;
+            images.forEach(markProductImageTrimmed);
+            card.imageUrl = source;
+            card._productData = { ...card._productData, imageUrl: source, image: source };
+            if (shouldSetActive) canvas.value.setActiveObject(card);
+            refreshCanvasObjects({ immediate: true });
+            updateSelection();
+            safeRequestRenderAll();
+            if (shouldSave) await saveCurrentState({ reason: 'replace-product-image-copies', skipIfUnchanged: false });
+            return true;
+        }
         const oldDisplayW = Math.abs((target.width || 1) * (target.scaleX || 1));
         const oldDisplayH = Math.abs((target.height || 1) * (target.scaleY || 1));
         const proxiedNewUrl = await resolveTrimmedInsertUrl(newUrl);
@@ -39179,7 +39199,7 @@ const handleAutoOfferLayout = async () => {
             <div>
               <h3 class="text-sm font-semibold text-white">Escolher imagem do produto</h3>
               <p class="text-[11px] text-zinc-400">
-                {{ productImagePickerMode === 'replace' ? 'Troque a imagem atual pela opção escolhida.' : 'Escolha uma imagem para este produto.' }}
+                {{ productImagePickerMode === 'replace' ? 'Troque a imagem e todas as suas cópias neste produto.' : 'Escolha uma imagem para este produto.' }}
               </p>
             </div>
             <button
@@ -39527,6 +39547,7 @@ const handleAutoOfferLayout = async () => {
                      :selected-template-id="selectedProductImageQuickActions.selectedTemplateId"
                      :fill-count="selectedProductImageQuickActions.card._productData?.autoFillImages ? (selectedProductImageQuickActions.card._productData.imageFillCount || 0) : 1"
                      :fill-direction="selectedProductImageQuickActions.card._productData?.imageFillDirection || 'auto'"
+                     @replace="handleAction('replace-product-image-upload')"
                      @duplicate="handleProductImageDuplicate"
                      @fill="handleProductImageFill"
                      @resize="handleProductImageResize"
