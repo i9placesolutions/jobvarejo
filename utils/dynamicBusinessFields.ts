@@ -353,7 +353,7 @@ export const fitDynamicBusinessTextObject = (
   )
   const maxWidth = finitePositive(options.maxWidth)
     || finitePositive(object.width)
-  const maxHeight = finitePositive(options.maxHeight)
+  const maxHeight = object.dynamicFieldAutoHeight ? null : finitePositive(options.maxHeight)
     || finitePositive(object.dynamicFieldHeight)
     || finitePositive(object.height)
 
@@ -450,7 +450,7 @@ export const syncDynamicBusinessTextHeight = (object: any): boolean => {
   const baseHeight = Number.isFinite(naturalHeight) && naturalHeight > 0
     ? naturalHeight
     : (Number.isFinite(currentHeight) && currentHeight > 0 ? currentHeight : 1)
-  const nextHeight = Number.isFinite(storedHeight) && storedHeight > 0
+  const nextHeight = !object.dynamicFieldAutoHeight && Number.isFinite(storedHeight) && storedHeight > 0
     ? Math.max(baseHeight, storedHeight)
     : baseHeight
 

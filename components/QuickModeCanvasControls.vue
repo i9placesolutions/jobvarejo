@@ -64,7 +64,6 @@ const fontSearch = ref('')
 const filteredFonts = computed(() => [...new Set([...(props.nativeFontFamily && props.nativeFontFamily !== 'Várias' ? [props.nativeFontFamily] : []), ...AVAILABLE_FONT_FAMILIES])].filter(font => font.toLocaleLowerCase().includes(fontSearch.value.trim().toLocaleLowerCase())))
 const fontControls = computed(() => [
   { key: 'fontSize', label: 'Tamanho', unit: 'px', min: 1, value: props.nativeFontSize },
-  { key: 'height', label: 'Altura do campo', unit: 'px', min: 1, value: props.typography?.height },
   { key: 'charSpacing', label: 'Entre letras', unit: '%', min: -100, value: props.typography?.charSpacing == null ? undefined : props.typography.charSpacing / 10 },
   { key: 'lineHeight', label: 'Entrelinhas', unit: '%', min: 10, value: props.typography?.lineHeight == null ? undefined : props.typography.lineHeight * 100 }
 ])
@@ -268,6 +267,7 @@ const onZoomInput = (event: Event) => {
             <div class="font-current"><strong>{{ fontLabel }}</strong><span>{{ nativeFontSize == null ? 'Vários tamanhos' : `${Math.round(nativeFontSize)} px` }}</span></div>
             <button type="button" class="font-apply-all" :disabled="!selectedText || busy" @click="emit('apply-to-all')">{{ applyAllLabel || 'Aplicar a todos os textos da página' }}</button>
             <p v-if="!selectedText">Selecione um texto para copiar sua configuração.</p>
+            <p class="mb-3 text-xs text-zinc-400">Altura automática conforme o texto e as quebras de linha.</p>
             <div class="font-controls-grid">
               <label v-for="control in fontControls" :key="control.key" class="font-control">
                 <span>{{ control.label }}</span>

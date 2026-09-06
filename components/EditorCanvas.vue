@@ -6505,6 +6505,12 @@ const quickModeNativeTextObjects = computed(() => {
 })
 
 function getQuickFontTargets(all = false): any[] {
+    const active = canvas.value?.getActiveObject?.()
+    if (active && isActiveSelectionObject(active)) {
+        const names = (active.getObjects?.() || []).filter(isProductNameText)
+        // Seleção mista: fonte altera só os nomes, sem tocar nos preços.
+        return all && names.length ? collectProductNameTexts(canvas.value) : names
+    }
     const snapshot = selectedObjectRef.value
     // Inspector snapshots are plain copies, never mutation targets.
     const selected = snapshot?._customId
@@ -6524,7 +6530,7 @@ function getQuickFontTargets(all = false): any[] {
 }
 const quickFontApplyAllLabel = computed(() => {
     const targets = quickModeNativeTextObjects.value
-    return targets.length === 1 && isProductNameText(targets[0])
+    return targets.length > 0 && targets.every(isProductNameText)
         ? 'Aplicar a todos os nomes dos produtos'
         : 'Aplicar a todos os textos da página'
 })
@@ -6600,6 +6606,8 @@ const applyQuickTypography = (change: { property: string; value: number | string
 const applyQuickFontSize = async (value: number) => {
     if (!Number.isFinite(value) || value < 1 || value > 500) return
     for (const object of getQuickFontTargets()) {
+        const top = object.getPointByOrigin?.('center', 'top')
+        object.dynamicFieldAutoHeight = true
         object.set({ fontSize: value })
         // Imported rich text may carry a size per character that overrides
         // the Textbox size. An explicit whole-text edit replaces those sizes.
@@ -6618,6 +6626,7 @@ const applyQuickFontSize = async (value: number) => {
             object.dynamicFieldHeight = object.height
         }
         object.initDimensions?.()
+        if (top) object.setPositionByOrigin?.(top, 'center', 'top')
         object.setCoords?.()
         touchQuickModeObjectAncestors(object)
     }
@@ -8250,6 +8259,16 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 // FIX: Reparar elementos de fundo de etiquetas de preço que ficaram
                 // invisíveis após deserialização (viewport culling corruption, image load fail).
                 repairLivePriceGroupBackgrounds(canvas.value);
+                if (isQuickMode.value) {
+                    for (const text of collectObjectsDeep(canvas.value).filter(isDynamicBusinessFieldObject)) {
+                        const top = text.getPointByOrigin?.('center', 'top');
+                        text.dynamicFieldAutoHeight = true;
+                        fitDynamicBusinessTextObject(text);
+                        text.initDimensions?.();
+                        if (top) text.setPositionByOrigin?.(top, 'center', 'top');
+                        text.setCoords?.();
+                    }
+                }
                 for (const zone of getRuntimeProductZones()) {
                     harmonizeProductCardTypography(getZoneChildren(zone));
                 }
@@ -11369,6 +11388,14 @@ const _handleObjectModifiedInner = (e: any) => {
 
         members.forEach((member: any) => {
             if (!member) return;
+            // Filhos selecionados continuam no card; não os reparentar para o frame.
+            if (isProductNameText(member) || member.name === 'priceGroup' || member.isPriceGroup) {
+                if (member.name === 'priceGroup' || member.isPriceGroup) markPriceGroupTransformAsManual(member);
+                else member.__manualTransform = true;
+                member.dirty = true;
+                member.setCoords?.();
+                return;
+            }
 
             if (shouldApplyContainmentConstraints(member)) {
                 applyContainmentConstraints(member);
@@ -16655,6 +16682,7 @@ const setupReactivity = () => {
     const resolveSelectionRootObject = (obj: any, opts: { keepCardImages?: boolean } = {}) => {
         if (!obj || isTransientCanvasObject(obj)) return null;
         const keepCardImages = opts.keepCardImages !== false;
+        if (isProductNameText(obj) || String(obj?.name || '') === 'priceGroup' || obj?.isPriceGroup === true) return obj;
         if (keepCardImages && isProductCardImageSelectionCandidate(obj)) return obj;
         if (keepCardImages && isLikelyProductCard(obj)) {
             const deepSelected = getDeepSelectedProductImageFromCard(obj);
@@ -16703,6 +16731,9 @@ const setupReactivity = () => {
         return unique;
     };
 
+    const isProductTextOrPriceSelectionTarget = (obj: any) =>
+        isProductNameText(obj) || String(obj?.name || '') === 'priceGroup' || obj?.isPriceGroup === true;
+
     // Shift+multi-select:
     // - keep deep-selected product images as independent targets (allows multi-select of images in a card)
     // - still prefer whole product cards for non-image inner elements.
@@ -16710,6 +16741,7 @@ const setupReactivity = () => {
         if (!obj || isTransientCanvasObject(obj)) return null;
         // Uma imagem já selecionada em profundidade continua independente:
         // converter para o card fazia Shift na segunda cópia alternar o mesmo card.
+        if (isProductTextOrPriceSelectionTarget(obj)) return obj;
         if (isProductCardImageSelectionCandidate(obj)) return obj;
         if (isQuickMode.value) {
             const card = isLikelyProductCard(obj) ? obj : findProductCardParentGroup(obj);
@@ -17014,6 +17046,16 @@ const setupReactivity = () => {
     };
 
     const pickShiftSelectionTarget = (evtPayload: any) => {
+        // Hit-test nomes e etiquetas antes do card/imagem que os contém.
+        const point = getScenePointFromNativeEvent(evtPayload?.e);
+        if (point && canvas.value) {
+            const candidates = collectObjectsDeep(canvas.value).filter(isProductTextOrPriceSelectionTarget).reverse();
+            for (const candidate of candidates) {
+                if (candidate.visible === false) continue;
+                candidate.setCoords?.();
+                if (candidate.containsPoint?.(point)) return candidate;
+            }
+        }
         const primary = evtPayload?.target || null;
         const subTargets = Array.isArray(evtPayload?.subTargets) ? evtPayload.subTargets.filter(Boolean) : [];
         const preferCardImages = shiftSelectionBaselineMembers.some((member: any) => isProductCardImageSelectionCandidate(member));
