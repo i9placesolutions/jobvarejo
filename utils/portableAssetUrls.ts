@@ -5,7 +5,7 @@ export const portableAssetUrl = (value: string): string => {
     const url = new URL(value)
     const local = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(url.hostname) || url.hostname.endsWith('.localhost')
     const appStorage = /^\/api\/storage\/(p|proxy|download)(\/|$)/.test(url.pathname)
-    if ((appStorage && (local || url.hostname === 'jobvarejo.com.br' || url.hostname === 'www.jobvarejo.com.br')) || (local && url.pathname.startsWith('/assets/'))) return url.pathname + url.search + url.hash
+    if ((appStorage && (local || url.hostname === 'jobvarejo.com.br' || url.hostname === 'www.jobvarejo.com.br')) || ((local || url.hostname === 'jobvarejo.com.br' || url.hostname === 'www.jobvarejo.com.br') && url.pathname.startsWith('/assets/'))) return url.pathname + url.search + url.hash
   } catch {}
   return value
 }

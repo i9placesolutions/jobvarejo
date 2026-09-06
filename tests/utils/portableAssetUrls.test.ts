@@ -9,3 +9,7 @@ it('corrige src, original e metadados usados na reconstrução dos cards', () =>
  expect(portableAssetUrl('https://example.com/photo.jpg')).toBe('https://example.com/photo.jpg')
  expect(portableAssetUrl('http://localhost:8000/service')).toBe('http://localhost:8000/service')
 })
+it('carrega o selo publicado pelo mesmo domínio da sessão local ou produção', () => {
+ expect(portableAssetUrl('https://jobvarejo.com.br/assets/alcohol-under-18-badge.png')).toBe('/assets/alcohol-under-18-badge.png')
+ expect(portableAssetUrl('https://example.com/assets/photo.png')).toBe('https://example.com/assets/photo.png')
+})
