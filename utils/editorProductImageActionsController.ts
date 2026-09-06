@@ -98,7 +98,9 @@ export const applyProductImageFromUploadPicker = async (
 
     try {
         if (ctx.productImagePickerMode.value === 'replace' && ctx.productImagePickerTargetImageId.value) {
-            await ctx.replaceImageByCustomId(ctx.productImagePickerTargetImageId.value, asset.url)
+            if (!await ctx.replaceImageByCustomId(ctx.productImagePickerTargetImageId.value, asset.url)) {
+                ctx.notifyEditorError('Não foi possível substituir a imagem. Selecione novamente a imagem do produto.')
+            }
         } else if (ctx.productImagePickerMode.value === 'add' && ctx.productImagePickerTargetCardId.value) {
             const targetCard = ctx.findProductCardByCustomId(ctx.productImagePickerTargetCardId.value)
             if (!targetCard) {
@@ -127,8 +129,10 @@ export const handleFileUpload = async (
 
     try {
         const mode = ctx.pendingLocalImageActionMode.value
+        const replaceTargetId = ctx.pendingImageReplaceTargetId.value
+        if (mode === 'replace' && !replaceTargetId) throw new Error('Selecione novamente a imagem que deseja substituir.')
 
-        if (mode === 'replace' && ctx.pendingImageReplaceTargetId.value) {
+        if (mode === 'replace' && replaceTargetId) {
             const file = files[0]
             if (!file) {
                 clearPendingProductImageOperation(ctx)
@@ -136,7 +140,9 @@ export const handleFileUpload = async (
             }
             const uploaded = await ctx.uploadFile(await trimImageFile(file))
             if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou')
-            await ctx.replaceImageByCustomId(ctx.pendingImageReplaceTargetId.value, uploaded.url)
+            if (!await ctx.replaceImageByCustomId(replaceTargetId, uploaded.url)) {
+                throw new Error('Não foi possível substituir a imagem do produto.')
+            }
             return
         }
 

@@ -77,7 +77,7 @@ watch(() => props.visible, (visible) => {
     >
       <button type="button" class="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-white hover:bg-white/10"
         title="Trocar imagem e suas cópias neste produto" @click="emit('replace')">
-        <ImagePlus class="h-3.5 w-3.5" /> Trocar
+        <ImagePlus class="h-3.5 w-3.5" /> Substituir imagem
       </button>
       <select aria-label="Preenchimento de imagens" :value="fillCount ?? 1" class="max-w-28 rounded bg-zinc-800 text-white text-[10px] p-1" @change="emit('fill', Number(($event.target as HTMLSelectElement).value), fillDirection)">
         <option value="0">Automático</option>

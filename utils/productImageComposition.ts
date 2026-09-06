@@ -170,10 +170,20 @@ export const replaceProductImageCopies = (card: any, target: any, replacement: a
   const width = Math.max(1, Number(replacement.width) || 1)
   const height = Math.max(1, Number(replacement.height) || 1)
   for (const image of images) {
-    const scaleX = Number(image.width) * Number(image.scaleX ?? 1) / width
-    const scaleY = Number(image.height) * Number(image.scaleY ?? 1) / height
+    const cardWidth = Math.max(1, Number(card._cardWidth || card.width))
+    const cardHeight = Math.max(1, Number(card._cardHeight || card.height))
+    const oldWidth = Math.abs(Number(image.width) * Number(image.scaleX ?? 1))
+    const oldHeight = Math.abs(Number(image.height) * Number(image.scaleY ?? 1))
+    const oversized = oldWidth > cardWidth || oldHeight > cardHeight
+    const fit = Math.min(cardWidth * 0.86 / width, cardHeight * 0.64 / height)
+    const scaleX = oversized ? fit : oldWidth / width
+    const scaleY = oversized ? fit : oldHeight / height
+    const halfW = width * scaleX / 2
+    const halfH = height * scaleY / 2
+    const left = oversized ? 0 : Math.max(-cardWidth / 2 + halfW, Math.min(cardWidth / 2 - halfW, Number(image.left || 0)))
+    const top = oversized ? 0 : Math.max(-cardHeight / 2 + halfH, Math.min(cardHeight / 2 - halfH, Number(image.top || 0)))
     image.setElement(replacement.getElement())
-    image.set({ width, height, scaleX, scaleY,
+    image.set({ width, height, scaleX, scaleY, left, top,
       cropX: Number(replacement.cropX || 0), cropY: Number(replacement.cropY || 0),
       src: source, __originalSrc: source, dirty: true,
       __manualTransform: true,

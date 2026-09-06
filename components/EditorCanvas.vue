@@ -599,6 +599,7 @@ import {
   Frame, // New Icon
   Group, // Group icon
   Ungroup, // Ungroup icon
+  ImagePlus,
   Copy, // Duplicate icon
 } from 'lucide-vue-next'
 
@@ -1576,6 +1577,8 @@ const layersContextMenu = ref({
 });
 
 const canvasContextMenuItems = computed(() => ([
+    ...(selectedObjectRef.value && resolveSelectedProductCardContext(canvas.value?.getActiveObject?.()).card
+        ? [{ label: 'Substituir imagem', action: 'replace-product-image-upload', icon: ImagePlus }] : []),
     { label: 'Copiar (Ctrl/Cmd+C)', action: 'copy', icon: Copy },
     { label: 'Colar (Ctrl/Cmd+V)', action: 'paste', icon: Copy },
     { label: 'Duplicar (Ctrl+D)', action: 'duplicate', icon: Copy },
@@ -1592,6 +1595,7 @@ const canvasContextMenuItems = computed(() => ([
 ]));
 
 const handleCanvasContextMenuSelect = (action: string) => {
+    if (action === 'replace-product-image-upload') void handleAction(action);
     if (action === 'copy' || action === 'paste') void handleAction(action);
     if (action === 'duplicate') void handleAction('duplicate');
     if (action === 'arrange-bring-to-front') arrangeActiveObjects('bring-to-front');
@@ -22579,19 +22583,25 @@ const addImageToProductCardByUrl = async (
         await autoTrimFabricImageAsync(newImg, { preserveVisualPosition: true });
         markProductImageTrimmed(newImg);
 
-        if ((newImg.width || 0) > 500) {
-            newImg.scaleToWidth(500);
-        }
-
         const existingProductImage = getPreferredProductImageFromGroup(card);
-        const targetLeft = existingProductImage ? ((Number(existingProductImage.left) || 0) + 10) : 0;
-        const targetTop = existingProductImage ? ((Number(existingProductImage.top) || 0) + 10) : 0;
-        const targetCanvas = groupLocalToCanvasPoint(card, targetLeft, targetTop);
+        const cardW = Number(card._cardWidth || card.width || 100);
+        const cardH = Number(card._cardHeight || card.height || 100);
+        const maxW = Math.min(cardW * 0.86, existingProductImage
+            ? Math.abs(existingProductImage.width * existingProductImage.scaleX) : cardW * 0.86);
+        const maxH = Math.min(cardH * 0.64, existingProductImage
+            ? Math.abs(existingProductImage.height * existingProductImage.scaleY) : cardH * 0.64);
+        const scale = Math.min(maxW / Math.max(1, newImg.width), maxH / Math.max(1, newImg.height));
+        const halfW = newImg.width * scale / 2;
+        const halfH = newImg.height * scale / 2;
+        const targetLeft = Math.max(-cardW / 2 + halfW, Math.min(cardW / 2 - halfW, Number(existingProductImage?.left || 0)));
+        const targetTop = Math.max(-cardH / 2 + halfH, Math.min(cardH / 2 - halfH, Number(existingProductImage?.top || 0)));
         const imageName = existingProductImage ? `extra_image_${Date.now()}` : 'smart_image';
 
         newImg.set({
-            left: targetCanvas.x,
-            top: targetCanvas.y,
+            left: targetLeft,
+            top: targetTop,
+            scaleX: scale,
+            scaleY: scale,
             originX: 'center',
             originY: 'center',
             selectable: true,
@@ -22608,6 +22618,11 @@ const addImageToProductCardByUrl = async (
             (newImg as any).__manualTransformCardH = Number((card as any)?._cardHeight ?? card?.height ?? 0) || undefined;
         }
 
+        // Group.add recebe coordenadas de cena. Converta também a escala do
+        // card, não só a posição, antes de inserir a imagem em seu plano local.
+        fabric.util.applyTransformToObject(newImg, fabric.util.multiplyTransformMatrices(
+            card.calcTransformMatrix(), newImg.calcOwnMatrix()
+        ));
         safeAddWithUpdate(card, newImg);
         card.set({ subTargetCheck: true, interactive: true });
         card.setCoords?.();

@@ -35,3 +35,36 @@ describe('replaceProductImageCopies', () => {
     expect(unrelated.src).toContain('rice')
   })
 })
+
+it('reencaixa uma imagem antiga maior que o card sem ampliar o card', () => {
+  const target = image('oversized'); target.width = 410; target.height = 721;
+  target.scaleX = 1.0156; target.scaleY = 1.1635; target.left = -360; target.top = -421;
+  const card = { width: 115, height: 77, getObjects: () => [target] };
+  replaceProductImageCopies(card, target, replacement, '/new.png');
+  expect(target.width * target.scaleX).toBeLessThanOrEqual(115);
+  expect(target.height * target.scaleY).toBeLessThanOrEqual(77 * 0.64);
+  expect([target.left, target.top, card.width, card.height]).toEqual([0, 0, 115, 77]);
+});
+
+it('mantém o encaixe e o vínculo em um Group real do Fabric após serializar', async () => {
+  const { FabricImage, Group, Rect, LayoutManager, FixedLayout, getEnv } = await import('fabric/node')
+  const texture = getEnv().document.createElement('canvas')
+  texture.width = 410; texture.height = 721
+  const target = new FabricImage(texture, { name: 'smart_image', originX: 'center', originY: 'center' } as any)
+  const card = new Group([new Rect({ width: 115, height: 77, originX: 'center', originY: 'center' }), target], {
+    width: 115, height: 77, layoutManager: new LayoutManager(new FixedLayout())
+  })
+  target.set({ width: 410, height: 721, scaleX: 1.0156, scaleY: 1.1635, left: -360, top: -421 })
+  const newTexture = getEnv().document.createElement('canvas')
+  newTexture.width = 800; newTexture.height = 1200
+  const replacement = new FabricImage(newTexture)
+  replaceProductImageCopies(card, target, replacement, '/new.png')
+  expect(target.group).toBe(card)
+  expect(target.getScaledWidth()).toBeLessThanOrEqual(115)
+  expect(target.getScaledHeight()).toBeLessThanOrEqual(77)
+  const saved = card.toObject(['name', '__originalSrc', '__manualTransform'] as any)
+  const savedImage = saved.objects.find((object: any) => object.name === 'smart_image') as any
+  expect(savedImage.width * savedImage.scaleX).toBeLessThanOrEqual(115)
+  expect(savedImage.__originalSrc).toBe('/new.png')
+  expect(savedImage.__manualTransform).toBe(true)
+})
