@@ -7,9 +7,10 @@ import ConfirmDialog from './ui/ConfirmDialog.vue'
 
 import Input from './ui/Input.vue'
 import Button from './ui/Button.vue'
-import { ShoppingCart, Sparkles } from 'lucide-vue-next'
+import { ShoppingCart } from 'lucide-vue-next'
 import { useFolder } from '~/composables/useFolder'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
+import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 // Props
 const props = defineProps<{
@@ -188,18 +189,88 @@ const fetchWithRetry = async (url: string, options: any, attempts = 3): Promise<
 }
 const assetsScrollRef = ref<HTMLElement | null>(null)
 
+const normalizeMappedAssetKey = (raw: string): string => {
+    const value = String(raw || '').trim()
+    if (!value) return ''
+    if (value.startsWith('s3:')) return value.slice(3)
+    if (value.startsWith('cache:')) return ''
+    return value
+}
+
+const extractDisplayNameFromKey = (key: string): string => {
+    const rawName = String(key || '').split('/').pop()?.replace(/^\d+-/, '') || key
+    const baseName = rawName.replace(/\.[^/.]+$/, '')
+    try {
+        return decodeURIComponent(baseName)
+    } catch {
+        return baseName
+    }
+}
+
+const assetKeyCandidates = (item: any): string[] => {
+    const id = String(item?.id || '').trim()
+    const key = String(item?.key || '').trim()
+    const candidates = [key, id]
+    if (id.startsWith('s3:')) candidates.push(id.slice(3))
+    if (key) candidates.push(`s3:${key}`)
+    return [...new Set(candidates.filter(Boolean))]
+}
+
+const lookupMappedValue = (map: Map<string, any>, item: any) => {
+    for (const candidate of assetKeyCandidates(item)) {
+        if (map.has(candidate)) return map.get(candidate)
+    }
+    return undefined
+}
+
+const sameFolderId = (left: any, right: any) => {
+    if (left == null || left === '') return right == null || right === ''
+    if (right == null || right === '') return false
+    return String(left) === String(right)
+}
+
 const normalizeUploadAsset = (item: any) => {
     const map = assetFolderMap.value
     const names = assetNameMap.value
-    const id = String(item?.id || '').trim()
-    const key = String(item?.key || '').trim()
-    const folderId = (id && map.get(id) !== undefined) ? map.get(id) : (key ? map.get(key) : null)
-    const overrideName = (id && names.get(id)) ? names.get(id) : (key ? names.get(key) : undefined)
+    const mappedFolderId = lookupMappedValue(map, item)
+    const overrideName = lookupMappedValue(names, item)
     return {
         ...item,
-        folderId: folderId ?? null,
+        folderId: mappedFolderId !== undefined ? mappedFolderId : (item?.folderId ?? null),
         name: (typeof overrideName === 'string' && overrideName.trim().length) ? overrideName : item?.name
     }
+}
+
+const listFilesInFolder = (folderId: string | null) => {
+    const byId = new Map<string, any>()
+
+    for (const item of assets.value.uploads) {
+        if (!sameFolderId(item?.folderId, folderId)) continue
+        const id = String(item?.id || item?.key || '')
+        if (!id) continue
+        byId.set(id, item)
+    }
+
+    for (const [rawKey, mappedFolderId] of assetFolderMap.value.entries()) {
+        if (!sameFolderId(mappedFolderId, folderId)) continue
+        const assetKey = normalizeMappedAssetKey(rawKey)
+        if (!assetKey) continue
+        const alreadyListed = [...byId.values()].some((item) =>
+            assetKeyCandidates(item).includes(rawKey) || assetKeyCandidates(item).includes(assetKey)
+        )
+        if (alreadyListed) continue
+        const id = `s3:${assetKey}`
+        byId.set(id, {
+            id,
+            key: assetKey,
+            url: toWasabiProxyUrl(assetKey) || `/api/storage/p?key=${encodeURIComponent(assetKey)}`,
+            name: assetNameMap.value.get(assetKey) || assetNameMap.value.get(rawKey) || extractDisplayNameFromKey(assetKey),
+            folderId: mappedFolderId,
+            lastModified: null
+        })
+    }
+
+    return Array.from(byId.values())
 }
 
 const mergeUploadsUnique = (current: any[], incoming: any[]) => {
@@ -406,8 +477,8 @@ const currentFolder = computed(() => {
 const currentItems = computed(() => {
     let items = [];
     if (activeCategory.value === 'folders') {
-        const folders = assets.value.folders.filter(f => f.parentId === currentFolderId.value)
-        const files = assets.value.uploads.filter(u => u.folderId === currentFolderId.value)
+        const folders = assets.value.folders.filter(f => sameFolderId(f.parentId, currentFolderId.value))
+        const files = listFilesInFolder(currentFolderId.value)
         items = [...folders, ...files]
     } else {
         items = assets.value[activeCategory.value as keyof typeof assets.value] || []
@@ -486,6 +557,7 @@ const contextMenuItems = computed(() => {
         ]
     } else {
          return [
+            { label: 'Remover fundo (criar cópia)', action: 'remove-bg', icon: Edit },
             { label: 'Mover', action: 'move', icon: Move },
             { label: 'Renomear', action: 'rename', icon: Edit },
             { label: 'Excluir', action: 'delete', icon: Trash, danger: true },
@@ -518,6 +590,8 @@ const handleBackgroundContextMenu = (e: MouseEvent) => {
 }
 
 // Confirm Dialog State
+const removingBackground = ref(false)
+const removeBackgroundOnUpload = ref(false)
 const showConfirmDialog = ref(false)
 const pendingDeleteItem = ref<any>(null)
 const confirmDeleteMessage = computed(() => {
@@ -529,6 +603,7 @@ const confirmDeleteMessage = computed(() => {
 const confirmDelete = async () => {
     const item = pendingDeleteItem.value
     if (!item) return
+
     uploadError.value = ''
     
     if (item.type === 'folder') {
@@ -573,6 +648,23 @@ const handleAction = async (action: string) => {
     }
 
     if (!item) return
+    if (action === 'remove-bg') {
+        if (removingBackground.value) return
+        removingBackground.value = true
+        try {
+            await $fetch('/api/remove-image-bg', {
+                method: 'POST', headers: await getApiAuthHeaders(),
+                body: { imageUrl: item.url, sourceKey: item.key || item.id, overwrite: false }
+            })
+            await fetchUploadsPage({ reset: true, fresh: true })
+        } catch (error: any) {
+            window.alert(error?.data?.message || 'Não foi possível remover o fundo. Tente novamente.')
+        } finally {
+            removingBackground.value = false
+        }
+        return
+    }
+
 
     if (action === 'delete') {
         pendingDeleteItem.value = item
@@ -903,6 +995,7 @@ const handleFileUpload = async (event: Event) => {
 
             if (endpoint === '/api/upload') {
                 const results = await uploadFiles(files, {
+                    removeBackground: removeBackgroundOnUpload.value,
                     continueOnError: true,
                     onProgress: ({ done, total, ok }) => {
                         uploadBatch.value = { ...uploadBatch.value, active: total > 1, done, total, failed: uploadBatch.value.failed + (ok ? 0 : 1) }
@@ -993,14 +1086,11 @@ const handleFileUpload = async (event: Event) => {
                         {{ uploadButtonText }}
                     </template>
                 </button>
-                <button
-                    @click="aiStudio.openStudio({ initial: { mode: 'generate', filenameBase: 'ai-image' }, applyMode: 'insert' })"
-                    class="flex items-center gap-2 px-3 py-2 rounded-md text-[10px] font-bold tracking-widest uppercase text-cyan-200 hover:text-white bg-cyan-900/40 hover:bg-cyan-800/60 border border-cyan-500/30 shadow-sm transition-all cursor-pointer ring-1 ring-black/50"
-                >
-                    <Sparkles class="w-3.5 h-3.5" />
-                    Gerar Anúncio com IA
-                </button>
             </div>
+            <label v-if="activeCategory !== 'brand'" class="mt-2 flex items-center gap-2 text-xs text-zinc-300">
+                <input v-model="removeBackgroundOnUpload" type="checkbox" :disabled="isAnyUploading" class="accent-violet-500" /> Remover fundo ao enviar
+            </label>
+            <p v-if="removingBackground" role="status" class="mt-2 text-xs text-violet-300">Removendo fundo… A cópia aparecerá nos uploads.</p>
             <p v-if="uploadError" class="text-[9px] text-red-400 mt-1">{{ uploadError }}</p>
         </div>
 
@@ -1077,7 +1167,7 @@ const handleFileUpload = async (event: Event) => {
                         @mouseleave="cancelLongPress"
                         @touchend="cancelLongPress"
                     >
-                        <img :src="asset.url" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300" />
+                        <img :src="asset.url" crossorigin="anonymous" class="w-full h-full object-contain bg-[#141416] opacity-80 group-hover:opacity-100 transition-all duration-300" />
                         <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 pt-6 opacity-0 group-hover:opacity-100 transition-opacity flex items-end pointer-events-none translate-y-2 group-hover:translate-y-0 duration-200">
                             <span class="text-[9px] font-bold text-white tracking-wide truncate w-full drop-shadow-md">{{ asset.name }}</span>
                         </div>
@@ -1108,7 +1198,7 @@ const handleFileUpload = async (event: Event) => {
                         @touchend="cancelLongPress"
                     >
                         <template v-if="asset.url">
-                            <img :src="asset.url" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300" />
+                            <img :src="asset.url" crossorigin="anonymous" class="w-full h-full object-contain bg-[#141416] opacity-80 group-hover:opacity-100 transition-all duration-300" />
                             <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 pt-6 opacity-0 group-hover:opacity-100 transition-opacity flex items-end pointer-events-none translate-y-2 group-hover:translate-y-0 duration-200">
                                 <span class="text-[9px] font-bold text-white tracking-wide truncate w-full drop-shadow-md">{{ asset.name }}</span>
                             </div>
@@ -1125,7 +1215,7 @@ const handleFileUpload = async (event: Event) => {
             </div>
 
             <div
-                v-if="(activeCategory === 'uploads' || activeCategory === 'folders') && (uploadsLoadingMore || uploadsHasMore)"
+                v-if="activeCategory === 'uploads' && (uploadsLoadingMore || uploadsHasMore)"
                 class="col-span-2 flex items-center justify-center py-3"
             >
                 <button

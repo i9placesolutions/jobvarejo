@@ -34,7 +34,26 @@ const hoveredTemplateId = ref<string | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const imageTargetId = ref<string | null>(null)
 const editingTemplateId = ref<string | null>(null)
+const miniEditorRef = ref<{ requestClose?: () => boolean } | null>(null)
 const showCreateSection = ref(false)
+
+const requestMiniEditorClose = () => {
+  if (miniEditorRef.value?.requestClose) {
+    return miniEditorRef.value.requestClose() !== false
+  }
+  editingTemplateId.value = null
+  return true
+}
+
+const requestManagerClose = () => {
+  if (editingTemplateId.value) {
+    if (!requestMiniEditorClose()) return false
+  }
+  emit('close')
+  return true
+}
+
+defineExpose({ requestClose: requestManagerClose })
 
 const openImagePicker = (templateId: string) => {
   imageTargetId.value = templateId
@@ -111,7 +130,7 @@ const formatDate = (dateStr: string) => {
           <p class="ltm-subtitle">Gerencie e aplique suas etiquetas manuais</p>
         </div>
       </div>
-      <button class="ltm-close-btn" @click="emit('close')">
+      <button type="button" class="ltm-close-btn" @click="requestManagerClose">
         <svg class="ltm-close-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
@@ -350,12 +369,13 @@ const formatDate = (dateStr: string) => {
     <!-- Mini Editor Overlay -->
     <transition name="ltm-slide-up">
       <div v-if="editingTemplateId" class="ltm-editor-overlay">
-        <button class="ltm-editor-close" @click="editingTemplateId = null">
+        <button type="button" class="ltm-editor-close" @click="requestMiniEditorClose">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
         <LabelTemplateMiniEditor
+          ref="miniEditorRef"
           :template="templates.find(t => t.id === editingTemplateId) || null"
           @close="editingTemplateId = null"
           @save="handleMiniEditorSave"

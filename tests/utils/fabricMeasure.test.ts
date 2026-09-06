@@ -12,7 +12,8 @@ import {
   guessAiSizeFromObject,
   setObjectCenterInParentPlane,
   computeViewportCenterInWorld,
-  computeViewportBoundsInWorld
+  computeViewportBoundsInWorld,
+  normalizePriceGroupPlacementInCard
 } from '~/utils/fabricMeasure'
 
 // Mock minimal de fabric.Object — duck-typed.
@@ -267,6 +268,37 @@ describe('getCardBaseSizeForContainment', () => {
       getObjects: () => { throw new Error('boom') },
       width: 50, height: 50
     })).toEqual({ w: 50, h: 50 })
+  })
+})
+
+describe('normalizePriceGroupPlacementInCard', () => {
+  it('preserva a escala quando a operacao e apenas mover a etiqueta', () => {
+    const child = obj({
+      left: -50,
+      top: -25,
+      width: 100,
+      height: 50,
+      originX: 'left',
+      originY: 'top'
+    })
+    const group: any = {
+      type: 'group',
+      name: 'priceGroup',
+      scaleX: 1.8,
+      scaleY: 1.8,
+      left: 20,
+      top: 30,
+      getObjects: () => [child],
+      set(values: Record<string, any>) {
+        Object.assign(this, values)
+      },
+      setCoords() {}
+    }
+
+    normalizePriceGroupPlacementInCard(group, 200, 200, null, () => false, { preserveScale: true })
+
+    expect(group.scaleX).toBe(1.8)
+    expect(group.scaleY).toBe(1.8)
   })
 })
 

@@ -106,4 +106,57 @@ describe('layoutManualTemplateGroup', () => {
     expect(group.__manualTemplateBaseW).toBe(280)
     expect(group.__manualTemplateBaseH).toBe(100)
   })
+
+  it('elimina escala externa grande do priceGroup sem acumular em relayout repetido', () => {
+    const priceBg = makeObj({ name: 'price_bg', width: 200, height: 80 })
+    const integer = makeObj({
+      type: 'text',
+      name: 'price_integer_text',
+      left: 20,
+      top: 0,
+      width: 80,
+      height: 40,
+      scaleX: 1,
+      scaleY: 1
+    })
+    const decimal = makeObj({
+      type: 'text',
+      name: 'price_decimal_text',
+      left: 95,
+      top: -6,
+      width: 34,
+      height: 24,
+      scaleX: 1,
+      scaleY: 1
+    })
+    const group = makeGroup([priceBg, integer, decimal], {
+      width: 200,
+      height: 80,
+      __manualTemplateBaseW: 200,
+      __manualTemplateBaseH: 80
+    })
+
+    layoutManualTemplateGroup(group, 500, 300, deps)
+    const first = {
+      groupScaleX: group.scaleX,
+      groupScaleY: group.scaleY,
+      integerLeft: integer.left,
+      integerScaleX: integer.scaleX,
+      decimalLeft: decimal.left,
+      width: group.width
+    }
+
+    layoutManualTemplateGroup(group, 500, 300, deps)
+
+    expect(first.groupScaleX).toBe(1)
+    expect(first.groupScaleY).toBe(1)
+    expect(group.scaleX).toBe(1)
+    expect(group.scaleY).toBe(1)
+    expect(group.width).toBeCloseTo(first.width, 5)
+    expect(integer.left).toBeCloseTo(first.integerLeft, 5)
+    expect(integer.scaleX).toBeCloseTo(first.integerScaleX, 5)
+    expect(decimal.left).toBeCloseTo(first.decimalLeft, 5)
+    expect(group.__manualTemplateBaseW).toBe(200)
+    expect(group.__manualTemplateBaseH).toBe(80)
+  })
 })

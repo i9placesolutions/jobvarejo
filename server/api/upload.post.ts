@@ -4,6 +4,8 @@ import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { getPublicUrl, getS3Client, resetS3Client } from "../utils/s3";
 import { resolveStorageReadUrl } from "../utils/project-storage-refs";
+import { trimRasterImageBuffer } from "../utils/image-trim";
+import { processImageWithOptions } from "../utils/image-processor";
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15MB
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
@@ -85,6 +87,11 @@ export default defineEventHandler(async (event) => {
 
   const originalFilename = String(file.filename || "upload").trim() || "upload";
   const originalMime = String(file.type || "").trim().toLowerCase();
+  const removeBackgroundPart = files.find((part: any) => part?.name === 'removeBackground');
+  const removeBackgroundValue = removeBackgroundPart?.data
+    ? Buffer.from(removeBackgroundPart.data as any).toString('utf8').trim().toLowerCase()
+    : '';
+  const shouldRemoveBackground = ['true', '1', 'on', 'yes'].includes(removeBackgroundValue);
   const inputBytes = Number((file.data as any)?.length || 0);
   if (!Number.isFinite(inputBytes) || inputBytes <= 0 || inputBytes > MAX_UPLOAD_BYTES) {
     throw createError({ statusCode: 400, statusMessage: "Invalid file size (max 15MB)" });
@@ -105,18 +112,35 @@ export default defineEventHandler(async (event) => {
   const isGif = originalMime === "image/gif" || ext === "gif";
 
   if (isImage && !isSvg && !isGif) {
-    try {
-      const sharp = (await import("sharp")).default;
-      bodyBuffer = await sharp(bodyBuffer)
-        .rotate()
-        .resize(2400, 2400, { fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 88, effort: 4 })
-        .toBuffer();
-      contentType = "image/webp";
-      ext = "webp";
-    } catch (err: any) {
-      console.warn("⚠️ [upload] Otimização falhou, enviando original:", err?.message || err);
-      // fallback: enviar original
+    let processedWithBackground = false;
+    if (shouldRemoveBackground) {
+      try {
+        bodyBuffer = await processImageWithOptions(bodyBuffer, {
+          outputFormat: 'webp',
+          strict: true,
+          forceBgRemoval: true
+        });
+        contentType = 'image/webp';
+        ext = 'webp';
+        processedWithBackground = true;
+      } catch (err: any) {
+        throw createError({ statusCode: 422, statusMessage: 'Não foi possível remover o fundo. Tente novamente ou envie sem essa opção.' });
+      }
+    }
+    if (!processedWithBackground) {
+      try {
+        const sharp = (await import("sharp")).default;
+        const trimmedBuffer = await trimRasterImageBuffer(bodyBuffer);
+        bodyBuffer = await sharp(trimmedBuffer)
+          .resize(2400, 2400, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 88, effort: 4, alphaQuality: 100 })
+          .toBuffer();
+        contentType = "image/webp";
+        ext = "webp";
+      } catch (err: any) {
+        console.warn("⚠️ [upload] Otimização falhou, enviando original:", err?.message || err);
+        // fallback: enviar original
+      }
     }
   }
 

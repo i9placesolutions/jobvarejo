@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { Plus } from 'lucide-vue-next'
 import { QRO_CARD_TEMPLATES, getQroCardTemplateById } from '~/utils/qro-card-templates'
+import { builderThemeSupportsModel } from '~/utils/builderThemeFormats'
 
 const {
   flyer,
+  model,
   layout,
   theme,
   paginatedProducts,
@@ -67,7 +69,7 @@ const activeCardTemplate = computed(() => {
   const dbTemplateId = String((flyer.value as any)?.card_template_id || '').trim()
   if (dbTemplateId) {
     const tpl = (cardTemplates.value || []).find((item: any) => String(item?.id || '') === dbTemplateId)
-    if (tpl) return tpl
+    if (tpl && builderThemeSupportsModel(tpl, model.value?.id)) return tpl
   }
 
   // Se o usuario escolheu um layout QRO no font_config
@@ -77,7 +79,16 @@ const activeCardTemplate = computed(() => {
     if (tpl) return tpl
   }
 
-  return getQroCardTemplateById(DEFAULT_QRO_TEMPLATE) || QRO_CARD_TEMPLATES[0] || null
+  // Um template pode ser criado somente para alguns formatos. Quando o
+  // encarte usa outro modelo, escolha o primeiro compatível em vez de aplicar
+  // uma estrutura que foi desenhada para outra proporção.
+  const compatibleDbTemplate = (cardTemplates.value || []).find((item: any) =>
+    builderThemeSupportsModel(item, model.value?.id)
+  )
+  return compatibleDbTemplate
+    || getQroCardTemplateById(DEFAULT_QRO_TEMPLATE)
+    || QRO_CARD_TEMPLATES[0]
+    || null
 })
 
 // Duplo clique alterna destaque

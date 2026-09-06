@@ -101,6 +101,17 @@ export const extractProductCodeFromName = (name: string): string | null => {
   return normalizeProductCode(candidate)
 }
 
+/**
+ * Limpa apenas separadores que sobraram nas extremidades depois que o preco
+ * foi removido. Hifens internos continuam fazendo parte do nome (ex.:
+ * "COCA-COLA"), mas "BATATA – 4,99" vira somente "BATATA".
+ */
+export const cleanProductName = (value: string): string => String(value || '')
+  .replace(/^[\s\-‐‑‒–—―:|;,]+/u, '')
+  .replace(/[\s\-‐‑‒–—―:|;,]+$/u, '')
+  .replace(/\s{2,}/g, ' ')
+  .trim()
+
 const normalizeToken = (v: any): string => {
   const s = String(v ?? '').trim()
   if (!s) return ''
@@ -273,11 +284,7 @@ export const parseProductsFromFreeText = (raw: string): ParsedProduct[] => {
       const mt = matches[i]!
       cleaned = cleaned.slice(0, mt.index) + cleaned.slice(mt.index + mt.length)
     }
-    const name = cleaned
-      .replace(/[\s\-:|;,]+$/g, '')
-      .replace(/^[\s\-:|;,]+/g, '')
-      .replace(/\s{2,}/g, ' ')
-      .trim()
+    const name = cleanProductName(cleaned)
 
     if (!name) continue
 
@@ -639,7 +646,7 @@ export const parseProductsFromTable = (raw: string): ParsedProduct[] => {
     // Limite tambem pode estar embutido no nome.
     const fromName = extractLimitFromText(nameRaw)
     if (fromName.limit && !product.limit) product.limit = fromName.limit
-    product.name = (fromName.rest || nameRaw).trim()
+    product.name = cleanProductName(fromName.rest || nameRaw)
     if (!product.name) continue
 
     // Codigo opcional embutido no nome (EAN 8-14 digitos)
@@ -679,6 +686,9 @@ export const parseProductsFromTable = (raw: string): ParsedProduct[] => {
 
 export const postProcessProducts = (products: ParsedProduct[]): ParsedProduct[] => {
   for (const prod of products) {
+    prod.name = cleanProductName(prod.name)
+    if (!prod.name) continue
+
     const isUnitPackaging = normalizePackageUnit(prod.packageLabel) === 'UN'
     const isSingleUnit = (prod.packQuantity === 1 || prod.packQuantity === null) && isUnitPackaging
 

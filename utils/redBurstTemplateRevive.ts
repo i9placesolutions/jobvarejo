@@ -15,6 +15,11 @@ import { normalizeVisibleScale } from './mathHelpers'
 import { collectTemplateJsonNodesDeep } from './canvasJsonClassifiers'
 import { isTextLikeObject, collectObjectsDeep, findByName } from './fabricObjectClassifiers'
 
+const isRichPriceNode = (node: any): boolean => !!node && (
+    node.__priceRichText === true ||
+    (String(node.name || '') === 'price_value_text' && node.__priceRichIntegerStyle && node.__priceRichDecimalStyle)
+)
+
 export type ReviveRedBurstOpts = {
     fallbackFill?: string
     fallbackFontSize?: number
@@ -111,7 +116,8 @@ export const sanitizeRedBurstTemplateGroupJson = (groupJson: any): any => {
     const currencyText = byName('price_currency_text')
     const priceInteger = byName('price_integer_text')
     const priceDecimal = byName('price_decimal_text')
-    if (!(priceBg && headerBg && headerText && burst && priceInteger && priceDecimal)) return groupJson
+    const richPrice = byName('price_value_text')
+    if (!(priceBg && headerBg && headerText && burst && (isRichPriceNode(richPrice) || (priceInteger && priceDecimal)))) return groupJson
 
     const ensureShellVisible = (node: any) => {
         if (!node || typeof node !== 'object') return
@@ -132,16 +138,18 @@ export const sanitizeRedBurstTemplateGroupJson = (groupJson: any): any => {
         fallbackFontSize: 30,
         fallbackText: 'R$'
     })
-    reviveRedBurstJsonNode(priceInteger, {
+    reviveRedBurstJsonNode(priceInteger || (isRichPriceNode(richPrice) ? richPrice : null), {
         fallbackFill: '#ffffff',
         fallbackFontSize: 92,
         fallbackText: '0'
     })
-    reviveRedBurstJsonNode(priceDecimal, {
-        fallbackFill: '#ffffff',
-        fallbackFontSize: 44,
-        fallbackText: ',00'
-    })
+    if (priceDecimal) {
+        reviveRedBurstJsonNode(priceDecimal, {
+            fallbackFill: '#ffffff',
+            fallbackFontSize: 44,
+            fallbackText: ',00'
+        })
+    }
     return groupJson
 }
 
@@ -149,7 +157,7 @@ export const sanitizeRedBurstTemplateGroupJson = (groupJson: any): any => {
  * Detecta se um priceGroup Fabric e' do tipo Red Burst — checa
  * presenca de TODOS os 6 nodes-chave do template:
  * price_bg, price_header_bg, price_header_text, price_burst_line_a,
- * price_integer_text, price_decimal_text.
+ * price_integer_text, price_decimal_text ou price_value_text rico.
  *
  * Pure: usa collectObjectsDeep + findByName (operam sobre Fabric).
  */
@@ -161,8 +169,10 @@ export const isRedBurstPriceGroup = (priceGroup: any): boolean => {
         findByName(all, 'price_header_bg') &&
         findByName(all, 'price_header_text') &&
         findByName(all, 'price_burst_line_a') &&
-        findByName(all, 'price_integer_text') &&
-        findByName(all, 'price_decimal_text')
+        (isRichPriceNode(findByName(all, 'price_value_text')) || (
+            findByName(all, 'price_integer_text') &&
+            findByName(all, 'price_decimal_text')
+        ))
     )
 }
 

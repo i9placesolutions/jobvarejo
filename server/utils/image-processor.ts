@@ -1,6 +1,7 @@
+import { removeBackgroundBiRefNet } from './birefnet'
 // Lazy load both sharp and background-removal to handle installation issues
 let sharpModule: any = null;
-let removeBackgroundModule: any = null;
+
 let sharpError: Error | null = null;
 
 const getSharp = async () => {
@@ -20,18 +21,67 @@ const getSharp = async () => {
     return sharpModule;
 };
 
-const getRemoveBackground = async () => {
-    if (!removeBackgroundModule) {
-        try {
-            const module = await import('@imgly/background-removal-node');
-            removeBackgroundModule = module.removeBackground;
-        } catch (error: any) {
-            console.error('⚠️ Background removal não está disponível.');
-            console.error('   Erro:', error?.message || error);
-            throw new Error('Background removal não está instalado corretamente.');
+// Packshots on a uniform light background do not need semantic segmentation.
+// Flood only the exterior background: printed light areas inside the package stay intact.
+export const removeUniformExteriorBackground = async (buffer: Buffer, sharp: any): Promise<Buffer | null> => {
+    const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { width: w, height: h } = info;
+    if (w < 8 || h < 8) return null;
+    const corners = [0, w - 1, (h - 1) * w, w * h - 1];
+    const background = [0, 1, 2].map(c => corners.reduce((sum, p) => sum + data[p * 4 + c], 0) / 4);
+    if (background.some(c => c < 225) || corners.some(p => [0, 1, 2].some(c => Math.abs(data[p * 4 + c] - background[c]!) > 12))) return null;
+    const matches = (p: number) => data[p * 4 + 3] >= 250 && [0, 1, 2].every(c => Math.abs(data[p * 4 + c] - background[c]!) <= 5);
+    const border: number[] = [];
+    for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
+    for (let y = 1; y < h - 1; y++) border.push(y * w, y * w + w - 1);
+    // Tall packages may touch the top/bottom of a product photo. Require
+    // uniform opposing sides instead of rejecting those valid packshots.
+    const sideBorder = Array.from({ length: h }, (_, y) => [y * w, y * w + w - 1]).flat();
+    const horizontalBorder = Array.from({ length: w }, (_, x) => [x, (h - 1) * w + x]).flat();
+    if (Math.max(sideBorder.filter(matches).length / sideBorder.length,
+        horizontalBorder.filter(matches).length / horizontalBorder.length) < 0.98) return null;
+    const seen = new Uint8Array(w * h);
+    const queue = new Int32Array(w * h);
+    let head = 0, tail = 0;
+    const add = (p: number) => { if (!seen[p] && matches(p)) { seen[p] = 1; queue[tail++] = p; } };
+    border.forEach(add);
+    while (head < tail) {
+        const p = queue[head++]!;
+        if (p % w) add(p - 1);
+        if (p % w < w - 1) add(p + 1);
+        if (p >= w) add(p - w);
+        if (p < w * (h - 1)) add(p + w);
+    }
+    if (tail / (w * h) > 0.94 || tail / (w * h) < 0.02) return null;
+    for (let i = 0; i < tail; i++) data[queue[i]! * 4 + 3] = 0;
+    return sharp(data, { raw: info }).png().toBuffer();
+};
+
+// Recover fully enclosed mask holes from the source, never from generated RGB.
+// Exterior-connected transparency remains background (handles/gaps stay open).
+const restoreEnclosedProductPixels = async (source: Buffer, mask: Buffer, sharp: any): Promise<Buffer> => {
+    const original = await sharp(source).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const cutout = await sharp(mask).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { width: w, height: h } = original.info;
+    if (w !== cutout.info.width || h !== cutout.info.height) return mask;
+    const seen = new Uint8Array(w * h), queue = new Int32Array(w * h);
+    let head = 0, tail = 0;
+    const add = (p: number) => { if (!seen[p] && cutout.data[p * 4 + 3] < 128) { seen[p] = 1; queue[tail++] = p; } };
+    for (let x = 0; x < w; x++) { add(x); add((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { add(y * w); add(y * w + w - 1); }
+    while (head < tail) {
+        const p = queue[head++]!;
+        if (p % w) add(p - 1);
+        if (p % w < w - 1) add(p + 1);
+        if (p >= w) add(p - w);
+        if (p < w * (h - 1)) add(p + w);
+    }
+    for (let p = 0; p < w * h; p++) {
+        if (!seen[p] && cutout.data[p * 4 + 3] < 128) {
+            for (let c = 0; c < 4; c++) cutout.data[p * 4 + c] = original.data[p * 4 + c];
         }
     }
-    return removeBackgroundModule;
+    return sharp(cutout.data, { raw: cutout.info }).png().toBuffer();
 };
 
 // Refina o canal alpha para evitar bordas serrilhadas e remover artefatos.
@@ -380,8 +430,7 @@ const shouldSkipBackgroundRemoval = async (buffer: Buffer, sharp: any): Promise<
     // Muitas imagens de produto do Google têm PNG com leve transparência
     // em artefatos de compressão, mas ainda têm fundo branco visível.
     const hasMeaningfulTransparency =
-        stats.transparentPercent >= 25 ||
-        (stats.transparentPercent >= 15 && totalTransparent >= 25);
+        stats.transparentPercent >= 1;
 
     if (hasMeaningfulTransparency) {
         console.log(
@@ -415,6 +464,14 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
     console.log('🖼️ [Image Process] Iniciando processamento de imagem...');
     console.log(`📊 [Image Process] Buffer original: ${imageBuffer.length} bytes`);
 
+    // Nunca segmentar de novo um recorte transparente, mesmo em upload forçado.
+    // Usar a entrada original também evita degradar rótulos por resize/recompressão.
+    if (await shouldSkipBackgroundRemoval(imageBuffer, sharp)) {
+        return outputFormat === 'png'
+            ? await sharp(imageBuffer).png().toBuffer()
+            : await sharp(imageBuffer).webp({ lossless: true }).toBuffer()
+    }
+
     // 1. Resize/Normalize (to max 800x800) mantendo transparência original
     console.log('📐 [Image Process] Redimensionando para max 800x800...');
     const resizePipeline = sharp(imageBuffer).resize(800, 800, {
@@ -432,52 +489,17 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         // 1.5. If input already has transparency, we may skip to avoid degrading cutouts.
         // In "forceBgRemoval" mode (used by explicit "remove background" action), always process.
         const shouldSkip = await shouldSkipBackgroundRemoval(resizedBuffer, sharp);
-        if (shouldSkip && !forceBgRemoval) {
+        if (shouldSkip) {
             const passthrough = outputFormat === 'png'
                 ? await sharp(resizedBuffer).png().toBuffer()
                 : await sharp(resizedBuffer).webp({ quality: 85, alphaQuality: 100 }).toBuffer();
             return passthrough;
         }
-        if (shouldSkip && forceBgRemoval) {
-            console.log('🧠 [Image Process] forceBgRemoval ativo: executando remoção mesmo com alpha pré-existente');
-        }
 
-        const lightRisk = await isMostlyLightLowContrast(resizedBuffer, sharp);
-        if (lightRisk) {
-            console.log('🧠 [Image Process] Detecção: imagem muito clara/baixo contraste — remoção de fundo pode ser agressiva');
-        }
 
-        // 2. Remove Background usando configurações refinadas
-        console.log('🎨 [Image Process] Removendo fundo da imagem...');
-        const blob = new Blob([resizedBuffer], { type: 'image/png' });
-
-        const removeBackground = await getRemoveBackground();
-
-        // Configurações refinadas - modelo 'medium' tem melhor separação
-        // entre produto e fundo, especialmente para produtos claros/brancos
-        const modelType = bgOptions.model || (lightRisk ? 'large' : 'medium');
-        console.log(`   📐 Modelo: ${modelType}`);
-
-        const rbResult = await removeBackground(blob, {
-            progress: (key: string, current: number, total: number) => {
-                if (current === total) console.log(`   ✓ ${key} concluído`);
-            },
-            debug: false,
-            model: modelType,
-            output: {
-                format: 'image/png',
-                type: 'foreground',
-                quality: 0.9
-            }
-        });
-
-        const rbBuffer = Buffer.from(await rbResult.arrayBuffer());
-        console.log(`📊 [Image Process] Após remoção de fundo: ${rbBuffer.length} bytes`);
-
-        // 2.5. Refinar canal alpha para remover artefatos e melhorar bordas
-        console.log('✨ [Image Process] Refinando canal alpha...');
-        const refinedBuffer = await refineAlphaChannel(rbBuffer, sharp);
-        console.log(`📊 [Image Process] Após refino: ${refinedBuffer.length} bytes`);
+        // BiRefNet fornece a máscara; não aplicar remoção por cor nem erosão adicional.
+        const modelBuffer = await removeBackgroundBiRefNet(resizedBuffer);
+        const refinedBuffer = await restoreEnclosedProductPixels(resizedBuffer, modelBuffer, sharp);
 
         // 2.6. Auto-trim: recortar bordas transparentes para produto preencher a imagem
         let trimmedBuffer = refinedBuffer;
@@ -498,6 +520,7 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         const hasContent = await validateImageHasContent(trimmedBuffer, sharp);
         
         if (!hasContent) {
+            if (strictMode) throw new Error('Remoção de fundo apagou o produto');
             console.warn('⚠️ [Image Process] Imagem resultante está vazia/transparente! Retornando original otimizada...');
             // Return optimized original without background removal
             const fallbackPipeline = sharp(imageBuffer).resize(800, 800, { fit: 'inside', withoutEnlargement: true });
@@ -511,7 +534,7 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
 
         // Additional guard for very light/low contrast images: if the result is mostly transparent,
         // prefer returning the original (better than deleting the subject).
-        if (lightRisk) {
+        if (await isMostlyLightLowContrast(resizedBuffer, sharp)) {
             if (outStats) {
                 const visiblePercent = 100 - outStats.transparentPercent;
                 if (visiblePercent < 10 || outStats.opaquePercent < 2) {

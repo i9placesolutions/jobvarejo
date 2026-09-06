@@ -5,7 +5,15 @@ import { inferZoneContentStatus } from '~/utils/product-zone-metadata';
 export type ProductZoneDiagnosticSeverity = 'info' | 'warning' | 'critical';
 
 export type ProductZoneDiagnostic = {
-  id: 'empty' | 'overflow-risk' | 'image-review' | 'template-risk' | 'text-risk' | 'mixed-visual-priority';
+  id:
+    | 'empty'
+    | 'overflow-risk'
+    | 'layout-rhythm-risk'
+    | 'label-space-risk'
+    | 'image-review'
+    | 'template-risk'
+    | 'text-risk'
+    | 'mixed-visual-priority';
   severity: ProductZoneDiagnosticSeverity;
   title: string;
   message: string;
@@ -55,6 +63,14 @@ export const buildProductZoneDiagnostics = (opts: {
     return diagnostics;
   }
 
+  const highlightSelection = zone.highlightSelection
+    ?? (zone.highlightPos === 'top'
+      ? 'first'
+      : zone.highlightPos === 'bottom'
+        ? 'last'
+        : zone.highlightPos)
+    ?? 'first';
+
   const layout = calculateGridLayout({
     x: Number(zone.x || 0),
     y: Number(zone.y || 0),
@@ -71,6 +87,8 @@ export const buildProductZoneDiagnostics = (opts: {
     verticalAlign: zone.verticalAlign ?? 'stretch',
     highlightCount: Number(zone.highlightCount ?? 0),
     highlightPos: zone.highlightPos ?? 'first',
+    highlightSelection,
+    highlightIndexes: zone.highlightIndexes ?? [1],
     highlightHeight: Number(zone.highlightHeight ?? 1.5)
   }, zoneCards.length);
 
@@ -81,6 +99,37 @@ export const buildProductZoneDiagnostics = (opts: {
       severity: 'warning',
       title: 'Zona com risco de excesso',
       message: 'A densidade atual está apertando os cards. Reduza colunas ou aplique um preset com mais respiro.',
+      actionLabel: 'Ajustar layout',
+      actionId: 'open-layout'
+    });
+  }
+
+  const columns = Math.max(1, Number(layout.cols || zone.columns || 1));
+  const rows = Math.max(1, Number(layout.rows || Math.ceil(zoneCards.length / columns)));
+  const lastRowItemCount = zoneCards.length % columns || columns;
+  const lastRowBehavior = String(zone.lastRowBehavior ?? 'fill');
+  const stretchesLastRow = lastRowBehavior === 'fill' || lastRowBehavior === 'stretch';
+  if (rows > 1 && lastRowItemCount < columns && stretchesLastRow) {
+    diagnostics.push({
+      id: 'layout-rhythm-risk',
+      severity: 'warning',
+      title: 'Última linha pode ficar irregular',
+      message: 'A regra atual estica a última linha quando ela fica incompleta. Use centralizar para manter os cards com o mesmo tamanho.',
+      actionLabel: 'Ajustar layout',
+      actionId: 'open-layout'
+    });
+  }
+
+  const splashScale = Number(opts.globalStyles?.splashScale ?? 1);
+  const priceFontSize = Number(opts.globalStyles?.priceFontSize ?? 60);
+  const estimatedLabelHeight = Math.max(70, priceFontSize * 1.15) * Math.max(0.5, splashScale || 1);
+  const labelHeightRatio = estimatedLabelHeight / Math.max(1, layout.itemHeight);
+  if (layout.itemHeight < 220 || labelHeightRatio > 0.42) {
+    diagnostics.push({
+      id: 'label-space-risk',
+      severity: labelHeightRatio > 0.55 ? 'critical' : 'warning',
+      title: 'Etiqueta com pouco espaço',
+      message: 'A altura dos cards está baixa para a etiqueta de preço. Aumente a zona, reduza linhas ou use uma base com mais respiro.',
       actionLabel: 'Ajustar layout',
       actionId: 'open-layout'
     });

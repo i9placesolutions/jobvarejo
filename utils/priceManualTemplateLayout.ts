@@ -19,6 +19,40 @@ type LayoutManualTemplateGroupDeps = {
     tuneRedBurstPriceGroupLayout: (group: any) => void
 }
 
+const bakeLargeGroupScaleIntoChildren = (priceGroup: any, threshold = 1.15): boolean => {
+    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return false
+
+    const sx = Math.abs(toFinite(priceGroup.scaleX, 1)) || 1
+    const sy = Math.abs(toFinite(priceGroup.scaleY, 1)) || 1
+    if (sx <= threshold && sy <= threshold) return false
+
+    const children = priceGroup.getObjects() || []
+    children.forEach((child: any) => {
+        if (!child || typeof child.set !== 'function') return
+        const next: Record<string, number> = {}
+        if (Number.isFinite(Number(child.left))) next.left = Number(child.left || 0) * sx
+        if (Number.isFinite(Number(child.top))) next.top = Number(child.top || 0) * sy
+        if (Number.isFinite(Number(child.scaleX))) next.scaleX = Number(child.scaleX || 1) * sx
+        if (Number.isFinite(Number(child.scaleY))) next.scaleY = Number(child.scaleY || 1) * sy
+        child.set(next)
+        child.initDimensions?.()
+        child.setCoords?.()
+        child.dirty = true
+    })
+
+    const bakedW = Math.max(1, toFinite(priceGroup.width, 1) * sx)
+    const bakedH = Math.max(1, toFinite(priceGroup.height, 1) * sy)
+    priceGroup.set({
+        width: bakedW,
+        height: bakedH,
+        scaleX: 1,
+        scaleY: 1
+    })
+    priceGroup.dirty = true
+    priceGroup.setCoords?.()
+    return true
+}
+
 export const layoutManualTemplateGroup = (
     priceGroup: any,
     cardW: number,
@@ -137,7 +171,8 @@ export const layoutManualTemplateGroup = (
     const singleAnchors = [
         findNamedTarget('price_bg'),
         findNamedTarget('price_bg_image'),
-        findNamedTarget('splash_image')
+        findNamedTarget('splash_image'),
+        findNamedTarget('label_bg_image')
     ].filter((obj: any) => isShown(obj))
     const fitTargets = atacAnchors.length > 0
         ? atacAnchors
@@ -170,6 +205,32 @@ export const layoutManualTemplateGroup = (
 
     let effectiveW = baseW
     let effectiveH = baseH
+    const normalizeChildrenByScale = (scaleX: number, scaleY: number) => {
+        if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY) || scaleX <= 1.15 || scaleY <= 1.15) return
+        directChildren.forEach((child: any) => {
+            if (!child || typeof child.set !== 'function') return
+            const next: Record<string, number> = {}
+            if (Number.isFinite(Number(child.left))) next.left = Number(child.left || 0) / scaleX
+            if (Number.isFinite(Number(child.top))) next.top = Number(child.top || 0) / scaleY
+            if (Number.isFinite(Number(child.scaleX))) next.scaleX = Number(child.scaleX || 1) / scaleX
+            if (Number.isFinite(Number(child.scaleY))) next.scaleY = Number(child.scaleY || 1) / scaleY
+            child.set(next)
+            child.initDimensions?.()
+            child.setCoords?.()
+            child.dirty = true
+        })
+    }
+
+    const normalizePreviouslyBakedChildren = (referenceObjects: any[], targetW: number, targetH: number) => {
+        const bounds = visibleBounds(referenceObjects)
+        if (!bounds || !hasSaneBounds(bounds)) return
+        const ratioW = bounds.width / Math.max(1, targetW)
+        const ratioH = bounds.height / Math.max(1, targetH)
+        const ratiosAreUniform = Math.abs(ratioW - ratioH) <= Math.max(0.18, Math.max(ratioW, ratioH) * 0.16)
+        if (!ratiosAreUniform) return
+        normalizeChildrenByScale(ratioW, ratioH)
+    }
+
     if (hasAtacarejoStructure) {
         const centerBounds = visibleBounds(directChildren)
         if (centerBounds && (Math.abs(centerBounds.centerX) > 0.001 || Math.abs(centerBounds.centerY) > 0.001)) {
@@ -192,6 +253,7 @@ export const layoutManualTemplateGroup = (
             effectiveW = Math.max(1, bounds.width)
             effectiveH = Math.max(1, bounds.height)
         }
+        normalizePreviouslyBakedChildren(fitAnchors, effectiveW, effectiveH)
     } else {
         let bounds = visibleBounds(fitTargets)
         if (!bounds && fitTargets !== directChildren) bounds = directChildrenVisibleBounds
@@ -204,6 +266,7 @@ export const layoutManualTemplateGroup = (
             ;(priceGroup as any).__manualTemplateBaseW = effectiveW
             ;(priceGroup as any).__manualTemplateBaseH = effectiveH
         }
+        normalizePreviouslyBakedChildren(fitTargets, effectiveW, effectiveH)
     }
 
     const wholesaleBg = findByName(all, 'atac_wholesale_bg')
@@ -227,8 +290,12 @@ export const layoutManualTemplateGroup = (
         scaleX: fitScale,
         scaleY: fitScale
     })
+    bakeLargeGroupScaleIntoChildren(priceGroup)
 
     priceGroup.dirty = true
     priceGroup.setCoords?.()
-    return { pillW: Math.max(1, effectiveW) * fitScale, pillH: Math.max(1, effectiveH) * fitScale }
+    return {
+        pillW: Math.max(1, toFinite(priceGroup.width, effectiveW * fitScale)),
+        pillH: Math.max(1, toFinite(priceGroup.height, effectiveH * fitScale))
+    }
 }

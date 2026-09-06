@@ -1,6 +1,8 @@
 import { clamp } from './mathHelpers'
 import { layoutPrice } from './priceTagLayout'
 import { PRICE_INTEGER_DECIMAL_GAP_PX } from './priceTagText'
+import { isRichPriceTextObject, positionRichPriceUnit, setRichPriceBaseFontSize, setRichPriceSegmentStyle } from './priceRichText'
+import { detectImageTrimBounds } from './fabricImageHelpers'
 
 type LayoutCustomPriceGroupDeps = {
     fabric: any
@@ -113,13 +115,17 @@ export const layoutCustomPriceGroup = (
         const ih = el?.naturalHeight || el?.height || img.height || 0
 
         if (iw > 0 && ih > 0) {
-            img.set({ cropX: 0, cropY: 0, width: iw, height: ih })
-            const imgScale = Math.max(newW / iw, newH / ih)
+            const visibleBounds = detectImageTrimBounds(img, { alphaThreshold: 12, padding: 0 })
+            const sourceLeft = Math.max(0, Number(visibleBounds?.left || 0))
+            const sourceTop = Math.max(0, Number(visibleBounds?.top || 0))
+            const sourceW = Math.max(1, Number(visibleBounds?.width || iw))
+            const sourceH = Math.max(1, Number(visibleBounds?.height || ih))
+            const imgScale = Math.max(newW / sourceW, newH / sourceH)
             if (Number.isFinite(imgScale) && imgScale > 0) {
-                const cropW = Math.min(iw, newW / imgScale)
-                const cropH = Math.min(ih, newH / imgScale)
-                const cropX = Math.max(0, (iw - cropW) / 2)
-                const cropY = Math.max(0, (ih - cropH) / 2)
+                const cropW = Math.min(sourceW, newW / imgScale)
+                const cropH = Math.min(sourceH, newH / imgScale)
+                const cropX = sourceLeft + Math.max(0, (sourceW - cropW) / 2)
+                const cropY = sourceTop + Math.max(0, (sourceH - cropH) / 2)
                 img.set({ cropX, cropY, width: cropW, height: cropH, scaleX: imgScale, scaleY: imgScale })
             }
         }
@@ -179,13 +185,26 @@ export const layoutCustomPriceGroup = (
             ? obj.__originalFontFamily
             : obj.fontFamily
 
+        const scaledStrokeWidth = (obj.strokeWidth || 0) * scale
         obj.set({
             fontFamily: originalFontFamily || 'Inter',
             fontSize: originalFontSize * scale * textScaleMult,
             scaleX: 1,
             scaleY: 1,
-            strokeWidth: (obj.strokeWidth || 0) * scale
+            strokeWidth: scaledStrokeWidth
         })
+
+        if (isRichPriceTextObject(obj)) {
+            setRichPriceBaseFontSize(obj, originalFontSize * scale * textScaleMult)
+            setRichPriceSegmentStyle(obj, 'integer', {
+                fontFamily: originalFontFamily || 'Inter',
+                strokeWidth: scaledStrokeWidth
+            })
+            setRichPriceSegmentStyle(obj, 'decimal', {
+                fontFamily: originalFontFamily || 'Inter',
+                strokeWidth: scaledStrokeWidth
+            })
+        }
 
         if (typeof obj.initDimensions === 'function') obj.initDimensions()
     })
@@ -247,12 +266,21 @@ export const layoutCustomPriceGroup = (
         } else if (priceText) {
             const priceY = (typeof priceText.__yOffsetRatio === 'number' ? priceText.__yOffsetRatio : 0) * newH
             priceText.set({ originX: 'left', originY: 'center', left: textStartX, top: priceY })
+            if (isRichPriceTextObject(priceText)) {
+                const unitY = (typeof priceUnit?.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * newH
+                positionRichPriceUnit(priceText, priceUnit, unitY)
+            }
         }
     }
 
     all.forEach((obj: any) => {
         if (!obj || isTextLikeObject(obj)) return
-        if (obj.name === 'price_bg' || obj.name === 'price_bg_image' || obj.name === 'splash_image') return
+        if (
+            obj.name === 'price_bg' ||
+            obj.name === 'price_bg_image' ||
+            obj.name === 'splash_image' ||
+            obj.name === 'label_bg_image'
+        ) return
 
         const originalLeft = typeof obj.__originalLeft === 'number' ? obj.__originalLeft : obj.left
         const originalTop = typeof obj.__originalTop === 'number' ? obj.__originalTop : obj.top
@@ -286,6 +314,10 @@ export const layoutCustomPriceGroup = (
     })
 
     constrainSinglePriceTextInsideBackground(priceGroup)
+    if (priceText && isRichPriceTextObject(priceText)) {
+        const unitY = (typeof priceUnit?.__yOffsetRatio === 'number' ? priceUnit.__yOffsetRatio : 0.22) * newH
+        positionRichPriceUnit(priceText, priceUnit, unitY)
+    }
 
     priceGroup.set({ width: newW, height: newH })
     const parts = priceGroup.getObjects?.() || []

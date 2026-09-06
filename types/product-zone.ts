@@ -28,6 +28,11 @@ export interface Product {
   id: string | number;
   name: string;
   uiPriority?: 'primary' | 'advanced';
+  // Classificacao usada pelo selo +18. O parser pode preencher qualquer uma
+  // destas chaves; a deteccao tambem usa categoria/segmento como fallback.
+  isAlcoholic?: boolean;
+  alcoholic?: boolean;
+  containsAlcohol?: boolean;
   images: ProductImage[];
   // Referencias top-level usadas por importadores, cache de imagem e restauração do canvas.
   imageUrl?: string | null;
@@ -148,6 +153,9 @@ export interface Splash {
 export interface ProductZone {
   id?: string;
   name?: string;
+  // Quando true, a composição veio de um Modelo de encarte e deve ser
+  // preservada contra reaplicações das bibliotecas globais da conta.
+  templateCompositionManaged?: boolean;
   enabled?: boolean; // Whether the zone is active/visible
   role?: 'grid' | 'hero' | 'sidebar' | 'showcase';
   contentSource?: 'manual' | 'paste-list' | 'file-import' | 'multi-frame';
@@ -167,14 +175,32 @@ export interface ProductZone {
   rows?: number; // 0 = auto
   layoutDirection?: 'horizontal' | 'vertical'; // preenchimento
   // Aspect ratio dos cards
-  cardAspectRatio?: 'auto' | 'square' | '3:4' | '4:3' | '16:9' | '9:16' | 'fill';
+  cardAspectRatio?: 'auto' | 'square' | '3:4' | '4:5' | '4:3' | '16:9' | '9:16' | 'fill';
   // Comportamento da última linha
   lastRowBehavior?: 'fill' | 'center' | 'stretch' | 'left';
   // Alinhamento vertical
   verticalAlign?: 'top' | 'center' | 'bottom' | 'stretch';
+  // Receita de layout escolhida para cada quantidade de produtos (1..24).
+  // Este e o motor principal das zonas novas.
+  structureByProductCountEnabled?: boolean;
+  structureByProductCount?: ProductZoneStructureMap;
+  // A mesma zona pode ser usada em varios formatos de arte. Cada formato
+  // guarda sua propria receita para que uma alteracao no Story nao altere o
+  // Feed, Post, Banner ou A4.
+  structureByProductCountByPreviewFormat?: ProductZoneStructureMapByPreviewFormat;
+  // Variacoes disponiveis por quantidade. A primeira variacao e a receita
+  // automatica; a escolha abaixo pode ser diferente em cada zona.
+  structureVariantsByProductCount?: ProductZoneStructureVariantMap;
+  structureVariantsByProductCountByPreviewFormat?: ProductZoneStructureVariantMapByPreviewFormat;
+  structureVariantByProductCount?: Record<string, string>;
+  structureVariantByProductCountByPreviewFormat?: Partial<Record<ProductZonePreviewFormat, Record<string, string>>>;
   // Highlights (destaque de produtos)
   highlightCount?: number;
   highlightPos?: 'first' | 'last' | 'random' | 'center' | 'top' | 'bottom';
+  // Qual grupo de produtos entra na area de destaque. A posicao da area continua em highlightPos.
+  highlightSelection?: 'first' | 'last' | 'random' | 'center' | 'manual';
+  // Posicoes 1-based da lista usadas quando highlightSelection === 'manual'.
+  highlightIndexes?: number[];
   highlightHeight?: number; // multiplicador (1.5 = 50% mais alto)
   highlightStyle?: 'larger' | 'featured' | 'banner';
   // Lock
@@ -190,6 +216,85 @@ export interface ProductZone {
   splashOffsetY?: number;
   splashOffsetByCol?: number[];
   splashOffsetByRow?: number[];
+}
+
+export type ProductZoneStructureFormat = 'auto' | 'hero' | 'grid' | 'horizontal' | 'vertical' | 'showcase';
+
+export interface ProductZoneStructure {
+  count: number;
+  format: ProductZoneStructureFormat;
+  role: NonNullable<ProductZone['role']>;
+  columns: number;
+  rows: number;
+  layoutDirection: NonNullable<ProductZone['layoutDirection']>;
+  cardAspectRatio: NonNullable<ProductZone['cardAspectRatio']>;
+  lastRowBehavior: NonNullable<ProductZone['lastRowBehavior']>;
+  verticalAlign: NonNullable<ProductZone['verticalAlign']>;
+  padding: number;
+  gapHorizontal: number;
+  gapVertical: number;
+  // Espacamento proprio da area de destaque. Por padrao herda o da zona.
+  highlightPadding: number;
+  highlightGapHorizontal: number;
+  highlightGapVertical: number;
+  highlightCount: number;
+  highlightPos: NonNullable<ProductZone['highlightPos']>;
+  highlightSelection: NonNullable<ProductZone['highlightSelection']>;
+  highlightIndexes: number[];
+  // Formato individual por posicao da lista (chaves 1-based: "1", "2", ...).
+  cardAspectRatios: Record<string, NonNullable<ProductZone['cardAspectRatio']>>;
+  highlightHeight: number;
+}
+
+export type ProductZoneStructureMap = Record<string, ProductZoneStructure>;
+
+export type ProductZonePreviewFormat = 'story' | 'feed' | 'post' | 'banner' | 'a4';
+
+export type ProductZoneStructureMapByPreviewFormat = Record<
+  ProductZonePreviewFormat,
+  ProductZoneStructureMap
+>;
+
+export interface ProductZoneStructureVariant extends ProductZoneStructure {
+  id: string;
+  name: string;
+}
+
+export type ProductZoneStructureVariantMap = Record<string, ProductZoneStructureVariant[]>;
+
+export type ProductZoneStructureVariantMapByPreviewFormat = Record<
+  ProductZonePreviewFormat,
+  ProductZoneStructureVariantMap
+>;
+
+// === PRODUCT CARD INTERNAL LAYOUT ===
+// Coordenadas relativas ao card. x/y representam o centro do elemento e
+// width/height representam a area maxima em porcentagem (0..100).
+export type ProductCardElementKey = 'name' | 'image' | 'price' | 'alcoholBadge' | 'limit';
+
+export interface ProductCardElementLayout {
+  visible: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Rotacao do elemento em graus, relativa ao card. */
+  rotation: number;
+}
+
+export type ProductCardConfigurationProfileKey = 'compact' | 'standard' | 'wide' | 'featured';
+
+export interface ProductCardConfigurationProfile {
+  elements: Record<ProductCardElementKey, ProductCardElementLayout>;
+}
+
+export interface ProductCardConfiguration {
+  version: 1;
+  enabled: boolean;
+  alcoholBadgeEnabled: boolean;
+  alcoholBadgeText: string;
+  elements: Record<ProductCardElementKey, ProductCardElementLayout>;
+  profiles?: Record<ProductCardConfigurationProfileKey, ProductCardConfigurationProfile>;
 }
 
 // === GLOBAL STYLES ===
@@ -245,6 +350,9 @@ export interface GlobalStyles {
   priceTextColor?: string;
   priceCurrencyColor?: string;
   currencySymbol?: string;
+  // Configuracao interna do card aplicada por zona. O mapa e salvo dentro de
+  // _zoneGlobalStyles para que cada zona preserve sua ultima aplicacao.
+  cardLayout?: ProductCardConfiguration;
   // Tema
   theme?: 'light' | 'dark' | 'vibrant' | 'minimal';
 }
@@ -1070,8 +1178,11 @@ export const DEFAULT_PRODUCT_ZONE: ProductZone = {
   cardAspectRatio: 'fill',
   lastRowBehavior: 'fill',
   verticalAlign: 'stretch',
+  structureByProductCountEnabled: true,
   highlightCount: 0,
   highlightPos: 'first',
+  highlightSelection: 'first',
+  highlightIndexes: [1],
   highlightHeight: 1.5,
   highlightStyle: 'larger',
   isLocked: false,

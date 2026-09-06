@@ -120,10 +120,10 @@ describe('getAvailablePrices', () => {
       .toEqual({ label: 'CX', value: '50,00', type: 'special' })
   })
 
-  it('priceSpecialUnit OFUSCA priceSpecial', () => {
+  it('preserva priceSpecialUnit e priceSpecial como precos distintos', () => {
     const result = getAvailablePrices({ priceSpecialUnit: 4, priceSpecial: 50 })
-    expect(result.prices.filter(p => p.type === 'special')).toHaveLength(1)
-    expect(result.prices.find(p => p.type === 'special')?.value).toBe('4,00')
+    expect(result.prices.filter(p => p.type === 'special')).toHaveLength(2)
+    expect(result.prices.filter(p => p.type === 'special').map(p => p.value)).toEqual(['4,00', '50,00'])
   })
 
   it('cenario atacarejo: special + main + pack', () => {
@@ -136,6 +136,25 @@ describe('getAvailablePrices', () => {
     expect(result.prices).toHaveLength(3)
     expect(result.hasSpecial).toBe(true)
     expect(result.mainPrice).toBe('5,00') // varejo é o main
+  })
+
+  it('mantem os quatro precos comerciais explicitos', () => {
+    const result = getAvailablePrices({
+      priceUnit: '6,25',
+      pricePack: '37,50',
+      priceSpecialUnit: '5,83',
+      priceSpecial: '34,98',
+      packageLabel: 'FARDO'
+    })
+
+    expect(result.prices).toEqual([
+      { label: '', value: '5,83', type: 'special' },
+      { label: 'FARDO', value: '34,98', type: 'special' },
+      { label: '', value: '6,25', type: 'main' },
+      { label: 'FARDO', value: '37,50', type: 'pack' }
+    ])
+    expect(result.mainPrice).toBe('6,25')
+    expect(result.hasSpecial).toBe(true)
   })
 
   it('quando nao tem unit nem pack: special vira main pelo fallback de mainPrice', () => {

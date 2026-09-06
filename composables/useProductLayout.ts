@@ -15,6 +15,7 @@ import {
   createDefaultSplash
 } from '~/utils/product-zone-helpers';
 import { toWasabiProxyUrl } from '~/utils/storageProxy';
+import { autoTrimFabricImage } from '~/utils/fabricImageHelpers';
 import { DEFAULT_PRODUCT_ZONE, DEFAULT_GLOBAL_STYLES } from '~/types/product-zone';
 
 declare var fabric: any;
@@ -347,6 +348,13 @@ export const useProductLayout = () => {
         imgObj = await new Promise((resolve) => {
           fabric.Image.fromURL(imageUrl, (img: any) => {
             if (!img) { resolve(null); return; }
+
+            autoTrimFabricImage(img, {
+              alphaThreshold: 12,
+              padding: 0,
+              colorTolerance: 20,
+              preserveVisualPosition: true
+            });
             
             // Scale to fit optimal size
             const scaleW = imgSize.maxWidth / (img.width || 1);

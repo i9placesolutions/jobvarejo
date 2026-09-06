@@ -4,6 +4,9 @@ import {
   collectTrackableImageSrcCounts
 } from '~/utils/canvasImageTracking'
 
+const PLACEHOLDER =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
 describe('isTrackableImageSrc', () => {
   it('vazio/null/undefined → false', () => {
     expect(isTrackableImageSrc(null)).toBe(false)
@@ -86,6 +89,17 @@ describe('collectTrackableImageSrcCounts', () => {
       objects: [{ type: 'image', __originalSrc: 'https://example.com/orig.png' }]
     })
     expect(r.get('https://example.com/orig.png')).toBe(1)
+  })
+
+  it('nao conta __originalSrc quando src e placeholder de carregamento progressivo', () => {
+    const r = collectTrackableImageSrcCounts({
+      objects: [{
+        type: 'image',
+        src: PLACEHOLDER,
+        __originalSrc: 'https://example.com/deferred.png'
+      }]
+    })
+    expect(r.size).toBe(0)
   })
 
   it('non-image nodes ignorados', () => {

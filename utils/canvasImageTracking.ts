@@ -8,6 +8,9 @@
  * Cobertura: tests/utils/canvasImageTracking.test.ts
  */
 
+const CANVAS_IMAGE_PLACEHOLDER_DATA_URL =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
 /**
  * Detecta se uma URL e' "trackable" — vale a pena reportar progresso
  * de carregamento. Excluimos data URLs (instantaneos) e blob URLs
@@ -55,7 +58,10 @@ export const collectTrackableImageSrcCounts = (canvasData: any): Map<string, num
 
         const t = String((node as any).type || '').toLowerCase()
         if (t === 'image') {
-            const src = String((node as any).src || (node as any).__originalSrc || '').trim()
+            const currentSrc = String((node as any).src || '').trim()
+            const originalSrc = String((node as any).__originalSrc || '').trim()
+            const isDeferredPlaceholder = currentSrc === CANVAS_IMAGE_PLACEHOLDER_DATA_URL
+            const src = isDeferredPlaceholder ? currentSrc : (currentSrc || originalSrc)
             if (src && isTrackableImageSrc(src)) {
                 counts.set(src, (counts.get(src) || 0) + 1)
             }

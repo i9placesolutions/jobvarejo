@@ -8,6 +8,7 @@ import {
 import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull } from '../utils/postgres'
+import { ensureProjectTemplateColumn } from '../utils/project-templates'
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -104,6 +105,17 @@ export default defineEventHandler(async (event) => {
     updates.push(`shared_with = ${pushParam(sharedWith)}::uuid[]`)
   }
 
+  if ('is_template' in body) {
+    updates.push(`is_template = ${pushParam(Boolean(body?.is_template))}`)
+  }
+
+  if ('template_config' in body) {
+    const templateConfig = body?.template_config == null
+      ? null
+      : parseAndStringifyJsonbParam(body.template_config, 'template_config')
+    updates.push(`template_config = ${pushParam(templateConfig)}::jsonb`)
+  }
+
   if ('canvas_data' in body) {
     if (body?.canvas_data == null) {
       throw createError({ statusCode: 400, statusMessage: 'canvas_data cannot be empty' })
@@ -126,6 +138,7 @@ export default defineEventHandler(async (event) => {
   const userPlaceholder = pushParam(user.id)
 
   try {
+    await ensureProjectTemplateColumn()
     const row = await pgOneOrNull<any>(
       `update public.projects
        set ${updates.join(', ')}

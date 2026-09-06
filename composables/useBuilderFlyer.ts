@@ -399,6 +399,23 @@ export const useBuilderFlyer = () => {
     state.value.currentPage = Math.max(1, Math.min(page, totalPages.value))
   }
 
+  const reset = () => {
+    if (autosaveTimer) {
+      clearTimeout(autosaveTimer)
+      autosaveTimer = null
+    }
+    state.value.flyer = null
+    state.value.products = []
+    state.value.theme = null
+    state.value.model = null
+    state.value.layout = null
+    state.value.isDirty = false
+    state.value.isSaving = false
+    state.value.isLoading = false
+    state.value.zoom = 1
+    state.value.currentPage = 1
+  }
+
   const cleanup = () => {
     if (autosaveTimer) {
       clearTimeout(autosaveTimer)
@@ -446,6 +463,7 @@ export const useBuilderFlyer = () => {
     reorderProducts,
     setZoom,
     setCurrentPage,
+    reset,
     cleanup,
     productEditorOpen,
   }

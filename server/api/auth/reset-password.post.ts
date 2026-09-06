@@ -2,6 +2,7 @@ import { ensureAuthColumns, getProfileByResetTokenHash, updatePasswordForUser } 
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { hashPassword } from '../../utils/password'
 import { createSessionToken, hashOpaqueToken } from '../../utils/session-token'
+import { getAuthCookieOptions } from '../../utils/auth-cookie'
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
@@ -34,26 +35,18 @@ export default defineEventHandler(async (event) => {
     role
   })
 
+  const cookieBase = getAuthCookieOptions(event, expiresIn)
   setCookie(event, 'access-token', sessionToken, {
-    path: '/',
-    maxAge: expiresIn,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    ...cookieBase,
     httpOnly: true
   })
   // Keep legacy cookie for backward compatibility during cutover.
   setCookie(event, 'sb-access-token', sessionToken, {
-    path: '/',
-    maxAge: expiresIn,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    ...cookieBase,
     httpOnly: true
   })
   setCookie(event, 'authenticated', 'true', {
-    path: '/',
-    maxAge: expiresIn,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    ...cookieBase,
     httpOnly: false
   })
 

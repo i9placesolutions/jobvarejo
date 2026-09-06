@@ -2,6 +2,7 @@ import type { H3Event } from 'h3'
 import type { BuilderTenant } from '~/types/builder'
 import { getTenantById } from './builder-auth-db'
 import { getProfileById } from './auth-db'
+import { requireAuthenticatedUser } from './auth'
 import { verifyBuilderSessionToken } from './builder-session-token'
 import { pgOneOrNull } from './postgres'
 
@@ -49,6 +50,10 @@ const getCachedTenant = async (id: string): Promise<BuilderTenant | null> => {
   return null
 }
 
+export const invalidateBuilderTenantCache = (id: string): void => {
+  _tenantCache.delete(String(id || '').trim())
+}
+
 const getBuilderToken = (event: H3Event): string | null => {
   const authHeader = getHeader(event, 'authorization')
   if (authHeader) {
@@ -79,19 +84,51 @@ export const isBuilderAdmin = (event: H3Event): boolean => {
 
 export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenant> => {
   const token = getBuilderToken(event)
-  if (!token) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: 'Missing builder authorization token'
-    })
-  }
+  const payload = token ? verifyBuilderSessionToken(token) : null
 
-  const payload = verifyBuilderSessionToken(token)
+  // O Builder e um dos modos do mesmo SaaS. Quando a sessao principal ja
+  // existe, criamos/recuperamos o tenant pelo mesmo UUID do usuario para que
+  // o cadastro empresarial seja compartilhado entre o editor avancado e o
+  // editor rapido. Sessoes antigas do Builder continuam funcionando pelo
+  // token proprio acima.
   if (!payload?.sub) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: 'Invalid or expired builder token'
-    })
+    let user: Awaited<ReturnType<typeof requireAuthenticatedUser>>
+    try {
+      user = await requireAuthenticatedUser(event)
+    } catch {
+      throw createError({
+        statusCode: 401,
+        statusMessage: token ? 'Invalid or expired builder token' : 'Missing authorization token'
+      })
+    }
+
+    const existingTenant = await getTenantById(user.id)
+    if (existingTenant?.id) {
+      const tenant = await getCachedTenant(user.id)
+      if (tenant) return tenant
+      throw createError({ statusCode: 500, statusMessage: 'Unable to load business profile' })
+    }
+
+    const fallbackName = String(user.user_metadata?.name || user.email.split('@')[0] || 'Minha empresa').trim()
+    const created = await pgOneOrNull<any>(
+      `insert into public.builder_tenants
+         (id, email, password_hash, name, plan, is_active)
+       values
+         ($1::uuid, $2, 'main-auth-managed', $3, 'free', true)
+       on conflict (id) do nothing
+       returning *`,
+      [user.id, user.email, fallbackName]
+    )
+
+    if (created?.id) {
+      invalidateBuilderTenantCache(user.id)
+      const tenant = await getCachedTenant(user.id)
+      if (tenant) return tenant
+    }
+
+    const afterInsert = await getCachedTenant(user.id)
+    if (afterInsert) return afterInsert
+    throw createError({ statusCode: 500, statusMessage: 'Unable to initialize business profile' })
   }
 
   // Check if this is an admin user from profiles table
@@ -116,7 +153,7 @@ export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenan
         [profile.id, String(profile.email), String(profile.name || 'Admin')]
       )
       // Invalidate cache
-      _tenantCache.delete(profile.id)
+      invalidateBuilderTenantCache(profile.id)
     }
 
     return {

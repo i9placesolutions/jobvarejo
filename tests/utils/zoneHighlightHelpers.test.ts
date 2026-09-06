@@ -75,6 +75,36 @@ describe('getZoneHighlightPredicate', () => {
     expect(result.isHighlighted(cards[0], 0)).toBe(false)
   })
 
+  it('permite escolher os cards sem amarrar a selecao ao lado da area', () => {
+    const cards = [card('a'), card('b'), card('c'), card('d')]
+    const result = getZoneHighlightPredicate(
+      { highlightCount: 2, highlightHeight: 2, highlightPos: 'last', highlightSelection: 'first' },
+      cards
+    )
+    expect(result.isHighlighted(cards[0], 0)).toBe(true)
+    expect(result.isHighlighted(cards[1], 1)).toBe(true)
+    expect(result.isHighlighted(cards[2], 2)).toBe(false)
+    expect(result.isHighlighted(cards[3], 3)).toBe(false)
+  })
+
+  it('permite escolher posicoes especificas da lista', () => {
+    const cards = [card('a'), card('b'), card('c'), card('d'), card('e')]
+    const result = getZoneHighlightPredicate(
+      {
+        highlightCount: 2,
+        highlightHeight: 2,
+        highlightPos: 'first',
+        highlightSelection: 'manual',
+        highlightIndexes: [2, 5]
+      },
+      cards
+    )
+    expect(result.count).toBe(2)
+    expect(result.isHighlighted(cards[0], 0)).toBe(false)
+    expect(result.isHighlighted(cards[1], 1)).toBe(true)
+    expect(result.isHighlighted(cards[4], 4)).toBe(true)
+  })
+
   it('center: destaca os do meio', () => {
     const cards = [card('a'), card('b'), card('c'), card('d'), card('e')]
     const result = getZoneHighlightPredicate(

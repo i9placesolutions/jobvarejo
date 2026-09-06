@@ -12,6 +12,7 @@ definePageMeta({
 
 const route = useRoute()
 const flyerId = computed(() => String(route.params.id || ''))
+const auth = useBuilderAuth()
 
 const {
   flyer,
@@ -79,6 +80,7 @@ let resizeObserver: ResizeObserver | null = null
 
 // Load data on mount
 onMounted(async () => {
+  await auth.getSession()
   await loadCatalog()
   if (flyerId.value) {
     try {

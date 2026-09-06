@@ -11,7 +11,9 @@ export default defineEventHandler(async (event) => {
       email: tenant.email,
       name: tenant.name ?? null,
       logo: tenant.logo ?? null,
+      logo_position: tenant.logo_position ?? {},
       phone: tenant.phone ?? null,
+      phone2: tenant.phone2 ?? null,
       whatsapp: tenant.whatsapp ?? null,
       address: tenant.address ?? null,
       instagram: tenant.instagram ?? null,
@@ -19,6 +21,12 @@ export default defineEventHandler(async (event) => {
       website: tenant.website ?? null,
       slogan: tenant.slogan ?? null,
       cep: tenant.cep ?? null,
+      payment_notes: tenant.payment_notes ?? null,
+      segment1: tenant.segment1 ?? null,
+      segment2: tenant.segment2 ?? null,
+      segment3: tenant.segment3 ?? null,
+      flyer_defaults: tenant.flyer_defaults ?? null,
+      plan: tenant.plan ?? 'free',
     }
   }
 })

@@ -1,4 +1,5 @@
 const readText = (value: unknown): string | null => {
+  if (typeof value !== 'string' && typeof value !== 'number') return null
   const text = String(value ?? '').trim()
   return text ? text : null
 }
@@ -42,6 +43,7 @@ export const resolveProductImageRef = (product: any, seen = new WeakSet<object>(
     product.customImage ??
     product.previewUrl ??
     product.thumbnailUrl ??
+    product.key ??
     product.s3_key ??
     product.storageKey ??
     product.storage_key
@@ -55,6 +57,7 @@ export const resolveProductImageRef = (product: any, seen = new WeakSet<object>(
   }
 
   const nestedCandidates = [
+    product.image,
     product.selectedImage,
     product.approvedImage,
     product.imageCandidate,

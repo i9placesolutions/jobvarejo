@@ -22,6 +22,7 @@ import {
   Zap,
   ChevronsUp,
   ChevronsDown,
+  Settings2,
   Crop // For Crop mode
 } from 'lucide-vue-next'
 import ColorPicker from './ui/ColorPicker.vue'
@@ -33,6 +34,10 @@ type ZoneUpdateTargetMeta = {
   targetId?: string | null
 }
 import { AVAILABLE_FONT_FAMILIES } from '~/utils/font-catalog'
+import {
+  QUICK_LOGO_BACKDROP_OPTIONS,
+  normalizeQuickLogoBackdropMode
+} from '~/utils/quickLogoBackdrop'
 
 const props = defineProps<{
   selectedObject: any | null,
@@ -43,6 +48,7 @@ const props = defineProps<{
   productZone?: Partial<ProductZone>,
   productZoneInspector?: any | null,
   productGlobalStyles?: Partial<GlobalStyles>,
+  productZoneStructuresLoaded?: boolean,
   labelTemplates?: LabelTemplate[]
 }>()
 
@@ -59,6 +65,7 @@ const emit = defineEmits<{
   // "Editar so este card": override de estilo de etiqueta por card.
   (e: 'update-card-style', prop: string, value: any, cardId?: string): void
   (e: 'reset-card-style', cardId?: string): void
+  (e: 'update-card-configuration-profile', profile: string, cardId?: string): void
   (e: 'apply-preset', presetId: string): void
   (e: 'sync-gaps', padding: number, meta?: ZoneUpdateTargetMeta): void
   (e: 'recalculate-layout'): void
@@ -289,7 +296,8 @@ const resolvedZoneSelection = computed(() => {
   return null
 })
 
-const isProductZone = computed(() => !!resolvedZoneSelection.value)
+const isDirectProductZone = computed(() => isLikelyProductZone(props.selectedObject))
+const isProductZone = computed(() => isDirectProductZone.value)
 const isProductZoneSectionOpen = ref(false)
 
 // "Editar so este card": detecta selecao de UM card de produto (tem parentZoneId,
@@ -306,10 +314,51 @@ const cardStyleOverrides = computed<Record<string, any>>(() => {
   const o = props.selectedObject?._cardStyleOverrides
   return o && typeof o === 'object' ? o : {}
 })
+const selectedCardConfigurationProfile = computed(() =>
+  String(props.selectedObject?.__cardConfigurationProfile || '').trim()
+)
 const cardHasOverrides = computed(() => Object.keys(cardStyleOverrides.value).length > 0)
 const cardLabelSectionOpen = ref(true)
 const onCardStyle = (prop: string, value: any) => emit('update-card-style', prop, value, selectedCardId.value)
 const onResetCardStyle = () => emit('reset-card-style', selectedCardId.value)
+const onCardConfigurationProfile = (value: string) => emit(
+  'update-card-configuration-profile',
+  value,
+  selectedCardId.value
+)
+
+const isProductCardContainerContext = computed(() => (
+  isDirectProductZone.value
+  || isProductCard.value
+  || (isSingleProductCard.value && !isChildInsideProductCard.value)
+))
+const isProductContext = computed(() => (
+  isProductCardContainerContext.value || isChildInsideProductCard.value
+))
+const technicalControlsOpen = ref(false)
+const showTechnicalControls = computed(() => (
+  !isProductCardContainerContext.value || technicalControlsOpen.value
+))
+const productContextLabel = computed(() => {
+  if (isDirectProductZone.value) return 'Zona de produtos'
+  if (isProductCardContainerContext.value) return 'Card de produto'
+  if (isChildInsideProductCard.value) return 'Elemento do card'
+  return 'Objeto selecionado'
+})
+const productContextDescription = computed(() => {
+  if (isDirectProductZone.value) return 'Estrutura automática e variação desta zona.'
+  if (isProductCardContainerContext.value) return 'A aparência vem da configuração de cards.'
+  return 'Edição direta do elemento selecionado.'
+})
+
+watch(
+  () => normalizeSelectionId(props.selectedObject),
+  () => {
+    technicalControlsOpen.value = false
+    isProductZoneSectionOpen.value = isDirectProductZone.value
+  },
+  { immediate: true }
+)
 
 const openProductZoneInspector = () => {
   if (!isProductZone.value) return
@@ -363,6 +412,13 @@ const currentZoneData = computed<ZoneInspectorData>(() => {
     cardAspectRatio: obj.cardAspectRatio ?? 'fill',
     lastRowBehavior: obj.lastRowBehavior ?? 'fill',
     verticalAlign: obj.verticalAlign ?? 'stretch',
+    structureByProductCountEnabled: obj.structureByProductCountEnabled === true,
+    structureByProductCount: obj.structureByProductCount,
+    structureByProductCountByPreviewFormat: obj.structureByProductCountByPreviewFormat,
+    structureVariantsByProductCount: obj.structureVariantsByProductCount,
+    structureVariantsByProductCountByPreviewFormat: obj.structureVariantsByProductCountByPreviewFormat,
+    structureVariantByProductCount: obj.structureVariantByProductCount,
+    structureVariantByProductCountByPreviewFormat: obj.structureVariantByProductCountByPreviewFormat,
     highlightCount: obj.highlightCount ?? 0,
     highlightPos: obj.highlightPos ?? 'first',
     highlightHeight: obj.highlightHeight ?? 1.5,
@@ -545,6 +601,14 @@ const focusedInput = ref<string | null>(null)
 
 // Helper to safely get value
 const getVal = (prop: string, defaultVal: any = '') => props.selectedObject ? (props.selectedObject[prop] ?? defaultVal) : defaultVal
+
+const isLogoObject = computed(() => {
+  const object = props.selectedObject as any
+  return String(object?.businessProfileField || '').trim().toLowerCase() === 'logo'
+    || object?.quickLogoSlot === true
+})
+
+const logoBackdropMode = computed(() => normalizeQuickLogoBackdropMode(getVal('quickLogoBackdropMode')))
 
 const textSelectionActive = computed(() => {
   if (!isText.value) return false
@@ -879,9 +943,64 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       <!-- DESIGN TAB (Figma-style design properties) -->
       <div v-else class="pp-design-panel">
 
+      <div v-if="isProductContext" class="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] px-3 py-2.5 mb-2">
+        <div class="flex items-start gap-2.5">
+          <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10">
+            <LayoutGrid class="w-3.5 h-3.5 text-cyan-300" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-300">Contexto selecionado</span>
+              <NuxtLink
+                v-if="isProductCardContainerContext && !isDirectProductZone"
+                to="/card-configurations"
+                class="text-[9px] font-bold uppercase tracking-widest text-amber-200 hover:text-white transition-colors"
+              >
+                Configurar card
+              </NuxtLink>
+            </div>
+            <strong class="mt-0.5 block text-[12px] text-white">{{ productContextLabel }}</strong>
+            <span class="mt-0.5 block text-[10px] leading-snug text-zinc-400">{{ productContextDescription }}</span>
+          </div>
+        </div>
+      </div>
+
+      <button
+        v-if="isProductCardContainerContext"
+        type="button"
+        class="w-full mb-2 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#18181b] px-3 py-2.5 text-left transition-colors hover:border-cyan-400/30 hover:bg-white/[0.04]"
+        @click="technicalControlsOpen = !technicalControlsOpen"
+      >
+        <span class="flex min-w-0 items-center gap-2">
+          <Settings2 class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+          <span class="min-w-0">
+            <span class="block text-[10px] font-semibold uppercase tracking-widest text-zinc-200">Controles técnicos</span>
+            <span class="mt-0.5 block text-[9px] leading-snug text-zinc-500">Preenchimento, efeitos, camadas e alinhamento</span>
+          </span>
+        </span>
+        <span class="shrink-0 text-[9px] font-bold uppercase tracking-widest text-cyan-300">
+          {{ technicalControlsOpen ? 'Ocultar' : 'Mostrar' }}
+        </span>
+      </button>
+
       <!-- "Editar so este card": override de etiqueta por card (vence a zona).
            Fica no TOPO para aparecer assim que o usuario seleciona uma etiqueta. -->
-      <div v-if="isSingleProductCard" class="bg-[#18181b] border border-violet-500/25 rounded-xl mb-2 shadow-sm relative overflow-hidden">
+      <div v-if="isProductCardContainerContext || isChildInsideProductCard" class="bg-[#18181b] border border-violet-500/25 rounded-xl mb-2 shadow-sm relative overflow-hidden">
+          <div class="px-3 pt-3 pb-2">
+            <label class="block text-[10px] font-semibold text-violet-300 mb-1">Modelo deste card</label>
+            <select
+              :value="selectedCardConfigurationProfile"
+              class="w-full bg-[#0f0f11] border border-violet-500/30 rounded-lg px-2 py-1.5 text-[12px] text-zinc-200"
+              @change="onCardConfigurationProfile(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">Automático pelo formato</option>
+              <option value="compact">Compacto · cards pequenos</option>
+              <option value="standard">Médio · card regular</option>
+              <option value="wide">Largo · card horizontal</option>
+              <option value="featured">Destaque · card maior</option>
+            </select>
+            <p class="mt-1 text-[10px] text-zinc-500 leading-snug">Escolha um modelo criado em Card Configurations. A escolha vale só para este card.</p>
+          </div>
           <button
               type="button"
               class="w-full px-3 py-2.5 flex items-center justify-between gap-3 hover:bg-white/5 transition-colors text-left"
@@ -989,6 +1108,62 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
         </button>
       </div>
 
+      <!-- Fundo da logo: a escolha altera somente a placa vinculada e preserva
+           left/top da imagem definida no modelo. -->
+      <div v-if="isLogoObject" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-2.5 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <span class="block text-[11px] font-semibold tracking-wide text-zinc-200">Fundo da logo</span>
+            <span class="mt-0.5 block text-[10px] leading-snug text-zinc-500">A logo continua no local definido no modelo.</span>
+          </div>
+          <span class="shrink-0 rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-violet-300">Logo</span>
+        </div>
+        <div class="grid grid-cols-4 gap-1.5">
+          <button
+            v-for="option in QUICK_LOGO_BACKDROP_OPTIONS"
+            :key="option.id"
+            type="button"
+            class="min-w-0 rounded-lg border px-1 py-2 transition-colors"
+            :class="logoBackdropMode === option.id
+              ? 'border-violet-400/70 bg-violet-500/15 text-violet-200'
+              : 'border-white/10 bg-[#27272a]/50 text-zinc-500 hover:border-white/25 hover:text-zinc-200'"
+            :title="option.label"
+            @click="$emit('update-property', 'quickLogoBackdropMode', option.id)"
+          >
+            <span
+              class="mx-auto mb-1 block h-5 w-7 border border-current bg-white/90 shadow-sm"
+              :class="{
+                'rounded-none': option.id === 'square',
+                'rounded-full aspect-square': option.id === 'round',
+                'rounded-[50%]': option.id === 'oval',
+                'border-dashed bg-transparent': option.id === 'none'
+              }"
+            ></span>
+            <span class="block truncate text-[9px] font-semibold">{{ option.label }}</span>
+          </button>
+        </div>
+        <div class="border-t border-white/5 pt-2.5">
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <span class="block text-[11px] font-semibold tracking-wide text-zinc-200">Contorno sticker</span>
+              <span class="mt-0.5 block text-[10px] leading-snug text-zinc-500">Destaca a silhueta da logo sobre qualquer fundo.</span>
+            </div>
+            <button
+              type="button"
+              class="shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest transition-colors"
+              :class="stickerOutlineEnabled
+                ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
+                : 'border-white/10 bg-white/5 text-zinc-500 hover:border-white/25 hover:text-zinc-200'"
+              :aria-pressed="stickerOutlineEnabled"
+              @click="$emit('update-property', 'stickerOutlineEnabled', !stickerOutlineEnabled)"
+            >
+              {{ stickerOutlineEnabled ? 'Ativo' : 'Inativo' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <template v-if="showTechnicalControls">
       <!-- Alinhamento e Distribuição -->
       <div class="bg-[#18181b] border border-white/5 rounded-xl px-2.5 py-2 mb-2 flex flex-wrap gap-1 justify-between text-zinc-400 shadow-sm">
           <div class="flex gap-0.5">
@@ -1060,6 +1235,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <input type="number" :value="selectedObject.gap || 0" @input="e => $emit('action', 'update-gap:' + (e.target as any).value)" class="bg-transparent w-7 text-[11px] text-white focus:outline-none text-center" />
           </div>
       </div>
+      </template>
 
       <!-- Posição e Tamanho -->
       <div class="bg-[#18181b] border border-white/5 rounded-xl mb-2 overflow-hidden shadow-sm">
@@ -1125,6 +1301,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
         </div>
       </div>
 
+      <template v-if="showTechnicalControls">
       <!-- Seção Vetor -->
       <div v-if="isVectorPath" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
           <div class="flex items-center gap-2 mb-1">
@@ -1245,6 +1422,8 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
       </div>
 
+      </template>
+
       <!-- Texto -->
       <div v-if="isText" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
           <div class="flex items-center gap-2 mb-1">
@@ -1346,6 +1525,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
           </div>
       </div>
 
+      <template v-if="showTechnicalControls">
       <!-- Preenchimento -->
       <div v-if="!isImage && !isLineLike" class="bg-[#18181b] border border-white/5 rounded-xl mb-2 p-3 space-y-3 shadow-sm">
           <div class="flex items-center justify-between group cursor-pointer" @click="$emit('update-property', 'fillEnabled', !fillEnabled)">
@@ -2145,6 +2325,8 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
 	          </div>
 	      </div>
 
+      </template>
+
       <!-- Grade Inteligente -->
       <div v-if="isSmartGroup" class="bg-[#18181b] border border-violet-500/20 rounded-xl mb-2 p-3 space-y-3 shadow-sm relative overflow-hidden">
           <div class="absolute inset-0 bg-violet-500/5 mix-blend-overlay pointer-events-none"></div>
@@ -2164,7 +2346,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
       </div>
 
       <!-- 9. Zona de Produtos -->
-      <div v-show="isProductZone" class="bg-[#18181b] border border-emerald-500/20 rounded-xl mb-2 shadow-sm relative overflow-hidden">
+      <div v-if="isProductZone" class="bg-[#18181b] border border-emerald-500/20 rounded-xl mb-2 shadow-sm relative overflow-hidden">
           <div class="absolute inset-0 bg-emerald-500/5 mix-blend-overlay pointer-events-none"></div>
           <button
               type="button"
@@ -2212,6 +2394,8 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
             v-show="isProductZoneSectionOpen"
             :zone="currentZoneData"
             :global-styles="currentGlobalStyles"
+            :global-structures-loaded="productZoneStructuresLoaded"
+            :compact="true"
             :label-templates="labelTemplates"
             @open-review="$emit('open-zone-review')"
             @update:zone="(prop, val, meta) => $emit('update-zone', prop, val, meta)"

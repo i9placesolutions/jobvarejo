@@ -41,39 +41,85 @@ export const parsePriceBR = (preco: string): { inteiro: string; centavos: string
 };
 
 /**
- * Tipo restrito para a unidade visivel na etiqueta. Apenas 'KG' e 'UN'
- * sao permitidos no chip — gramaturas (ML/L/G) seguem no nome do produto.
+ * Unidades comerciais que podem aparecer junto ao preco.
+ *
+ * A unidade nao e o mesmo que a gramatura do nome: `ARROZ 5KG` continua
+ * sendo vendido por `UN`, enquanto `PICANHA KG` e vendida por `KG`. Ainda
+ * assim, quando a origem informa uma embalagem explicita (PCT, CX, FD...),
+ * ela precisa sobreviver ate a etiqueta para nao transformar tudo em `UN`.
  */
-export type PriceUnitLabel = '' | 'KG' | 'UN';
+export type PriceUnitLabel =
+    | ''
+    | 'KG'
+    | 'UN'
+    | 'CADA'
+    | 'PCT'
+    | 'CX'
+    | 'FD'
+    | 'DZ'
+    | 'BD'
+    | 'SC'
+    | 'EMB';
+
+const stripUnitAccents = (value: any): string => String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[.;:/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const UNIT_ALIASES: Record<string, PriceUnitLabel> = {
+    KG: 'KG', KGS: 'KG', K: 'KG', KILO: 'KG', KILOS: 'KG', QUILO: 'KG', QUILOS: 'KG',
+    QUILOGRAMA: 'KG', QUILOGRAMAS: 'KG',
+    UN: 'UN', UND: 'UN', UNID: 'UN', UNIDADE: 'UN', UNIDADES: 'UN', UNIT: 'UN',
+    PC: 'UN', PCS: 'UN', PECA: 'UN', PECAS: 'UN',
+    CADA: 'CADA',
+    PCT: 'PCT', PAC: 'PCT', PCTE: 'PCT', PACOTE: 'PCT', PACOTES: 'PCT',
+    CX: 'CX', CAIXA: 'CX', CAIXAS: 'CX',
+    FD: 'FD', FARDO: 'FD', FARDOS: 'FD',
+    DZ: 'DZ', DUZIA: 'DZ', DUZIAS: 'DZ',
+    BD: 'BD', BANDEJA: 'BD', BANDEJAS: 'BD',
+    SC: 'SC', SACO: 'SC', SACOS: 'SC',
+    EMB: 'EMB', EMBALAGEM: 'EMB', EMBALAGENS: 'EMB'
+};
+
+const GENERIC_UNIT_TOKENS = new Set(['UN', 'UND', 'UNID', 'UNIDADE', 'UNIDADES', 'UNIT', 'PC', 'PCS', 'PECA', 'PECAS']);
+
+const normalizeUnitToken = (raw: any): { label: PriceUnitLabel; token: string; hasQuantity: boolean } => {
+    const normalized = stripUnitAccents(raw).replace(/\s+/g, '');
+    if (!normalized) return { label: '', token: '', hasQuantity: false };
+
+    const quantityMatch = normalized.match(/^(\d+(?:[.,]\d+)?)([A-Z]+)$/);
+    const hasQuantity = !!quantityMatch;
+    const token = quantityMatch?.[2] || normalized;
+    const label = UNIT_ALIASES[token] || '';
+
+    // Gramaturas numeradas (500G, 1L, 900ML) descrevem a embalagem, nao a
+    // unidade de venda. Mantemos essa regra para evitar o antigo "UN"
+    // fantasma virar agora "ML/G/L" na etiqueta.
+    if (hasQuantity && ['G', 'GR', 'GRAMA', 'GRAMAS', 'MG', 'L', 'LT', 'LITRO', 'LITROS', 'ML', 'MLS', 'MILILITRO', 'MILILITROS'].includes(token)) {
+        return { label: '', token, hasQuantity };
+    }
+
+    return { label, token, hasQuantity };
+};
 
 /**
  * Normaliza uma unidade arbitraria do produto (ou texto livre) para a
  * representacao usada no chip da etiqueta. Retorna string vazia quando
- * o template nao deve mostrar unidade — evita "UN fantasma" em
- * gramaturas como 500ML, 1L ou produtos sem unidade definida.
+ * o token e apenas uma gramatura numerada (500ML, 1L, 300G), pois nesses
+ * casos a unidade de venda e inferida separadamente a partir do produto.
  *
  * Regra:
  *   - vazio/null/undefined  -> ''
  *   - KG / KILO / KILOS / "1KG" / "2,5KG"  -> 'KG'
  *   - UN / UND / UNID / UNIDADE  -> 'UN'
+ *   - CADA, PCT, CX, FD, DZ, BD, SC, EMB -> abreviatura canonica
  *   - ML / L / G / 500ML  -> '' (gramatura segue no nome do produto)
  */
 export const normalizeUnitForLabel = (raw: any): PriceUnitLabel => {
-    const s0 = String(raw ?? '').trim();
-    if (!s0) return '';
-    const s = s0.toUpperCase().replace(/\s+/g, '');
-
-    // Remove a leading numeric quantity (e.g. "500ML", "1KG", "2,5KG") so we don't show gramatura.
-    const tok = s.replace(/^\d+(?:[.,]\d+)?/, '');
-
-    // Only allow these units on the label.
-    if (tok === 'KG' || tok === 'K' || tok === 'KILO' || tok === 'KILOS' || tok.includes('KG')) return 'KG';
-    if (tok === 'UN' || tok === 'UND' || tok === 'UNID' || tok === 'UNIDADE' || tok.includes('UN')) return 'UN';
-
-    // Gramaturas (ML/L/G/etc) NAO devem virar 'UN' automatico — gramatura segue
-    // no nome do produto. Retornar string vazia evita 'UN' fantasma quando o
-    // template nao permite unidade.
-    return '';
+    return normalizeUnitToken(raw).label;
 };
 
 /**
@@ -207,40 +253,69 @@ export type ProductUnitInferenceInput = {
 }
 
 /**
- * Infere a unidade visivel ('KG' | 'UN' | '') a partir dos campos do produto,
- * priorizando sinais explicitos antes de heuristica baseada no nome.
+ * Infere a unidade visivel a partir dos campos do produto, distinguindo
+ * unidade de venda de gramatura/volume.
  *
  * Ordem de prioridade:
- *  1. product.unit explicito
- *  2. Heuristica do nome/weight/packageLabel:
- *     - "5KG", "500G", "2L" (numero antes da unidade) → UN (vendido por unidade)
- *     - "KG" / "G" / "L" sozinho (sem numero antes) → KG (vendido por peso)
- *  3. packUnit como fallback
+ *  1. unidade explicita nao-generica (CADA/PCT/CX/...)
+ *  2. nome/gramatura (um `KG` sem numero e peso vendido por KG; `5KG` e
+ *     embalagem vendida por UN; PCT/CX/CADA preservados)
+ *  3. unidade generica explicita (`UN`) ou packUnit/packageLabel
  *  4. '' quando nenhum sinal disponivel
  */
 export const inferUnitLabelFromProduct = (product: ProductUnitInferenceInput): PriceUnitLabel => {
     const unitRaw = String(product?.unit ?? '').trim();
-    if (unitRaw) return normalizeUnitForLabel(unitRaw);
+    const explicit = normalizeUnitToken(unitRaw);
+    const explicitIsGeneric = !!explicit.token && GENERIC_UNIT_TOKENS.has(explicit.token);
+
+    // Uma unidade de embalagem realmente informada deve vencer heuristicas
+    // do nome. `UN`/`UND` sao a excecao: varios importadores usam UN como
+    // default, entao deixamos um sinal textual mais forte corrigir esse valor.
+    if (explicit.label && !explicitIsGeneric) return explicit.label;
 
     const name = String(product?.name ?? '');
     const weight = String(product?.weight ?? '');
     const packageLabel = String(product?.packageLabel ?? '');
-    const probe = `${name} ${weight} ${packageLabel}`.toUpperCase();
+    const packUnit = String(product?.packUnit ?? '');
+    // A etiqueta pode receber a gramatura em `weight` ou em `packageLabel`;
+    // ambos precisam participar da mesma heuristica (ex.: `500G` => UN).
+    const probe = stripUnitAccents(`${name} ${weight} ${packageLabel}`);
 
-    // CRITICAL: Check if there's a NUMBER before the weight unit (KG, G, ML, L)
-    // Pattern like "5KG", "500G", "2L" = sold by unit → use "UN"
-    // Pattern like "KG", "G" without number = sold by kilo → use "KG"
-    const hasNumberBeforeWeightUnit = /\d+\s*(?:KG|G|ML|L)\b/.test(probe);
-    const hasWeightUnitWithoutNumber = /\b(?:KG|G|ML|L)\b/.test(probe) && !hasNumberBeforeWeightUnit;
+    const hasNumberBefore = (units: string): boolean =>
+        new RegExp(`\\d+(?:[.,]\\d+)?\\s*(?:${units})\\b`, 'i').test(probe);
+    const hasStandalone = (units: string): boolean =>
+        new RegExp(`(?:^|\\s|[(/-])(?:${units})(?:\\s|$|[)/,.-])`, 'i').test(probe);
 
-    if (hasWeightUnitWithoutNumber) return 'KG'; // Vendido por quilo (ex: "ARROZ KG")
-    if (hasNumberBeforeWeightUnit) return 'UN'; // Vendido por unidade (ex: "ARROZ 5KG")
+    // A embalagem explicita no nome ("Picanha kg", "ovos cx", "arroz pct")
+    // e o campo peso sem quantidade sao sinais comerciais fortes.
+    const weightUnits = 'KG|KILO(?:S)?|QUILO(?:S)?|QUILOGRAMA(?:S)?|G|GR(?:AMA)?S?|MG|L|LT(?:S)?|LITRO(?:S)?|ML|MLS|MILILITRO(?:S)?';
+    if (hasStandalone(weightUnits) && !hasNumberBefore(weightUnits)) return 'KG';
+    if (hasStandalone('CADA')) return 'CADA';
+    if (hasStandalone('PCT|PCTE|PAC(?:OTE|OTES)?')) return 'PCT';
+    if (hasStandalone('CX|CAIXA(?:S)?')) return 'CX';
+    if (hasStandalone('FD|FARDO(?:S)?')) return 'FD';
+    if (hasStandalone('DZ|DUZIA(?:S)?')) return 'DZ';
+    if (hasStandalone('BD|BANDEJA(?:S)?')) return 'BD';
+    if (hasStandalone('SC|SACO(?:S)?')) return 'SC';
+    if (hasStandalone('EMB|EMBALAGEM(?:S)?')) return 'EMB';
 
-    const packUnitRaw = String(product?.packUnit ?? '').trim();
-    const packUnitNorm = packUnitRaw ? normalizeUnitForLabel(packUnitRaw) : '';
-    if (packUnitNorm === 'KG') return 'KG';
-    if (packUnitNorm === 'UN') return 'UN';
+    // Peso/volume numerado no nome (`5KG`, `500G`, `2L`, `900ML`) representa
+    // uma embalagem/produto vendido por unidade. Mantemos UN para esse caso.
+    if (hasNumberBefore('KG|KILO(?:S)?|QUILO(?:S)?|QUILOGRAMA(?:S)?|G|GR(?:AMA)?S?|MG|L|LT(?:S)?|LITRO(?:S)?|ML|MLS|MILILITRO(?:S)?')) return 'UN';
 
+    const unitFromWeight = normalizeUnitToken(weight);
+    if (unitFromWeight.label) return unitFromWeight.label;
+
+    // `packUnit` normalmente informa a unidade do item dentro da caixa;
+    // `packageLabel` informa a embalagem. Nesta ordem, UN continua sendo a
+    // escolha correta para `CX C/12 UN`, enquanto CX/PCT sobrevivem quando
+    // forem a única informação disponível.
+    const packUnitNorm = normalizeUnitForLabel(packUnit);
+    if (packUnitNorm) return packUnitNorm;
+    const packageNorm = normalizeUnitForLabel(packageLabel);
+    if (packageNorm) return packageNorm;
+
+    if (explicit.label) return explicit.label;
     return '';
 };
 

@@ -18,6 +18,33 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     'name',
     'layerName',
     'excludeFromExport',
+    // Seed nativo da edicao rapida e campos comerciais editaveis no editor.
+    'isQuickGenerated',
+    'quickSeedId',
+    'businessProfileField',
+    'quickDataField',
+    'quickFieldEnabled',
+    'quickValidityStartDate',
+    'quickValidityEndDate',
+    'quickValidityMode',
+    'quickValidityWhileStocks',
+    'quickOfferScope',
+    'dynamicFieldResizeMode',
+    'dynamicFieldKey',
+    'dynamicFieldHeight',
+    'dynamicFieldBaseFontSize',
+    'dynamicFieldAutoFitFontSize',
+    'quickLogoSource',
+    'quickLogoSlot',
+    'quickLogoMaxWidth',
+    'quickLogoMaxHeight',
+    'quickLogoCenterX',
+    'quickLogoCenterY',
+    'quickLogoBackdrop',
+    'quickLogoBackdropOwnerId',
+    'quickLogoBackdropId',
+    'quickLogoBackdropPadding',
+    'quickLogoBackdropMode',
     // User guides (persistent)
     'isUserGuide',
     'guideAxis',
@@ -47,10 +74,18 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     '_zoneOrder',
     '_cardWidth',
     '_cardHeight',
+    '_productImageLayout',
+    '_productImageLayoutVersion',
+    '__cardLabelTemplateId',
+    // Marca uma escolha feita explicitamente em apenas um card. Quando falso
+    // (ou ausente em projetos antigos), a etiqueta acompanha o modelo global
+    // da zona e pode ser reconciliada com a biblioteca central.
+    '__cardLabelTemplateOverride',
     // Override de estilo de etiqueta POR CARD ("editar so esta etiqueta"):
     // mapa prop->valor que vence os estilos da zona. Ver labelTemplateHelpers /
     // getEffectiveStylesForCard em EditorCanvas.
     '_cardStyleOverrides',
+    '__cardConfigurationProfile',
     '_productData',
     'imageUrl',
     'subTargetCheck',
@@ -60,6 +95,10 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     '__lastCardRelayoutSignature',
     // When true on a child object, prevents auto-layout from overriding user placement (persisted).
     '__manualTransform',
+    // Price labels have a separate marker for an explicit outer-card move.
+    // Editing the artwork/text inside a label must not freeze its position;
+    // the card configuration remains responsible for the label slot.
+    '__manualPricePosition',
     '__manualTransformCardW',
     '__manualTransformCardH',
     '__manualTextWidth',
@@ -71,6 +110,12 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     '__preserveManualLayout',
     '__isCustomTemplate',
     '__forceAtacarejoCanonical',
+    '__autoCollapseMissingPrices',
+    '__atacarejoPalette',
+    '__atacarejoLabelVariant',
+    '__atacDisplayUnit',
+    '__atacPackLineCompact',
+    '__atacConditionFormat',
     '__manualTemplateBaseW',
     '__manualTemplateBaseH',
     '__manualGapSingle',
@@ -106,14 +151,33 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
 
     // Text transform (preserva texto original antes de upper/lower case)
     '__rawText',
+    'dynamicUserText',
     '__textCase',
+    // Alias sem prefixo usado como fallback por serializadores legados.
+    'dynamicTextCase',
+    '__labelBackgroundImage',
 
     // Price text scaling base (referência para splashTextScale)
     '__fontSizeBase',
 
+    // Rich price text: integer and decimal stay in one Fabric IText while
+    // preserving independent per-character typography.
+    '__priceRichText',
+    '__priceRichIntegerStyle',
+    '__priceRichDecimalStyle',
+    '__priceRichIntegerScale',
+    '__priceRichDecimalScale',
+    '__priceRichIntegerOffsetX',
+    '__priceRichIntegerOffsetY',
+    '__priceRichDecimalOffsetX',
+    '__priceRichDecimalOffsetY',
+
     // Product zone metadata
     'isGridZone',
     'isProductZone',
+    // A composição veio de um Modelo de encarte e não pode ser reescrita
+    // pelas bibliotecas globais durante a hidratação.
+    'templateCompositionManaged',
     'zoneName',
     'role',
     'contentSource',
@@ -142,8 +206,17 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     'lastRowBehavior',
     'layoutDirection',
     'verticalAlign',
+    'structureByProductCountEnabled',
+    'structureByProductCount',
+    'structureByProductCountByPreviewFormat',
+    'structureVariantsByProductCount',
+    'structureVariantsByProductCountByPreviewFormat',
+    'structureVariantByProductCount',
+    'structureVariantByProductCountByPreviewFormat',
     'highlightCount',
     'highlightPos',
+    'highlightSelection',
+    'highlightIndexes',
     'highlightHeight',
     'highlightStyle',
     'splashOffsetByCol',
@@ -213,6 +286,8 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     'objectCaching',
     'statefullCache',
     '__originalSrc',
+    // Product images: idempotent alpha trim applied by the editor.
+    '__productImageTrimVersion',
 
     // Locks (persist cadeado state across reload)
     'lockMovementX',

@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS builder_themes (
     sort_order INT DEFAULT 0,
     category_name TEXT,
     tags TEXT[] DEFAULT '{}',
+    -- Lista de modelos/formats suportados. Vazia = todos os formatos.
+    model_ids UUID[] DEFAULT '{}',
+    -- Composicao visual posicionavel; elementos usam coordenadas percentuais.
+    composition JSONB DEFAULT '{}',
     css_config JSONB DEFAULT '{}',
     header_config JSONB DEFAULT '{}',
     body_config JSONB DEFAULT '{}',

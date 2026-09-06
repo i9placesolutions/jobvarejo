@@ -12,6 +12,7 @@
 import type { GlobalStyles } from '~/types/product-zone'
 import { normalizeHexColor } from './colorHelpers'
 import { toFinite } from './mathHelpers'
+import { normalizeProductCardConfiguration } from './product-card-configuration'
 
 /**
  * Normaliza um objeto parcial de GlobalStyles para o tipo completo:
@@ -98,7 +99,8 @@ export const normalizeGlobalStyles = (
         priceFontWeight: merged.priceFontWeight === '' || merged.priceFontWeight === null ? undefined : merged.priceFontWeight,
         priceFontStyle: String(merged.priceFontStyle ?? defaults.priceFontStyle ?? 'normal').trim().toLowerCase() === 'italic'
             ? 'italic'
-            : 'normal'
+            : 'normal',
+        cardLayout: normalizeProductCardConfiguration(merged.cardLayout)
     }
 
     const align = String(normalized.prodNameAlign || '').toLowerCase()

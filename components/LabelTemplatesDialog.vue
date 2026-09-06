@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { defineAsyncComponent, ref } from 'vue'
 import type { LabelTemplate } from '~/types/label-template'
 
 const LabelTemplateManager = defineAsyncComponent(() => import('./LabelTemplateManager.vue'))
+
+const managerRef = ref<{ requestClose?: () => boolean } | null>(null)
+
+const handleDialogBeforeClose = () => {
+  if (!managerRef.value?.requestClose) return true
+  managerRef.value.requestClose()
+  return false
+}
 
 defineProps<{
   modelValue: boolean
@@ -32,11 +40,13 @@ const emit = defineEmits<{
     :model-value="modelValue"
     title="Modelos de Etiqueta"
     width="min(920px, 96vw)"
+    :before-close="handleDialogBeforeClose"
     @update:model-value="emit('update:modelValue', $event)"
     @close="emit('update:modelValue', false)"
   >
     <template #default>
       <LabelTemplateManager
+        ref="managerRef"
         :templates="templates"
         :selected-template-id="selectedTemplateId ?? undefined"
         :can-save-from-selection="canSaveFromSelection"

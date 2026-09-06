@@ -13,8 +13,8 @@ export default defineEventHandler(async (event) => {
 
   const theme = await pgOneOrNull(
     `SELECT id, name, slug, thumbnail, background_image, is_premium,
-            category_name, tags, css_config, header_config, body_config,
-            footer_config, sort_order
+            category_name, tags, model_ids, composition, css_config, header_config,
+            body_config, footer_config, sort_order
      FROM public.builder_themes
      WHERE id = $1 AND is_active = true
      LIMIT 1`,

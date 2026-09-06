@@ -477,12 +477,21 @@ export type PriceGroupPlacement = {
     cardH?: number
 }
 
+export type NormalizePriceGroupPlacementOptions = {
+    /**
+     * Preserve the current group scale while clamping only its position.
+     * Moving a label must never be interpreted as a request to refit it.
+     */
+    preserveScale?: boolean
+}
+
 export const normalizePriceGroupPlacementInCard = (
     priceGroup: any,
     cardW: number,
     cardH: number,
     placement: PriceGroupPlacement | null | undefined,
-    hasAtacStructure: (pg: any) => boolean
+    hasAtacStructure: (pg: any) => boolean,
+    options: NormalizePriceGroupPlacementOptions = {}
 ): boolean => {
     if (!priceGroup || cardW <= 0 || cardH <= 0) return false
 
@@ -500,11 +509,17 @@ export const normalizePriceGroupPlacementInCard = (
     const requestedScaleY = Math.max(0.0001, Math.abs(Number(priceGroup.scaleY ?? 1)) || 1)
     const signedScaleX = Number(priceGroup.scaleX ?? 1) < 0 ? -1 : 1
     const signedScaleY = Number(priceGroup.scaleY ?? 1) < 0 ? -1 : 1
-    const fitScale = Math.min(
-        1,
-        localBounds.width > 0 ? (maxAllowedW / (localBounds.width * requestedScaleX)) : 1,
-        localBounds.height > 0 ? (maxAllowedH / (localBounds.height * requestedScaleY)) : 1
-    )
+    // A drag is a placement operation, not a layout operation.  In that
+    // case the caller opts out of the safety refit below so a label does not
+    // mysteriously shrink as soon as it is moved.  Creation/relayout keeps
+    // the historical fit-to-card behaviour by default.
+    const fitScale = options.preserveScale
+        ? 1
+        : Math.min(
+            1,
+            localBounds.width > 0 ? (maxAllowedW / (localBounds.width * requestedScaleX)) : 1,
+            localBounds.height > 0 ? (maxAllowedH / (localBounds.height * requestedScaleY)) : 1
+        )
     const scaleClamp = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 1
     const nextScaleX = requestedScaleX * scaleClamp
     const nextScaleY = requestedScaleY * scaleClamp

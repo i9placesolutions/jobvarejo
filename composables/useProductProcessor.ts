@@ -1,4 +1,5 @@
 import { toWasabiDirectUrl } from '~/utils/storageProxy';
+import { inferUnitLabelFromProduct } from '~/utils/priceTagText';
 
 export interface SmartProductImageCandidate {
     id: string;
@@ -46,6 +47,7 @@ export interface SmartProduct {
     packQuantity?: number | null;
     packUnit?: string | null;
     packageLabel?: string | null;
+    unit?: string | null;
     // ===== OUTROS =====
     price_mode: string;
     limit: string | null;
@@ -351,6 +353,13 @@ export const useProductProcessor = () => {
             packQuantity: p.packQuantity ?? null,
             packUnit: p.packUnit ?? '',
             packageLabel: p.packageLabel ?? '',
+            // Recalcula a unidade comercial para nao aceitar `UN` generico
+            // quando a gramatura/nome deixa claro que e KG, PCT, CX etc.
+            unit: inferUnitLabelFromProduct({
+                ...p,
+                name: p.name || 'Produto sem nome',
+                unit: p.unit || ''
+            }) || String(p.unit || '').trim().toUpperCase() || null,
             // Outros
             price_mode: p.price_mode || 'retail',
             limit: p.limit || '',

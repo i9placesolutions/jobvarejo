@@ -6,6 +6,32 @@ import {
   getFontWeightOptionsForFamily,
   normalizeFontWeightForFamily
 } from '~/utils/font-catalog'
+import {
+  getRichPriceSegmentFontSize,
+  getRichPriceSegmentOffset,
+  isRichPriceTextObject,
+  applyRichPriceTextValue,
+  installRichPriceTextRenderer,
+  setRichPriceBaseFontSize,
+  setRichPriceSegmentOffset,
+  setRichPriceSegmentStyle,
+  positionRichPriceUnit,
+  migratePriceGroupToRichText
+} from '~/utils/priceRichText'
+import {
+  applyImageTrimBounds,
+  detectImageTrimBounds
+} from '~/utils/fabricImageHelpers'
+import { resolveFardoSpecialPricePalette } from '~/utils/fardoSpecialPriceHelpers'
+import {
+  LABEL_TEMPLATE_EXTRA_PROPS,
+  MANUAL_TEMPLATE_DERIVED_PROPS,
+  MANUAL_TEMPLATE_STABLE_PROPS
+} from '~/utils/labelTemplateHelpers'
+import {
+  disableFabricGroupAutoLayout,
+  refreshFabricGroupBounds
+} from '~/utils/fabricGroupHelpers'
 
 const props = defineProps<{
   template: LabelTemplate | null
@@ -24,6 +50,7 @@ const emit = defineEmits<{
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const viewportEl = ref<HTMLDivElement | null>(null)
 const imageInputEl = ref<HTMLInputElement | null>(null)
+const backgroundImageInputEl = ref<HTMLInputElement | null>(null)
 const replaceImageInputEl = ref<HTMLInputElement | null>(null)
 let fabric: any = null
 let canvas: any = null
@@ -44,15 +71,211 @@ const findObjectByNameDeep = (root: any, wantedName: string): any | null => {
   return null
 }
 
-// Debug helper to list all objects in a group
-const listAllObjects = (root: any, prefix = '') => {
-  if (!root) return
-  const name = root?.name || root?.type || 'unknown'
-  console.log(`[listObjects] ${prefix}${name} (${root?.type})`)
-  const children: any[] = Array.isArray(root?._objects) ? root._objects : (typeof root?.getObjects === 'function' ? root.getObjects() : [])
-  for (const c of children || []) {
-    listAllObjects(c, prefix + '  ')
+const MAX_LABEL_IMAGE_BYTES = 15 * 1024 * 1024
+const LABEL_IMAGE_TRIM_ALPHA_THRESHOLD = 12
+
+const isLabelBackgroundImageName = (name: unknown): boolean => {
+  const normalized = String(name || '').trim()
+  return normalized === 'label_bg_image'
+    || normalized === 'price_bg_image'
+    || normalized === 'splash_image'
+}
+
+const trimLabelImageToVisibleContent = (img: any): boolean => {
+  if (!img || String(img.type || '').toLowerCase() !== 'image') return false
+
+  const bounds = detectImageTrimBounds(img, {
+    alphaThreshold: LABEL_IMAGE_TRIM_ALPHA_THRESHOLD,
+    padding: 0
+  })
+  if (!bounds) return false
+
+  const current = {
+    left: Number(img.cropX || 0),
+    top: Number(img.cropY || 0),
+    width: Number(img.width || 0),
+    height: Number(img.height || 0)
   }
+  const alreadyTrimmed = Math.abs(current.left - bounds.left) < 0.5 &&
+    Math.abs(current.top - bounds.top) < 0.5 &&
+    Math.abs(current.width - bounds.width) < 0.5 &&
+    Math.abs(current.height - bounds.height) < 0.5
+  if (alreadyTrimmed) return false
+
+  const applied = applyImageTrimBounds(img, bounds, { preserveVisualPosition: true })
+  if (!applied) return false
+  img.set?.({ dirty: true, objectCaching: false })
+  img.setCoords?.()
+  return true
+}
+
+const trimCustomLabelImages = (root: any): number => {
+  let trimmed = 0
+  const visit = (obj: any) => {
+    if (!obj) return
+    const type = String(obj.type || '').toLowerCase()
+    if (type === 'image' && !isLabelBackgroundImageName(obj.name)) {
+      if (trimLabelImageToVisibleContent(obj)) trimmed += 1
+    }
+    const children = getObjectChildren(obj)
+    children.forEach(visit)
+  }
+  visit(root)
+  return trimmed
+}
+
+const decodeLabelImageElement = async (el: any): Promise<void> => {
+  if (!el) return
+  // Preferir decode(): garante que os pixels do WebP/remoto estejam prontos
+  // para leitura via canvas (getImageData) antes de qualquer recorte.
+  try {
+    if (typeof el.decode === 'function') {
+      await el.decode()
+      return
+    }
+  } catch {
+    // decode() pode rejeitar em alguns navegadores/imagens; cai para o onload.
+  }
+  if (el.complete && (el.naturalWidth || el.width)) return
+  await new Promise<void>((resolve) => {
+    const done = () => resolve()
+    try {
+      el.addEventListener?.('load', done, { once: true })
+      el.addEventListener?.('error', done, { once: true })
+    } catch {
+      resolve()
+      return
+    }
+    // Timeout de seguranca: nunca travar a abertura do editor por uma imagem.
+    setTimeout(done, 4000)
+  })
+}
+
+const waitForLabelImagesDecoded = async (root: any): Promise<void> => {
+  if (!root) return
+  const elements: any[] = []
+  const seen = new Set<any>()
+  const visit = (obj: any) => {
+    if (!obj) return
+    if (String(obj.type || '').toLowerCase() === 'image') {
+      const el = obj.getElement?.() || obj._element || obj._originalElement
+      if (el && !seen.has(el)) {
+        seen.add(el)
+        elements.push(el)
+      }
+    }
+    getObjectChildren(obj).forEach(visit)
+  }
+  visit(root)
+  if (!elements.length) return
+  await Promise.all(elements.map((el) => decodeLabelImageElement(el)))
+}
+
+const getEditorErrorMessage = (error: unknown, fallback: string) => {
+  const message = String((error as any)?.message || '').trim()
+  return message || fallback
+}
+
+const validateLabelImageFile = (file: File) => {
+  if (!file.type || !file.type.toLowerCase().startsWith('image/')) {
+    throw new Error('Escolha um arquivo de imagem.')
+  }
+  if (file.size > MAX_LABEL_IMAGE_BYTES) {
+    throw new Error('A imagem deve ter no máximo 15 MB.')
+  }
+}
+
+const readLabelImageFile = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result || ''))
+  reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'))
+  reader.readAsDataURL(file)
+})
+
+const reportEditorError = (error: unknown, fallback: string) => {
+  const message = getEditorErrorMessage(error, fallback)
+  editorError.value = message
+  console.error(`[LabelTemplateMiniEditor] ${message}`, error)
+}
+
+const getObjectChildren = (root: any): any[] => {
+  if (!root) return []
+  if (Array.isArray(root?._objects)) return root._objects
+  return typeof root?.getObjects === 'function' ? root.getObjects() || [] : []
+}
+
+const getObjectParent = (obj: any): any | null => {
+  const parent = obj?.group
+  return parent && parent !== canvas ? parent : null
+}
+
+const getDirectChildOfEditorGroup = (obj: any): any | null => {
+  if (!obj || !group || obj === group) return null
+  let current = obj
+  const visited = new Set<any>()
+  while (current && current !== group && !visited.has(current)) {
+    visited.add(current)
+    const parent = current.group
+    if (!parent) return null
+    if (parent === group) return current
+    current = parent
+  }
+  return null
+}
+
+const markObjectTreeDirty = (obj: any) => {
+  let current = obj
+  const visited = new Set<any>()
+  while (current && !visited.has(current)) {
+    visited.add(current)
+    current.dirty = true
+    current.setCoords?.()
+    if (current === group) break
+    current = current.group
+  }
+  group?.setCoords?.()
+  group && (group.dirty = true)
+}
+
+const removeObjectFromEditorTree = (obj: any): boolean => {
+  if (!obj || obj === group) return false
+  const parent = getObjectParent(obj) || (group && getObjectChildren(group).includes(obj) ? group : null)
+  if (!parent) return false
+
+  let removed = false
+  if (typeof parent.remove === 'function') {
+    const result = parent.remove(obj)
+    removed = Array.isArray(result) ? result.includes(obj) : result === obj || result === true
+  }
+  if (!removed) {
+    const objects = getObjectChildren(parent)
+    const index = objects.indexOf(obj)
+    if (index >= 0) {
+      objects.splice(index, 1)
+      parent._onObjectRemoved?.(obj)
+      removed = true
+    }
+  }
+  if (!removed) return false
+
+  obj.group = undefined
+  refreshManualGroupBounds(parent)
+  markObjectTreeDirty(parent)
+  return true
+}
+
+const reorderObjectInParent = (obj: any, direction: -1 | 1): boolean => {
+  if (!obj || obj === group) return false
+  const parent = getObjectParent(obj) || (group && getObjectChildren(group).includes(obj) ? group : null)
+  if (!parent) return false
+  const objects = getObjectChildren(parent)
+  const index = objects.indexOf(obj)
+  const next = index + direction
+  if (index < 0 || next < 0 || next >= objects.length) return false
+  ;[objects[index], objects[next]] = [objects[next], objects[index]]
+  parent._onStackOrderChanged?.(obj)
+  markObjectTreeDirty(parent)
+  return true
 }
 
 const selectedObj = shallowRef<any>(null)
@@ -62,6 +285,7 @@ const editorName = ref('')
 const isReady = ref(false)
 const zoomPct = ref(100)
 const saveError = ref<string | null>(null)
+const editorError = ref<string | null>(null)
 const isSaving = ref(false)
 const isLoadingTemplate = ref(false)
 
@@ -69,8 +293,11 @@ const MINI_EDITOR_HISTORY_LIMIT = 120
 const historyStack = ref<any[]>([])
 const historyIndex = ref(-1)
 const historyFingerprint = ref('')
+const savedHistoryFingerprint = ref('')
+const savedEditorName = ref('')
 let isRestoringHistory = false
 let historyDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let resizeObserver: ResizeObserver | null = null
 const allContentMoveMode = ref(false)
 const childInteractivityCache = new WeakMap<any, { selectable: boolean; evented: boolean; hasControls: boolean; hasBorders: boolean }>()
 let renderQueued = false
@@ -79,6 +306,34 @@ const showFillColorPicker = ref(false)
 const showFillColorPicker2 = ref(false)
 const showStrokeColorPicker = ref(false)
 const showTextStrokeColorPicker = ref(false)
+
+// Cores por trecho permitem montar um texto com mais de uma cor sem criar
+// um novo modelo de dados: o Fabric persiste os estilos de cada caractere.
+const textSegmentColor = ref('#facc15')
+const textSecondColor = ref('#facc15')
+const gradientStart = ref('#ffffff')
+const gradientEnd = ref('#f59e0b')
+const gradientDirection = ref('vertical')
+const applyTextGradient = () => {
+  const obj = selectedObj.value
+  if (!obj || !isText.value || !fabric?.Gradient) return
+  // Cores por caractere prevalecem sobre o preenchimento do texto.
+  for (const line of Object.values(obj.styles || {}) as any[]) {
+    for (const style of Object.values(line) as any[]) delete style.fill
+  }
+  for (const key of ['__priceRichIntegerStyle', '__priceRichDecimalStyle']) {
+    if (obj[key]) obj[key] = { ...obj[key], fill: undefined }
+  }
+  obj.set('fill', new fabric.Gradient({
+    type: 'linear', gradientUnits: 'percentage',
+    coords: { x1: 0, y1: 0, x2: gradientDirection.value === 'vertical' ? 0 : 1, y2: gradientDirection.value === 'horizontal' ? 0 : 1 },
+    colorStops: [{ offset: 0, color: gradientStart.value }, { offset: 1, color: gradientEnd.value }]
+  }))
+  finishTextColorChange(obj, 'textGradient')
+}
+const textRangeStart = ref(0)
+const textRangeEnd = ref(0)
+const textRangeIsActive = ref(false)
 
 // Trigger elements for color pickers positioning
 const fillColorTrigger = ref<HTMLElement | null>(null)
@@ -137,73 +392,7 @@ const applyPresetColor = (color: string, property: 'fill' | 'stroke') => {
 
 // Keep parity with EditorCanvas label template serialization so templates behave the same
 // when applied to product cards (proportional scaling, stroke/roundness, etc).
-const TEMPLATE_EXTRA_PROPS = [
-  '_customId',
-  'name',
-  'fontFamily',
-  'fontSize',
-  'fontWeight',
-  'fontStyle',
-  'underline',
-  'linethrough',
-  'overline',
-  'textAlign',
-  'lineHeight',
-  'visible',
-  'charSpacing',
-  '__rawText',
-  '__textCase',
-  '__preserveManualLayout',
-  '__forceAtacarejoCanonical',
-  '__atacValueVariants',
-  '__atacVariantGroups',
-  '__fontScale',
-  '__yOffsetRatio',
-  '__manualScaleX',
-  '__manualScaleY',
-  '__strokeWidth',
-  '__roundness',
-  '__originalWidth',
-  '__originalHeight',
-  '__originalFontSize',
-  '__originalFontFamily',
-  '__originalLeft',
-  '__originalTop',
-  '__originalOriginX',
-  '__originalOriginY',
-  '__originalScaleX',
-  '__originalScaleY',
-  '__originalRadius',
-  '__originalRx',
-  '__originalRy',
-  '__originalStrokeWidth',
-  '__originalFill',
-  '__shadowBlur',
-  '__manualTemplateBaseW',
-  '__manualTemplateBaseH',
-  '__manualGapSingle',
-  '__manualGapRetail',
-  '__manualGapWholesale',
-  '__manualSingleAnchors',
-  '__cornerTL',
-  '__cornerTR',
-  '__cornerBL',
-  '__cornerBR',
-  '__originalCornerTL',
-  '__originalCornerTR',
-  '__originalCornerBL',
-  '__originalCornerBR'
-]
-const MANUAL_TEMPLATE_STABLE_PROPS = [
-  '__manualTemplateBaseW',
-  '__manualTemplateBaseH'
-] as const
-const MANUAL_TEMPLATE_DERIVED_PROPS = [
-  '__manualGapSingle',
-  '__manualGapRetail',
-  '__manualGapWholesale',
-  '__manualSingleAnchors'
-] as const
+const TEMPLATE_EXTRA_PROPS = LABEL_TEMPLATE_EXTRA_PROPS
 
 const ATAC_VALUE_VARIANT_KEYS = ['tiny', 'normal', 'large'] as const
 type AtacValueVariantKey = (typeof ATAC_VALUE_VARIANT_KEYS)[number]
@@ -253,12 +442,14 @@ const ATAC_PREVIEW_OBJECT_NAMES = [
   'retail_currency_text',
   'retail_integer_text',
   'retail_decimal_text',
+  'retail_price_text',
   'retail_unit_text',
   'retail_pack_line_text',
   'wholesale_banner_text',
   'wholesale_currency_text',
   'wholesale_integer_text',
   'wholesale_decimal_text',
+  'wholesale_price_text',
   'wholesale_unit_text',
   'wholesale_pack_line_text'
 ] as const
@@ -473,6 +664,35 @@ const measureContentBoundsLocal = (
   }
 }
 
+const getLabelVisualBaseBounds = () => {
+  if (!group) return null
+  const all = collectObjectsDeepLocal(group)
+  const isAtacarejo = !!findObjectByNameDeep(group, 'atac_retail_bg')
+  const hasPriceBackground = !!findObjectByNameDeep(group, 'price_bg')
+  const names = isAtacarejo
+    ? ['atac_retail_bg', 'atac_banner_bg', 'atac_wholesale_bg']
+    : hasPriceBackground
+      ? ['price_bg']
+      : ['label_bg_image', 'price_bg_image', 'splash_image']
+  const anchors = names
+    .map((name) => findByNameInObjects(all, name))
+    .filter((obj) => isObjectShownForBoundsLocal(obj))
+  const bounds = measureContentBoundsLocal(anchors)
+  if (bounds && bounds.width > 0 && bounds.height > 0) return bounds
+
+  const width = Number((group as any).__manualTemplateBaseW || group.width || 300)
+  const height = Number((group as any).__manualTemplateBaseH || group.height || 220)
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+  return {
+    left: -width / 2,
+    right: width / 2,
+    top: -height / 2,
+    bottom: height / 2,
+    width,
+    height
+  }
+}
+
 const parseColorRgbaLocal = (input: any): { r: number; g: number; b: number; a: number } | null => {
   if (typeof input !== 'string') return null
   const raw = input.trim().toLowerCase()
@@ -538,28 +758,39 @@ const ensureAtacarejoPreviewContrast = (priceGroup: any) => {
   const retailBg = findByNameInObjects(all, 'atac_retail_bg')
   const bannerBg = findByNameInObjects(all, 'atac_banner_bg')
   const wholesaleBg = findByNameInObjects(all, 'atac_wholesale_bg')
+  const palette = (priceGroup as any).__atacarejoPalette
+    ? resolveFardoSpecialPricePalette((priceGroup as any).__atacarejoPalette)
+    : {
+      retailBg: '#ef4444',
+      bannerBg: '#ffffff',
+      wholesaleBg: '#fde047',
+      retailText: '#ffffff',
+      bannerText: '#000000',
+      wholesaleText: '#000000'
+    }
   if (!retailBg && !bannerBg && !wholesaleBg) return
+  const hasAuthoredPalette = !!(priceGroup as any).__atacarejoPalette
 
   const shouldFixRetail = !!retailBg && (
     retailBg.visible === false ||
     isTransparentLikeColorLocal(retailBg.fill) ||
-    isDarkOpaqueColorLocal(retailBg.fill)
+    (!hasAuthoredPalette && isDarkOpaqueColorLocal(retailBg.fill))
   )
   const shouldFixWholesale = !!wholesaleBg && (
     wholesaleBg.visible === false ||
     isTransparentLikeColorLocal(wholesaleBg.fill) ||
-    isDarkOpaqueColorLocal(wholesaleBg.fill)
+    (!hasAuthoredPalette && isDarkOpaqueColorLocal(wholesaleBg.fill))
   )
   const shouldFixBanner = !!bannerBg && (
     bannerBg.visible === false ||
     isTransparentLikeColorLocal(bannerBg.fill) ||
-    isDarkOpaqueColorLocal(bannerBg.fill)
+    (!hasAuthoredPalette && isDarkOpaqueColorLocal(bannerBg.fill))
   )
   if (!shouldFixRetail && !shouldFixWholesale && !shouldFixBanner) return
 
-  if (shouldFixRetail) retailBg.set?.({ fill: '#ef4444', visible: true, opacity: 1 })
-  if (shouldFixBanner) bannerBg.set?.({ fill: '#ffffff', visible: true, opacity: 1 })
-  if (shouldFixWholesale) wholesaleBg.set?.({ fill: '#fde047', visible: true, opacity: 1 })
+  if (shouldFixRetail) retailBg.set?.({ fill: hasAuthoredPalette ? palette.retailBg : '#ef4444', visible: true, opacity: 1 })
+  if (shouldFixBanner) bannerBg.set?.({ fill: hasAuthoredPalette ? palette.bannerBg : '#ffffff', visible: true, opacity: 1 })
+  if (shouldFixWholesale) wholesaleBg.set?.({ fill: hasAuthoredPalette ? palette.wholesaleBg : '#fde047', visible: true, opacity: 1 })
 
   const ensureTextVisible = (name: string, fallbackColor: string) => {
     const obj = findByNameInObjects(all, name)
@@ -569,17 +800,19 @@ const ensureAtacarejoPreviewContrast = (priceGroup: any) => {
     if (obj.visible === false) obj.set?.({ visible: true })
   }
 
-  ensureTextVisible('retail_currency_text', '#ffffff')
-  ensureTextVisible('retail_integer_text', '#ffffff')
-  ensureTextVisible('retail_decimal_text', '#ffffff')
-  ensureTextVisible('retail_unit_text', '#ffffff')
-  ensureTextVisible('retail_pack_line_text', '#ffffff')
-  ensureTextVisible('wholesale_banner_text', '#111827')
-  ensureTextVisible('wholesale_currency_text', '#111827')
-  ensureTextVisible('wholesale_integer_text', '#111827')
-  ensureTextVisible('wholesale_decimal_text', '#111827')
-  ensureTextVisible('wholesale_unit_text', '#111827')
-  ensureTextVisible('wholesale_pack_line_text', '#111827')
+  ensureTextVisible('retail_currency_text', hasAuthoredPalette ? palette.retailText : '#ffffff')
+  ensureTextVisible('retail_integer_text', hasAuthoredPalette ? palette.retailText : '#ffffff')
+  ensureTextVisible('retail_decimal_text', hasAuthoredPalette ? palette.retailText : '#ffffff')
+  ensureTextVisible('retail_price_text', hasAuthoredPalette ? palette.retailText : '#ffffff')
+  ensureTextVisible('retail_unit_text', hasAuthoredPalette ? palette.retailText : '#ffffff')
+  ensureTextVisible('retail_pack_line_text', hasAuthoredPalette ? palette.retailText : '#ffffff')
+  ensureTextVisible('wholesale_banner_text', hasAuthoredPalette ? palette.bannerText : '#111827')
+  ensureTextVisible('wholesale_currency_text', hasAuthoredPalette ? palette.wholesaleText : '#111827')
+  ensureTextVisible('wholesale_integer_text', hasAuthoredPalette ? palette.wholesaleText : '#111827')
+  ensureTextVisible('wholesale_decimal_text', hasAuthoredPalette ? palette.wholesaleText : '#111827')
+  ensureTextVisible('wholesale_price_text', hasAuthoredPalette ? palette.wholesaleText : '#111827')
+  ensureTextVisible('wholesale_unit_text', hasAuthoredPalette ? palette.wholesaleText : '#111827')
+  ensureTextVisible('wholesale_pack_line_text', hasAuthoredPalette ? palette.wholesaleText : '#111827')
 
   safeAddWithUpdate(priceGroup)
 }
@@ -659,9 +892,10 @@ const ensureRedBurstPreviewVisibility = (priceGroup: any) => {
   const headerText = byName('price_header_text')
   const burst = byName('price_burst_line_a')
   const currencyText = byName('price_currency_text')
+  const richPrice = byName('price_value_text')
   const priceInteger = byName('price_integer_text')
   const priceDecimal = byName('price_decimal_text')
-  if (!(priceBg && headerBg && headerText && burst && priceInteger && priceDecimal)) return
+  if (!(priceBg && headerBg && headerText && burst && (richPrice || (priceInteger && priceDecimal)))) return
 
   let changed = false
   const ensureShellVisible = (obj: any) => {
@@ -680,8 +914,10 @@ const ensureRedBurstPreviewVisibility = (priceGroup: any) => {
   ensureShellVisible(headerBg)
   changed = reviveRedBurstNodeLocal(headerText, { fallbackFill: '#ffd94c', fallbackFontSize: 28, fallbackText: 'OFERTA' }) || changed
   changed = reviveRedBurstNodeLocal(currencyText, { fallbackFill: '#ffffff', fallbackFontSize: 30, fallbackText: 'R$' }) || changed
-  changed = reviveRedBurstNodeLocal(priceInteger, { fallbackFill: '#ffffff', fallbackFontSize: 92, fallbackText: '0' }) || changed
-  changed = reviveRedBurstNodeLocal(priceDecimal, { fallbackFill: '#ffffff', fallbackFontSize: 44, fallbackText: ',00' }) || changed
+  changed = reviveRedBurstNodeLocal(priceInteger || richPrice, { fallbackFill: '#ffffff', fallbackFontSize: 92, fallbackText: '0' }) || changed
+  if (priceDecimal) {
+    changed = reviveRedBurstNodeLocal(priceDecimal, { fallbackFill: '#ffffff', fallbackFontSize: 44, fallbackText: ',00' }) || changed
+  }
 
   if (changed) safeAddWithUpdate(priceGroup)
 }
@@ -1113,7 +1349,7 @@ const fitAtacarejoValuesForPreview = (priceGroup: any) => {
 
   const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
   const getIntegerDigitsCount = (obj: any) => {
-    const raw = String(obj?.text ?? '').replace(/[^\d]/g, '')
+    const raw = (String(obj?.text ?? '').split(/[,.]/, 1)[0] || '').replace(/[^\d]/g, '')
     const normalized = raw.replace(/^0+(?=\d)/, '')
     return Math.max(1, normalized.length || raw.length || 1)
   }
@@ -1171,42 +1407,52 @@ const fitAtacarejoValuesForPreview = (priceGroup: any) => {
     currency: any
     integer: any
     decimal: any
+    rich?: any
     unit: any
     pack: any
   }) => {
-    const { bg, currency, integer, decimal, unit, pack } = opts
-    if (!bg || !integer || !decimal) return
+    const { bg, currency, integer, decimal, rich, unit, pack } = opts
+    if (!bg || (!rich && (!integer || !decimal))) return
 
-    const digits = getIntegerDigitsCount(integer)
+    const valueText = rich || integer
+    const digits = getIntegerDigitsCount(valueText)
     const variant = variants[resolveVariantKey(digits)]
     const maxW = getInnerWidth(bg, 0.075, 12, 34)
     const chainMaxW = Math.max(20, maxW * variant.chainWidthRatio)
 
     restoreBaseScale(integer)
     restoreBaseScale(decimal)
+    restoreBaseScale(rich)
     restoreBaseScale(unit)
     restoreBaseScale(currency)
 
-    const intY = Number(integer.top || 0)
-    const decY = Number(decimal.top || intY)
+    const intY = Number(valueText?.top || 0)
+    const decY = Number(decimal?.top || intY)
     const unitY = Number(unit?.top || decY)
     const unitVisible = isObjectShownForBoundsLocal(unit)
 
-    layoutPriceLocal({
-      integer,
-      decimal,
-      unit: unitVisible ? unit : undefined,
-      intX: 0,
-      intY,
-      decY,
-      unitY,
-      maxWidth: chainMaxW,
-      gapPx: variant.intDecimalGap,
-      minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
-      maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
-    })
+    if (rich && isRichPriceTextObject(rich)) {
+      rich.set?.({ originX: 'left', originY: 'center', left: 0, top: intY })
+      if (unitVisible) {
+        positionRichPriceUnit(rich, unit, unitY)
+      }
+    } else {
+      layoutPriceLocal({
+        integer,
+        decimal,
+        unit: unitVisible ? unit : undefined,
+        intX: 0,
+        intY,
+        decY,
+        unitY,
+        maxWidth: chainMaxW,
+        gapPx: variant.intDecimalGap,
+        minGapPx: PRICE_INTEGER_DECIMAL_GAP_PX,
+        maxGapPx: PRICE_INTEGER_DECIMAL_GAP_PX
+      })
+    }
 
-    const chain = [integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[]
+    const chain = [valueText, rich ? null : decimal, unitVisible ? unit : null].filter(Boolean) as any[]
     const chainBounds = measureHorizontalBoundsLocal(chain)
     if (currency && chainBounds) {
       const curGap = Math.max(2, maxW * variant.currencyGapRatio)
@@ -1221,6 +1467,10 @@ const fitAtacarejoValuesForPreview = (priceGroup: any) => {
     centerObjectsX(full, 0)
     fitChain(full, maxW, variant.minScale)
     centerObjectsX(full, 0)
+    if (rich && unitVisible) {
+      positionRichPriceUnit(rich, unit, unitY)
+      centerObjectsX(full, 0)
+    }
 
     if (pack && isObjectShownForBoundsLocal(pack)) fitText(pack, maxW * variant.packWidthRatio, 0.5)
   }
@@ -1228,11 +1478,13 @@ const fitAtacarejoValuesForPreview = (priceGroup: any) => {
   const retailCurrency = findByNameInObjects(all, 'retail_currency_text')
   const retailInteger = findByNameInObjects(all, 'retail_integer_text')
   const retailDecimal = findByNameInObjects(all, 'retail_decimal_text')
+  const retailRichPrice = findByNameInObjects(all, 'retail_price_text')
   const retailUnit = findByNameInObjects(all, 'retail_unit_text')
   const retailPack = findByNameInObjects(all, 'retail_pack_line_text')
   const wholesaleCurrency = findByNameInObjects(all, 'wholesale_currency_text')
   const wholesaleInteger = findByNameInObjects(all, 'wholesale_integer_text')
   const wholesaleDecimal = findByNameInObjects(all, 'wholesale_decimal_text')
+  const wholesaleRichPrice = findByNameInObjects(all, 'wholesale_price_text')
   const wholesaleUnit = findByNameInObjects(all, 'wholesale_unit_text')
   const wholesalePack = findByNameInObjects(all, 'wholesale_pack_line_text')
   const bannerText = findByNameInObjects(all, 'wholesale_banner_text')
@@ -1241,8 +1493,8 @@ const fitAtacarejoValuesForPreview = (priceGroup: any) => {
   const wholesaleInnerW = getInnerWidth(wholesaleBg, 0.075, 12, 34)
   const bannerInnerW = getInnerWidth(bannerBg, 0.06, 8, 28)
 
-  applyTierVariant({ bg: retailBg, currency: retailCurrency, integer: retailInteger, decimal: retailDecimal, unit: retailUnit, pack: retailPack })
-  applyTierVariant({ bg: wholesaleBg, currency: wholesaleCurrency, integer: wholesaleInteger, decimal: wholesaleDecimal, unit: wholesaleUnit, pack: wholesalePack })
+  applyTierVariant({ bg: retailBg, currency: retailCurrency, integer: retailInteger, decimal: retailDecimal, rich: retailRichPrice, unit: retailUnit, pack: retailPack })
+  applyTierVariant({ bg: wholesaleBg, currency: wholesaleCurrency, integer: wholesaleInteger, decimal: wholesaleDecimal, rich: wholesaleRichPrice, unit: wholesaleUnit, pack: wholesalePack })
   fitText(retailPack, retailInnerW, 0.5)
   fitText(wholesalePack, wholesaleInnerW, 0.5)
   fitText(bannerText, bannerInnerW, 0.5)
@@ -1340,11 +1592,13 @@ const ensureAtacarejoMinimumVisible = (priceGroup: any) => {
     pick('retail_currency_text'),
     pick('retail_integer_text'),
     pick('retail_decimal_text'),
+    pick('retail_price_text'),
     pick('retail_unit_text'),
     pick('wholesale_banner_text'),
     pick('wholesale_currency_text'),
     pick('wholesale_integer_text'),
     pick('wholesale_decimal_text'),
+    pick('wholesale_price_text'),
     pick('wholesale_unit_text')
   ].filter(Boolean)
 
@@ -1403,6 +1657,7 @@ const applySerializedSnapshotToCurrentGroup = async (
   const current = typeof group.getObjects === 'function' ? group.getObjects().slice() : []
   current.forEach((o: any) => group.remove?.(o))
   enlivened.forEach((o: any) => safeAddWithUpdate(group, o))
+  migratePriceGroupToRichText(group, fabric)
 
   group.set({
     ...(opts || {}),
@@ -1495,25 +1750,30 @@ const applyAtacPreviewMode = async (mode: AtacPreviewMode) => {
 
     const preset = ATAC_PREVIEW_PRESETS[mode]
     if (preset) {
-      const retail = parsePriceBRLocal(preset.retailPrice)
-      const wholesale = parsePriceBRLocal(preset.wholesalePrice)
-
       const setText = (name: string, value: string) => {
         const obj = findObjectByNameDeep(group, name)
         if (!obj) return
         obj.set?.('text', value)
         obj.initDimensions?.()
       }
+      const setPrice = (richName: string, integerName: string, decimalName: string, value: string) => {
+        const rich = findObjectByNameDeep(group, richName)
+        if (rich && isRichPriceTextObject(rich)) {
+          applyRichPriceTextValue(rich, value)
+          return
+        }
+        const parts = parsePriceBRLocal(value)
+        setText(integerName, parts.integer)
+        setText(decimalName, parts.decimal)
+      }
 
       setText('retail_currency_text', 'R$')
-      setText('retail_integer_text', retail.integer)
-      setText('retail_decimal_text', retail.decimal)
+      setPrice('retail_price_text', 'retail_integer_text', 'retail_decimal_text', preset.retailPrice)
       setText('retail_unit_text', 'UN')
       setText('retail_pack_line_text', preset.retailPack)
       setText('wholesale_banner_text', preset.banner)
       setText('wholesale_currency_text', 'R$')
-      setText('wholesale_integer_text', wholesale.integer)
-      setText('wholesale_decimal_text', wholesale.decimal)
+      setPrice('wholesale_price_text', 'wholesale_integer_text', 'wholesale_decimal_text', preset.wholesalePrice)
       setText('wholesale_unit_text', 'UN')
       setText('wholesale_pack_line_text', preset.wholesalePack)
     }
@@ -1551,6 +1811,7 @@ const loadFabric = async () => {
   if (fabric) return
   const m: any = await import('fabric')
   fabric = m
+  installRichPriceTextRenderer(fabric)
 }
 
 const safeAddWithUpdate = (g: any, obj?: any) => {
@@ -1568,6 +1829,55 @@ const safeAddWithUpdate = (g: any, obj?: any) => {
   }
   if (typeof g.setCoords === 'function') g.setCoords()
   g.dirty = true
+}
+
+const disableManualGroupLayout = (g: any) => {
+  disableFabricGroupAutoLayout(g)
+}
+
+const refreshManualGroupBounds = (g: any) => refreshFabricGroupBounds(g)
+
+const getManualChildScale = () => {
+  const sx = Math.abs(Number(group?.scaleX || 1))
+  const sy = Math.abs(Number(group?.scaleY || 1))
+  return 1 / Math.max(1, sx, sy)
+}
+
+const addManualChild = (obj: any, parent: any = group) => {
+  if (!group || !obj || !parent) return false
+  disableManualGroupLayout(parent)
+  const placement = {
+    left: Number(obj.left || 0),
+    top: Number(obj.top || 0),
+    angle: Number(obj.angle || 0),
+    scaleX: Number(obj.scaleX || 1),
+    scaleY: Number(obj.scaleY || 1)
+  }
+  if (typeof parent.add === 'function') parent.add(obj)
+  else safeAddWithUpdate(parent, obj)
+  obj.set?.(placement)
+  obj.setCoords?.()
+  refreshManualGroupBounds(parent)
+  markObjectTreeDirty(parent)
+  return true
+}
+
+const bringGroupObjectToFront = (obj: any) => {
+  if (!group || !obj || obj === group) return
+  const parent = getObjectParent(obj) || (getObjectChildren(group).includes(obj) ? group : null)
+  if (!parent) return
+  const stack = (parent as any)._objects
+  if (Array.isArray(stack)) {
+    const index = stack.indexOf(obj)
+    if (index >= 0 && index !== stack.length - 1) {
+      stack.splice(index, 1)
+      stack.push(obj)
+      ;(parent as any)._onStackOrderChanged?.(obj)
+    }
+  } else if (typeof parent.bringObjectToFront === 'function') parent.bringObjectToFront(obj)
+  else if (typeof obj.bringToFront === 'function') obj.bringToFront()
+  obj.set?.({ visible: true, selectable: true, evented: true })
+  markObjectTreeDirty(parent)
 }
 
 const enlivenObjectsAsync = (objectsJson: any[]) => {
@@ -1714,6 +2024,8 @@ const instantiateGroupFromTemplate = async (tpl: LabelTemplate) => {
   delete (opts as any).layout
   const enlivened = await enlivenObjectsAsync(objectsJson)
   const g = new fabric.Group(enlivened, opts)
+  migratePriceGroupToRichText(g, fabric)
+  disableManualGroupLayout(g)
 
   // Fabric may drop unknown/custom JSON props when constructing a Group from options.
   // Rehydrate template metadata explicitly so variant settings persist across reopen.
@@ -1730,6 +2042,12 @@ const instantiateGroupFromTemplate = async (tpl: LabelTemplate) => {
     const rehydrateKeys = [
       '__preserveManualLayout',
       '__forceAtacarejoCanonical',
+      '__autoCollapseMissingPrices',
+      '__atacarejoPalette',
+      '__atacarejoLabelVariant',
+      '__atacDisplayUnit',
+      '__atacPackLineCompact',
+      '__atacConditionFormat',
       '__atacValueVariants',
       '__atacVariantGroups',
       '__isCustomTemplate',
@@ -1762,6 +2080,7 @@ const instantiateGroupFromTemplate = async (tpl: LabelTemplate) => {
 
 const normalizeEditorGroupTransform = (g: any) => {
   if (!g) return
+  disableManualGroupLayout(g)
   g.set({
     name: 'priceGroup',
     originX: 'center',
@@ -1845,6 +2164,16 @@ const serializeGroupForTemplate = (g: any) => {
       return value
     }
   }
+  ;[
+    '__autoCollapseMissingPrices',
+    '__atacarejoPalette',
+    '__atacarejoLabelVariant',
+    '__atacDisplayUnit',
+    '__atacPackLineCompact',
+    '__atacConditionFormat'
+  ].forEach((key) => {
+    if (key in (g as any)) json[key] = cloneSafe((g as any)[key])
+  })
   json.__preserveManualLayout = true
   // Never persist canonical enforcement from mini editor.
   json.__forceAtacarejoCanonical = false
@@ -1963,7 +2292,16 @@ const recordHistorySnapshot = (reason = 'manual') => {
   historyStack.value = base
   historyIndex.value = base.length - 1
   historyFingerprint.value = fp
-  console.debug?.('[MiniEditor] history snapshot:', reason, historyIndex.value, '/', historyStack.value.length)
+}
+
+const setAutoCollapseMissingPrices = (enabled: boolean) => {
+  if (!group || !isAtacarejoTemplate.value) return
+  ;(group as any).__autoCollapseMissingPrices = enabled
+  group.dirty = true
+  group.setCoords?.()
+  updateKey.value++
+  queueRender()
+  recordHistorySnapshot('autoCollapseMissingPrices')
 }
 
 const queueHistorySnapshot = (reason = 'manual', delayMs = 120) => {
@@ -1991,6 +2329,22 @@ const queueRender = () => {
 
 const canUndo = computed(() => historyIndex.value > 0)
 const canRedo = computed(() => historyIndex.value >= 0 && historyIndex.value < historyStack.value.length - 1)
+const hasUnsavedChanges = computed(() => (
+  (!!historyFingerprint.value && historyFingerprint.value !== savedHistoryFingerprint.value) ||
+  editorName.value.trim() !== savedEditorName.value.trim()
+))
+
+const requestClose = (): boolean => {
+  if (isSaving.value) return false
+  if (hasUnsavedChanges.value && typeof window !== 'undefined') {
+    const shouldDiscard = window.confirm('Existem alterações não salvas nesta etiqueta. Deseja sair mesmo assim?')
+    if (!shouldDiscard) return false
+  }
+  emit('close')
+  return true
+}
+
+defineExpose({ requestClose })
 
 const setAllContentMoveMode = (enabled: boolean) => {
   if (!group || typeof group.getObjects !== 'function') return
@@ -2105,21 +2459,25 @@ const selectAllContent = () => {
 
 const moveActiveObjectBy = (dx: number, dy: number) => {
   if (!canvas) return
-  const target = canvas.getActiveObject?.() || selectedObj.value || group
+  const target = selectedObj.value && selectedObj.value !== group
+    ? selectedObj.value
+    : (canvas.getActiveObject?.() || group)
   if (!target || typeof target.set !== 'function') return
   target.set({
     left: Number(target.left || 0) + dx,
     top: Number(target.top || 0) + dy
   })
   target.setCoords?.()
-  if (target !== group && target.group === group) safeAddWithUpdate(group)
+  if (target !== group && getDirectChildOfEditorGroup(target)) markObjectTreeDirty(target)
   queueRender()
   queueHistorySnapshot('keyboard-move', 140)
 }
 
 const scaleSelection = (factor: number) => {
   if (!canvas) return
-  const target = canvas.getActiveObject?.() || selectedObj.value || group
+  const target = selectedObj.value && selectedObj.value !== group
+    ? selectedObj.value
+    : (canvas.getActiveObject?.() || group)
   if (!target || typeof target.set !== 'function') return
   const currentScaleX = Number(target.scaleX || 1)
   const currentScaleY = Number(target.scaleY || 1)
@@ -2127,7 +2485,7 @@ const scaleSelection = (factor: number) => {
   const nextScaleY = Math.max(0.05, Math.min(12, currentScaleY * factor))
   target.set({ scaleX: nextScaleX, scaleY: nextScaleY })
   target.setCoords?.()
-  if (target !== group && target.group === group) safeAddWithUpdate(group)
+  if (target !== group && getDirectChildOfEditorGroup(target)) markObjectTreeDirty(target)
   queueRender()
   queueHistorySnapshot('keyboard-scale', 140)
 }
@@ -2154,6 +2512,12 @@ const handleMiniEditorKeydown = async (e: KeyboardEvent) => {
   if (key === 'escape' && allContentMoveMode.value) {
     e.preventDefault()
     setAllContentMoveMode(false)
+    return
+  }
+
+  if (key === 'escape') {
+    e.preventDefault()
+    requestClose()
     return
   }
 
@@ -2259,10 +2623,21 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
 
   const bannerBg = findByNameInObjects(all, 'atac_banner_bg')
   const wholesaleBg = findByNameInObjects(all, 'atac_wholesale_bg')
+  const palette = (priceGroup as any).__atacarejoPalette
+    ? resolveFardoSpecialPricePalette((priceGroup as any).__atacarejoPalette)
+    : {
+      retailBg: '#ef4444',
+      bannerBg: '#ffffff',
+      wholesaleBg: '#fde047',
+      retailText: '#ffffff',
+      bannerText: '#000000',
+      wholesaleText: '#000000'
+    }
 
   const retailCurrency = findByNameInObjects(all, 'retail_currency_text')
   const retailInteger = findByNameInObjects(all, 'retail_integer_text')
   const retailDecimal = findByNameInObjects(all, 'retail_decimal_text')
+  const retailRichPrice = findByNameInObjects(all, 'retail_price_text')
   const retailUnit = findByNameInObjects(all, 'retail_unit_text')
   const retailPack = findByNameInObjects(all, 'retail_pack_line_text')
 
@@ -2271,6 +2646,7 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
   const wholesaleCurrency = findByNameInObjects(all, 'wholesale_currency_text')
   const wholesaleInteger = findByNameInObjects(all, 'wholesale_integer_text')
   const wholesaleDecimal = findByNameInObjects(all, 'wholesale_decimal_text')
+  const wholesaleRichPrice = findByNameInObjects(all, 'wholesale_price_text')
   const wholesaleUnit = findByNameInObjects(all, 'wholesale_unit_text')
   const wholesalePack = findByNameInObjects(all, 'wholesale_pack_line_text')
 
@@ -2287,6 +2663,7 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
     setVisibleForEditor(retailCurrency, true)
     setVisibleForEditor(retailInteger, true)
     setVisibleForEditor(retailDecimal, true)
+    setVisibleForEditor(retailRichPrice, true)
     setVisibleForEditor(retailUnit, true)
   }
 
@@ -2294,6 +2671,7 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
   setVisibleForEditor(retailCurrency, showRetail)
   setVisibleForEditor(retailInteger, showRetail)
   setVisibleForEditor(retailDecimal, showRetail)
+  setVisibleForEditor(retailRichPrice, showRetail)
   setVisibleForEditor(retailUnit, showRetail)
   setVisibleForEditor(retailPack, showRetail && String(retailPack?.text || '').trim().length > 0)
 
@@ -2301,6 +2679,7 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
   setVisibleForEditor(wholesaleCurrency, showWholesale)
   setVisibleForEditor(wholesaleInteger, showWholesale)
   setVisibleForEditor(wholesaleDecimal, showWholesale)
+  setVisibleForEditor(wholesaleRichPrice, showWholesale)
   setVisibleForEditor(wholesaleUnit, showWholesale)
   setVisibleForEditor(wholesalePack, showWholesale && String(wholesalePack?.text || '').trim().length > 0)
 
@@ -2413,9 +2792,9 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
     return { min: y0, max: y0 + h }
   }
 
-  if (showRetail) setBg(retailBg, retailH, centers.retail, clamp(retailH * 0.22, 10, 28), '#ef4444')
-  if (showBanner && bannerBg) setBg(bannerBg, bannerH, centers.banner, clamp(bannerH * 0.48, 8, 20), '#ffffff')
-  if (showWholesale) setBg(wholesaleBg, wholesaleH, centers.wholesale, clamp(wholesaleH * 0.22, 10, 28), '#fde047')
+  if (showRetail) setBg(retailBg, retailH, centers.retail, clamp(retailH * 0.22, 10, 28), palette.retailBg)
+  if (showBanner && bannerBg) setBg(bannerBg, bannerH, centers.banner, clamp(bannerH * 0.48, 8, 20), palette.bannerBg)
+  if (showWholesale) setBg(wholesaleBg, wholesaleH, centers.wholesale, clamp(wholesaleH * 0.22, 10, 28), palette.wholesaleBg)
 
   const layoutTier = (tier: {
     blockH: number
@@ -2423,13 +2802,16 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
     currency: any
     integer: any
     decimal: any
+    rich?: any
     unit: any
     pack: any
     color: string
     emphasis?: 'normal' | 'high'
   }) => {
-    const { blockH, blockCY, currency, integer, decimal, unit, pack, color, emphasis } = tier
+    const { blockH, blockCY, currency, integer, decimal, rich, unit, pack, color, emphasis } = tier
     if (!blockH || !Number.isFinite(blockH)) return
+    const valueText = rich || integer
+    const decimalText = rich ? null : decimal
 
     const maxPriceW = totalW - (padX * 2)
     const currencyGap = clamp(blockH * 0.045, 2, 9)
@@ -2441,8 +2823,15 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
     const unitScale = isHigh ? 0.27 : 0.22
     const packScale = isHigh ? 0.17 : 0.155
 
-    setTextSizing(integer, integerScale, blockH, color)
-    setTextSizing(decimal, decimalScale, blockH, color)
+    if (rich && isRichPriceTextObject(rich)) {
+      setRichPriceBaseFontSize(rich, Math.max(8, blockH * (isHigh ? 0.72 : 0.60)))
+      setRichPriceSegmentStyle(rich, 'integer', { fill: color })
+      setRichPriceSegmentStyle(rich, 'decimal', { fill: color })
+      rich.set?.({ fill: color, scaleX: 1, scaleY: 1 })
+    } else {
+      setTextSizing(integer, integerScale, blockH, color)
+      setTextSizing(decimal, decimalScale, blockH, color)
+    }
     setTextSizing(currency, currencyScale, blockH, color)
     setTextSizing(unit, unitScale, blockH, color)
     setTextSizing(pack, packScale, blockH, color)
@@ -2450,13 +2839,13 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
     const packVisible = isShown(pack) && String(pack?.text || '').trim().length > 0
     const unitVisible = isShown(unit) && String(unit?.text || '').trim().length > 0
 
-    let centsBlockW = unitVisible ? Math.max(getScaledWidthLocal(decimal), getScaledWidthLocal(unit)) : getScaledWidthLocal(decimal)
-    let priceW = getScaledWidthLocal(currency) + currencyGap + getScaledWidthLocal(integer) + integerDecimalGap + centsBlockW
+    let centsBlockW = unitVisible ? Math.max(getScaledWidthLocal(decimalText), getScaledWidthLocal(unit)) : getScaledWidthLocal(decimalText)
+    let priceW = getScaledWidthLocal(currency) + currencyGap + getScaledWidthLocal(valueText) + (rich ? 0 : integerDecimalGap) + centsBlockW
     if (priceW > maxPriceW && priceW > 0) {
       const s = Math.max(isHigh ? 0.65 : 0.58, maxPriceW / priceW)
-      ;[currency, integer, decimal, unit].forEach((t: any) => t?.set?.({ scaleX: s, scaleY: s }))
-      centsBlockW = unitVisible ? Math.max(getScaledWidthLocal(decimal), getScaledWidthLocal(unit)) : getScaledWidthLocal(decimal)
-      priceW = getScaledWidthLocal(currency) + currencyGap + getScaledWidthLocal(integer) + integerDecimalGap + centsBlockW
+      ;[currency, valueText, decimalText, unit].forEach((t: any) => t?.set?.({ scaleX: s, scaleY: s }))
+      centsBlockW = unitVisible ? Math.max(getScaledWidthLocal(decimalText), getScaledWidthLocal(unit)) : getScaledWidthLocal(decimalText)
+      priceW = getScaledWidthLocal(currency) + currencyGap + getScaledWidthLocal(valueText) + (rich ? 0 : integerDecimalGap) + centsBlockW
     }
 
     const blockTop = blockCY - (blockH / 2)
@@ -2491,33 +2880,41 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
     currency?.set?.({ originX: 'left', originY: 'center', left: startX, top: curY })
     const intX = startX + curW + currencyGap
 
-    layoutPriceLocal({
-      integer,
-      decimal,
-      unit: unitVisible ? unit : undefined,
-      intX,
-      intY,
-      decY,
-      unitY: intY + (blockH * (isHigh ? 0.26 : 0.22)),
-      maxWidth: Math.max(20, maxPriceW - (curW + currencyGap)),
-      gapPx: integerDecimalGap,
-      minGapPx: integerDecimalGap,
-      maxGapPx: integerDecimalGap
-    })
+    const unitY = intY + (blockH * (isHigh ? 0.26 : 0.22))
+    if (rich && isRichPriceTextObject(rich)) {
+      rich.set({ originX: 'left', originY: 'center', left: intX, top: intY })
+      if (unitVisible) {
+        positionRichPriceUnit(rich, unit, unitY)
+      }
+    } else {
+      layoutPriceLocal({
+        integer,
+        decimal,
+        unit: unitVisible ? unit : undefined,
+        intX,
+        intY,
+        decY,
+        unitY,
+        maxWidth: Math.max(20, maxPriceW - (curW + currencyGap)),
+        gapPx: integerDecimalGap,
+        minGapPx: integerDecimalGap,
+        maxGapPx: integerDecimalGap
+      })
+    }
 
-    const chainBounds = measureHorizontalBoundsLocal([currency, integer, decimal, unitVisible ? unit : null].filter(Boolean) as any[])
+    const chainBounds = measureHorizontalBoundsLocal([currency, valueText, decimalText, unitVisible ? unit : null].filter(Boolean) as any[])
     if (chainBounds) {
       const chainCenterX = (chainBounds.left + chainBounds.right) / 2
       const dx = -chainCenterX
       if (Math.abs(dx) > 0.001) {
-        ;[currency, integer, decimal, unitVisible ? unit : null].forEach((obj: any) => {
+        ;[currency, valueText, decimalText, unitVisible ? unit : null].forEach((obj: any) => {
           if (!obj || typeof obj.set !== 'function') return
           obj.set({ left: Number(obj.left || 0) + dx })
         })
       }
     }
 
-    const chainObjects = [currency, integer, decimal, unitVisible ? unit : null].filter(Boolean)
+    const chainObjects = [currency, valueText, decimalText, unitVisible ? unit : null].filter(Boolean)
     const yBounds = chainObjects
       .map((obj: any) => getVerticalBounds(obj))
       .filter(Boolean) as Array<{ min: number; max: number }>
@@ -2542,9 +2939,10 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
       currency: retailCurrency,
       integer: retailInteger,
       decimal: retailDecimal,
+      rich: retailRichPrice,
       unit: retailUnit,
       pack: retailPack,
-      color: '#ffffff',
+      color: palette.retailText,
       emphasis: 'normal'
     })
   }
@@ -2556,15 +2954,16 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
       currency: wholesaleCurrency,
       integer: wholesaleInteger,
       decimal: wholesaleDecimal,
+      rich: wholesaleRichPrice,
       unit: wholesaleUnit,
       pack: wholesalePack,
-      color: '#000000',
+      color: palette.wholesaleText,
       emphasis: 'high'
     })
   }
 
   if (showBanner && bannerText) {
-    setTextSizing(bannerText, 0.58, bannerH, '#000000')
+    setTextSizing(bannerText, 0.58, bannerH, palette.bannerText)
     fitTextWidth(bannerText, totalW - (padX * 0.9), 0.56)
     const bannerTop = centers.banner - (bannerH / 2)
     const bannerBottom = centers.banner + (bannerH / 2)
@@ -2590,6 +2989,7 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
 const normalizeAndLayoutForEditor = (g: any) => {
   if (!g || typeof g.getObjects !== 'function') return
 
+  migratePriceGroupToRichText(g, fabric)
   // Normalize group transform so it doesn't open off-screen.
   g.set({ originX: 'center', originY: 'center', left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0 })
   repairCollapsedSinglePriceTemplateGeometryLocal(g, 'normalize-editor')
@@ -2692,6 +3092,13 @@ const fitToViewport = () => {
   if (!canvas || !group) return
   const cw = canvas.getWidth?.() ?? 1
   const ch = canvas.getHeight?.() ?? 1
+  const viewportTransform = Array.isArray(canvas.viewportTransform)
+    ? canvas.viewportTransform
+    : [1, 0, 0, 1, 0, 0]
+  const viewportZoom = Math.max(
+    0.01,
+    Math.abs(Number(canvas.getZoom?.() || viewportTransform[0] || 1))
+  )
   const deepVisible = collectObjectsDeepLocal(group).filter((o: any) => o && o !== group && isObjectShownForBoundsLocal(o))
   const topLevel = typeof group.getObjects === 'function' ? group.getObjects() : []
   const byNameDeep = (name: string) => deepVisible.find((o: any) => String(o?.name || '') === name)
@@ -2718,7 +3125,12 @@ const fitToViewport = () => {
   const bounds = measureContentBoundsLocal(fitTargets)
   const bw = Math.max(1, Number(bounds?.width || group.width || 1))
   const bh = Math.max(1, Number(bounds?.height || group.height || 1))
-  const rawScale = Math.min((cw * 0.9) / bw, (ch * 0.85) / bh)
+  // Fabric stores object coordinates in scene space while zoom changes the
+  // viewport transform. Fit against scene-space dimensions so "Centralizar"
+  // remains correct after the user zooms in or out.
+  const sceneWidth = cw / viewportZoom
+  const sceneHeight = ch / viewportZoom
+  const rawScale = Math.min((sceneWidth * 0.9) / bw, (sceneHeight * 0.85) / bh)
   // Keep the label large/visible by default in the mini editor.
   const scale = Math.max(0.25, Math.min(12, Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1))
   let centerX = Number(bounds ? (bounds.left + bounds.right) / 2 : 0)
@@ -2733,11 +3145,16 @@ const fitToViewport = () => {
     centerY = 0
   }
 
+  const translateX = Number(viewportTransform[4] || 0)
+  const translateY = Number(viewportTransform[5] || 0)
+  const sceneCenterX = ((cw / 2) - translateX) / viewportZoom
+  const sceneCenterY = ((ch / 2) - translateY) / viewportZoom
+
   group.set({
     originX: 'center',
     originY: 'center',
-    left: (cw / 2) - (centerX * scale),
-    top: (ch / 2) - (centerY * scale),
+    left: sceneCenterX - (centerX * scale),
+    top: sceneCenterY - (centerY * scale),
     scaleX: scale,
     scaleY: scale
   })
@@ -2782,7 +3199,10 @@ const loadTemplate = async () => {
   historyStack.value = []
   historyIndex.value = -1
   historyFingerprint.value = ''
+  savedHistoryFingerprint.value = ''
+  editorError.value = null
   editorName.value = props.template.name || ''
+  savedEditorName.value = editorName.value.trim()
   selectedObj.value = null
   cornersLinked.value = true
   atacPreviewMode.value = 'current'
@@ -2807,9 +3227,13 @@ const loadTemplate = async () => {
       captureAtacPreviewSnapshot()
     }
     recoverMiniEditorLayoutIfNeeded(group)
-
-    console.log('[MiniEditor] Template loaded, listing objects:')
-    listAllObjects(group)
+    // Aguarda o decode real dos pixels (WebP/imagem remota) antes de recortar.
+    // Sem isso, detectImageTrimBounds le um canvas vazio e o auto-trim da imagem
+    // de fundo do preco (splash_image) nao e aplicado ao abrir o editor.
+    await waitForLabelImagesDecoded(group)
+    trimCustomLabelImages(group)
+    fitExistingLabelBackgroundImages()
+    refreshManualGroupBounds(group)
 
     canvas.add(group)
     canvas.setActiveObject(group)
@@ -2817,6 +3241,13 @@ const loadTemplate = async () => {
     fitToViewport()
     canvas.requestRenderAll()
     recordHistorySnapshot('loadTemplate')
+    savedHistoryFingerprint.value = historyFingerprint.value
+    savedEditorName.value = editorName.value.trim()
+  } catch (error) {
+    group = null
+    selectedObj.value = null
+    canvas.clear()
+    reportEditorError(error, 'Não foi possível abrir esta etiqueta. Verifique se o modelo contém dados válidos.')
   } finally {
     isLoadingTemplate.value = false
   }
@@ -2864,14 +3295,39 @@ const setSelected = (opt?: any) => {
   })
 
   selectedObj.value = target || null
+  syncTextSelectionState(selectedObj.value)
   updateKey.value++
 }
 
 const patch = (prop: string, value: any) => {
   const obj = selectedObj.value
   if (!obj || !canvas) {
-    console.warn('[MiniEditor] patch: no object or canvas', { obj, canvas })
     return
+  }
+
+  const numericLimits: Record<string, { min?: number; max?: number }> = {
+    left: { min: -100000, max: 100000 },
+    top: { min: -100000, max: 100000 },
+    scaleX: { min: 0.01, max: 100 },
+    scaleY: { min: 0.01, max: 100 },
+    angle: { min: -36000, max: 36000 },
+    opacity: { min: 0, max: 1 },
+    strokeWidth: { min: 0, max: 1000 },
+    width: { min: 1, max: 100000 },
+    height: { min: 1, max: 100000 },
+    rx: { min: 0, max: 100000 },
+    ry: { min: 0, max: 100000 },
+    radius: { min: 1, max: 100000 },
+    fontSize: { min: 1, max: 2000 },
+    fontWeight: { min: 100, max: 1000 },
+    lineHeight: { min: 0.1, max: 10 },
+    charSpacing: { min: -1000, max: 1000 }
+  }
+  const limits = numericLimits[prop]
+  if (limits) {
+    const numericValue = Number(value)
+    if (!Number.isFinite(numericValue)) return
+    value = Math.min(limits.max ?? numericValue, Math.max(limits.min ?? numericValue, numericValue))
   }
 
   // Fabric.Image doesn't render `stroke` / `strokeWidth`.
@@ -2880,23 +3336,42 @@ const patch = (prop: string, value: any) => {
   const isProxiedProp = prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth' || prop.startsWith('stroke') || prop === 'rx' || prop === 'ry' || prop === 'width' || prop === 'height'
   const isSplashImage = obj?.type === 'image' && (obj?.name === 'price_bg_image' || obj?.name === 'splash_image')
   const isPriceGroup = obj?.type === 'group' && (obj === group || obj?.name === 'priceGroup')
+  const isRichPriceText = isRichPriceTextObject(obj)
+  const richStyleProps = new Set([
+    'fontFamily',
+    'fontWeight',
+    'fill',
+    'stroke',
+    'strokeWidth',
+    'fontStyle',
+    'underline',
+    'linethrough',
+    'overline',
+    'charSpacing'
+  ])
 
   let proxyTarget = obj
   if (isProxiedProp && (isSplashImage || isPriceGroup) && group) {
     const bg = findObjectByNameDeep(group, 'price_bg')
     if (bg) {
       proxyTarget = bg
-      console.log('[MiniEditor] patch: using price_bg proxy instead of', obj?.name)
-    } else {
-      console.warn('[MiniEditor] patch: price_bg NOT FOUND in group!')
-      listAllObjects(group, '  ')
     }
   }
 
-  console.log('[MiniEditor] patch:', prop, '=', value, 'on', proxyTarget?.type, proxyTarget?.name, 'id:', proxyTarget?.cacheKey)
-
-  // Use set() method which handles all internal updates
-  proxyTarget.set(prop, value)
+  // A rich price is one IText with per-character styles. Keep both value
+  // ranges synchronized when the generic typography controls are used.
+  if (isRichPriceText && prop === 'text') {
+    applyRichPriceTextValue(obj, value)
+  } else if (isRichPriceText && prop === 'fontSize') {
+    setRichPriceBaseFontSize(obj, Number(value))
+  } else if (isRichPriceText && richStyleProps.has(prop)) {
+    setRichPriceSegmentStyle(obj, 'integer', { [prop]: value })
+    setRichPriceSegmentStyle(obj, 'decimal', { [prop]: value })
+    obj.set(prop, value)
+  } else {
+    // Use set() method which handles all internal updates
+    proxyTarget.set(prop, value)
+  }
 
   // Persist responsive-layout knobs for the price pill.
   if (proxyTarget?.name === 'price_bg' && (prop === 'strokeWidth' || prop === 'rx' || prop === 'ry')) {
@@ -2921,41 +3396,34 @@ const patch = (prop: string, value: any) => {
   if (proxyTarget.type === 'textbox' && typeof proxyTarget.initDimensions === 'function') proxyTarget.initDimensions()
   if (proxyTarget.type?.includes('text') && typeof proxyTarget.initDimensions === 'function') proxyTarget.initDimensions()
 
-  // CRITICAL: Update the group properly when modifying children
-  // Check if the target is inside our group
-  let targetParent = proxyTarget.group
-  let needsGroupUpdate = false
-
-  if (targetParent === group) {
-    needsGroupUpdate = true
-  } else if (group && typeof group.getObjects === 'function') {
-    // Check if target is a child of our group
-    const groupChildren = group.getObjects()
-    if (groupChildren.includes(proxyTarget)) {
-      needsGroupUpdate = true
-    }
+  // CRITICAL: nested label groups are valid Fabric trees. Updating only the
+  // direct child used to leave parent bounds/cache stale, so the next save or
+  // reload could move the edited item back or make it disappear.
+  if (getDirectChildOfEditorGroup(proxyTarget)) {
+    markObjectTreeDirty(proxyTarget)
+    if (group) safeAddWithUpdate(group)
   }
 
-  if (needsGroupUpdate && group) {
-    console.log('[MiniEditor] patch: updating group after child change')
-    safeAddWithUpdate(group)
+  // A splash image delegates its dimensions/radius to price_bg. Re-fit the
+  // image immediately so changing the pill does not leave an old crop/clip.
+  if (
+    proxyTarget?.name === 'price_bg' &&
+    ['width', 'height', 'rx', 'ry'].includes(prop)
+  ) {
+    const backgroundImage = findObjectByNameDeep(group, 'price_bg_image') || findObjectByNameDeep(group, 'splash_image')
+    if (backgroundImage) fitImageAsLabelBackground(backgroundImage)
   }
 
   // Update coordinates
   if (typeof proxyTarget.setCoords === 'function') proxyTarget.setCoords()
 
   // Also update the main group coords if needed
-  if (group && typeof group.setCoords === 'function') {
-    group.setCoords()
-  }
+  markObjectTreeDirty(proxyTarget)
 
   // Render
   canvas.requestRenderAll()
   updateKey.value++ // Force reactivity
 
-  // Verify the change was applied
-  const actualValue = typeof proxyTarget.get === 'function' ? proxyTarget.get(prop) : proxyTarget[prop]
-  console.log('[MiniEditor] after patch:', prop, '=', actualValue, 'expected:', value, 'match:', actualValue === value)
   recordHistorySnapshot(`patch:${prop}`)
 }
 
@@ -2991,8 +3459,8 @@ const patchCorner = (cornerProp: string, value: number) => {
   (bg as any)[cornerProp] = n
   bg.dirty = true
   if (group) {
+    markObjectTreeDirty(bg)
     safeAddWithUpdate(group)
-    if (typeof group.setCoords === 'function') group.setCoords()
   }
   canvas.requestRenderAll()
   updateKey.value++
@@ -3006,6 +3474,7 @@ const patchCustom = (prop: string, value: any) => {
   if (obj.type?.includes('text') && typeof obj.initDimensions === 'function') obj.initDimensions()
   if (obj.group && typeof obj.group.triggerLayout === 'function') obj.group.triggerLayout()
   if (typeof obj.setCoords === 'function') obj.setCoords()
+  markObjectTreeDirty(obj)
   canvas.requestRenderAll()
   updateKey.value++ // Force reactivity
   recordHistorySnapshot(`patchCustom:${prop}`)
@@ -3064,6 +3533,11 @@ const current = (prop: string, fallback: any = '') => {
   return result
 }
 
+const solidFillColor = () => {
+  const fill = current('fill', '#ffffff')
+  return typeof fill === 'string' ? fill : (fill?.colorStops?.[0]?.color || '#ffffff')
+}
+
 const currentNumber = (prop: string, fallback = 0) => {
   const v = current(prop, fallback)
   const n = Number(v)
@@ -3078,10 +3552,13 @@ const setTextCase = (mode: 'none' | 'upper' | 'lower') => {
   if (typeof obj[rawKey] !== 'string') obj[rawKey] = String(obj.text ?? '')
   const base = String(obj[rawKey] ?? obj.text ?? '')
   const next = mode === 'upper' ? base.toUpperCase() : mode === 'lower' ? base.toLowerCase() : base
-  obj.set('text', next)
+  if (isRichPriceTextObject(obj)) applyRichPriceTextValue(obj, next)
+  else obj.set('text', next)
   obj.__textCase = mode
+  obj.dynamicTextCase = mode
   if (typeof obj.initDimensions === 'function') obj.initDimensions()
   if (obj.group && typeof obj.group.triggerLayout === 'function') obj.group.triggerLayout()
+  markObjectTreeDirty(obj)
   obj.setCoords?.()
   canvas.requestRenderAll()
   recordHistorySnapshot(`textCase:${mode}`)
@@ -3095,6 +3572,52 @@ const isText = computed(() => {
 const selectedName = computed(() => String(selectedObj.value?.name || ''))
 const isDecimalText = computed(() => selectedName.value === 'price_decimal_text')
 const isUnitText = computed(() => selectedName.value === 'price_unit_text')
+const isRichPriceText = computed(() => isRichPriceTextObject(selectedObj.value))
+
+const richPriceSegmentSize = (segment: 'integer' | 'decimal', fallback: number) => {
+  updateKey.value
+  return Math.round(getRichPriceSegmentFontSize(selectedObj.value, segment, fallback))
+}
+
+const setRichPriceSegmentFontSize = (segment: 'integer' | 'decimal', rawValue: unknown) => {
+  const obj = selectedObj.value
+  if (!obj || !canvas || !isRichPriceTextObject(obj)) return
+  const value = Math.min(320, Math.max(6, Number(rawValue) || 6))
+  setRichPriceSegmentStyle(obj, segment, { fontSize: value })
+  obj.dirty = true
+  obj.group?.setCoords?.()
+  obj.setCoords?.()
+  canvas.requestRenderAll()
+  updateKey.value++
+  recordHistorySnapshot(`richPrice:${segment}:fontSize`)
+}
+
+const richPriceSegmentOffset = (
+  segment: 'integer' | 'decimal',
+  axis: 'x' | 'y',
+  fallback = 0
+) => {
+  updateKey.value
+  return Number(getRichPriceSegmentOffset(selectedObj.value, segment, axis) || fallback)
+}
+
+const setRichPriceSegmentOffsetValue = (
+  segment: 'integer' | 'decimal',
+  axis: 'x' | 'y',
+  rawValue: unknown
+) => {
+  const obj = selectedObj.value
+  if (!obj || !canvas || !isRichPriceTextObject(obj)) return
+  const parsed = Number(rawValue)
+  if (!Number.isFinite(parsed)) return
+  const value = Math.min(240, Math.max(-240, parsed))
+  if (!setRichPriceSegmentOffset(obj, segment, axis, value)) return
+  markObjectTreeDirty(obj)
+  canvas.requestRenderAll?.()
+  updateKey.value++
+  recordHistorySnapshot(`richPrice:${segment}:offset:${axis}`)
+}
+
 const isPriceGroupSelected = computed(() => {
   const obj = selectedObj.value
   return obj?.type === 'group' && (obj === group || obj?.name === 'priceGroup')
@@ -3122,10 +3645,24 @@ const isCircle = computed(() => {
 })
 
 const isImage = computed(() => selectedObj.value?.type === 'image')
+const isBackgroundImageObject = (obj: any) => {
+  const name = String(obj?.name || '').trim()
+  return obj?.type === 'image' && (
+    name === 'label_bg_image' ||
+    name === 'price_bg_image' ||
+    name === 'splash_image'
+  )
+}
+const isBackgroundImageSelected = computed(() => isBackgroundImageObject(selectedObj.value))
 const isAtacarejoTemplate = computed(() => {
   // eslint-disable-next-line @typescript-eslint/no-unused-expressions
   updateKey.value
   return !!findObjectByNameDeep(group, 'atac_retail_bg')
+})
+const autoCollapseMissingPrices = computed(() => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  updateKey.value
+  return !group || (group as any).__autoCollapseMissingPrices !== false
 })
 const atacValueVariants = computed(() => {
   // eslint-disable-next-line @typescript-eslint/no-unused-expressions
@@ -3170,6 +3707,127 @@ const currentTextCase = computed(() => {
 const isTextLikeObject = (obj: any) => {
   const t = String(obj?.type || '').toLowerCase()
   return t === 'text' || t === 'i-text' || t === 'textbox'
+}
+
+const syncTextSelectionState = (obj: any = selectedObj.value) => {
+  if (!isTextLikeObject(obj)) {
+    textRangeStart.value = 0
+    textRangeEnd.value = 0
+    textRangeIsActive.value = false
+    return
+  }
+
+  const length = String(obj?.text || '').length
+  const editingStart = Number(obj?.selectionStart)
+  const editingEnd = Number(obj?.selectionEnd)
+  const hasEditingSelection = !!obj?.isEditing && Number.isFinite(editingStart) && Number.isFinite(editingEnd)
+  const start = hasEditingSelection
+    ? Math.min(length, Math.max(0, editingStart))
+    : 0
+  const end = hasEditingSelection
+    ? Math.min(length, Math.max(start, editingEnd))
+    : length
+
+  textRangeStart.value = start
+  textRangeEnd.value = end
+  textRangeIsActive.value = hasEditingSelection && end > start
+  const fill = extractColorStringFromFill(obj?.fill)
+  if (fill && /^#[0-9a-f]{6}$/i.test(fill)) textSegmentColor.value = fill
+  updateKey.value++
+}
+
+const getTextRangeForColor = (obj: any) => {
+  const length = String(obj?.text || '').length
+  if (!length) return { start: 0, end: 0 }
+
+  const liveStart = Number(obj?.selectionStart)
+  const liveEnd = Number(obj?.selectionEnd)
+  if (obj?.isEditing && Number.isFinite(liveStart) && Number.isFinite(liveEnd) && liveEnd > liveStart) {
+    return {
+      start: Math.min(length, Math.max(0, liveStart)),
+      end: Math.min(length, Math.max(0, liveEnd))
+    }
+  }
+
+  const start = Math.min(length, Math.max(0, Number(textRangeStart.value) || 0))
+  const requestedEnd = Number(textRangeEnd.value)
+  const end = Math.min(length, Math.max(start, Number.isFinite(requestedEnd) ? requestedEnd : length))
+  return end > start ? { start, end } : { start: 0, end: length }
+}
+
+const applyTextColorRange = (obj: any, color: string, start: number, end: number) => {
+  if (!isTextLikeObject(obj) || !color || end <= start) return false
+
+  // Rich price text has two dynamic segments. Keep their persisted segment
+  // styles in sync so a future product-price refresh does not erase colors.
+  if (isRichPriceTextObject(obj)) {
+    const commaIndex = String(obj.text || '').indexOf(',')
+    if (commaIndex < 0 || start < commaIndex) setRichPriceSegmentStyle(obj, 'integer', { fill: color })
+    if (commaIndex >= 0 && end > commaIndex) setRichPriceSegmentStyle(obj, 'decimal', { fill: color })
+  }
+
+  if (typeof obj.setSelectionStyles === 'function') {
+    obj.setSelectionStyles({ fill: color }, start, end)
+  } else {
+    const styles = obj.styles && typeof obj.styles === 'object' ? obj.styles : {}
+    styles[0] ||= {}
+    for (let index = start; index < end; index++) {
+      styles[0][index] = { ...(styles[0][index] || {}), fill: color }
+    }
+    obj.styles = styles
+  }
+  obj.dirty = true
+  obj.initDimensions?.()
+  obj.setCoords?.()
+  return true
+}
+
+const finishTextColorChange = (obj: any, reason: string) => {
+  if (!obj || !canvas) return
+  markObjectTreeDirty(obj)
+  obj.dirty = true
+  obj.setCoords?.()
+  canvas.requestRenderAll?.()
+  updateKey.value++
+  recordHistorySnapshot(reason)
+}
+
+const applyTextSegmentColor = () => {
+  const obj = selectedObj.value
+  if (!isTextLikeObject(obj)) return
+  const range = getTextRangeForColor(obj)
+  if (!applyTextColorRange(obj, textSegmentColor.value, range.start, range.end)) return
+  textRangeStart.value = range.start
+  textRangeEnd.value = range.end
+  finishTextColorChange(obj, 'textSegmentColor')
+}
+
+const applyTextColorToWhole = () => {
+  const obj = selectedObj.value
+  if (!isTextLikeObject(obj)) return
+  const length = String(obj.text || '').length
+  if (!length) return
+  obj.set?.('fill', textSegmentColor.value)
+  applyTextColorRange(obj, textSegmentColor.value, 0, length)
+  finishTextColorChange(obj, 'textWholeColor')
+}
+
+const applyTwoTextColors = () => {
+  const obj = selectedObj.value
+  if (!isTextLikeObject(obj)) return
+  const length = String(obj.text || '').length
+  if (length < 2) {
+    applyTextColorToWhole()
+    return
+  }
+  const splitAt = Math.max(1, Math.ceil(length / 2))
+  const firstColor = extractColorStringFromFill(obj.fill) || '#ffffff'
+  obj.set?.('fill', firstColor)
+  applyTextColorRange(obj, firstColor, 0, splitAt)
+  applyTextColorRange(obj, textSecondColor.value, splitAt, length)
+  textRangeStart.value = splitAt
+  textRangeEnd.value = length
+  finishTextColorChange(obj, 'textTwoColors')
 }
 
 const extractColorStringFromFill = (fill: any): string | null => {
@@ -3235,12 +3893,17 @@ const addText = () => {
   if (!fabric || !canvas || !group) return
   const selected = selectedObj.value
   const baseText = isTextLikeObject(selected) ? selected : null
-  const topOffset = Number(group?.height || 0) > 0
-    ? -Math.max(18, Math.min(56, Math.round(Number(group.height) * 0.18)))
-    : -26
+  const customTextCount = (group.getObjects?.() || []).filter((item: any) => isTextLikeObject(item) && String(item?.name || '').startsWith('custom_text_')).length
+  // O grupo ja chega escalado para caber no canvas. Posicoes muito grandes aqui
+  // sao multiplicadas pela escala do grupo e acabam fora da etiqueta.
+  const designWidth = Math.max(120, Number(group?.width || 220))
+  const designHeight = Math.max(100, Number(group?.height || 180))
+  const spreadX = Math.max(10, Math.min(26, designWidth * 0.06))
+  const rowHeight = Math.max(16, Math.min(28, designHeight * 0.08))
+  const topOffset = -Math.max(6, Math.min(16, Math.round(designHeight * 0.04)))
   const txt = new fabric.IText('Novo texto', {
-    left: 0,
-    top: topOffset,
+    left: ((customTextCount % 3) - 1) * spreadX,
+    top: topOffset + Math.floor(customTextCount / 3) * rowHeight,
     originX: 'center',
     originY: 'center',
     fontSize: Math.max(10, Number(baseText?.fontSize || 28)),
@@ -3250,9 +3913,12 @@ const addText = () => {
     textAlign: String(baseText?.textAlign || 'center'),
     lineHeight: Math.max(0.8, Number(baseText?.lineHeight || 1)),
     charSpacing: Number(baseText?.charSpacing || 0),
+    scaleX: getManualChildScale(),
+    scaleY: getManualChildScale(),
     name: `custom_text_${makeId()}`
   })
-  safeAddWithUpdate(group, txt)
+  addManualChild(txt)
+  bringGroupObjectToFront(txt)
   canvas.setActiveObject?.(txt)
   setSelected({ target: txt, subTarget: txt, subTargets: [txt], selected: [txt] })
   focusAddedText(txt)
@@ -3274,9 +3940,12 @@ const addRect = () => {
     top: 0,
     originX: 'center',
     originY: 'center',
+    scaleX: getManualChildScale(),
+    scaleY: getManualChildScale(),
     name: `custom_rect_${makeId()}`
   })
-  safeAddWithUpdate(group, rect)
+  addManualChild(rect)
+  bringGroupObjectToFront(rect)
   canvas.setActiveObject(rect)
   setSelected()
   canvas.requestRenderAll()
@@ -3294,64 +3963,281 @@ const addCircle = () => {
     top: 0,
     originX: 'center',
     originY: 'center',
+    scaleX: getManualChildScale(),
+    scaleY: getManualChildScale(),
     name: `custom_circle_${makeId()}`
   })
-  safeAddWithUpdate(group, c)
+  addManualChild(c)
+  bringGroupObjectToFront(c)
   canvas.setActiveObject(c)
   setSelected()
   canvas.requestRenderAll()
   recordHistorySnapshot('addCircle')
 }
 
+const getLabelBackgroundShape = () => {
+  if (!group) return null
+  return findObjectByNameDeep(group, 'price_bg') ||
+    findObjectByNameDeep(group, 'atac_retail_bg') ||
+    findObjectByNameDeep(group, 'atac_wholesale_bg') ||
+    findObjectByNameDeep(group, 'atac_banner_bg')
+}
+
+const getImageNaturalDimensions = (img: any) => {
+  const element: any = img?._originalElement || img?._element
+  return {
+    width: Math.max(1, Number(element?.naturalWidth || element?.width || img?.width || 1)),
+    height: Math.max(1, Number(element?.naturalHeight || element?.height || img?.height || 1))
+  }
+}
+
+const fitImageAsLabelBackground = (
+  img: any,
+  options: { baseBounds?: { left: number; right: number; top: number; bottom: number; width: number; height: number } | null } = {}
+) => {
+  if (!img || !group) return false
+  const hasPriceBackground = !!findObjectByNameDeep(group, 'price_bg')
+  const isFullLabelBackground = String(img?.name || '') === 'label_bg_image' && !hasPriceBackground
+  const background = isFullLabelBackground ? null : getLabelBackgroundShape()
+  const storedBaseWidth = Number((group as any).__manualTemplateBaseW || 0)
+  const storedBaseHeight = Number((group as any).__manualTemplateBaseH || 0)
+  const stableFullLabelBounds = !hasPriceBackground &&
+    Number.isFinite(storedBaseWidth) && storedBaseWidth > 0 &&
+    Number.isFinite(storedBaseHeight) && storedBaseHeight > 0
+    ? {
+        left: -storedBaseWidth / 2,
+        right: storedBaseWidth / 2,
+        top: -storedBaseHeight / 2,
+        bottom: storedBaseHeight / 2,
+        width: storedBaseWidth,
+        height: storedBaseHeight
+      }
+    : null
+  const baseBounds = options.baseBounds || getLabelVisualBaseBounds()
+  const backgroundBounds = background ? measureContentBoundsLocal([background]) : null
+  const targetBounds = backgroundBounds || (isFullLabelBackground && stableFullLabelBounds) || baseBounds
+  const backgroundScaleX = Math.abs(Number(background?.scaleX || 1))
+  const backgroundScaleY = Math.abs(Number(background?.scaleY || 1))
+  const backgroundWidth = targetBounds
+    ? Math.max(1, Number(targetBounds.width || 0))
+    : Math.max(1, Number((group as any).__manualTemplateBaseW || group.width || 300))
+  const backgroundHeight = targetBounds
+    ? Math.max(1, Number(targetBounds.height || 0))
+    : Math.max(1, Number((group as any).__manualTemplateBaseH || group.height || 220))
+  const dimensions = getImageNaturalDimensions(img)
+  const visibleBounds = detectImageTrimBounds(img, {
+    alphaThreshold: LABEL_IMAGE_TRIM_ALPHA_THRESHOLD,
+    padding: 0
+  })
+  const sourceLeft = Math.max(0, Number(visibleBounds?.left || 0))
+  const sourceTop = Math.max(0, Number(visibleBounds?.top || 0))
+  const sourceWidth = Math.max(1, Number(visibleBounds?.width || dimensions.width))
+  const sourceHeight = Math.max(1, Number(visibleBounds?.height || dimensions.height))
+  const imageScale = Math.max(backgroundWidth / sourceWidth, backgroundHeight / sourceHeight)
+  const cropWidth = Math.min(sourceWidth, backgroundWidth / Math.max(0.0001, imageScale))
+  const cropHeight = Math.min(sourceHeight, backgroundHeight / Math.max(0.0001, imageScale))
+  const cropX = sourceLeft + Math.max(0, (sourceWidth - cropWidth) / 2)
+  const cropY = sourceTop + Math.max(0, (sourceHeight - cropHeight) / 2)
+  const radiusX = Math.max(0, Number(background?.rx || 0) * backgroundScaleX)
+  const radiusY = Math.max(0, Number(background?.ry || 0) * backgroundScaleY)
+  const currentName = String(img?.name || '')
+  const backgroundName = isFullLabelBackground
+    ? 'label_bg_image'
+    : (currentName === 'splash_image' ? 'splash_image' : 'price_bg_image')
+
+  img.set({
+    left: Number(targetBounds ? (targetBounds.left + targetBounds.right) / 2 : background?.left || 0),
+    top: Number(targetBounds ? (targetBounds.top + targetBounds.bottom) / 2 : background?.top || 0),
+    originX: 'center',
+    originY: 'center',
+    width: cropWidth,
+    height: cropHeight,
+    cropX,
+    cropY,
+    scaleX: imageScale,
+    scaleY: imageScale,
+    opacity: 1,
+    name: backgroundName,
+    __labelBackgroundImage: true,
+    crossOrigin: 'anonymous'
+  })
+
+  if (isFullLabelBackground) {
+    // A imagem de fundo já é recortada pelas dimensões calculadas acima.
+    // Não reutilize o clipPath do selo de preço: no Fabric ele usa outra
+    // referência local e encolhe a arte para o centro da etiqueta.
+    img.set('clipPath', undefined)
+    try { delete (img as any).clipPath } catch { /* ignore */ }
+  } else if (fabric?.Rect) {
+    img.set('clipPath', new fabric.Rect({
+      width: backgroundWidth,
+      height: backgroundHeight,
+      rx: radiusX,
+      ry: radiusY,
+      originX: 'center',
+      originY: 'center',
+      left: 0,
+      top: 0
+    }))
+  }
+
+  if (!isFullLabelBackground && background && typeof background.fill === 'string' && background.fill !== 'transparent') {
+    ;(background as any).__originalFill = background.fill
+    background.set('fill', 'transparent')
+  }
+  const imageParent = getObjectParent(img) || (getObjectChildren(group).includes(img) ? group : null)
+  if (imageParent && typeof imageParent.sendObjectToBack === 'function') imageParent.sendObjectToBack(img)
+  else if (typeof img.sendToBack === 'function') img.sendToBack()
+  img.dirty = true
+  if (background) background.dirty = true
+  refreshManualGroupBounds(imageParent || group)
+  markObjectTreeDirty(img)
+  return true
+}
+
+const fitExistingLabelBackgroundImages = () => {
+  if (!group) return 0
+
+  const images: any[] = []
+  ;['label_bg_image', 'price_bg_image', 'splash_image'].forEach((name) => {
+    const image = findObjectByNameDeep(group, name)
+    if (!image || String(image.type || '').toLowerCase() !== 'image' || images.includes(image)) return
+    images.push(image)
+  })
+
+  let fitted = 0
+  images.forEach((image) => {
+    if (fitImageAsLabelBackground(image)) fitted += 1
+  })
+  return fitted
+}
+
+const setImageAsBackground = (img: any, options: { replaceExisting?: boolean } = {}) => {
+  if (!img || !group) return false
+  // Capture the label base before renaming/adding the new image. For legacy
+  // templates without `price_bg`, the new image would otherwise become its
+  // own sizing reference and never be fitted to the original label.
+  const baseBoundsBeforeChange = getLabelVisualBaseBounds()
+  const existing = findObjectByNameDeep(group, 'label_bg_image') ||
+    findObjectByNameDeep(group, 'price_bg_image') ||
+    findObjectByNameDeep(group, 'splash_image')
+  if (options.replaceExisting !== false && existing && existing !== img) {
+    if (!removeObjectFromEditorTree(existing)) return false
+  }
+  img.set?.({ name: 'label_bg_image', __labelBackgroundImage: true })
+  return fitImageAsLabelBackground(img, { baseBounds: baseBoundsBeforeChange })
+}
+
+const promoteSelectedImageToBackground = () => {
+  const obj = selectedObj.value
+  if (!obj || obj.type !== 'image' || !group) return
+  if (!setImageAsBackground(obj)) return
+  group.setCoords?.()
+  group.dirty = true
+  canvas?.setActiveObject?.(obj)
+  setSelected({ target: obj, subTarget: obj, subTargets: [obj], selected: [obj] })
+  canvas?.requestRenderAll?.()
+  recordHistorySnapshot('promoteImageToBackground')
+}
+
+const removeSelectedImageAsBackground = () => {
+  const obj = selectedObj.value
+  if (!isBackgroundImageObject(obj) || !group) return
+  const background = getLabelBackgroundShape()
+  const restoredFill = String((background as any)?.__originalFill || '').trim()
+  if (background && restoredFill) background.set('fill', restoredFill)
+  if (background) background.dirty = true
+  obj.set?.({ name: `custom_image_${makeId()}`, clipPath: undefined, __labelBackgroundImage: false })
+  try { delete (obj as any).clipPath } catch { /* ignore */ }
+  group.setCoords?.()
+  group.dirty = true
+  canvas?.setActiveObject?.(obj)
+  setSelected({ target: obj, subTarget: obj, subTargets: [obj], selected: [obj] })
+  canvas?.requestRenderAll?.()
+  recordHistorySnapshot('removeBackgroundImage')
+}
+
 const openAddImage = () => imageInputEl.value?.click()
+const openAddBackgroundImage = () => backgroundImageInputEl.value?.click()
 const openReplaceImage = () => replaceImageInputEl.value?.click()
 
 const onAddImage = async (e: Event) => {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file || !fabric || !canvas || !group) return
+  if (!file || !fabric || !canvas || !group) {
+    if (input) input.value = ''
+    return
+  }
   
   try {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const r = new FileReader()
-      r.onload = () => resolve(String(r.result || ''))
-      r.onerror = () => reject(new Error('FileReader failed'))
-      r.readAsDataURL(file)
-    })
+    validateLabelImageFile(file)
+    editorError.value = null
+    const dataUrl = await readLabelImageFile(file)
 
     // Fabric v7: fromURL returns a Promise
     const img: any = await fabric.Image.fromURL(dataUrl, { crossOrigin: 'anonymous' })
     
-    const existingBgImage =
-      findObjectByNameDeep(group, 'price_bg_image') ||
-      findObjectByNameDeep(group, 'splash_image')
     img.set({
       left: 0,
       top: 0,
       originX: 'center',
       originY: 'center',
-      name: existingBgImage ? `custom_image_${makeId()}` : 'splash_image'
+      name: `custom_image_${makeId()}`
     })
+
+    trimLabelImageToVisibleContent(img)
     
     const iw = img.width || 1
     const ih = img.height || 1
     const targetW = 180
-    const s = targetW / iw
+    const childScale = getManualChildScale()
+    const s = (targetW / iw) * childScale
     img.set({ scaleX: s, scaleY: s })
-    if (ih > iw) img.set({ scaleX: (targetW * 0.7) / iw, scaleY: (targetW * 0.7) / iw })
+    if (ih > iw) img.set({ scaleX: ((targetW * 0.7) / iw) * childScale, scaleY: ((targetW * 0.7) / iw) * childScale })
     
-    safeAddWithUpdate(group, img)
+    addManualChild(img)
+    bringGroupObjectToFront(img)
+    refreshManualGroupBounds(group)
     canvas.setActiveObject(img)
     setSelected()
     canvas.requestRenderAll()
     recordHistorySnapshot('addImage')
     
-    console.log('✅ [MiniEditor] Imagem adicionada com sucesso:', img.name)
   } catch (err) {
-    console.error('❌ [MiniEditor] Erro ao adicionar imagem:', err)
+    reportEditorError(err, 'Não foi possível adicionar a imagem.')
+  } finally {
+    if (input) input.value = ''
+  }
+}
+
+const onAddBackgroundImage = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !fabric || !canvas || !group) {
+    if (input) input.value = ''
+    return
   }
 
-  if (input) input.value = ''
+  try {
+    validateLabelImageFile(file)
+    editorError.value = null
+    const dataUrl = await readLabelImageFile(file)
+    const img: any = await fabric.Image.fromURL(dataUrl, { crossOrigin: 'anonymous' })
+    if (!addManualChild(img) || !setImageAsBackground(img)) {
+      removeObjectFromEditorTree(img)
+      throw new Error('Não foi possível preparar a imagem de fundo.')
+    }
+    group.setCoords?.()
+    group.dirty = true
+    canvas.setActiveObject?.(img)
+    setSelected({ target: img, subTarget: img, subTargets: [img], selected: [img] })
+    canvas.requestRenderAll?.()
+    recordHistorySnapshot('addBackgroundImage')
+  } catch (err) {
+    reportEditorError(err, 'Não foi possível adicionar a imagem de fundo.')
+  } finally {
+    if (input) input.value = ''
+  }
 }
 
 const replaceSelectedImage = async (e: Event) => {
@@ -3361,20 +4247,22 @@ const replaceSelectedImage = async (e: Event) => {
 
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file) return
+  if (!file) {
+    if (input) input.value = ''
+    return
+  }
 
   try {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const r = new FileReader()
-      r.onload = () => resolve(String(r.result || ''))
-      r.onerror = () => reject(new Error('FileReader failed'))
-      r.readAsDataURL(file)
-    })
+    validateLabelImageFile(file)
+    editorError.value = null
+    const dataUrl = await readLabelImageFile(file)
 
     // Fabric v7: fromURL returns a Promise
     const img: any = await fabric.Image.fromURL(dataUrl, { crossOrigin: 'anonymous' })
     
     const prev = obj
+    const previousBaseBounds = getLabelVisualBaseBounds()
+    const wasBackgroundImage = isBackgroundImageObject(prev)
     const keep: any = {
       left: prev.left,
       top: prev.top,
@@ -3390,35 +4278,74 @@ const replaceSelectedImage = async (e: Event) => {
     }
 
     img.set(keep)
-    // preserve crop + clipPath if present (common in splash images)
-    if (typeof prev.cropX === 'number') img.set('cropX', prev.cropX)
-    if (typeof prev.cropY === 'number') img.set('cropY', prev.cropY)
-    if (typeof prev.width === 'number') img.set('width', prev.width)
-    if (typeof prev.height === 'number') img.set('height', prev.height)
-    if (prev.clipPath) img.set('clipPath', prev.clipPath)
+    if (wasBackgroundImage) {
+      img.set({
+        name: String(prev.name || '') === 'label_bg_image' ? 'label_bg_image' : 'price_bg_image',
+        __labelBackgroundImage: true
+      })
+    }
+    const oldDisplayWidth = Math.abs(Number(prev.width || 1) * Number(prev.scaleX || 1))
+    const oldDisplayHeight = Math.abs(Number(prev.height || 1) * Number(prev.scaleY || 1))
+    const didTrim = wasBackgroundImage ? false : trimLabelImageToVisibleContent(img)
 
-    group.remove(prev)
-    safeAddWithUpdate(group, img)
-    safeAddWithUpdate(group)
+    // Preserve an existing crop only when the new image has no detectable
+    // transparent margin. Otherwise the new visible bounds must win.
+    if (!wasBackgroundImage && !didTrim) {
+      if (typeof prev.cropX === 'number') img.set('cropX', prev.cropX)
+      if (typeof prev.cropY === 'number') img.set('cropY', prev.cropY)
+      if (typeof prev.width === 'number') img.set('width', prev.width)
+      if (typeof prev.height === 'number') img.set('height', prev.height)
+    }
+    if (prev.clipPath && !wasBackgroundImage) img.set('clipPath', prev.clipPath)
+    if (didTrim) {
+      const trimmedWidth = Math.max(1, Number(img.width || 1))
+      const trimmedHeight = Math.max(1, Number(img.height || 1))
+      const scaleSignX = Number(prev.scaleX || 1) < 0 ? -1 : 1
+      const scaleSignY = Number(prev.scaleY || 1) < 0 ? -1 : 1
+      img.set({
+        scaleX: scaleSignX * (oldDisplayWidth / trimmedWidth),
+        scaleY: scaleSignY * (oldDisplayHeight / trimmedHeight)
+      })
+    }
+
+    const previousParent = getObjectParent(prev) || (getObjectChildren(group).includes(prev) ? group : null)
+    if (!previousParent || !removeObjectFromEditorTree(prev)) {
+      throw new Error('Não foi possível substituir a imagem selecionada.')
+    }
+    if (!addManualChild(img, previousParent)) {
+      addManualChild(prev, previousParent)
+      throw new Error('Não foi possível substituir a imagem selecionada.')
+    }
+    if (wasBackgroundImage) fitImageAsLabelBackground(img, { baseBounds: previousBaseBounds })
+    else refreshManualGroupBounds(previousParent)
+    markObjectTreeDirty(img)
     canvas.setActiveObject(img)
     setSelected()
     canvas.requestRenderAll()
     recordHistorySnapshot('replaceImage')
     
-    console.log('✅ [MiniEditor] Imagem substituída com sucesso')
   } catch (err) {
-    console.error('❌ [MiniEditor] Erro ao substituir imagem:', err)
+    reportEditorError(err, 'Não foi possível substituir a imagem selecionada.')
+  } finally {
+    if (input) input.value = ''
   }
-
-  if (input) input.value = ''
 }
 
 const deleteSelected = () => {
   if (!canvas || !group) return
   const obj = selectedObj.value
   if (!obj || obj === group) return
-  if (typeof group.remove === 'function') group.remove(obj)
-  safeAddWithUpdate(group)
+  const background = isBackgroundImageObject(obj) ? getLabelBackgroundShape() : null
+  const restoredFill = String((background as any)?.__originalFill || '').trim()
+  if (!removeObjectFromEditorTree(obj)) {
+    reportEditorError(new Error('O elemento não pôde ser removido.'), 'Não foi possível excluir o elemento selecionado.')
+    return
+  }
+  if (background && restoredFill) {
+    background.set('fill', restoredFill)
+    background.dirty = true
+  }
+  markObjectTreeDirty(group)
   canvas.discardActiveObject?.()
   selectedObj.value = null
   canvas.requestRenderAll()
@@ -3428,17 +4355,7 @@ const deleteSelected = () => {
 const moveLayer = (dir: -1 | 1) => {
   if (!group || !selectedObj.value || selectedObj.value === group) return
   const obj = selectedObj.value
-  const list: any[] = (group._objects || group.getObjects?.() || []).slice()
-  const idx = list.indexOf(obj)
-  if (idx < 0) return
-  const next = idx + dir
-  if (next < 0 || next >= list.length) return
-  const swapped = list.slice()
-  ;[swapped[idx], swapped[next]] = [swapped[next], swapped[idx]]
-  // Rebuild group order
-  if (typeof group.remove === 'function') list.forEach(o => group.remove(o))
-  swapped.forEach(o => safeAddWithUpdate(group, o))
-  safeAddWithUpdate(group)
+  if (!reorderObjectInParent(obj, dir)) return
   canvas?.setActiveObject?.(obj)
   canvas?.requestRenderAll?.()
   recordHistorySnapshot('moveLayer')
@@ -3495,10 +4412,73 @@ const commitEditingTextObjects = (root: any) => {
       cur.initDimensions?.()
       cur.setCoords?.()
     }
+    // Direct editing on the Fabric canvas can change the character count
+    // without going through the sidebar input. Rebuild the rich-price ranges
+    // before serializing so integer/cents styles remain aligned with the text.
+    if (isRichPriceTextObject(cur)) {
+      applyRichPriceTextValue(cur, cur.text)
+    }
     const children: any[] = Array.isArray(cur?._objects)
       ? cur._objects
       : (typeof cur?.getObjects === 'function' ? cur.getObjects() : [])
     for (const child of children || []) queue.push(child)
+  }
+}
+
+const renderMiniEditorPreview = (): string | undefined => {
+  if (!canvas || typeof canvas.toDataURL !== 'function') return undefined
+  try {
+    group?.setCoords?.()
+    const canvasWidth = Number(canvas.getWidth?.() || canvas.width || 0)
+    const canvasHeight = Number(canvas.getHeight?.() || canvas.height || 0)
+    const bounds = group?.getBoundingRect?.()
+    const hasBounds = bounds &&
+      Number.isFinite(Number(bounds.left)) &&
+      Number.isFinite(Number(bounds.top)) &&
+      Number.isFinite(Number(bounds.width)) &&
+      Number.isFinite(Number(bounds.height)) &&
+      Number(bounds.width) > 1 &&
+      Number(bounds.height) > 1
+
+    const preview = hasBounds && canvasWidth > 1 && canvasHeight > 1
+      ? (() => {
+          // Fabric returns getBoundingRect() in scene coordinates, while
+          // toDataURL's crop offsets are canvas/viewport coordinates. Using
+          // scene bounds directly makes thumbnails drift or become empty as
+          // soon as the user changes the mini-editor zoom.
+          const viewportTransform = Array.isArray(canvas.viewportTransform)
+            ? canvas.viewportTransform
+            : [1, 0, 0, 1, 0, 0]
+          const zoom = Math.max(0.01, Math.abs(Number(canvas.getZoom?.() || viewportTransform[0] || 1)))
+          const translateX = Number(viewportTransform[4] || 0)
+          const translateY = Number(viewportTransform[5] || 0)
+          const screenLeft = Number(bounds.left) * zoom + translateX
+          const screenTop = Number(bounds.top) * zoom + translateY
+          const screenWidth = Number(bounds.width) * zoom
+          const screenHeight = Number(bounds.height) * zoom
+          const padding = Math.max(8, Math.min(24, Math.max(screenWidth, screenHeight) * 0.04))
+          const left = Math.max(0, screenLeft - padding)
+          const top = Math.max(0, screenTop - padding)
+          const right = Math.min(canvasWidth, screenLeft + screenWidth + padding)
+          const bottom = Math.min(canvasHeight, screenTop + screenHeight + padding)
+          const width = right - left
+          const height = bottom - top
+          if (width <= 1 || height <= 1) return undefined
+          return canvas.toDataURL({
+            format: 'png',
+            left,
+            top,
+            width,
+            height,
+            multiplier: 1,
+            enableRetinaScaling: false
+          })
+        })()
+      : canvas.toDataURL({ format: 'png', multiplier: 1, enableRetinaScaling: false })
+    return typeof preview === 'string' && preview.startsWith('data:image/') ? preview : undefined
+  } catch (error) {
+    console.warn('[LabelTemplateMiniEditor] Não foi possível gerar o preview', error)
+    return undefined
   }
 }
 
@@ -3550,9 +4530,14 @@ const save = async () => {
 
     const saveResult = await new Promise<TemplateSaveResult>((resolve) => {
       let settled = false
+      let timeoutHandle: ReturnType<typeof setTimeout> | null = null
       const finalize = (result: TemplateSaveResult) => {
         if (settled) return
         settled = true
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle)
+          timeoutHandle = null
+        }
         resolve(result)
       }
       const templateId = String(props.template?.id || '').trim()
@@ -3560,8 +4545,13 @@ const save = async () => {
         finalize({ ok: false, message: 'Template inválido para salvar.' })
         return
       }
-      emit('save', templateId, { group: groupJson, name }, finalize)
-      setTimeout(() => {
+      const previewDataUrl = renderMiniEditorPreview()
+      emit('save', templateId, {
+        group: groupJson,
+        name,
+        ...(previewDataUrl ? { previewDataUrl } : {})
+      }, finalize)
+      timeoutHandle = setTimeout(() => {
         finalize({ ok: false, message: 'Tempo esgotado ao salvar a etiqueta. Tente novamente.' })
       }, 20000)
     })
@@ -3570,6 +4560,12 @@ const save = async () => {
       saveError.value = saveResult?.message || 'Falha ao salvar a etiqueta'
       return
     }
+
+    // A successful persistence establishes the current history state as the
+    // clean baseline, so Esc/Fechar does not ask about changes already saved.
+    recordHistorySnapshot('save')
+    savedHistoryFingerprint.value = historyFingerprint.value
+    savedEditorName.value = name.trim()
 
     // Keep the edited tag visible and centered after save/reload cycles.
     if (typeof window !== 'undefined') {
@@ -3586,32 +4582,30 @@ const save = async () => {
 }
 
 onMounted(async () => {
-  await loadFabric()
-  if (!canvasEl.value) return
+  try {
+    await loadFabric()
+    if (!canvasEl.value) return
 
-  canvas = new fabric.Canvas(canvasEl.value, {
-    width: 520,
-    height: 220,
-    backgroundColor: 'transparent',
-    preserveObjectStacking: true,
-    selection: true
-  })
+    canvas = new fabric.Canvas(canvasEl.value, {
+      width: 520,
+      height: 220,
+      backgroundColor: 'transparent',
+      preserveObjectStacking: true,
+      selection: true
+    })
 
-  const handleCanvasObjectModified = () => {
-    queueHistorySnapshot('object:modified', 80)
-  }
+    const handleCanvasObjectModified = () => {
+      queueHistorySnapshot('object:modified', 80)
+    }
 
-  // Enhanced selection handling for groups with subTargetCheck
-  const handleSelection = (e: any) => {
-    console.log('[MiniEditor] selection event:', e?.kind, 'selected:', e?.selected?.[0]?.name || e?.selected?.[0]?.type)
-
+    // Enhanced selection handling for groups with subTargetCheck
+    const handleSelection = (e: any) => {
     // Try to get the actual sub-target that was clicked
     let actualTarget = e?.selected?.[0]
 
     // If it's our group, try to find what was actually clicked
     if (actualTarget === group && e?.subTargets && e.subTargets.length > 0) {
       actualTarget = e.subTargets[0]
-      console.log('[MiniEditor] using subTarget:', actualTarget?.name)
     }
 
     setSelected({
@@ -3619,37 +4613,32 @@ onMounted(async () => {
       subTargets: e?.subTargets,
       selected: e?.selected
     })
-  }
+    }
 
-  canvas.on('selection:created', handleSelection)
-  canvas.on('selection:updated', handleSelection)
-  canvas.on('selection:cleared', () => {
-    console.log('[MiniEditor] selection cleared')
+    canvas.on('selection:created', handleSelection)
+    canvas.on('selection:updated', handleSelection)
+    canvas.on('selection:cleared', () => {
     if (allContentMoveMode.value) setAllContentMoveMode(false)
     selectedObj.value = null
     updateKey.value++
-  })
+    })
 
-  // Also try to catch clicks on objects
-  canvas.on('mouse:down', (e: any) => {
+    // Also try to catch clicks on objects
+    canvas.on('mouse:down', (e: any) => {
     if (allContentMoveMode.value && group) {
       canvas.setActiveObject?.(group)
       selectedObj.value = group
       updateKey.value++
       return
     }
-    console.log('[MiniEditor] mouse:down', {
-      target: e?.target?.name || e?.target?.type,
-      subTarget: e?.subTarget?.name || e?.subTarget?.type
-    })
     setSelected({
       target: e?.target,
       subTarget: e?.subTarget,
       subTargets: e?.subTargets
     })
-  })
+    })
 
-  canvas.on('mouse:up', (e: any) => {
+    canvas.on('mouse:up', (e: any) => {
     if (allContentMoveMode.value && group) {
       canvas.setActiveObject?.(group)
       selectedObj.value = group
@@ -3664,28 +4653,48 @@ onMounted(async () => {
         subTargets: e?.subTargets
       })
     }
-  })
-
-  // Add path modifier to ensure subTargetCheck works
-  canvas.on('path:created', (e: any) => {
-    console.log('[MiniEditor] path:created', e?.path?.name)
-  })
-  canvas.on('object:modified', handleCanvasObjectModified)
-
-  isReady.value = true
-  setZoom(100)
-  await loadTemplate()
-  if (typeof window !== 'undefined') {
-    window.addEventListener('keydown', handleMiniEditorKeydown)
-  }
-
-  // Keep the Fabric canvas strictly inside the preview viewport.
-  if (viewportEl.value && typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver(() => {
-      resizeCanvasToViewport()
-      fitToViewport()
     })
-    ro.observe(viewportEl.value)
+
+    const handleTextSelectionChanged = (e: any) => {
+    const target = e?.target || canvas?.getActiveObject?.() || selectedObj.value
+    if (target && isTextLikeObject(target)) syncTextSelectionState(target)
+    }
+    const handleTextChanged = (e: any) => {
+      const target = e?.target
+      if (!target || !isTextLikeObject(target)) return
+      if (isRichPriceTextObject(target)) applyRichPriceTextValue(target, target.text)
+      markObjectTreeDirty(target)
+      target.dirty = true
+      target.setCoords?.()
+      updateKey.value++
+      queueHistorySnapshot('text:changed', 120)
+      canvas?.requestRenderAll?.()
+    }
+    canvas.on('text:selection:changed', handleTextSelectionChanged)
+    canvas.on('text:editing:entered', handleTextSelectionChanged)
+    canvas.on('text:editing:exited', handleTextSelectionChanged)
+    canvas.on('text:changed', handleTextChanged)
+
+    canvas.on('object:modified', handleCanvasObjectModified)
+
+    isReady.value = true
+    setZoom(100)
+    await loadTemplate()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', handleMiniEditorKeydown)
+    }
+
+    // Keep the Fabric canvas strictly inside the preview viewport.
+    if (viewportEl.value && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        resizeCanvasToViewport()
+        fitToViewport()
+      })
+      resizeObserver.observe(viewportEl.value)
+    }
+  } catch (error) {
+    isReady.value = false
+    reportEditorError(error, 'Não foi possível iniciar o editor de etiquetas.')
   }
 })
 
@@ -3695,6 +4704,8 @@ onBeforeUnmount(() => {
     historyDebounceTimer = null
   }
   renderQueued = false
+  resizeObserver?.disconnect()
+  resizeObserver = null
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleMiniEditorKeydown)
   }
@@ -3724,6 +4735,7 @@ watch(
 <template>
   <div class="me-container">
     <input ref="imageInputEl" type="file" class="hidden" accept="image/*" @change="onAddImage" />
+    <input ref="backgroundImageInputEl" type="file" class="hidden" accept="image/*" @change="onAddBackgroundImage" />
     <input ref="replaceImageInputEl" type="file" class="hidden" accept="image/*" @change="replaceSelectedImage" />
 
     <!-- Floating Top Bar (compact) -->
@@ -3746,7 +4758,7 @@ watch(
           </svg>
           {{ isSaving ? 'Salvando...' : 'Salvar' }}
         </button>
-        <button class="me-close-compact" @click="emit('close')" title="Fechar (Esc)">
+        <button type="button" class="me-close-compact" @click="requestClose" title="Fechar (Esc)">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -3759,6 +4771,13 @@ watch(
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
       {{ saveError }}
+    </div>
+
+    <div v-if="editorError" class="me-error-msg-compact" role="alert">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      {{ editorError }}
     </div>
 
     <div class="me-grid">
@@ -3784,6 +4803,12 @@ watch(
           <button class="me-tool-btn-compact" @click="openAddImage" title="Adicionar imagem">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
+          <button class="me-tool-btn-compact" @click="openAddBackgroundImage" title="Adicionar imagem de fundo">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.5-4.5a2 2 0 012.8 0L16 16l1.5-1.5a2 2 0 012.5-.2" />
             </svg>
           </button>
           <div class="me-toolbar-divider"></div>
@@ -3890,6 +4915,13 @@ watch(
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             Imagem
+          </button>
+          <button class="me-insert-btn me-insert-btn--background" @click="openAddBackgroundImage" title="Adicionar imagem de fundo">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.5-4.5a2 2 0 012.8 0L16 16l1.5-1.5a2 2 0 012.5-.2" />
+            </svg>
+            Imagem de fundo
           </button>
         </div>
 
@@ -4068,6 +5100,19 @@ watch(
             </button>
             <div v-show="!isSectionCollapsed('appearance')" class="me-accordion-content">
               <!-- Preset Colors (Figma-inspired) -->
+              <div v-if="isText" class="mb-4 space-y-2">
+                <label class="me-prop-label">Degradê do texto</label>
+                <div class="flex items-center gap-2">
+                  <input v-model="gradientStart" type="color" aria-label="Cor inicial do degradê" title="Cor inicial" />
+                  <input v-model="gradientEnd" type="color" aria-label="Cor final do degradê" title="Cor final" />
+                  <select v-model="gradientDirection" aria-label="Direção do degradê" class="me-input">
+                    <option value="vertical">Vertical</option>
+                    <option value="horizontal">Horizontal</option>
+                    <option value="diagonal">Diagonal</option>
+                  </select>
+                </div>
+                <button class="w-full rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500" @click="applyTextGradient">Aplicar degradê</button>
+              </div>
               <div class="me-preset-colors">
                 <button
                   v-for="color in PRICE_LABEL_COLORS"
@@ -4087,18 +5132,18 @@ watch(
                     <div
                       :ref="isText ? 'fillColorTrigger' : 'fillColorTrigger2'"
                       class="me-color-swatch-large"
-                      :style="{ backgroundColor: current('fill', '#ffffff') }"
+                      :style="{ backgroundColor: solidFillColor() }"
                       @click="isText ? (showFillColorPicker = true) : (showFillColorPicker2 = true)"
                     ></div>
                     <input
                       class="me-color-hex-input"
-                      :value="String(current('fill', '#ffffff')).replace('#', '').toUpperCase()"
+                      :value="String(solidFillColor()).replace('#', '').toUpperCase()"
                       maxlength="6"
                       @input="patch('fill', '#' + ($event.target as HTMLInputElement).value.replace('#', ''))"
                     />
                     <ColorPicker
                       :show="isText ? showFillColorPicker : showFillColorPicker2"
-                      :model-value="current('fill', '#ffffff')"
+                      :model-value="solidFillColor()"
                       :trigger-element="isText ? fillColorTrigger : fillColorTrigger2"
                       @update:show="isText ? (showFillColorPicker = $event) : (showFillColorPicker2 = $event)"
                       @update:model-value="(val: string) => patch('fill', val)"
@@ -4183,6 +5228,133 @@ watch(
                   :value="current('text', '')"
                   @input="patch('text', ($event.target as HTMLInputElement).value)"
                 />
+              </div>
+
+              <div class="me-text-color-section">
+                <div class="me-text-color-section__header">
+                  <span>Cores por trecho</span>
+                  <span class="me-text-color-section__status">
+                    {{ textRangeIsActive ? 'seleção ativa' : `${textRangeStart}-${textRangeEnd}` }}
+                  </span>
+                </div>
+                <p class="me-text-color-section__hint">Escolha o intervalo e aplique a cor no texto selecionado.</p>
+                <div class="me-props-grid me-props-grid--2">
+                  <div>
+                    <label class="me-prop-label">Início</label>
+                    <input v-model.number="textRangeStart" type="number" min="0" class="me-text-input" />
+                  </div>
+                  <div>
+                    <label class="me-prop-label">Fim</label>
+                    <input v-model.number="textRangeEnd" type="number" min="0" class="me-text-input" />
+                  </div>
+                </div>
+                <div class="me-text-color-row">
+                  <label class="me-prop-label">Cor do trecho</label>
+                  <div class="me-text-color-picker">
+                    <input v-model="textSegmentColor" type="color" aria-label="Cor do trecho" />
+                    <span>{{ textSegmentColor.toUpperCase() }}</span>
+                  </div>
+                </div>
+                <div class="me-text-color-row">
+                  <label class="me-prop-label">Cor 2</label>
+                  <div class="me-text-color-picker">
+                    <input v-model="textSecondColor" type="color" aria-label="Segunda cor do texto" />
+                    <span>{{ textSecondColor.toUpperCase() }}</span>
+                  </div>
+                </div>
+                <div class="me-text-color-actions">
+                  <button type="button" class="me-text-color-action me-text-color-action--primary" @click="applyTextSegmentColor">Aplicar trecho</button>
+                  <button type="button" class="me-text-color-action" @click="applyTwoTextColors">Dividir em 2 cores</button>
+                  <button type="button" class="me-text-color-action" @click="applyTextColorToWhole">Aplicar no texto todo</button>
+                </div>
+              </div>
+
+              <div v-if="isRichPriceText" class="me-rich-price-section">
+                <div class="me-rich-price-header">
+                  <span>Preço em um único texto</span>
+                  <code>10,99</code>
+                </div>
+                <p class="me-rich-price-hint">Controle o tamanho do inteiro e dos centavos sem separar o valor em objetos diferentes.</p>
+                <div class="me-props-grid me-props-grid--2">
+                  <div>
+                    <label class="me-prop-label">Inteiro (10)</label>
+                    <input
+                      type="number"
+                      min="6"
+                      max="320"
+                      class="me-text-input"
+                      :value="richPriceSegmentSize('integer', 48)"
+                      @input="setRichPriceSegmentFontSize('integer', ($event.target as HTMLInputElement).value)"
+                    />
+                  </div>
+                  <div>
+                    <label class="me-prop-label">Centavos (99)</label>
+                    <input
+                      type="number"
+                      min="6"
+                      max="320"
+                      class="me-text-input"
+                      :value="richPriceSegmentSize('decimal', 26)"
+                      @input="setRichPriceSegmentFontSize('decimal', ($event.target as HTMLInputElement).value)"
+                    />
+                  </div>
+                </div>
+                <div class="me-rich-price-offsets">
+                  <div class="me-rich-price-offsets__header">
+                    <span>Posição independente (px)</span>
+                    <span class="me-rich-price-offsets__hint">X / Y por trecho</span>
+                  </div>
+                  <div class="me-props-grid me-props-grid--2">
+                    <div>
+                      <label class="me-prop-label">Inteiro X</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="-240"
+                        max="240"
+                        class="me-text-input"
+                        :value="richPriceSegmentOffset('integer', 'x')"
+                        @input="setRichPriceSegmentOffsetValue('integer', 'x', ($event.target as HTMLInputElement).value)"
+                      />
+                    </div>
+                    <div>
+                      <label class="me-prop-label">Inteiro Y</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="-240"
+                        max="240"
+                        class="me-text-input"
+                        :value="richPriceSegmentOffset('integer', 'y')"
+                        @input="setRichPriceSegmentOffsetValue('integer', 'y', ($event.target as HTMLInputElement).value)"
+                      />
+                    </div>
+                    <div>
+                      <label class="me-prop-label">Centavos X</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="-240"
+                        max="240"
+                        class="me-text-input"
+                        :value="richPriceSegmentOffset('decimal', 'x')"
+                        @input="setRichPriceSegmentOffsetValue('decimal', 'x', ($event.target as HTMLInputElement).value)"
+                      />
+                    </div>
+                    <div>
+                      <label class="me-prop-label">Centavos Y</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="-240"
+                        max="240"
+                        class="me-text-input"
+                        :value="richPriceSegmentOffset('decimal', 'y')"
+                        @input="setRichPriceSegmentOffsetValue('decimal', 'y', ($event.target as HTMLInputElement).value)"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div v-if="isUnitText" class="me-hint-box">
@@ -4519,6 +5691,30 @@ watch(
                   </svg>
                   Trocar Imagem
                 </button>
+                <button
+                  v-if="!isBackgroundImageSelected"
+                  class="me-image-background-btn"
+                  @click="promoteSelectedImageToBackground"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.5-4.5a2 2 0 012.8 0L16 16l1.5-1.5a2 2 0 012.5-.2" />
+                  </svg>
+                  Usar como fundo
+                </button>
+                <button
+                  v-else
+                  class="me-image-background-btn me-image-background-btn--active"
+                  @click="removeSelectedImageAsBackground"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                  Tirar do fundo
+                </button>
+                <p class="me-image-hint">
+                  {{ isBackgroundImageSelected ? 'Preenche a base da etiqueta e fica atrás dos textos.' : 'Imagem livre: mova, aumente e escolha quando ela deve virar fundo.' }}
+                </p>
                 <div class="me-props-grid me-props-grid--2">
                   <label class="me-checkbox-label">
                     <input
@@ -4540,6 +5736,29 @@ watch(
                   </label>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div v-if="isAtacarejoTemplate" class="me-accordion-section me-atacarejo-behavior-section">
+            <div class="me-accordion-header me-accordion-header--static">
+              <svg class="me-accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Comportamento comercial</span>
+            </div>
+            <div class="me-accordion-content me-atacarejo-behavior-content">
+              <label class="me-checkbox-label">
+                <input
+                  type="checkbox"
+                  class="me-small-checkbox"
+                  :checked="autoCollapseMissingPrices"
+                  @change="setAutoCollapseMissingPrices(($event.target as HTMLInputElement).checked)"
+                />
+                Auto-colapsar faixas sem preço
+              </label>
+              <p class="me-atac-variants-hint">
+                Oculta a faixa sem valor e reduz a etiqueta quando o produto não tiver todas as condições.
+              </p>
             </div>
           </div>
 
@@ -4711,6 +5930,82 @@ watch(
   @apply flex flex-col h-full p-2;
 }
 
+.me-rich-price-section {
+  @apply rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-2.5;
+}
+
+.me-rich-price-header {
+  @apply flex items-center justify-between gap-2 text-[11px] font-semibold text-indigo-200;
+}
+
+.me-rich-price-header code {
+  @apply rounded bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[10px] text-indigo-100;
+}
+
+.me-rich-price-hint {
+  @apply mt-1 text-[10px] leading-4 text-zinc-400;
+}
+
+.me-rich-price-offsets {
+  @apply mt-2 rounded-md border border-indigo-500/15 bg-black/10 p-2;
+}
+
+.me-rich-price-offsets__header {
+  @apply mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-indigo-100;
+}
+
+.me-rich-price-offsets__hint {
+  @apply font-normal text-zinc-500;
+}
+
+.me-text-color-section {
+  @apply rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 space-y-2;
+}
+
+.me-text-color-section__header {
+  @apply flex items-center justify-between gap-2 text-[11px] font-semibold text-amber-200;
+}
+
+.me-text-color-section__status {
+  @apply rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] text-amber-100;
+}
+
+.me-text-color-section__hint {
+  @apply text-[10px] leading-4 text-zinc-400;
+}
+
+.me-text-color-row {
+  @apply flex items-center justify-between gap-2;
+}
+
+.me-text-color-row .me-prop-label {
+  @apply mb-0;
+}
+
+.me-text-color-picker {
+  @apply flex items-center gap-2;
+}
+
+.me-text-color-picker input[type="color"] {
+  @apply h-7 w-9 cursor-pointer rounded border border-zinc-600 bg-transparent p-0.5;
+}
+
+.me-text-color-picker span {
+  @apply min-w-16 font-mono text-[10px] text-zinc-300;
+}
+
+.me-text-color-actions {
+  @apply grid grid-cols-1 gap-1.5;
+}
+
+.me-text-color-action {
+  @apply rounded-lg border border-zinc-700/60 bg-zinc-800/50 px-2 py-1.5 text-[10px] font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white;
+}
+
+.me-text-color-action--primary {
+  @apply border-amber-500/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25;
+}
+
 /* Floating Top Bar (compact) */
 .me-top-bar {
   @apply flex items-center justify-between gap-3 px-3 py-2 mb-2 bg-zinc-900/80 backdrop-blur-sm rounded-xl border border-zinc-800/50;
@@ -4835,6 +6130,10 @@ watch(
 
 .me-insert-btn--primary {
   @apply border-violet-500/40 bg-violet-500/15 text-violet-100 hover:bg-violet-500/25;
+}
+
+.me-insert-btn--background {
+  @apply border-sky-500/30 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20;
 }
 
 /* Empty State */
@@ -5154,6 +6453,18 @@ input[type="checkbox"] {
 
 .me-replace-image-btn {
   @apply w-full px-3 py-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-xs text-zinc-300 transition-colors flex items-center justify-center gap-2;
+}
+
+.me-image-background-btn {
+  @apply w-full px-3 py-2 rounded-lg border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-xs text-sky-100 transition-colors flex items-center justify-center gap-2;
+}
+
+.me-image-background-btn--active {
+  @apply border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20;
+}
+
+.me-image-hint {
+  @apply text-[10px] leading-4 text-zinc-500;
 }
 
 .me-image-checkboxes {

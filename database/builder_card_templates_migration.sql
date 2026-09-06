@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS builder_card_templates (
     elements JSONB NOT NULL DEFAULT '[]',
     -- Estilos globais do card (fundo, borda, sombra, overflow)
     card_style JSONB DEFAULT '{}',
+    -- Lista de modelos/formats suportados. Vazia = todos os formatos.
+    model_ids UUID[] DEFAULT '{}',
     is_active BOOLEAN DEFAULT TRUE,
     sort_order INT DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),

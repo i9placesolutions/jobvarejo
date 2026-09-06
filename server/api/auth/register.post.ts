@@ -2,6 +2,7 @@ import { countProfiles, createProfileWithPassword, ensureAuthColumns, getProfile
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { hashPassword } from '../../utils/password'
 import { createSessionToken } from '../../utils/session-token'
+import { getAuthCookieOptions } from '../../utils/auth-cookie'
 import type { UserRole } from '~/types/auth'
 
 const normalizeName = (value: unknown): string => String(value || '').trim().replace(/\s+/g, ' ')
@@ -65,13 +66,10 @@ export default defineEventHandler(async (event) => {
       role
     })
 
-    const isProduction = process.env.NODE_ENV === 'production'
-    const isTunnel = String(getHeader(event, 'host') || '').includes('devtunnels.ms')
-    const useSecure = isProduction || isTunnel
-    const sameSite = isTunnel ? 'none' as const : 'lax' as const
-    setCookie(event, 'access-token', token, { path: '/', maxAge: expiresIn, sameSite, secure: useSecure, httpOnly: true })
-    setCookie(event, 'sb-access-token', token, { path: '/', maxAge: expiresIn, sameSite, secure: useSecure, httpOnly: true })
-    setCookie(event, 'authenticated', 'true', { path: '/', maxAge: expiresIn, sameSite, secure: useSecure, httpOnly: false })
+    const cookieBase = getAuthCookieOptions(event, expiresIn)
+    setCookie(event, 'access-token', token, { ...cookieBase, httpOnly: true })
+    setCookie(event, 'sb-access-token', token, { ...cookieBase, httpOnly: true })
+    setCookie(event, 'authenticated', 'true', { ...cookieBase, httpOnly: false })
 
     response.session = {
       access_token: token,

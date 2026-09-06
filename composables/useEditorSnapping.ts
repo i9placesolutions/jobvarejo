@@ -125,6 +125,58 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
         }
 
         const getBounds = (o: any): SnapBounds => {
+            if (deps.isLikelyProductZone(o)) {
+                const metrics = deps.getZoneMetrics(o)
+                const width = Number(metrics?.width || 0)
+                const height = Number(metrics?.height || 0)
+                if (metrics && width > 0 && height > 0) {
+                    const left = Number(metrics.left)
+                    const top = Number(metrics.top)
+                    return {
+                        left,
+                        right: left + width,
+                        top,
+                        bottom: top + height,
+                        centerX: Number(metrics.centerX ?? left + width / 2),
+                        centerY: Number(metrics.centerY ?? top + height / 2),
+                        width,
+                        height
+                    }
+                }
+            }
+
+            // Fabric returns object coordinates in the scene plane. Prefer this
+            // source for every non-zone object so rotation, skew, groups and
+            // non-center origins do not make the guides drift from the art.
+            try {
+                const rect = o?.getBoundingRect?.()
+                const left = Number(rect?.left)
+                const top = Number(rect?.top)
+                const width = Math.abs(Number(rect?.width))
+                const height = Math.abs(Number(rect?.height))
+                if (
+                    Number.isFinite(left) &&
+                    Number.isFinite(top) &&
+                    Number.isFinite(width) &&
+                    Number.isFinite(height) &&
+                    width > 0 &&
+                    height > 0
+                ) {
+                    return {
+                        left,
+                        right: left + width,
+                        top,
+                        bottom: top + height,
+                        centerX: left + width / 2,
+                        centerY: top + height / 2,
+                        width,
+                        height
+                    }
+                }
+            } catch {
+                // Fall back to the legacy dimension calculation below.
+            }
+
             const width = Math.abs((o.width || 0) * (o.scaleX || 1))
             const height = Math.abs((o.height || 0) * (o.scaleY || 1))
             let actualLeft = o.left || 0
@@ -250,9 +302,9 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
             for (const o of all) {
                 if (!o || o === exclude) continue
                 if (frameDescendants && frameDescendants.has(o)) continue
-                if (o.excludeFromExport || isControl(o)) continue
+                if (isControl(o)) continue
                 if (o.id === 'artboard-bg' || o.id === 'guide-vertical' || o.id === 'guide-horizontal') continue
-                if (parentFrameId && o.isFrame && o._customId === parentFrameId) continue
+                if (o.excludeFromExport && !o.businessProfileField && !o.quickDataField) continue
                 nextTargets.push(o)
                 nextBounds.set(o, getBounds(o))
             }
@@ -403,8 +455,9 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
             const isScaleTransform = !!currentTransform && transformAction.includes('scale')
             const zoom = Math.max(0.01, Number(canvasInstance.getZoom?.() || 1))
             const snapRange = SNAP_RANGE_PX / zoom
-            const isRectOrImage = String(obj.type || '').toLowerCase() === 'rect' || String(obj.type || '').toLowerCase() === 'image'
-            const activeSnapRange = snapRange * (isRectOrImage ? SNAP_RANGE_FACTOR_RECT_IMAGE : 1)
+            const isZone = deps.isLikelyProductZone(obj)
+            const isRectOrImage = !isZone && (String(obj.type || '').toLowerCase() === 'rect' || String(obj.type || '').toLowerCase() === 'image')
+            const activeSnapRange = snapRange * (isZone ? 1.25 : isRectOrImage ? SNAP_RANGE_FACTOR_RECT_IMAGE : 1)
             const snapReleaseFactor = isRectOrImage ? SNAP_HYSTERESIS_HOLD_FACTOR_RECT_IMAGE : SNAP_HYSTERESIS_HOLD_FACTOR
 
             if (!obj || isControl(obj)) {
@@ -441,12 +494,11 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
                     isMoveArmedForSnap = true
                 }
 
-                const perFrameMoveGatePx = isRectOrImage ? moveGatePx : SNAP_MOVE_EPSILON_PX
+                const perFrameMoveGatePx = SNAP_MOVE_EPSILON_PX
                 if (hasLastMoveEvalPoint) {
                     const moveDelta = Math.hypot(currentMoveX - lastMoveEvalPoint.x, currentMoveY - lastMoveEvalPoint.y)
                     if (moveDelta < perFrameMoveGatePx) {
                         lastMoveEvalPoint = { x: currentMoveX, y: currentMoveY }
-                        hideGuides()
                         syncMovingFrameClip(obj)
                         return
                     }
@@ -514,6 +566,11 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
                 const cardH = (parentGroup as any)._cardHeight || parentGroup.height
 
                 ;(obj as any).__manualTransform = true
+                if (String((obj as any)?.name || '').trim() === 'priceGroup') {
+                    // Move/resize do bloco da etiqueta é uma escolha externa;
+                    // edição de seus filhos não deve receber este marcador.
+                    ;(obj as any).__manualPricePosition = true
+                }
                 ;(obj as any).__manualTransformCardW = Number(cardW) || (obj as any).__manualTransformCardW
                 ;(obj as any).__manualTransformCardH = Number(cardH) || (obj as any).__manualTransformCardH
 
@@ -666,22 +723,27 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
             const b = getBounds(obj)
 
             const parentFrameId = (obj as any).parentFrameId as string | undefined
-            const parentFrame = getSnapFrameById(parentFrameId)
+            let parentFrame = obj?.isFrame ? null : getSnapFrameById(parentFrameId)
+            if (!parentFrame && !obj?.isFrame) {
+                const frames = canvasInstance.getObjects().filter((candidate: any) => candidate?.isFrame)
+                parentFrame = frames.find((frame: any) => {
+                    const fb = getCachedBounds(frame)
+                    return b.centerX >= fb.left && b.centerX <= fb.right && b.centerY >= fb.top && b.centerY <= fb.bottom
+                }) || null
+            }
 
             const pageW = deps.activePage.value?.width ?? 1080
             const pageH = deps.activePage.value?.height ?? 1920
-            const container = parentFrame
-                ? (() => {
-                    const fb = getCachedBounds(parentFrame)
-                    return {
-                        left: fb.left,
-                        right: fb.right,
-                        top: fb.top,
-                        bottom: fb.bottom,
-                        centerX: fb.centerX,
-                        centerY: fb.centerY
-                    }
-                })()
+            const frameBounds = parentFrame ? getCachedBounds(parentFrame) : null
+            const container = frameBounds
+                ? {
+                    left: frameBounds.left,
+                    right: frameBounds.right,
+                    top: frameBounds.top,
+                    bottom: frameBounds.bottom,
+                    centerX: frameBounds.centerX,
+                    centerY: frameBounds.centerY
+                }
                 : {
                     left: 0,
                     right: pageW,
@@ -693,8 +755,8 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
 
             let vVisible = false, hVisible = false
             let vX = 0, hY = 0
-            let bestVDist = snapRange + 1
-            let bestHDist = snapRange + 1
+            let bestVDist = Number.POSITIVE_INFINITY
+            let bestHDist = Number.POSITIVE_INFINITY
             let snapVType: 'left' | 'right' | 'center' = 'center'
             let snapHType: 'top' | 'bottom' | 'center' = 'center'
 
@@ -813,14 +875,22 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
             }
 
             if (allowPositionSnap && vVisible) {
-                if (snapVType === 'left') setObjLeft(obj, vX)
-                else if (snapVType === 'right') setObjRight(obj, vX)
-                else setObjCenterX(obj, vX)
+                const visual = getBounds(obj)
+                const dx = snapVType === 'left'
+                    ? vX - visual.left
+                    : snapVType === 'right'
+                        ? vX - visual.right
+                        : vX - visual.centerX
+                if (dx) obj.set('left', (obj.left || 0) + dx)
             }
             if (allowPositionSnap && hVisible) {
-                if (snapHType === 'top') setObjTop(obj, hY)
-                else if (snapHType === 'bottom') setObjBottom(obj, hY)
-                else setObjCenterY(obj, hY)
+                const visual = getBounds(obj)
+                const dy = snapHType === 'top'
+                    ? hY - visual.top
+                    : snapHType === 'bottom'
+                        ? hY - visual.bottom
+                        : hY - visual.centerY
+                if (dy) obj.set('top', (obj.top || 0) + dy)
             }
 
             if (allowPositionSnap && deps.snapToGrid.value && !isRectOrImage && !vVisible && !hVisible) {
@@ -848,16 +918,22 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
             }
 
             if (vVisible || hVisible) {
-                const vb = getViewportBounds()
-                const viewW = Math.max(1, vb.maxX - vb.minX)
-                const viewH = Math.max(1, vb.maxY - vb.minY)
-                const pad = Math.max(400, Math.max(viewW, viewH) * 0.5)
+                const guideBox = frameBounds || getViewportBounds()
+                const minX = Number((guideBox as any).left ?? (guideBox as any).minX ?? 0)
+                const maxX = Number((guideBox as any).right ?? (guideBox as any).maxX ?? 0)
+                const minY = Number((guideBox as any).top ?? (guideBox as any).minY ?? 0)
+                const maxY = Number((guideBox as any).bottom ?? (guideBox as any).maxY ?? 0)
 
                 if (vVisible) {
-                    if (!lastGuideRender.vVisible || lastGuideRender.vX !== vX) {
-                        verticalGuide.set({ x1: vX, y1: vb.minY - pad, x2: vX, y2: vb.maxY + pad, visible: true })
-                        lastGuideRender.vX = vX
-                    }
+                    verticalGuide.set({
+                        x1: vX,
+                        y1: minY,
+                        x2: vX,
+                        y2: maxY,
+                        visible: true,
+                        opacity: 1
+                    })
+                    lastGuideRender.vX = vX
                     lastGuideRender.vVisible = true
                 } else if (lastGuideRender.vVisible) {
                     verticalGuide.set({ visible: false })
@@ -865,10 +941,15 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
                 }
 
                 if (hVisible) {
-                    if (!lastGuideRender.hVisible || lastGuideRender.hY !== hY) {
-                        horizontalGuide.set({ x1: vb.minX - pad, y1: hY, x2: vb.maxX + pad, y2: hY, visible: true })
-                        lastGuideRender.hY = hY
-                    }
+                    horizontalGuide.set({
+                        x1: minX,
+                        y1: hY,
+                        x2: maxX,
+                        y2: hY,
+                        visible: true,
+                        opacity: 1
+                    })
+                    lastGuideRender.hY = hY
                     lastGuideRender.hVisible = true
                 } else if (lastGuideRender.hVisible) {
                     horizontalGuide.set({ visible: false })

@@ -79,9 +79,10 @@ export type AvailablePricesResult = {
  *
  *   1. priceSpecialUnit (atacado especial, sem label)
  *   2. priceSpecial (atacado embalagem, label CX/packageLabel)
- *   3. priceUnit (varejo unitario - "main")
- *   4. pricePack (embalagem - "main" se nao tem unit, senao "pack")
- *   5. price (legado, fallback final)
+ *   3. priceWholesale (atacado legado, somente quando nao ha especial explicito)
+ *   4. priceUnit (varejo unitario - "main")
+ *   5. pricePack (embalagem - "main" se nao tem unit, senao "pack")
+ *   6. price (legado, fallback final)
  *
  * Tambem retorna a condicao especial e mainPrice — string formatada
  * pronta para a etiqueta. Ordem de fallback do mainPrice:
@@ -102,10 +103,19 @@ export const getAvailablePrices = (product: any): AvailablePricesResult => {
         return false
     }
 
-    const hasSpecialUnit = addPrice(product?.priceSpecialUnit, '', 'special')
+    const specialUnitFormatted = formatPriceValue(product?.priceSpecialUnit)
+    const specialPackFormatted = formatPriceValue(product?.priceSpecial)
+    addPrice(specialUnitFormatted, '', 'special')
+    // Preserve the explicit pack/unit distinction. Only collapse equal values,
+    // which are commonly duplicated by the single-unit normalizer.
+    if (specialPackFormatted && specialPackFormatted !== specialUnitFormatted) {
+        addPrice(specialPackFormatted, product?.packageLabel || 'CX', 'special')
+    } else if (!specialUnitFormatted) {
+        addPrice(specialPackFormatted, product?.packageLabel || 'CX', 'special')
+    }
 
-    if (!hasSpecialUnit) {
-        addPrice(product?.priceSpecial, product?.packageLabel || 'CX', 'special')
+    if (!specialUnitFormatted && !specialPackFormatted) {
+        addPrice(product?.priceWholesale, '', 'special')
     }
 
     const hasSpecial = prices.some(p => p.type === 'special')

@@ -83,7 +83,21 @@ const exportWithRetry = async (input: ExportRetryInput): Promise<ExportBlobResul
       if (input.postProcessDataUrl) {
         dataUrl = await input.postProcessDataUrl(dataUrl)
       }
-      const blob = await dataUrlToBlob(dataUrl)
+      let blob = await dataUrlToBlob(dataUrl)
+      if (input.format === 'png' && blob.size > 256_000 && typeof window !== 'undefined') {
+        try {
+          const response = await fetch('/api/export/optimize-png', {
+            method: 'POST', body: blob, headers: { 'Content-Type': 'image/png' },
+            credentials: 'same-origin', signal: AbortSignal.timeout(20000)
+          })
+          if (response.ok && response.headers.get('content-type')?.includes('image/png')) {
+            const optimized = await response.blob()
+            if (optimized.size > 0 && optimized.size < blob.size) blob = optimized
+          }
+        } catch {
+          // O PNG original sem perda continua disponível se a otimização falhar.
+        }
+      }
       return {
         blob,
         dataUrl,

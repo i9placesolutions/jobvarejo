@@ -645,7 +645,7 @@ export const isProductCardImageSelectionCandidateJson = (obj: any): boolean => {
     if (!obj || String(obj?.type || '').toLowerCase() !== 'image') return false
     const smartType = String((obj as any)?.data?.smartType || '').toLowerCase()
     const name = String((obj as any)?.name || '').toLowerCase()
-    if (name === 'price_bg_image' || name === 'splash_image') return false
+    if (name === 'label_bg_image' || name === 'price_bg_image' || name === 'splash_image') return false
     if (smartType === 'product-image') return true
     if (name === 'smart_image' || name === 'product_image' || name === 'productimage') return true
     if (name.startsWith('extra_image_')) return true
@@ -733,7 +733,8 @@ export const isPriceGroupVisualShellNode = (node: any): boolean => {
 }
 
 /**
- * Detecta template "Red Burst" via combinacao de 6 nomes especificos.
+ * Detecta template "Red Burst" via os elementos estruturais e o preço rico
+ * (ou o par legado inteiro/centavos).
  */
 export const isRedBurstTemplateGroupJson = (groupJson: any): boolean => {
     if (!groupJson || typeof groupJson !== 'object') return false
@@ -744,8 +745,10 @@ export const isRedBurstTemplateGroupJson = (groupJson: any): boolean => {
         names.has('price_header_bg') &&
         names.has('price_header_text') &&
         names.has('price_burst_line_a') &&
-        names.has('price_integer_text') &&
-        names.has('price_decimal_text')
+        (
+            names.has('price_value_text') ||
+            (names.has('price_integer_text') && names.has('price_decimal_text'))
+        )
     )
 }
 

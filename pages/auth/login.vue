@@ -15,6 +15,7 @@ const showPassword = ref(false)
 const isLoading = ref(false)
 const isRedirecting = ref(false)
 const errorMessage = ref('')
+const BUSINESS_PROFILE_ONBOARDING_KEY = 'jobvarejo:business-profile-onboarding-pending'
 
 const handleLogin = async () => {
   if (isLoading.value || isRedirecting.value) {
@@ -34,6 +35,13 @@ const handleLogin = async () => {
 
     // Avoid overlapping Nuxt navigations if the user submits twice.
     isRedirecting.value = true
+    const shouldOpenBusinessProfile = typeof window !== 'undefined'
+      && window.localStorage.getItem(BUSINESS_PROFILE_ONBOARDING_KEY) === '1'
+    if (shouldOpenBusinessProfile) {
+      window.localStorage.removeItem(BUSINESS_PROFILE_ONBOARDING_KEY)
+      await navigateTo('/business-profile?onboarding=1&returnTo=/', { replace: true })
+      return
+    }
     await navigateTo('/', { replace: true })
   } catch (error: any) {
     isRedirecting.value = false

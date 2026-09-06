@@ -85,7 +85,7 @@ export const inferHeaderPartsFromProduct = (
     const rawName = String(product?.name || '').replace(/\s+/g, ' ').trim()
     const { cleanedName } = extractLimitFromName(rawName)
     const inferredUnit = inferUnitLabelFromProduct(product)
-    const unit = inferredUnit === 'KG' ? 'KG' : (inferredUnit === 'UN' ? 'UN' : '')
+    const unit = inferredUnit || ''
     const splitUnitIntoDedicatedField = opts.splitUnitIntoDedicatedField !== false
 
     let title = String(cleanedName || fallbackText).toUpperCase()
@@ -121,9 +121,10 @@ export const inferHeaderPartsFromProduct = (
 }
 
 /**
- * Infer unit ('KG' | 'UN' | '') a partir de um card Fabric:
- *  - Prefere metadata explicita (unitLabel/unit/packUnit no proprio card)
- *  - Fallback: scaneia o titulo do card por /\bkg\b/i — se aparece, KG
+ * Infere a unidade comercial a partir de um card Fabric, reaproveitando a
+ * mesma regra usada para produtos importados. Isso evita que `unit: UN`
+ * (default de alguns importadores) esconda um `KG`, `PCT` ou `CX` presente no
+ * nome/gramatura do produto.
  *
  * `findTitleText` injeta a logica de "achar o text node do titulo"
  * (em runtime, getCardTitleText(card)). Mantem este modulo livre da
@@ -134,12 +135,39 @@ export const inferUnitFromCard = (
     findTitleText: (c: any) => any
 ): string => {
     if (!card) return ''
-    const meta = (card as any).unitLabel ?? (card as any).unit ?? (card as any).packUnit ?? ''
-    if (String(meta || '').trim().length) return normalizeUnitForLabel(meta)
     const title = findTitleText(card)
     const text = String(title?.text || '')
+    const productData = (card as any)?._productData && typeof (card as any)._productData === 'object'
+        ? (card as any)._productData
+        : {}
+
+    // Cards legados guardam apenas `unit` no proprio objeto. Preserve essa
+    // prioridade quando nao ha dados de produto para reavaliar; nos cards
+    // importados, `_productData` traz nome/gramatura e permite corrigir o
+    // `UN` generico para KG, PCT, CX etc.
+    const hasProductSignals = Object.keys(productData).some((key) => {
+        const value = productData?.[key]
+        return ['name', 'weight', 'packageLabel', 'packUnit', 'unit'].includes(key)
+            && String(value ?? '').trim().length > 0
+    })
+    if (!hasProductSignals) {
+        const legacyMeta = (card as any).unitLabel ?? (card as any).unit ?? (card as any).packUnit ?? ''
+        if (String(legacyMeta || '').trim().length) return normalizeUnitForLabel(legacyMeta)
+    }
+
+    const inferred = inferUnitLabelFromProduct({
+        ...productData,
+        name: productData?.name || text,
+        unit: productData?.unit ?? (card as any).unitLabel ?? (card as any).unit,
+        weight: productData?.weight ?? (card as any).weight,
+        packUnit: productData?.packUnit ?? (card as any).packUnit,
+        packageLabel: productData?.packageLabel ?? (card as any).packageLabel
+    })
+    if (inferred) return inferred
+
+    // Fallback para cards legados que só preservaram o titulo.
     if (/\bkg\b/i.test(text)) return 'KG'
-    return ''
+    return normalizeUnitForLabel((card as any).unitLabel ?? (card as any).unit ?? (card as any).packUnit ?? '')
 }
 
 /**
@@ -165,7 +193,7 @@ export const inferHeaderPartsForPriceTemplate = (
     const titleRaw = String(productData?.name || rawFromCard).replace(/\s+/g, ' ').trim()
 
     const inferredUnit = inferUnitFromCard(card, findTitleText)
-    const unit = inferredUnit === 'KG' ? 'KG' : (inferredUnit === 'UN' ? 'UN' : '')
+    const unit = inferredUnit || ''
     const splitUnitIntoDedicatedField = opts.splitUnitIntoDedicatedField !== false
     const weightToken = extractWeightTokenForHeader({
         name: productData?.name || titleRaw,
@@ -185,7 +213,10 @@ export const inferHeaderPartsForPriceTemplate = (
         title = `${title} KG`.replace(/\s+/g, ' ').trim()
     }
     if (splitUnitIntoDedicatedField) {
-        title = title.replace(/\b(KG|UN)\b$/i, '').trim()
+        // `unit` vem de um conjunto fechado de abreviaturas ASCII (KG, PCT,
+        // CX...), portanto nao ha metacaracteres para escapar aqui.
+        const removableUnit = unit ? new RegExp(`\\b${unit}\\b$`, 'i') : null
+        if (removableUnit) title = title.replace(removableUnit, '').trim()
     }
 
     if (!title) title = fallbackText.toUpperCase()

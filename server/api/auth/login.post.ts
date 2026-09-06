@@ -2,6 +2,7 @@ import { ensureAuthColumns, getProfileByEmail, normalizeEmail, updateLastLoginAt
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { verifyPassword } from '../../utils/password'
 import { createSessionToken } from '../../utils/session-token'
+import { getAuthCookieOptions } from '../../utils/auth-cookie'
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
@@ -31,31 +32,19 @@ export default defineEventHandler(async (event) => {
     role: profile.role || 'user'
   })
 
-  const isProduction = process.env.NODE_ENV === 'production'
-  const isTunnel = String(getHeader(event, 'host') || '').includes('devtunnels.ms')
-  const useSecure = isProduction || isTunnel
-  const sameSite = isTunnel ? 'none' as const : 'lax' as const
+  const cookieBase = getAuthCookieOptions(event, expiresIn)
   setCookie(event, 'access-token', token, {
-    path: '/',
-    maxAge: expiresIn,
-    sameSite,
-    secure: useSecure,
+    ...cookieBase,
     httpOnly: true
   })
   // Keep legacy cookie for backward compatibility during cutover.
   setCookie(event, 'sb-access-token', token, {
-    path: '/',
-    maxAge: expiresIn,
-    sameSite,
-    secure: useSecure,
+    ...cookieBase,
     httpOnly: true
   })
   // Non-httpOnly flag so client JS can detect authenticated state without reading the token
   setCookie(event, 'authenticated', 'true', {
-    path: '/',
-    maxAge: expiresIn,
-    sameSite,
-    secure: useSecure,
+    ...cookieBase,
     httpOnly: false
   })
 

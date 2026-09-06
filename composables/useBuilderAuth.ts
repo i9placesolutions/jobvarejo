@@ -7,10 +7,14 @@ interface BuilderAuthState {
 }
 
 const AUTH_COOKIE = 'builder-authenticated'
+const MAIN_AUTH_COOKIE = 'authenticated'
 
 const isAuthFlagSet = (): boolean => {
   if (!import.meta.client) return false
-  return document.cookie.split(';').some(c => c.trim() === `${AUTH_COOKIE}=true`)
+  return document.cookie.split(';').some(c => {
+    const value = c.trim()
+    return value === `${AUTH_COOKIE}=true` || value === `${MAIN_AUTH_COOKIE}=true`
+  })
 }
 
 const clearAuthFlag = () => {

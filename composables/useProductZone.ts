@@ -470,7 +470,7 @@ export const useProductZone = () => {
       rows: preset.rows ?? DEFAULT_PRODUCT_ZONE.rows ?? 0,
       layoutDirection: preset.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection ?? 'horizontal',
       cardAspectRatio: preset.cardAspectRatio ?? DEFAULT_PRODUCT_ZONE.cardAspectRatio ?? 'fill',
-      lastRowBehavior: preset.lastRowBehavior ?? DEFAULT_PRODUCT_ZONE.lastRowBehavior ?? 'fill',
+      lastRowBehavior: 'fill',
       verticalAlign: preset.verticalAlign ?? DEFAULT_PRODUCT_ZONE.verticalAlign ?? 'stretch',
       padding: nextPadding,
       gapHorizontal: nextGapH,

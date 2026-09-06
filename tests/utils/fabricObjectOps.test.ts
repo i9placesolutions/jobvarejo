@@ -1098,7 +1098,13 @@ describe('recalcAllTextMetrics', () => {
       type: 'text',
       ...overrides,
       initDimensions() { initCalls += 1 },
-      set(_k: string, _v: any) {},
+      set(_k: string | Record<string, any>, _v?: any) {
+        if (typeof _k === 'string') {
+          ;(this as any)[_k] = _v
+        } else {
+          Object.assign(this, _k)
+        }
+      },
       setCoords() { coordsCalls += 1 },
       _initCount: () => initCalls,
       _coordsCount: () => coordsCalls
@@ -1124,6 +1130,20 @@ describe('recalcAllTextMetrics', () => {
       recalcAllTextMetrics(t)
       expect(t._initCount()).toBe(1)
     }
+  })
+
+  it('reaplica a altura manual dos textos dinamicos depois das metricas', () => {
+    const t = makeText({
+      type: 'textbox',
+      businessProfileField: 'address',
+      height: 20,
+      dynamicFieldHeight: 96,
+      calcTextHeight: () => 24,
+    })
+
+    recalcAllTextMetrics(t)
+
+    expect(t.height).toBe(96)
   })
 
   it('non-text com getObjects: nao chama initDimensions', () => {

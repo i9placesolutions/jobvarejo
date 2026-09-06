@@ -8,6 +8,7 @@ import {
 import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull, pgQuery } from '../utils/postgres'
+import { ensureProjectTemplateColumn } from '../utils/project-templates'
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -58,6 +59,10 @@ export default defineEventHandler(async (event) => {
     normalizeProjectCanvasDataStorageRefs(payload.canvas_data)
   )
   const canvasDataJson = parseAndStringifyJsonbParam(normalizedCanvasData, 'canvas_data')
+  const hasTemplateConfig = Object.prototype.hasOwnProperty.call(payload, 'template_config')
+  const templateConfigJson = hasTemplateConfig && payload.template_config != null
+    ? parseAndStringifyJsonbParam(payload.template_config, 'template_config')
+    : null
 
   const projectId = String(payload.id || '').trim()
   if (projectId && !isUuid(projectId)) {
@@ -86,6 +91,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid last_viewed date format' })
   }
 
+  const isTemplate = Boolean(payload.is_template)
   const updatedAt = new Date().toISOString()
   const actorClientId = String(getHeader(event, 'x-client-id') || '').trim() || null
   // NOTA: optimistic concurrency control (expected_updated_at) foi removido porque
@@ -98,6 +104,7 @@ export default defineEventHandler(async (event) => {
   let didPersistMutation = false
 
   try {
+    await ensureProjectTemplateColumn()
     if (projectId) {
       const nextCanvasComparable = canvasDataJson.length <= MAX_NOOP_COMPARE_BYTES ? canvasDataJson : null
       const existing = await pgOneOrNull<any>(
@@ -121,6 +128,7 @@ export default defineEventHandler(async (event) => {
         && existing.name === name
         && normalizeStoredStorageRef(existing.preview_url) === previewUrl
         && existingCanvasComparable === nextCanvasComparable
+        && (!hasTemplateConfig || stringifyForNoopCompare(existing.template_config) === stringifyForNoopCompare(payload.template_config))
 
       if (isNoopUpdate) {
         result = existing
@@ -128,18 +136,24 @@ export default defineEventHandler(async (event) => {
         // Simple UPDATE when data changed. We intentionally avoid
         // `canvas_data IS DISTINCT FROM $2::jsonb` because comparing large JSONB
         // in Postgres previously made autosaves exceed request timeouts.
-        const row = await pgOneOrNull<any>(
-          `update public.projects
+        const updateParams: any[] = [name, canvasDataJson, previewUrl, user.id, updatedAt]
+        let updateSql = `update public.projects
            set name = $1,
                canvas_data = $2::jsonb,
                preview_url = $3,
                user_id = $4,
-               updated_at = $5
-           where id = $6
-             and user_id = $7
-           returning *`,
-          [name, canvasDataJson, previewUrl, user.id, updatedAt, projectId, user.id]
-        )
+               updated_at = $5`
+        if (hasTemplateConfig) {
+          updateParams.push(templateConfigJson)
+          updateSql += `,
+               template_config = $${updateParams.length}::jsonb`
+        }
+        updateParams.push(projectId, user.id)
+        updateSql += `
+           where id = $${updateParams.length - 1}
+             and user_id = $${updateParams.length}
+           returning *`
+        const row = await pgOneOrNull<any>(updateSql, updateParams)
 
         if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
         didPersistMutation = true
@@ -148,11 +162,11 @@ export default defineEventHandler(async (event) => {
     } else {
       const { rows } = await pgQuery<any>(
         `insert into public.projects
-           (name, canvas_data, preview_url, user_id, updated_at, folder_id, last_viewed)
+           (name, canvas_data, preview_url, user_id, updated_at, folder_id, last_viewed, is_template, template_config)
          values
-           ($1, $2::jsonb, $3, $4, $5, $6::uuid, $7::timestamptz)
+           ($1, $2::jsonb, $3, $4, $5, $6::uuid, $7::timestamptz, $8, $9::jsonb)
          returning *`,
-        [name, canvasDataJson, previewUrl, user.id, updatedAt, folderId, lastViewed]
+        [name, canvasDataJson, previewUrl, user.id, updatedAt, folderId, lastViewed, isTemplate, templateConfigJson]
       )
       result = rows[0] || null
       didPersistMutation = !!result

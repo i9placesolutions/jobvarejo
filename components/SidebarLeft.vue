@@ -2,9 +2,19 @@
 import { ref, nextTick, defineAsyncComponent } from 'vue'
 import { useProject } from '~/composables/useProject'
 import { useResponsive } from '~/composables/useResponsive'
+import { FLYER_TEMPLATE_FORMATS } from '~/utils/flyerTemplateApi'
 import { Search, Plus, FileText, Copy, Trash2, Box, ChevronDown, Menu, Layers, Image, Sparkles } from 'lucide-vue-next'
 
 const { isTablet } = useResponsive()
+
+const props = defineProps<{
+    /**
+     * Modelos são criados no modo avançado. Abrir Recursos logo de início
+     * deixa as ferramentas de composição visíveis sem esconder a biblioteca
+     * atrás de um segundo clique em Arquivo.
+     */
+    startInResources?: boolean
+}>()
 const leftExpanded = ref(false)
 
 const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
@@ -22,14 +32,36 @@ const emit = defineEmits<{
 
 
 type Tab = 'layers' | 'pages' | 'assets' | 'inspiracoes';
-const activeTab = ref<Tab>('layers')
+const activeTab = ref<Tab>(props.startInResources ? 'assets' : 'layers')
 const sidebarSearch = ref('')
+
+// O projeto chega de forma assíncrona. Quando a flag é recebida depois da
+// montagem, ainda devemos abrir a biblioteca de criação — mas sem interromper
+// uma escolha manual feita pelo usuário.
+watch(() => props.startInResources, (shouldStartInResources) => {
+    if (shouldStartInResources && activeTab.value === 'layers') {
+        activeTab.value = 'assets'
+    }
+})
 
 type AssetsSubTab = 'elements' | 'files'
 const assetsSubTab = ref<AssetsSubTab>('elements')
 
 const createPage = (preset: string) => {
     addPage('RETAIL_OFFER', 1080, 1920, `Page ${project.pages.length + 1}`);
+}
+
+const missingFormats = computed(() => project.isTemplate
+    ? FLYER_TEMPLATE_FORMATS.filter(format => !project.pages.some(page =>
+        page.templateModelId === activePage.value?.templateModelId && page.templateFormatId === format.id))
+    : [])
+const createFormat = (format: typeof FLYER_TEMPLATE_FORMATS[number]) => {
+    addPage('RETAIL_OFFER', format.width, format.height, format.label, {
+        templateModelId: activePage.value?.templateModelId,
+        templateModelName: activePage.value?.templateModelName,
+        templateFormatId: format.id,
+        templateFormatLabel: format.label
+    })
 }
 
 	const editingPageId = ref<string | null>(null)
@@ -197,7 +229,7 @@ const commitPageRename = (index: number) => {
                        v-else
                        class="text-xs font-medium truncate flex-1"
                        :title="page.name"
-                     >{{ page.name }}</span>
+                     >{{ project.isTemplate ? (page.templateFormatLabel || page.name) : page.name }}</span>
                      
                      <!-- Actions (Hover) -->
                      <div v-if="editingPageId !== page.id" class="hidden group-hover:flex items-center gap-0.5 ml-auto">
@@ -208,6 +240,12 @@ const commitPageRename = (index: number) => {
                  </div>
                </div>
 
+               <div v-if="missingFormats.length" class="px-3 pb-3 space-y-1">
+                 <p class="mb-2 text-[10px] font-semibold text-zinc-400">Criar outros formatos</p>
+                 <button v-for="format in missingFormats" :key="format.id" class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs text-zinc-300 hover:bg-white/5" @click="createFormat(format)">
+                   <Plus class="h-3.5 w-3.5 text-violet-400" />{{ format.label }}<span class="ml-auto text-[10px] text-zinc-500">{{ format.width }} × {{ format.height }}</span>
+                 </button>
+               </div>
                <!-- Layers Section -->
                <div class="flex-1 min-h-0 flex flex-col border-t border-white/5">
                  <slot name="layers-panel"></slot>

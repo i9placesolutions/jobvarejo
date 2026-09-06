@@ -32,7 +32,7 @@ import {
 export type FabricRectFactory = (props: any) => any
 
 const PRICE_BG_NAMES_LIVE = new Set([
-    'price_bg', 'price_bg_image', 'splash_image',
+    'price_bg', 'label_bg_image', 'price_bg_image', 'splash_image',
     'price_header_bg', 'offerBackground',
     'atac_banner_bg', 'atac_wholesale_bg', 'atac_retail_bg'
 ])

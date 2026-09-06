@@ -8,6 +8,7 @@ import { useProductProcessor, type SmartProduct, type SmartProductImageCandidate
 import { useResponsive } from '~/composables/useResponsive'
 import { toWasabiDirectUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
+import { isAtacarejoTemplateGroupJson } from '~/utils/canvasJsonClassifiers'
 
 type ImportTargetMode = 'zone' | 'multi-frame'
 type ImportSourceMode = 'manual' | 'paste-list' | 'file-import'
@@ -51,8 +52,12 @@ type ReviewFilter = 'all' | 'approved' | 'suspect' | 'blocked' | 'pending'
 type ReviewDecisionState = 'approved' | 'ambiguous' | 'blocked' | 'pending'
 
 const props = defineProps<{
+    initialAutoFillImages?: boolean
     modelValue: boolean
     initialProducts?: SmartProduct[]
+    initialTextInput?: string
+    autoParseOnOpen?: boolean
+    quickMode?: boolean
     showImportMode?: boolean
     existingCount?: number
     initialImportMode?: 'replace' | 'append'
@@ -69,6 +74,7 @@ const emit = defineEmits<{
 }>()
 
 const { isMobile } = useResponsive()
+const isQrofertasPresentation = computed(() => props.quickMode === true)
 const { getApiAuthHeaders } = useApiAuth()
 const fetchUntyped = $fetch as unknown as (url: string, options?: any) => Promise<any>
 
@@ -123,9 +129,28 @@ const reviewPage = ref(1)
 const isQueuePaused = computed(() => imageQueueState.value.paused)
 const isImageQueueRunning = computed(() => imageQueueState.value.running)
 const expandedAdvancedRows = ref<Set<string>>(new Set())
+// No modo rápido, os dados do produto ficam recolhidos para priorizar a
+// conferência da imagem. Eles continuam disponíveis sob demanda pelo botão
+// "Configurar dados".
+const expandedCommercialRows = ref<Set<string>>(new Set())
+// Sugestões são secundárias no modo rápido: só carregamos a área visualmente
+// quando o usuário decide conferir alternativas.
+const expandedImageSuggestionRows = ref<Set<string>>(new Set())
+// No modo rápido, a busca apresenta primeiro apenas os resultados. Os
+// controles de edição do produto ficam recolhidos até o usuário abrir um
+// card explicitamente.
+const quickExpandedProductIndex = ref<number | null>(null)
+const showQuickProductProperties = ref(false)
 const reviewContainerRef = ref<HTMLElement | null>(null)
+const reviewContentRef = ref<HTMLElement | null>(null)
 const activeReviewRowIndex = ref<number | null>(null)
 const pendingReviewUploadIndex = ref<number | null>(null)
+const pendingReviewUploadFiles = ref<File[]>([])
+const showReviewUploadOptions = ref(false)
+const isReviewUploadSubmitting = ref(false)
+// A remoção de fundo é o comportamento esperado para fotos de produtos.
+// O usuário ainda pode desligá-la no passo de confirmação do upload.
+const removeBackgroundOnUpload = ref(true)
 
 const getImageQueueModeLabel = (mode: ImageMatchMode) => (mode === 'fast' ? 'Busca rápida' : 'Busca precisa')
 const imageSourceFromProvider = (provider?: string): string => {
@@ -476,65 +501,6 @@ const imageMatchModeOptions = [
     { value: 'fast' as const, label: 'Busca rápida' }
 ]
 
-// Watcher to reset state when opening
-watch(() => props.modelValue, (newVal) => {
-    if (!newVal) {
-        isSubmittingImport.value = false
-        appendBaseProducts.value = null
-        lockedTargetZoneId.value = ''
-        reviewFilter.value = 'all'
-        reviewSuggestionMap.value = {}
-        reviewSuggestionLoadingMap.value = {}
-        reviewSuggestionErrorMap.value = {}
-        stopImageQueue()
-        resetImageProcessingState()
-        reviewPage.value = 1
-        activeReviewRowIndex.value = null
-        return
-    }
-
-    isSubmittingImport.value = false
-    lockedTargetZoneId.value = String(props.initialTargetZoneId || '').trim()
-    reviewFilter.value = 'all'
-    reviewSuggestionMap.value = {}
-    reviewSuggestionLoadingMap.value = {}
-    reviewSuggestionErrorMap.value = {}
-    importMode.value = props.initialImportMode === 'append' ? 'append' : 'replace'
-    importSource.value = 'manual'
-    if (props.initialProducts && props.initialProducts.length > 0) {
-        // Load external products directly into review mode
-        products.value = props.initialProducts.map((p: any) => ({
-            ...p,
-            imageUrl: resolveProductImageUrl(p?.imageUrl || '')
-        }))
-        step.value = 'review'
-    } else {
-        products.value = []
-        step.value = 'input'
-        textInput.value = ''
-    }
-
-    if (targetMode.value === 'multi-frame') {
-        if (selectedFrameIds.value.length === 0 && orderedFrameIds.value.length > 0) {
-            setSelectedFrameIdsOrdered(orderedFrameIds.value)
-        }
-        reconcileFrameAssignments({ autofill: true })
-    }
-    if (targetMode.value === 'zone' && canUseMultiZone.value) {
-        zoneAssignmentsMap.value = {}
-        reconcileZoneAssignments({ autofill: true })
-    }
-    reviewPage.value = 1
-
-    if (step.value === 'review') {
-        activeReviewRowIndex.value = null
-        nextTick(() => {
-            reviewContainerRef.value?.focus()
-            syncActiveReviewRowToFiltered()
-        })
-    }
-})
-
 const cloneProducts = (list: SmartProduct[]) =>
     JSON.parse(JSON.stringify(Array.isArray(list) ? list : [])) as SmartProduct[]
 
@@ -550,10 +516,15 @@ const handleParse = async () => {
     if (!textInput.value.trim()) return;
     const shouldAppend = !!appendBaseProducts.value
     importSource.value = 'paste-list'
+    quickExpandedProductIndex.value = null
     await parseText(textInput.value);
     
     if (products.value.length > 0) {
         if (shouldAppend) mergeParsedProductsWithAppendBase()
+        selectedLabelTemplateId.value = resolveCompatibleLabelTemplateId(
+            products.value[0],
+            selectedLabelTemplateId.value || props.initialLabelTemplateId
+        )
         step.value = 'review';
         // Process all images automatically
         await startImageProcessing()
@@ -586,10 +557,15 @@ const handleFileSelected = async (event: Event) => {
 
     const shouldAppend = !!appendBaseProducts.value
     importSource.value = 'file-import'
+    quickExpandedProductIndex.value = null
     await parseFile(file)
 
     if (products.value.length > 0) {
         if (shouldAppend) mergeParsedProductsWithAppendBase()
+        selectedLabelTemplateId.value = resolveCompatibleLabelTemplateId(
+            products.value[0],
+            selectedLabelTemplateId.value || props.initialLabelTemplateId
+        )
         step.value = 'review'
         await startImageProcessing()
     }
@@ -600,9 +576,14 @@ const handleDropFile = async (event: DragEvent) => {
     if (!file) return
     const shouldAppend = !!appendBaseProducts.value
     importSource.value = 'file-import'
+    quickExpandedProductIndex.value = null
     await parseFile(file)
     if (products.value.length > 0) {
         if (shouldAppend) mergeParsedProductsWithAppendBase()
+        selectedLabelTemplateId.value = resolveCompatibleLabelTemplateId(
+            products.value[0],
+            selectedLabelTemplateId.value || props.initialLabelTemplateId
+        )
         step.value = 'review'
         await startImageProcessing()
     }
@@ -644,6 +625,7 @@ const addManualProduct = () => {
 const startAppendFromReview = () => {
     appendBaseProducts.value = cloneProducts(products.value)
     textInput.value = ''
+    quickExpandedProductIndex.value = null
     step.value = 'input'
 }
 
@@ -655,6 +637,8 @@ const backToReviewWithoutAppending = () => {
     step.value = 'review'
 }
 
+const autoFillImages = ref(props.initialAutoFillImages === true)
+watch(() => props.modelValue, (open) => { if (open) autoFillImages.value = props.initialAutoFillImages === true })
 const handleImport = () => {
     if (isSubmittingImport.value || importButtonDisabled.value) return
     isSubmittingImport.value = true
@@ -689,9 +673,18 @@ const handleImport = () => {
     }
 
     const importedProducts = (JSON.parse(JSON.stringify(products.value)) as SmartProduct[])
-        .map((product) => normalizeProductForImport(product))
+        .map((product) => ({ ...normalizeProductForImport(product), autoFillImages: autoFillImages.value }))
     emit('import', importedProducts, opts)
     emit('update:modelValue', false)
+}
+
+const addAllQuickProductsToEncarte = () => {
+    if (!isQrofertasPresentation.value || !products.value.length || isSubmittingImport.value) return
+
+    // A ação é global: o lote inteiro da busca entra na zona selecionada,
+    // preservando os produtos que já estavam no encarte.
+    importMode.value = 'append'
+    handleImport()
 }
 
 const showAssetPicker = ref(false)
@@ -928,9 +921,19 @@ watch(
         syncActiveReviewRowToFiltered()
         nextTick(() => {
             reviewContainerRef.value?.focus()
+            if (isQrofertasPresentation.value && reviewContentRef.value) {
+                reviewContentRef.value.scrollTop = 0
+            }
         })
     }
 )
+
+watch(activeReviewRowIndex, () => {
+    if (!isQrofertasPresentation.value || step.value !== 'review') return
+    nextTick(() => {
+        if (reviewContentRef.value) reviewContentRef.value.scrollTop = 0
+    })
+})
 
 watch(
     reviewPage,
@@ -1137,6 +1140,101 @@ const activeReviewRowMeta = computed<ReviewRowWithMeta | null>(() => {
     }
 })
 
+const isQuickProductExpanded = (productIndex: number): boolean => (
+    !isQrofertasPresentation.value || quickExpandedProductIndex.value === productIndex
+)
+
+const toggleQuickProductOptions = (row: { index: number } | null) => {
+    if (!isQrofertasPresentation.value || !row) return
+    const isSameProduct = quickExpandedProductIndex.value === row.index
+    activeReviewRowIndex.value = row.index
+    quickExpandedProductIndex.value = isSameProduct ? null : row.index
+    showQuickProductProperties.value = !isSameProduct
+}
+
+const hasLabelPriceValue = (value: unknown): boolean => {
+    const normalized = normalizeCommercialPriceValue(value)
+    return normalized.length > 0
+}
+
+/**
+ * O formato da etiqueta acompanha o que o produto realmente informa:
+ * somente um valor usa etiqueta simples; varejo + atacado (ou condição de
+ * atacado) usa etiqueta de dois níveis. Isso evita mostrar uma etiqueta
+ * incompatível no modo rápido.
+ */
+const productUsesMultiPriceLabel = (product: any): boolean => {
+    if (!product || typeof product !== 'object') return false
+    const hasRetail = [product.priceUnit, product.pricePack, product.price]
+        .some(hasLabelPriceValue)
+    const hasWholesale = [product.priceSpecialUnit, product.priceSpecial, product.priceWholesale]
+        .some(hasLabelPriceValue)
+    const hasCondition = String(product.specialCondition || product.condition || '').trim().length > 0
+    return (hasRetail && hasWholesale) || (hasCondition && (hasRetail || hasWholesale)) || hasLabelPriceValue(product.priceWholesale)
+}
+
+const templateUsesMultiPriceLabel = (template: any): boolean => {
+    if (!template || typeof template !== 'object') return false
+    if (isAtacarejoTemplateGroupJson(template.group)) return true
+    const identity = `${String(template.id || '')} ${String(template.name || '')}`.toLowerCase()
+    return /atacarejo|atacado|varejo|fardo|multi.?pre[cç]o/.test(identity)
+}
+
+const activeProductLabelMode = computed<'simple' | 'multi'>(() => (
+    productUsesMultiPriceLabel(activeReviewRow.value?.product) ? 'multi' : 'simple'
+))
+
+const activeCompatibleLabelTemplates = computed(() => {
+    const mode = activeProductLabelMode.value
+    return labelTemplateList.value.filter((template: any) => (
+        templateUsesMultiPriceLabel(template) === (mode === 'multi')
+    ))
+})
+
+const resolveCompatibleLabelTemplateId = (product: any, requestedId?: string): string => {
+    const mode = productUsesMultiPriceLabel(product) ? 'multi' : 'simple'
+    const compatible = labelTemplateList.value.filter((template: any) => (
+        templateUsesMultiPriceLabel(template) === (mode === 'multi')
+    ))
+    const requested = String(requestedId || '').trim()
+    if (requested && compatible.some((template: any) => String(template.id) === requested)) return requested
+    return String(compatible[0]?.id || '')
+}
+
+const setSelectedLabelTemplate = (templateId: string) => {
+    const id = String(templateId || '').trim()
+    if (!id) {
+        selectedLabelTemplateId.value = ''
+        return
+    }
+    if (activeCompatibleLabelTemplates.value.some((template: any) => String(template.id) === id)) {
+        selectedLabelTemplateId.value = id
+    }
+}
+
+watch(
+    () => {
+        const product = activeReviewRow.value?.product as any
+        return [
+            product?.price,
+            product?.priceUnit,
+            product?.pricePack,
+            product?.priceSpecial,
+            product?.priceSpecialUnit,
+            product?.priceWholesale,
+            product?.specialCondition,
+            product?.condition
+        ]
+    },
+    () => {
+        if (!isQrofertasPresentation.value) return
+        const currentId = String(selectedLabelTemplateId.value || '').trim()
+        if (currentId && activeCompatibleLabelTemplates.value.some((template: any) => String(template.id) === currentId)) return
+        selectedLabelTemplateId.value = resolveCompatibleLabelTemplateId(activeReviewRow.value?.product, currentId)
+    },
+    { immediate: true }
+)
+
 const setActiveReviewStringField = (field: string, value: string) => {
     const row = activeReviewRowMeta.value
     if (!row) return
@@ -1175,6 +1273,102 @@ const mapAssetToReviewCandidate = (asset: any, index: number): SmartProductImage
     }
 }
 
+// A galeria de sugestões é uma etapa de conferência, não uma busca visual
+// genérica. O storage pode devolver resultados que compartilham somente um
+// termo de embalagem (por exemplo, "kg"). Esses termos não identificam o
+// produto e não podem fazer arroz, hambúrguer ou outro item aparecer para
+// uma busca de picanha.
+const IMAGE_MATCH_NOISE_TOKENS = new Set([
+    'o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'e', 'para', 'por', 'no', 'na',
+    'kg', 'kgs', 'g', 'gr', 'grs', 'mg', 'ml', 'mls', 'l', 'lt', 'lts', 'un', 'und', 'unds', 'pct', 'pcts', 'cx', 'cxs', 'fd',
+    'produto', 'produtos', 'imagem', 'imagens', 'image', 'images', 'manual', 'smart', 'src', 'storage', 'uploads', 'upload',
+    'bg', 'removed', 'remove', 'background', 'pack', 'packs', 'embalagem', 'embalagens', 'lata', 'latinha', 'garrafa', 'pet',
+    'unidade', 'unidades', 'caixa', 'caixas', 'pacote', 'pacotes', 'fardo', 'fardos', 'sabor', 'sabores', 'sortido', 'sortidos',
+    'variado', 'variados', 'diverso', 'diversos', 'carne', 'carnes', 'bovina', 'bovino', 'suina', 'suino', 'frango', 'aves',
+    'alimento', 'alimentos', 'bebida', 'bebidas'
+])
+
+// Termos de outro produto no nome do asset são um conflito forte. Isso cobre
+// o caso prático em que um arquivo chamado, por exemplo,
+// "hot-picanha-pocket" compartilha "picanha", mas a foto é de um lanche.
+// A lista é deliberadamente conservadora e os termos são liberados quando
+// fazem parte do próprio nome/marca/sabor pesquisado.
+const IMAGE_MATCH_CONFLICT_TOKENS = new Set([
+    'hot', 'pocket', 'hamburguer', 'hamburger', 'bolonha', 'mortadela', 'salame', 'linguica', 'linguica',
+    'arroz', 'feijao', 'macarrao', 'massa', 'leite', 'iogurte', 'queijo', 'presunto', 'sadia', 'bacon',
+    'frango', 'nuggets', 'pizza', 'lasanha', 'batata', 'cebola', 'tomate', 'farinha', 'acucar', 'oleo',
+    'cafe', 'cerveja', 'refrigerante', 'suco', 'agua', 'biscoito', 'bolacha', 'chocolate', 'sorvete', 'pao'
+])
+
+const normalizeImageMatchText = (value: unknown): string => String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const imageMatchTokens = (value: unknown): string[] => normalizeImageMatchText(value)
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3)
+    .filter((token) => !IMAGE_MATCH_NOISE_TOKENS.has(token))
+    .filter((token) => !/^\d+(?:\.\d+)?$/.test(token))
+    .filter((token) => !/^\d+(?:\.\d+)?(?:kg|kgs|g|gr|grs|mg|ml|mls|l|lt|lts|un|und|pct|cx|fd)$/.test(token))
+
+const productImageIdentityTokens = (product: any): string[] => {
+    const nameTokens = imageMatchTokens(product?.name)
+    const brandTokens = imageMatchTokens(product?.brand)
+    const flavorTokens = imageMatchTokens(product?.flavor)
+    const codeTokens = imageMatchTokens(product?.productCode)
+    // O nome é a identidade principal. Marca/sabor entram como fallback para
+    // linhas em que o parser não trouxe um nome distintivo.
+    const primary = [...new Set(nameTokens)]
+    if (primary.length > 0) return primary
+    return [...new Set([...brandTokens, ...flavorTokens, ...codeTokens])]
+}
+
+const candidateImageMatchText = (candidate: SmartProductImageCandidate): string => normalizeImageMatchText([
+    candidate?.title,
+    candidate?.key,
+    candidate?.url,
+    candidate?.previewUrl,
+    candidate?.domain
+].filter(Boolean).join(' '))
+
+const candidateMatchesProductIdentity = (product: any, candidate: SmartProductImageCandidate): boolean => {
+    const identityTokens = productImageIdentityTokens(product)
+    if (!identityTokens.length) return false
+    const candidateText = candidateImageMatchText(candidate)
+    if (!candidateText) return false
+    const candidateTokens = new Set(candidateText.split(' ').filter(Boolean))
+    const allowedConflictTokens = new Set([
+        ...identityTokens,
+        ...imageMatchTokens(product?.brand),
+        ...imageMatchTokens(product?.flavor)
+    ])
+    for (const token of candidateTokens) {
+        if (IMAGE_MATCH_CONFLICT_TOKENS.has(token) && !allowedConflictTokens.has(token)) return false
+    }
+    // Também compara a frase compactada para casos como "coca-cola" x
+    // "cocacola", sem aceitar uma correspondência por substring isolada ou
+    // por unidade/gramatura.
+    const candidateCompact = candidateText.replace(/\s+/g, '')
+    const exactTokenMatch = identityTokens.every((token) => candidateTokens.has(token))
+    const compactPhraseMatch = identityTokens.length > 1 && candidateCompact.includes(identityTokens.join(''))
+    return exactTokenMatch || compactPhraseMatch
+}
+
+const filterReviewCandidatesForProduct = (
+    product: any,
+    candidates: SmartProductImageCandidate[]
+): SmartProductImageCandidate[] => candidates
+    .filter((candidate) => candidateMatchesProductIdentity(product, candidate))
+    .map((candidate, index) => ({
+        ...candidate,
+        recommended: index === 0
+    }))
+
 const mergeReviewCandidates = (...lists: Array<SmartProductImageCandidate[] | undefined | null>): SmartProductImageCandidate[] => {
     const merged: SmartProductImageCandidate[] = []
     const seen = new Set<string>()
@@ -1211,10 +1405,11 @@ const isActiveReviewSuggestionLoading = computed(() => {
 
 const activeReviewCandidates = computed<SmartProductImageCandidate[]>(() => {
     const product = activeReviewRow.value?.product
-    return mergeReviewCandidates(
+    const merged = mergeReviewCandidates(
         Array.isArray(product?.imageCandidates) ? product.imageCandidates : [],
         activeStorageSuggestions.value
     )
+    return filterReviewCandidatesForProduct(product, merged)
 })
 
 const activeReviewDecisionState = computed<ReviewDecisionState>(() => {
@@ -1279,10 +1474,15 @@ const importReadinessToneClass = computed(() => {
 })
 
 watch(
-    () => [props.modelValue, step.value, activeReviewRow.value?.productId || '', activeReviewDecisionState.value] as const,
+    () => [props.modelValue, step.value, activeReviewRow.value?.productId || '', activeReviewDecisionState.value, quickExpandedProductIndex.value] as const,
     ([open, currentStep, productId, decision]) => {
         if (!open || currentStep !== 'review' || !productId) return
-        if (decision === 'approved') return
+        if (isQrofertasPresentation.value && quickExpandedProductIndex.value === null) return
+        // No modo rápido, a galeria de troca deve ser pesquisada assim que o
+        // produto entra em foco, mesmo quando a busca principal já aprovou a
+        // primeira imagem. O helper evita uma nova requisição se já houver
+        // candidatas válidas no cache.
+        if (decision === 'approved' && !isQrofertasPresentation.value) return
         const row = activeReviewRow.value
         if (!row) return
         void fetchReviewSuggestionsForRow(row)
@@ -1349,10 +1549,12 @@ const fetchReviewSuggestionsForRow = async (
             }
         })
         const next = Array.isArray(data)
-            ? data
-                .map((asset, index) => mapAssetToReviewCandidate(asset, index))
-                .filter((candidate): candidate is SmartProductImageCandidate => !!candidate)
-                .slice(0, 6)
+            ? filterReviewCandidatesForProduct(
+                row.product,
+                data
+                    .map((asset, index) => mapAssetToReviewCandidate(asset, index))
+                    .filter((candidate): candidate is SmartProductImageCandidate => !!candidate)
+            ).slice(0, 6)
             : []
         reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: next }
     } catch (error: any) {
@@ -1414,6 +1616,37 @@ const toggleAdvancedFields = (rowId: string) => {
         next.add(key)
     }
     expandedAdvancedRows.value = next
+}
+
+const isCommercialFieldsExpanded = (rowId: string): boolean => expandedCommercialRows.value.has(String(rowId || ''))
+const toggleCommercialFields = (rowId: string) => {
+    const key = String(rowId || '')
+    if (!key) return
+    const next = new Set(expandedCommercialRows.value)
+    if (next.has(key)) {
+        next.delete(key)
+        // Reabrir começa sempre no nível principal; os campos avançados
+        // continuam sendo uma segunda decisão explícita.
+        const advanced = new Set(expandedAdvancedRows.value)
+        advanced.delete(key)
+        expandedAdvancedRows.value = advanced
+    } else {
+        next.add(key)
+    }
+    expandedCommercialRows.value = next
+}
+
+const isImageSuggestionsExpanded = (rowId: string): boolean => (
+    !isQrofertasPresentation.value || expandedImageSuggestionRows.value.has(String(rowId || ''))
+)
+const toggleImageSuggestions = (rowId: string) => {
+    if (!isQrofertasPresentation.value) return
+    const key = String(rowId || '')
+    if (!key) return
+    const next = new Set(expandedImageSuggestionRows.value)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    expandedImageSuggestionRows.value = next
 }
 
 const thumbnailUiStateClass = (row: any): string => {
@@ -1950,6 +2183,114 @@ const reconcileZoneAssignments = (opts: { autofill?: boolean; preferPrimary?: bo
     zoneAssignmentsMap.value = next
 }
 
+// Keep this watcher after all helpers it invokes. With `immediate: true`, a
+// watcher declared near the top of script setup can otherwise read a later
+// `const` while its temporal dead zone is still active.
+watch(() => props.modelValue, (newVal) => {
+    if (!newVal) {
+        isSubmittingImport.value = false
+        appendBaseProducts.value = null
+        lockedTargetZoneId.value = ''
+        reviewFilter.value = 'all'
+        reviewSuggestionMap.value = {}
+        reviewSuggestionLoadingMap.value = {}
+        reviewSuggestionErrorMap.value = {}
+        expandedAdvancedRows.value = new Set()
+        expandedCommercialRows.value = new Set()
+        expandedImageSuggestionRows.value = new Set()
+        pendingReviewUploadFiles.value = []
+        pendingReviewUploadIndex.value = null
+        showReviewUploadOptions.value = false
+        isReviewUploadSubmitting.value = false
+        stopImageQueue()
+        resetImageProcessingState()
+        reviewPage.value = 1
+        activeReviewRowIndex.value = null
+        quickExpandedProductIndex.value = null
+        showQuickProductProperties.value = false
+        return
+    }
+
+    isSubmittingImport.value = false
+    lockedTargetZoneId.value = String(props.initialTargetZoneId || '').trim()
+    reviewFilter.value = 'all'
+    reviewSuggestionMap.value = {}
+    reviewSuggestionLoadingMap.value = {}
+    reviewSuggestionErrorMap.value = {}
+    // Cada abertura começa com os campos opcionais recolhidos.
+    expandedAdvancedRows.value = new Set()
+    expandedCommercialRows.value = new Set()
+    expandedImageSuggestionRows.value = new Set()
+    pendingReviewUploadFiles.value = []
+    pendingReviewUploadIndex.value = null
+    showReviewUploadOptions.value = false
+    isReviewUploadSubmitting.value = false
+    importMode.value = props.initialImportMode === 'append' ? 'append' : 'replace'
+    importSource.value = 'manual'
+    if (props.initialProducts && props.initialProducts.length > 0) {
+        // Load external products directly into review mode
+        products.value = props.initialProducts.map((p: any) => ({
+            ...p,
+            imageUrl: resolveProductImageUrl(p?.imageUrl || '')
+        }))
+        step.value = 'review'
+    } else {
+        products.value = []
+        step.value = 'input'
+        textInput.value = String(props.initialTextInput || '')
+    }
+    // O primeiro produto define a etiqueta inicial no modo rápido. Se a
+    // preferência salva apontar para outro tipo, corrigimos para o primeiro
+    // modelo compatível em vez de renderizar uma etiqueta desconfigurada.
+    selectedLabelTemplateId.value = resolveCompatibleLabelTemplateId(
+        products.value[0],
+        props.initialLabelTemplateId
+    )
+
+    if (targetMode.value === 'multi-frame') {
+        if (selectedFrameIds.value.length === 0 && orderedFrameIds.value.length > 0) {
+            setSelectedFrameIdsOrdered(orderedFrameIds.value)
+        }
+        reconcileFrameAssignments({ autofill: true })
+    }
+    if (targetMode.value === 'zone' && canUseMultiZone.value) {
+        zoneAssignmentsMap.value = {}
+        reconcileZoneAssignments({ autofill: true })
+    }
+    reviewPage.value = 1
+    quickExpandedProductIndex.value = null
+    showQuickProductProperties.value = false
+
+    if (step.value === 'review') {
+        activeReviewRowIndex.value = null
+        nextTick(() => {
+            reviewContainerRef.value?.focus()
+            syncActiveReviewRowToFiltered()
+        })
+
+        // Quando o modo rápido recebe produtos já prontos (por exemplo, ao
+        // reabrir uma revisão), iniciar a busca de imagens sem exigir um
+        // clique extra no usuário.
+        if (isQrofertasPresentation.value && products.value.length > 0) {
+            nextTick(() => {
+                if (!props.modelValue || step.value !== 'review' || !products.value.length) return
+                void startImageProcessing()
+            })
+        }
+    }
+
+    if (props.autoParseOnOpen && step.value === 'input' && textInput.value.trim()) {
+        nextTick(() => {
+            if (!props.modelValue || !props.autoParseOnOpen || step.value !== 'input') return
+            void handleParse()
+        })
+    }
+}, { immediate: true })
+
+watch(showQuickProductProperties, (open) => {
+    if (!open) quickExpandedProductIndex.value = null
+})
+
 const setZoneAssignmentForProduct = (productId: string, zoneIdRaw: string) => {
     const pid = String(productId || '').trim()
     if (!pid) return
@@ -2364,7 +2705,11 @@ const applySelectedAssets = async () => {
     }
 }
 
-const uploadManualImageForProduct = async (productIndex: number, file: File) => {
+const uploadManualImageForProduct = async (
+    productIndex: number,
+    file: File,
+    options: { removeBackground?: boolean } = {}
+) => {
     const product = products.value[productIndex]
     if (!product) return
 
@@ -2420,6 +2765,7 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
         const createUploadForm = (includeMetadata: boolean) => {
             const fd = new FormData()
             fd.append('file', uploadBlob, uploadFilename)
+            fd.append('removeBackground', options.removeBackground === false ? 'false' : 'true')
             if (includeMetadata) {
                 fd.append('productName', product.name || 'Produto')
                 if (product.brand) fd.append('brand', product.brand)
@@ -2544,7 +2890,7 @@ const uploadManualImageForProduct = async (productIndex: number, file: File) => 
 }
 
 const openReviewImageUpload = (index: number) => {
-    if (!Number.isInteger(index) || index < 0) return
+    if (!Number.isInteger(index) || index < 0 || isReviewUploadSubmitting.value) return
     pendingReviewUploadIndex.value = index
     openFilePickerInput(reviewImageUploadInput.value)
 }
@@ -2558,12 +2904,56 @@ const handleReviewImageUploadSelected = async (event: Event) => {
     if (!files.length) return
     if (!Number.isInteger(startIndex) || startIndex < 0) return
 
+    // No modo rápido, o upload abre uma confirmação compacta para que a
+    // remoção de fundo possa ser ligada/desligada sem esconder a opção em
+    // configurações avançadas. O padrão é ligado.
+    if (isQrofertasPresentation.value) {
+        pendingReviewUploadIndex.value = startIndex
+        pendingReviewUploadFiles.value = files
+        if (showQuickProductProperties.value) {
+            await confirmReviewImageUpload()
+            return
+        }
+        removeBackgroundOnUpload.value = true
+        showReviewUploadOptions.value = true
+        return
+    }
+
     // Se selecionar múltiplas imagens, aplica em sequência a partir do produto clicado:
     // imagem[0] -> produto[index], imagem[1] -> produto[index+1], etc.
     for (let i = 0; i < files.length; i++) {
         const targetIndex = startIndex + i
         if (targetIndex >= products.value.length) break
-        await uploadManualImageForProduct(targetIndex, files[i]!)
+        await uploadManualImageForProduct(targetIndex, files[i]!, { removeBackground: true })
+    }
+}
+
+const cancelReviewImageUpload = () => {
+    pendingReviewUploadFiles.value = []
+    pendingReviewUploadIndex.value = null
+    showReviewUploadOptions.value = false
+    isReviewUploadSubmitting.value = false
+}
+
+const confirmReviewImageUpload = async () => {
+    const startIndex = Number(pendingReviewUploadIndex.value)
+    const files = [...pendingReviewUploadFiles.value]
+    if (!files.length || !Number.isInteger(startIndex) || startIndex < 0) {
+        cancelReviewImageUpload()
+        return
+    }
+
+    isReviewUploadSubmitting.value = true
+    try {
+        for (let i = 0; i < files.length; i++) {
+            const targetIndex = startIndex + i
+            if (targetIndex >= products.value.length) break
+            await uploadManualImageForProduct(targetIndex, files[i]!, {
+                removeBackground: removeBackgroundOnUpload.value
+            })
+        }
+    } finally {
+        cancelReviewImageUpload()
     }
 }
 
@@ -2596,11 +2986,19 @@ const getAssetDisplayName = (asset: any): string => {
         :model-value="modelValue"
         @update:model-value="$emit('update:modelValue', $event)"
         title="Importação Inteligente"
-        width="1280px"
+        :width="isQrofertasPresentation ? 'min(386px, calc(100vw - 1rem))' : 'min(1456px, calc(100vw - 4rem))'"
         :fullscreen="isMobile"
+        :side-panel="isQrofertasPresentation && !isMobile"
+        :header-class="isQrofertasPresentation ? 'px-4 py-3 bg-zinc-900/90' : ''"
+        :title-class="isQrofertasPresentation ? 'text-sm tracking-widest' : ''"
+        :close-class="isQrofertasPresentation ? 'p-1.5' : ''"
         content-class="w-full h-full min-h-0"
     >
-        <div :class="['flex flex-col gap-3 min-h-0', isMobile ? 'h-full max-h-none' : 'min-h-145 max-h-[84vh]']">
+        <div :class="[
+            'flex flex-col min-h-0',
+            isQrofertasPresentation ? 'qrofertas-review gap-3 h-full max-h-none' : 'gap-3',
+            isMobile ? 'h-full max-h-none' : 'min-h-145 max-h-[84vh]'
+        ]">
 
             <!-- STEP 1: INPUT -->
             <div v-if="step === 'input'" class="flex flex-col gap-4 flex-1">
@@ -2686,7 +3084,10 @@ const getAssetDisplayName = (asset: any): string => {
                 v-else
                 ref="reviewContainerRef"
                 tabindex="0"
-                class="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto pr-1"
+                :class="[
+                    'flex flex-col flex-1 min-h-0 overflow-y-auto',
+                    isQrofertasPresentation ? 'gap-3 pr-1' : 'gap-4 pr-1'
+                ]"
                 @keydown="onReviewKeydown"
             >
                 <input
@@ -2697,74 +3098,124 @@ const getAssetDisplayName = (asset: any): string => {
                     multiple
                     @change="handleReviewImageUploadSelected"
                 />
-                <!-- Review Header Compacto -->
-                <div class="shrink-0 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 space-y-2.5">
+                <!-- Review Header -->
+                <div v-if="!isQrofertasPresentation" :class="[
+                    'review-header shrink-0 rounded-2xl border bg-zinc-900/60',
+                    isQrofertasPresentation
+                        ? 'rounded-xl border-white/10 bg-zinc-900/80 p-2 space-y-1.5 shadow-xl shadow-black/20'
+                        : 'border-zinc-800 p-3 space-y-2.5'
+                ]">
                     <!-- Linha 1: Título + Stats inline + Ações -->
-                    <div class="flex items-center justify-between gap-3 flex-wrap">
-                        <div class="flex items-center gap-2.5 min-w-0">
-                            <h2 class="text-lg font-semibold text-white shrink-0">Revisão</h2>
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span class="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                    <div :class="['flex items-center justify-between gap-2', isQrofertasPresentation ? 'flex-nowrap' : 'flex-wrap']">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <h2 :class="[isQrofertasPresentation ? 'text-base' : 'text-lg', 'font-semibold text-white shrink-0']">Revisão</h2>
+                            <label class="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                                <input v-model="autoFillImages" type="checkbox" class="accent-violet-500" />
+                                Preenchimento automático de imagens
+                                <span class="text-zinc-500" title="Usa até 4 imagens conforme o espaço do card. Você pode ajustar depois.">ⓘ</span>
+                            </label>
+                            <div class="flex items-center gap-1 flex-nowrap min-w-0">
+                                <span :class="isQrofertasPresentation ? 'px-1.5 text-[9px]' : 'px-2 text-[10px]'" class="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 border border-emerald-500/25 py-0.5 font-semibold text-emerald-300">
                                     <Check class="w-3 h-3" /> {{ imageStatusCounters.approved }}
                                 </span>
-                                <span class="inline-flex items-center gap-1 rounded-lg bg-sky-500/15 border border-sky-500/25 px-2 py-0.5 text-[10px] font-semibold text-sky-300">
+                                <span :class="isQrofertasPresentation ? 'px-1.5 text-[9px]' : 'px-2 text-[10px]'" class="inline-flex items-center gap-1 rounded-lg bg-sky-500/15 border border-sky-500/25 py-0.5 font-semibold text-sky-300">
                                     {{ imageStatusCounters.pending }} fila
                                 </span>
-                                <span v-if="imageStatusCounters.ambiguous" class="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 border border-amber-500/25 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                                <span v-if="imageStatusCounters.ambiguous" :class="isQrofertasPresentation ? 'px-1.5 text-[9px]' : 'px-2 text-[10px]'" class="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 border border-amber-500/25 py-0.5 font-semibold text-amber-300">
                                     <AlertCircle class="w-3 h-3" /> {{ imageStatusCounters.ambiguous }}
                                 </span>
-                                <span v-if="imageStatusCounters.blocked" class="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 border border-rose-500/25 px-2 py-0.5 text-[10px] font-semibold text-rose-300">
+                                <span v-if="imageStatusCounters.blocked" :class="isQrofertasPresentation ? 'px-1.5 text-[9px]' : 'px-2 text-[10px]'" class="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 border border-rose-500/25 py-0.5 text-[10px] font-semibold text-rose-300">
                                     {{ imageStatusCounters.blocked }} bloq.
                                 </span>
-                                <span class="rounded-lg bg-zinc-800/80 px-2 py-0.5 text-[10px] text-zinc-500">
+                                <span v-if="!isQrofertasPresentation" class="rounded-lg bg-zinc-800/80 px-2 py-0.5 text-[10px] text-zinc-500">
                                     {{ reviewOperationLabel }}
                                 </span>
                             </div>
                         </div>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <Button variant="ghost" size="sm" class="h-7 px-2.5" :disabled="isSubmittingImport || !canRunImageQueue" @click="toggleImageQueueProcessing">
-                                <Loader2 v-if="isImageQueueRunning && !isQueuePaused" class="w-3 h-3 mr-1 animate-spin" />
-                                <Play v-else class="w-3 h-3 mr-1" />
-                                <span class="text-[10px]">{{ imageQueueActionLabel }}</span>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <div
+                                v-if="isQrofertasPresentation && filteredProductRows.length > 1"
+                                class="mr-1 inline-flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-950/50 px-1"
+                                aria-label="Navegação dos produtos"
+                            >
+                                <button
+                                    type="button"
+                                    class="flex h-6 w-6 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30"
+                                    aria-label="Produto anterior"
+                                    :disabled="activeReviewRowVisibleIndex <= 0"
+                                    @click="moveActiveReviewRow(-1)"
+                                >
+                                    <ChevronDown class="h-3.5 w-3.5 rotate-90" />
+                                </button>
+                                <span class="min-w-10 text-center text-[9px] tabular-nums text-zinc-500">
+                                    {{ activeReviewRowVisibleIndex + 1 }}/{{ filteredProductRows.length }}
+                                </span>
+                                <button
+                                    type="button"
+                                    class="flex h-6 w-6 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30"
+                                    aria-label="Próximo produto"
+                                    :disabled="activeReviewRowVisibleIndex < 0 || activeReviewRowVisibleIndex >= filteredProductRows.length - 1"
+                                    @click="moveActiveReviewRow(1)"
+                                >
+                                    <ChevronDown class="h-3.5 w-3.5 -rotate-90" />
+                                </button>
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                :class="isQrofertasPresentation ? 'h-6 w-7 p-0' : 'h-7 px-2.5'"
+                                :title="imageQueueActionLabel"
+                                :aria-label="imageQueueActionLabel"
+                                :disabled="isSubmittingImport || !canRunImageQueue"
+                                @click="toggleImageQueueProcessing"
+                            >
+                                <Loader2 v-if="isImageQueueRunning && !isQueuePaused" :class="isQrofertasPresentation ? 'w-3 h-3' : 'w-3 h-3 mr-1'" class="animate-spin" />
+                                <Play v-else :class="isQrofertasPresentation ? 'w-3 h-3' : 'w-3 h-3 mr-1'" />
+                                <span v-if="!isQrofertasPresentation" class="text-[10px]">{{ imageQueueActionLabel }}</span>
                             </Button>
-                            <Button v-if="imageQueueState.running" variant="ghost" size="sm" class="h-7 px-2.5" @click="stopImageQueue">
-                                <X class="w-3 h-3 mr-1" />
-                                <span class="text-[10px]">Parar</span>
+                            <Button v-if="imageQueueState.running" variant="ghost" size="sm" :class="isQrofertasPresentation ? 'h-6 w-7 p-0' : 'h-7 px-2.5'" title="Parar busca" aria-label="Parar busca" @click="stopImageQueue">
+                                <X :class="isQrofertasPresentation ? 'w-3 h-3' : 'w-3 h-3 mr-1'" />
+                                <span v-if="!isQrofertasPresentation" class="text-[10px]">Parar</span>
                             </Button>
                             <Button
-                                v-if="targetMode !== 'multi-frame'"
+                                v-if="targetMode !== 'multi-frame' && !isQrofertasPresentation"
                                 size="sm"
-                                class="h-7 px-3 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                                :class="isQrofertasPresentation ? 'h-6 px-2 text-[9px]' : 'h-7 px-3'"
+                                class="bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
                                 :disabled="importButtonDisabled"
                                 @click="handleImport"
                             >
                                 <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="w-3 h-3 mr-1 animate-spin" />
                                 <Check v-else class="w-3 h-3 mr-1" />
-                                <span class="text-[10px] font-bold">Importar {{ products.length }}</span>
+                                <span :class="isQrofertasPresentation ? 'text-[9px]' : 'text-[10px]'" class="font-bold">Importar {{ products.length }}</span>
                             </Button>
                         </div>
                     </div>
 
                     <!-- Progress bar inline -->
-                    <div v-if="showImageQueueControls && imageQueueProgress.total > 0" class="space-y-1">
-                        <div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                    <div v-if="showImageQueueControls && imageQueueProgress.total > 0" :class="isQrofertasPresentation ? 'space-y-0.5' : 'space-y-1'">
+                        <div :class="isQrofertasPresentation ? 'h-1 rounded-full' : 'h-1.5 rounded-full'" class="bg-zinc-800 overflow-hidden">
                             <div class="h-full bg-emerald-500 transition-all duration-300" :style="{ width: `${imageQueueProgress.percent}%` }"></div>
                         </div>
-                        <div class="flex items-center justify-between text-[9px] text-zinc-500">
+                        <div :class="isQrofertasPresentation ? 'text-[8px]' : 'text-[9px]'" class="flex items-center justify-between text-zinc-500">
                             <span>{{ imageQueueProgress.status }} • {{ imageQueueProgress.done }}/{{ imageQueueProgress.total }}<span v-if="imageQueueProgress.active"> • {{ imageQueueProgress.active }} ativas</span></span>
                             <span v-if="imageQueueProgress.failed">{{ imageQueueProgress.failed }} falhas</span>
                         </div>
                     </div>
 
-                    <!-- Linha 2: Filtros + Busca -->
-                    <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+                    <!-- Filtros e busca ficam disponíveis no fluxo completo. No modo
+                         rápido, a prioridade é o produto e essas opções só criam ruído. -->
+                    <div v-if="!isQrofertasPresentation" class="flex flex-col gap-2 lg:flex-row lg:items-center">
                         <div class="flex items-center gap-1 overflow-x-auto custom-scrollbar shrink-0">
                             <button
                                 v-for="option in reviewFilterOptions"
                                 :key="option.value"
                                 type="button"
-                                class="shrink-0 h-7 rounded-lg px-3 text-[10px] font-medium transition-all"
-                                :class="reviewFilter === option.value ? 'text-white bg-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'"
+                                class="shrink-0 font-medium transition-all"
+                                :class="[
+                                    'h-7 rounded-lg px-3 text-[10px]',
+                                    reviewFilter === option.value ? 'text-white bg-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
+                                ]"
                                 @click="reviewFilter = option.value"
                             >
                                 {{ option.label }} <span class="ml-0.5 opacity-60">{{ option.count }}</span>
@@ -2776,13 +3227,107 @@ const getAssetDisplayName = (asset: any): string => {
                     </div>
                 </div>
 
-                <!-- Configurações compactas -->
-                <details class="group shrink-0 rounded-xl border border-zinc-800 bg-zinc-900/30 [&_summary::-webkit-details-marker]:hidden">
+                <!-- No modo rápido, a busca volta a ficar no topo da revisão e
+                     os resultados aparecem como cards compactos. Os controles
+                     do produto só entram em cena após um clique no card. -->
+                <section v-if="isQrofertasPresentation" class="quick-mode-results-view flex flex-col gap-3">
+                    <div class="quick-mode-results-search rounded-2xl border border-zinc-700/70 bg-zinc-800/90 p-3 shadow-lg shadow-black/20">
+                        <div class="flex items-center justify-between gap-2">
+                            <h2 class="text-base font-semibold tracking-tight text-white">Digite ou cole uma lista de produtos</h2>
+                            <span class="rounded-full border border-zinc-600 bg-zinc-900/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Busca</span>
+                        </div>
+                        <p class="mt-1 text-[11px] font-semibold text-white">
+                            Exemplo:
+                            <button type="button" class="font-normal text-zinc-200 underline decoration-zinc-500 underline-offset-2 hover:text-white" @click="textInput = 'Cerveja Brahma Lata de R$'">
+                                Cerveja Brahma Lata de R$
+                            </button>
+                        </p>
+                        <textarea
+                            v-model="textInput"
+                            :disabled="isParsing || isSubmittingImport"
+                            aria-label="Lista de produtos para buscar"
+                            placeholder="Ex: Arroz Cristal 5kg 24,99&#10;Picanha kg 39,99"
+                            class="mt-3 min-h-28 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950/75 px-3 py-2.5 text-sm leading-relaxed text-white outline-none placeholder:text-zinc-600 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-500/10"
+                        ></textarea>
+                        <button
+                            type="button"
+                            class="mt-2.5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-sky-500/70 bg-transparent px-3 text-sm font-semibold text-sky-200 transition-colors hover:bg-sky-500/10 disabled:cursor-wait disabled:opacity-60"
+                            :disabled="isParsing || isSubmittingImport || !textInput.trim()"
+                            @click="handleParse"
+                        >
+                            <Loader2 v-if="isParsing" class="h-4 w-4 animate-spin" />
+                            <span>{{ isParsing ? 'Buscando produtos...' : 'Buscar Produtos' }}</span>
+                        </button>
+                    </div>
+
+                    <section class="quick-mode-search-results rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex min-w-0 items-center gap-2">
+                                <ChevronDown class="mt-0.5 h-4 w-4 shrink-0 text-zinc-500 -rotate-90" />
+                                <div>
+                                    <h2 class="text-lg font-semibold leading-tight text-white">Resultado da Busca</h2>
+                                    <p class="mt-1 text-[11px] leading-relaxed text-zinc-400">Você pode trocar as imagens após a escolha dos produtos.</p>
+                                </div>
+                            </div>
+                            <span class="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[9px] font-bold uppercase text-white">Novo</span>
+                        </div>
+
+                        <div v-if="isParsing" class="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-6 text-center text-[11px] text-zinc-500">
+                            Buscando produtos...
+                        </div>
+                        <div v-else-if="!reviewRowsWithMeta.length" class="mt-3 rounded-xl border border-dashed border-zinc-800 px-3 py-6 text-center text-[11px] text-zinc-500">
+                            Faça uma busca para ver os produtos encontrados.
+                        </div>
+                        <div v-else class="mt-3 grid gap-2">
+                            <div
+                                v-for="row in reviewRowsWithMeta"
+                                :key="row.productId"
+                                role="button"
+                                tabindex="0"
+                                :aria-expanded="isQuickProductExpanded(row.index)"
+                                :class="[
+                                    'quick-mode-result-card group grid grid-cols-[76px_minmax(0,1fr)] items-center gap-3 rounded-xl border p-2.5 text-left transition-all',
+                                    isQuickProductExpanded(row.index)
+                                        ? 'border-sky-400/60 bg-sky-500/10 shadow-md shadow-sky-950/20'
+                                        : 'border-zinc-800 bg-zinc-950/45 hover:border-zinc-700 hover:bg-zinc-800/60'
+                                ]"
+                                @click="toggleQuickProductOptions(row)"
+                                @keydown.enter.prevent="toggleQuickProductOptions(row)"
+                                @keydown.space.prevent="toggleQuickProductOptions(row)"
+                            >
+                                <div class="flex h-[76px] w-[76px] items-center justify-center overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/80">
+                                    <img
+                                        v-if="row.product?.imageUrl"
+                                        :src="resolveProductImageUrl(row.product.imageUrl)"
+                                        :alt="row.product.name || 'Produto encontrado'"
+                                        class="h-full w-full object-contain p-1.5"
+                                    />
+                                    <Loader2 v-else-if="row.product?.status === 'processing'" class="h-5 w-5 animate-spin text-sky-300" />
+                                    <span v-else class="text-xl text-zinc-700">?</span>
+                                </div>
+                                <div class="min-w-0 self-stretch py-1">
+                                    <h3 class="line-clamp-2 text-sm font-semibold leading-tight text-white">
+                                        {{ row.product.name || `Produto ${row.index + 1}` }}
+                                    </h3>
+                                    <p class="mt-2 text-xs text-zinc-400">
+                                        Oferta:
+                                        <strong class="text-zinc-200">R$ {{ getFirstCommercialPrice(row.product) || '—' }}</strong>
+                                    </p>
+                                    <p v-if="isQuickProductExpanded(row.index)" class="mt-1 text-[10px] font-medium text-sky-200/80">Clique novamente para recolher as opções</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+
+                <!-- Configurações -->
+                <details v-if="!isQrofertasPresentation" class="group shrink-0 rounded-xl border border-zinc-800 bg-zinc-900/30 [&_summary::-webkit-details-marker]:hidden">
                     <summary class="flex items-center justify-between px-3 py-2 cursor-pointer select-none hover:bg-zinc-800/40 transition-colors rounded-xl outline-none">
                         <div class="flex items-center gap-2 text-[10px] font-medium text-zinc-400">
                             <Settings2 class="w-3.5 h-3.5" />
                             Configurações
-                            <span class="text-zinc-600 group-open:hidden">{{ selectedImportModeLabel }} • {{ selectedTargetModeLabel }} • {{ selectedLabelTemplateSummary }} • {{ autoLayoutSummary }}</span>
+                            <span v-if="isQrofertasPresentation" class="text-zinc-600 group-open:hidden truncate">{{ selectedTargetModeLabel }} • {{ autoLayoutSummary }}</span>
+                            <span v-else class="text-zinc-600 group-open:hidden">{{ selectedImportModeLabel }} • {{ selectedTargetModeLabel }} • {{ selectedLabelTemplateSummary }} • {{ autoLayoutSummary }}</span>
                         </div>
                         <ChevronDown class="w-3.5 h-3.5 text-zinc-600 transition-transform group-open:rotate-180" />
                     </summary>
@@ -3020,18 +3565,28 @@ const getAssetDisplayName = (asset: any): string => {
                     </div>
 
 
-                <div
-                    v-if="activeReviewRowMeta"
-                    class="grid gap-3 xl:gap-4 xl:grid-cols-[390px_minmax(0,1fr)] flex-1 min-h-0"
+                    <div
+                        v-if="activeReviewRowMeta && !isQrofertasPresentation"
+                        :class="[
+                        'flex-1 min-h-0',
+                        isQrofertasPresentation
+                            ? 'flex flex-col gap-2'
+                            : 'grid gap-3 xl:gap-4 xl:grid-cols-[390px_minmax(0,1fr)]'
+                    ]"
                 >
-                    <aside class="rounded-2xl border border-zinc-800 bg-zinc-950/55 shadow-2xl shadow-black/20 flex flex-col min-h-0 max-h-[38dvh] sm:max-h-80 xl:max-h-[68vh] overflow-hidden">
-                        <div class="px-4 py-3 border-b border-zinc-800 bg-zinc-900/70 shrink-0">
+                    <aside v-if="!isQrofertasPresentation" :class="[
+                        'rounded-2xl border border-zinc-800 bg-zinc-950/55 shadow-2xl shadow-black/20 flex flex-col min-h-0 overflow-hidden',
+                        isQrofertasPresentation
+                            ? 'order-2 flex-none w-full max-h-52'
+                            : 'max-h-[38dvh] sm:max-h-80 xl:max-h-[68vh]'
+                    ]">
+                        <div :class="isQrofertasPresentation ? 'px-3 py-2' : 'px-4 py-3'" class="border-b border-zinc-800 bg-zinc-900/70 shrink-0">
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                    <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">Produtos adicionados</div>
+                                    <div :class="isQrofertasPresentation ? 'text-[9px]' : 'text-[10px]'" class="font-bold uppercase tracking-[0.18em] text-sky-300">Produtos adicionados</div>
                                     <div class="mt-1 flex items-baseline gap-2">
-                                        <span class="text-2xl font-semibold leading-none text-white">{{ filteredProductRows.length }}</span>
-                                        <span class="text-[11px] text-zinc-500">de {{ products.length }} no lote</span>
+                                        <span :class="isQrofertasPresentation ? 'text-xl' : 'text-2xl'" class="font-semibold leading-none text-white">{{ filteredProductRows.length }}</span>
+                                        <span :class="isQrofertasPresentation ? 'text-[10px]' : 'text-[11px]'" class="text-zinc-500">de {{ products.length }} no lote</span>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-1">
@@ -3044,22 +3599,22 @@ const getAssetDisplayName = (asset: any): string => {
                                     </button>
                                 </div>
                             </div>
-                            <div class="mt-3 grid grid-cols-4 gap-1.5">
-                                <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1">
-                                    <div class="text-[9px] uppercase text-emerald-300/70">Prontos</div>
-                                    <div class="text-sm font-semibold text-emerald-200">{{ imageStatusCounters.approved }}</div>
+                            <div :class="isQrofertasPresentation ? 'mt-2 gap-1' : 'mt-3 gap-1.5'" class="grid grid-cols-4">
+                                <div :class="isQrofertasPresentation ? 'px-1.5 py-0.5' : 'px-2 py-1'" class="rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                                    <div :class="isQrofertasPresentation ? 'text-[8px]' : 'text-[9px]'" class="uppercase text-emerald-300/70">Prontos</div>
+                                    <div :class="isQrofertasPresentation ? 'text-xs' : 'text-sm'" class="font-semibold text-emerald-200">{{ imageStatusCounters.approved }}</div>
                                 </div>
-                                <div class="rounded-lg border border-sky-500/20 bg-sky-500/10 px-2 py-1">
-                                    <div class="text-[9px] uppercase text-sky-300/70">Fila</div>
-                                    <div class="text-sm font-semibold text-sky-200">{{ imageStatusCounters.pending }}</div>
+                                <div :class="isQrofertasPresentation ? 'px-1.5 py-0.5' : 'px-2 py-1'" class="rounded-lg border border-sky-500/20 bg-sky-500/10">
+                                    <div :class="isQrofertasPresentation ? 'text-[8px]' : 'text-[9px]'" class="uppercase text-sky-300/70">Fila</div>
+                                    <div :class="isQrofertasPresentation ? 'text-xs' : 'text-sm'" class="font-semibold text-sky-200">{{ imageStatusCounters.pending }}</div>
                                 </div>
-                                <div class="rounded-lg border border-amber-500/20 bg-amber-500/10 px-2 py-1">
-                                    <div class="text-[9px] uppercase text-amber-300/70">Revisar</div>
-                                    <div class="text-sm font-semibold text-amber-200">{{ imageStatusCounters.ambiguous }}</div>
+                                <div :class="isQrofertasPresentation ? 'px-1.5 py-0.5' : 'px-2 py-1'" class="rounded-lg border border-amber-500/20 bg-amber-500/10">
+                                    <div :class="isQrofertasPresentation ? 'text-[8px]' : 'text-[9px]'" class="uppercase text-amber-300/70">Revisar</div>
+                                    <div :class="isQrofertasPresentation ? 'text-xs' : 'text-sm'" class="font-semibold text-amber-200">{{ imageStatusCounters.ambiguous }}</div>
                                 </div>
-                                <div class="rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 py-1">
-                                    <div class="text-[9px] uppercase text-rose-300/70">Bloq.</div>
-                                    <div class="text-sm font-semibold text-rose-200">{{ imageStatusCounters.blocked }}</div>
+                                <div :class="isQrofertasPresentation ? 'px-1.5 py-0.5' : 'px-2 py-1'" class="rounded-lg border border-rose-500/20 bg-rose-500/10">
+                                    <div :class="isQrofertasPresentation ? 'text-[8px]' : 'text-[9px]'" class="uppercase text-rose-300/70">Bloq.</div>
+                                    <div :class="isQrofertasPresentation ? 'text-xs' : 'text-sm'" class="font-semibold text-rose-200">{{ imageStatusCounters.blocked }}</div>
                                 </div>
                             </div>
                         </div>
@@ -3159,23 +3714,27 @@ const getAssetDisplayName = (asset: any): string => {
                     </aside>
 
                     <!-- Conteúdo principal scrollável -->
-                    <div class="overflow-y-auto custom-scrollbar space-y-3 pr-1">
+                    <div ref="reviewContentRef" :class="['overflow-y-auto custom-scrollbar space-y-3 pr-1 min-h-0', isQrofertasPresentation ? 'order-1 flex-1 min-h-0 w-full' : '']">
                         <!-- Produto em foco: imagem + info + ações -->
-                        <section class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-                            <div class="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)]">
+                        <section :class="isQrofertasPresentation ? 'p-2.5' : 'p-4'" class="rounded-xl border border-zinc-800 bg-zinc-900/40">
+                            <div :class="isQrofertasPresentation ? 'grid grid-cols-[104px_minmax(0,1fr)] gap-2' : 'grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)]'">
                                 <!-- Imagem do produto -->
-                                <div class="space-y-2">
+                                <div :class="isQrofertasPresentation ? 'space-y-1' : 'space-y-2'">
                                     <div
                                         :class="[
-                                            'relative flex aspect-square items-center justify-center overflow-hidden rounded-xl border bg-zinc-950/80',
+                                            'relative flex aspect-square items-center justify-center overflow-hidden border bg-zinc-950/80',
+                                            isQrofertasPresentation ? 'w-[104px] rounded-lg' : 'rounded-xl',
                                             thumbnailUiStateClass(activeReviewRowMeta.product)
                                         ]"
                                     >
                                         <template v-if="activeReviewRowMeta.product?.imageUrl">
                                             <img
                                                 :src="resolveProductImageUrl(activeReviewRowMeta.product.imageUrl)"
-                                                class="h-full w-full object-contain p-3"
-                                                :class="activeReviewRowMeta.product?.status === 'processing' ? 'opacity-30' : ''"
+                                                class="h-full w-full object-contain"
+                                                :class="[
+                                                    isQrofertasPresentation ? 'p-1.5' : 'p-3',
+                                                    activeReviewRowMeta.product?.status === 'processing' ? 'opacity-30' : ''
+                                                ]"
                                                 alt="Imagem do produto ativo"
                                             />
                                             <div v-if="activeReviewRowMeta.product?.status === 'processing'" class="absolute inset-0 z-20 flex items-center justify-center bg-black/45">
@@ -3188,11 +3747,11 @@ const getAssetDisplayName = (asset: any): string => {
                                         <template v-else>
                                             <div class="text-[10px] text-zinc-500">{{ thumbnailStatusText(activeReviewRowMeta.product) }}</div>
                                         </template>
-                                        <div class="absolute left-2 top-2 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">
+                                        <div :class="isQrofertasPresentation ? 'left-1.5 top-1.5 px-1 text-[7px]' : 'left-2 top-2 px-1.5 text-[8px]'" class="absolute rounded-md bg-black/50 py-0.5 font-bold uppercase text-white">
                                             {{ activeReviewRowMeta.imageStatusMeta.source }}
                                         </div>
                                     </div>
-                                    <div class="flex gap-1.5 text-[9px] text-zinc-500">
+                                    <div :class="isQrofertasPresentation ? 'gap-1 text-[8px]' : 'gap-1.5 text-[9px]'" class="flex text-zinc-500">
                                         <span>Conf. {{ activeReviewRowMeta.imageStatusMeta.confidence }}</span>
                                         <span>•</span>
                                         <span>{{ activeReviewRowMeta.imageStatusMeta.attemptsText }}</span>
@@ -3200,17 +3759,17 @@ const getAssetDisplayName = (asset: any): string => {
                                 </div>
 
                                 <!-- Info + Ações -->
-                                <div class="min-w-0 space-y-3">
+                                <div :class="isQrofertasPresentation ? 'space-y-2' : 'space-y-3'" class="min-w-0">
                                     <div class="flex items-start justify-between gap-2">
                                         <div class="min-w-0">
                                             <div class="flex items-center gap-2 mb-1">
                                                 <span class="rounded-md border px-2 py-0.5 text-[9px] font-semibold uppercase" :class="activeDecisionToneClass">{{ activeDecisionLabel }}</span>
                                                 <span class="text-[10px] text-zinc-500">Item {{ activeReviewRowMeta.index + 1 }}</span>
                                             </div>
-                                            <h3 class="text-lg font-semibold leading-tight text-white">
+                                            <h3 :class="isQrofertasPresentation ? 'text-base' : 'text-lg'" class="font-semibold leading-tight text-white">
                                                 {{ activeReviewRowMeta.product.name || `Produto ${activeReviewRowMeta.index + 1}` }}
                                             </h3>
-                                            <div class="mt-1 text-[11px] text-zinc-400">
+                                            <div :class="isQrofertasPresentation ? 'text-[10px]' : 'text-[11px]'" class="mt-1 text-zinc-400">
                                                 {{ activeReviewRowMeta.product.brand || 'Sem marca' }}
                                                 <span v-if="activeReviewRowMeta.product.weight"> • {{ activeReviewRowMeta.product.weight }}</span>
                                                 <span v-if="activeReviewRowMeta.product.productCode"> • {{ activeReviewRowMeta.product.productCode }}</span>
@@ -3222,14 +3781,57 @@ const getAssetDisplayName = (asset: any): string => {
                                     </div>
 
                                     <!-- Ações rápidas -->
-                                    <div class="flex flex-wrap gap-1.5">
-                                        <button type="button" class="h-8 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 text-[10px] font-bold uppercase text-sky-100 hover:bg-sky-500/20 transition-colors" @click="runImageQuickAction(activeReviewRowMeta, 'search')">Buscar</button>
-                                        <button type="button" class="h-8 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-[10px] font-bold uppercase text-zinc-200 hover:bg-zinc-700/60 transition-colors" @click="reprocessProductImage(activeReviewRowMeta.index, true)">Reprocessar</button>
-                                        <button type="button" class="h-8 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-[10px] font-bold uppercase text-zinc-200 hover:bg-zinc-700/60 transition-colors" @click="openAssetPicker(activeReviewRowMeta.index)">Storage</button>
-                                        <button type="button" class="h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 text-[10px] font-bold uppercase text-emerald-100 hover:bg-emerald-500/20 transition-colors" @click="openReviewImageUpload(activeReviewRowMeta.index)">
-                                            <Upload class="h-3 w-3 inline mr-1" />Upload
-                                        </button>
+                                    <div :class="isQrofertasPresentation ? 'gap-1' : 'gap-1.5'" class="flex flex-wrap">
+                                        <template v-if="isQrofertasPresentation">
+                                            <button
+                                                type="button"
+                                                class="inline-flex h-7 items-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 text-[9px] font-bold uppercase text-emerald-100 transition-colors hover:bg-emerald-500/20"
+                                                @click="openReviewImageUpload(activeReviewRowMeta.index)"
+                                            >
+                                                <Upload class="mr-1 h-3 w-3" />Enviar imagem
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="inline-flex h-7 items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 text-[9px] font-bold uppercase text-sky-100 transition-colors hover:bg-sky-500/20 disabled:cursor-wait disabled:opacity-60"
+                                                :disabled="isActiveReviewSuggestionLoading"
+                                                @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })"
+                                            >
+                                                <Loader2 v-if="isActiveReviewSuggestionLoading" class="mr-1 h-3 w-3 animate-spin" />
+                                                <RefreshCw v-else class="mr-1 h-3 w-3" />
+                                                {{ isActiveReviewSuggestionLoading ? 'Buscando...' : 'Trocar imagem' }}
+                                            </button>
+                                        </template>
+                                        <template v-else>
+                                            <button type="button" class="h-8 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 text-[10px] font-bold uppercase text-sky-100 transition-colors hover:bg-sky-500/20" @click="runImageQuickAction(activeReviewRowMeta, 'search')">Buscar</button>
+                                            <button type="button" class="h-8 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-[10px] font-bold uppercase text-zinc-200 transition-colors hover:bg-zinc-700/60" @click="reprocessProductImage(activeReviewRowMeta.index, true)">Reprocessar</button>
+                                            <button type="button" class="h-8 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-[10px] font-bold uppercase text-zinc-200 transition-colors hover:bg-zinc-700/60" @click="openAssetPicker(activeReviewRowMeta.index)">Storage</button>
+                                            <button type="button" class="h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 text-[10px] font-bold uppercase text-emerald-100 transition-colors hover:bg-emerald-500/20" @click="openReviewImageUpload(activeReviewRowMeta.index)">
+                                                <Upload class="mr-1 inline h-3 w-3" />Upload
+                                            </button>
+                                        </template>
                                     </div>
+
+                                    <!-- A etiqueta acompanha o tipo de preço do produto. No modo
+                                         rápido só mostramos modelos compatíveis com este card. -->
+                                    <label v-if="isQrofertasPresentation" class="grid gap-1 rounded-lg border border-violet-500/20 bg-violet-500/5 px-2 py-1.5">
+                                        <span class="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-widest text-violet-200">
+                                            <span>Trocar etiqueta</span>
+                                            <span class="font-normal tracking-normal text-violet-200/60">
+                                                {{ activeProductLabelMode === 'multi' ? 'Atacado + varejo' : 'Valor simples' }}
+                                            </span>
+                                        </span>
+                                        <select
+                                            class="h-7 w-full rounded-md border border-violet-400/20 bg-zinc-950/70 px-2 text-[10px] text-zinc-100 outline-none focus:border-violet-300/60"
+                                            :value="selectedLabelTemplateId"
+                                            aria-label="Trocar etiqueta de preço"
+                                            @change="setSelectedLabelTemplate(String(($event.target as HTMLSelectElement).value || ''))"
+                                        >
+                                            <option value="">Padrão da zona</option>
+                                            <option v-for="template in activeCompatibleLabelTemplates" :key="template.id" :value="template.id">
+                                                {{ template.name }}
+                                            </option>
+                                        </select>
+                                    </label>
 
                                     <!-- Próxima ação sugerida -->
                                     <div v-if="activeReviewRowMeta.imageNextAction" class="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] text-amber-100 flex items-center justify-between gap-2">
@@ -3251,58 +3853,95 @@ const getAssetDisplayName = (asset: any): string => {
                         <!-- Sugestões de imagem -->
                         <section class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
                             <div class="flex items-center justify-between gap-3 mb-3">
-                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                                <button
+                                    v-if="isQrofertasPresentation"
+                                    type="button"
+                                    class="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg py-1 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-400 transition-colors hover:text-zinc-200"
+                                    :aria-expanded="isImageSuggestionsExpanded(activeReviewRowMeta.productId)"
+                                    :aria-controls="`image-suggestions-${activeReviewRowMeta.productId}`"
+                                    @click="toggleImageSuggestions(activeReviewRowMeta.productId)"
+                                >
+                                    <span class="truncate">
+                                        Sugestões de imagem
+                                        <span v-if="activeReviewCandidates.length" class="text-zinc-500 font-normal ml-1">({{ activeReviewCandidates.length }})</span>
+                                    </span>
+                                    <ChevronDown class="h-3.5 w-3.5 shrink-0 text-zinc-600 transition-transform" :class="isImageSuggestionsExpanded(activeReviewRowMeta.productId) ? 'rotate-180' : ''" />
+                                </button>
+                                <div v-else class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
                                     Sugestões de imagem
                                     <span v-if="activeReviewCandidates.length" class="text-zinc-500 font-normal ml-1">({{ activeReviewCandidates.length }})</span>
                                 </div>
-                                <button type="button" class="h-7 rounded-lg border border-zinc-700 bg-zinc-800/50 px-2.5 text-[9px] font-bold uppercase text-zinc-300 hover:bg-zinc-700/60 transition-colors disabled:opacity-50" :disabled="isActiveReviewSuggestionLoading" @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })">
+                                <button v-if="!isQrofertasPresentation || isImageSuggestionsExpanded(activeReviewRowMeta.productId)" type="button" class="h-7 rounded-lg border border-zinc-700 bg-zinc-800/50 px-2.5 text-[9px] font-bold uppercase text-zinc-300 hover:bg-zinc-700/60 transition-colors disabled:opacity-50" :disabled="isActiveReviewSuggestionLoading" @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })">
                                     <Loader2 v-if="isActiveReviewSuggestionLoading" class="h-3 w-3 animate-spin inline" />
                                     <span v-else>Atualizar</span>
                                 </button>
                             </div>
 
-                            <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-center text-[10px] text-zinc-500">
-                                Buscando imagens...
-                            </div>
-                            <div v-else-if="activeReviewCandidates.length" class="grid gap-2 grid-cols-2 xl:grid-cols-3">
-                                <button
-                                    v-for="(candidate, candidateIndex) in activeReviewCandidates"
-                                    :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
-                                    type="button"
-                                    class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/4"
-                                    @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
-                                >
-                                    <div class="relative aspect-4/3 bg-zinc-900/60">
-                                        <img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" />
-                                        <div v-if="candidate.recommended" class="absolute left-1.5 top-1.5 rounded-md bg-emerald-500/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">Recomendada</div>
-                                        <div class="absolute right-1.5 top-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">{{ candidate.source === 's3' ? 'Storage' : 'Busca' }}</div>
-                                    </div>
-                                    <div class="p-2">
-                                        <div class="flex items-center justify-between gap-1">
-                                            <div class="line-clamp-1 text-[10px] font-medium text-white">{{ candidate.title || candidate.domain || 'Imagem' }}</div>
-                                            <span class="text-[9px] font-semibold text-zinc-300 shrink-0">{{ formatCandidateConfidence(candidate) }}</span>
+                            <div
+                                v-if="isImageSuggestionsExpanded(activeReviewRowMeta.productId)"
+                                :id="`image-suggestions-${activeReviewRowMeta.productId}`"
+                                class="space-y-2"
+                            >
+                                <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-center text-[10px] text-zinc-500">
+                                    Buscando imagens...
+                                </div>
+                                <div v-else-if="activeReviewCandidates.length" class="grid gap-2 grid-cols-2 xl:grid-cols-3">
+                                    <button
+                                        v-for="(candidate, candidateIndex) in activeReviewCandidates"
+                                        :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
+                                        type="button"
+                                        class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/4"
+                                        @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
+                                    >
+                                        <div class="relative aspect-4/3 bg-zinc-900/60">
+                                            <img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" />
+                                            <div v-if="candidate.recommended" class="absolute left-1.5 top-1.5 rounded-md bg-emerald-500/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">Recomendada</div>
+                                            <div class="absolute right-1.5 top-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">{{ candidate.source === 's3' ? 'Storage' : 'Busca' }}</div>
                                         </div>
-                                        <div class="text-[9px] text-emerald-300 font-medium mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">Usar esta</div>
-                                    </div>
-                                </button>
+                                        <div class="p-2">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <div class="line-clamp-1 text-[10px] font-medium text-white">{{ candidate.title || candidate.domain || 'Imagem' }}</div>
+                                                <span class="text-[9px] font-semibold text-zinc-300 shrink-0">{{ formatCandidateConfidence(candidate) }}</span>
+                                            </div>
+                                            <div class="text-[9px] text-emerald-300 font-medium mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">Usar esta</div>
+                                        </div>
+                                    </button>
+                                </div>
+                                <div v-else class="rounded-lg border border-dashed border-zinc-800 px-4 py-5 text-center text-[10px] text-zinc-500">
+                                    {{ activeReviewSuggestionError || 'Nenhuma imagem compatível encontrada. Use Enviar imagem ou Storage.' }}
+                                </div>
+                                <div v-if="activeReviewSuggestionError" class="mt-2 text-[9px] text-rose-300/80">{{ activeReviewSuggestionError }}</div>
                             </div>
-                            <div v-else class="rounded-lg border border-dashed border-zinc-800 px-4 py-5 text-center text-[10px] text-zinc-500">
-                                {{ activeReviewSuggestionError || 'Sem candidatas. Use Storage, Upload ou Reprocessar.' }}
-                            </div>
-                            <div v-if="activeReviewSuggestionError" class="mt-2 text-[9px] text-rose-300/80">{{ activeReviewSuggestionError }}</div>
                         </section>
 
-                        <!-- Dados comerciais -->
+                        <!-- Dados do produto -->
                         <section class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
                             <div class="flex items-center justify-between gap-3 mb-3">
-                                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Dados comerciais</div>
-                                <button type="button" class="h-7 rounded-lg border border-zinc-700 bg-zinc-800/50 px-2.5 text-[9px] font-bold uppercase text-zinc-300 hover:bg-zinc-700/60 transition-colors" @click="toggleAdvancedFields(activeReviewRowMeta.productId)">
+                                <div class="flex min-w-0 items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                                    <span>Dados do produto</span>
+                                    <span v-if="isQrofertasPresentation && !isCommercialFieldsExpanded(activeReviewRowMeta.productId)" class="truncate text-[9px] font-normal tracking-normal text-zinc-600">
+                                        ocultos até configurar
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="h-7 rounded-lg border border-zinc-700 bg-zinc-800/50 px-2.5 text-[9px] font-bold uppercase text-zinc-300 transition-colors hover:bg-zinc-700/60"
+                                    :aria-expanded="isQrofertasPresentation ? isCommercialFieldsExpanded(activeReviewRowMeta.productId) : isAdvancedFieldsExpanded(activeReviewRowMeta.productId)"
+                                    :aria-controls="`commercial-fields-${activeReviewRowMeta.productId}`"
+                                    @click="isQrofertasPresentation ? toggleCommercialFields(activeReviewRowMeta.productId) : toggleAdvancedFields(activeReviewRowMeta.productId)"
+                                >
                                     <SlidersHorizontal class="h-3 w-3 inline mr-1" />
-                                    {{ isAdvancedFieldsExpanded(activeReviewRowMeta.productId) ? 'Ocultar' : 'Avançado' }}
+                                    {{ isQrofertasPresentation
+                                        ? (isCommercialFieldsExpanded(activeReviewRowMeta.productId) ? 'Ocultar dados' : 'Configurar dados')
+                                        : (isAdvancedFieldsExpanded(activeReviewRowMeta.productId) ? 'Ocultar campos' : 'Configurar campos') }}
                                 </button>
                             </div>
 
-                            <div class="grid gap-3 xl:grid-cols-2">
+                            <div
+                                v-if="!isQrofertasPresentation || isCommercialFieldsExpanded(activeReviewRowMeta.productId)"
+                                :id="`commercial-fields-${activeReviewRowMeta.productId}`"
+                                class="grid gap-3 xl:grid-cols-2"
+                            >
                                 <!-- Identidade -->
                                 <div class="space-y-2">
                                     <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
@@ -3372,8 +4011,8 @@ const getAssetDisplayName = (asset: any): string => {
                                     </div>
 
                                     <!-- Avançados -->
-                                    <details class="rounded-lg border border-zinc-800 bg-zinc-950/30 p-2.5 [&_summary::-webkit-details-marker]:hidden" :open="isAdvancedFieldsExpanded(activeReviewRowMeta.productId)">
-                                        <summary class="cursor-pointer text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300">Campos avançados</summary>
+                                    <div v-if="isAdvancedFieldsExpanded(activeReviewRowMeta.productId)" class="rounded-lg border border-zinc-800 bg-zinc-950/30 p-2.5">
+                                        <div class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Campos avançados</div>
                                         <div class="mt-2 grid gap-2 grid-cols-2">
                                             <label class="block text-[9px] font-bold uppercase tracking-widest text-zinc-500">
                                                 Preço
@@ -3392,13 +4031,14 @@ const getAssetDisplayName = (asset: any): string => {
                                                 <input :value="activeReviewRowMeta.product.wholesaleTriggerUnit ?? ''" @input="setActiveReviewUppercaseField('wholesaleTriggerUnit', String(($event.target as any).value || ''))" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/40" placeholder="FD" />
                                             </label>
                                         </div>
-                                    </details>
+                                    </div>
                                 </div>
                             </div>
                         </section>
 
-                        <!-- Fechamento compacto -->
-                        <section class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                        <!-- Fechamento compacto: no modo rápido, a ação global fica
+                             somente no rodapé fixo da lateral. -->
+                        <section v-if="!isQrofertasPresentation" class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
                             <div class="flex items-center justify-between gap-3">
                                 <div class="flex items-center gap-2 text-[10px]" :class="importReadinessToneClass.replace('border-', 'text-').split(' ').filter((c: string) => c.startsWith('text-'))[0]">
                                     <AlertCircle class="h-3.5 w-3.5 shrink-0" v-if="missingCommercialPriceCount > 0 || imageStatusCounters.blocked > 0 || imageStatusCounters.ambiguous > 0" />
@@ -3420,7 +4060,7 @@ const getAssetDisplayName = (asset: any): string => {
                                     >
                                         <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="h-3 w-3 mr-1 animate-spin" />
                                         <Check v-else class="h-3 w-3 mr-1" />
-                                        <span class="text-[10px] font-bold">Importar {{ products.length }}</span>
+                                        <span class="text-[10px] font-bold">{{ isQrofertasPresentation ? 'Adicionar no encarte' : `Importar ${products.length}` }}</span>
                                     </Button>
                                 </div>
                             </div>
@@ -3428,13 +4068,264 @@ const getAssetDisplayName = (asset: any): string => {
                     </div>
                 </div>
                 <div
-                    v-else
+                    v-else-if="!isQrofertasPresentation"
                     class="rounded-[28px] border border-dashed border-white/10 bg-white/2 px-6 py-10 text-center text-[12px] leading-relaxed text-zinc-500"
                 >
                     Nenhum produto disponível nesta revisão. Ajuste os filtros ou volte para a entrada para carregar um novo lote.
                 </div>
             </div>
 
+        </div>
+        <template v-if="isQrofertasPresentation" #footer>
+            <button
+                type="button"
+                class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-lg shadow-emerald-950/30 transition-colors hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-50"
+                :disabled="importButtonDisabled"
+                aria-label="Adicionar todos os produtos no encarte"
+                @click="addAllQuickProductsToEncarte"
+            >
+                <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="h-4 w-4 animate-spin" />
+                <Check v-else class="h-4 w-4" />
+                {{ isSubmittingImport ? 'Adicionando...' : 'Adicionar no encarte' }}
+            </button>
+        </template>
+    </Dialog>
+
+    <Dialog
+        v-if="isQrofertasPresentation && activeReviewRowMeta"
+        v-model="showQuickProductProperties"
+        title="Propriedades do produto"
+        width="min(560px, calc(100vw - 2rem))"
+        :fullscreen="isMobile"
+        header-class="px-4 py-3 bg-zinc-900/95"
+        title-class="text-sm tracking-widest"
+        close-class="p-1.5"
+        content-class="w-full"
+    >
+        <div class="space-y-3">
+            <section class="rounded-2xl border border-zinc-800 bg-zinc-950/45 p-3">
+                <div class="grid grid-cols-[104px_minmax(0,1fr)] gap-3">
+                    <div class="space-y-1">
+                        <div
+                            :class="[
+                                'relative flex aspect-square w-[104px] items-center justify-center overflow-hidden rounded-xl border bg-zinc-950/80',
+                                thumbnailUiStateClass(activeReviewRowMeta.product)
+                            ]"
+                        >
+                            <template v-if="activeReviewRowMeta.product?.imageUrl">
+                                <img
+                                    :src="resolveProductImageUrl(activeReviewRowMeta.product.imageUrl)"
+                                    class="h-full w-full object-contain p-2"
+                                    :class="activeReviewRowMeta.product?.status === 'processing' ? 'opacity-30' : ''"
+                                    alt="Imagem do produto"
+                                />
+                                <div v-if="activeReviewRowMeta.product?.status === 'processing'" class="absolute inset-0 flex items-center justify-center bg-black/45">
+                                    <Loader2 class="h-5 w-5 animate-spin text-sky-300" />
+                                </div>
+                            </template>
+                            <Loader2 v-else-if="activeReviewRowMeta.product?.status === 'processing'" class="h-5 w-5 animate-spin text-sky-300" />
+                            <span v-else class="text-[10px] text-zinc-500">{{ thumbnailStatusText(activeReviewRowMeta.product) }}</span>
+                            <span class="absolute left-1.5 top-1.5 rounded-md bg-black/55 px-1 py-0.5 text-[7px] font-bold uppercase text-white">
+                                {{ activeReviewRowMeta.imageStatusMeta.source }}
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-center gap-1 text-[8px] text-zinc-500">
+                            <span>Conf. {{ activeReviewRowMeta.imageStatusMeta.confidence }}</span>
+                            <span>•</span>
+                            <span>{{ activeReviewRowMeta.imageStatusMeta.attemptsText }}</span>
+                        </div>
+                    </div>
+
+                    <div class="min-w-0 space-y-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <div class="mb-1 flex items-center gap-2">
+                                    <span class="rounded-md border px-2 py-0.5 text-[9px] font-semibold uppercase" :class="activeDecisionToneClass">{{ activeDecisionLabel }}</span>
+                                    <span class="text-[10px] text-zinc-500">Item {{ activeReviewRowMeta.index + 1 }}</span>
+                                </div>
+                                <h3 class="text-base font-semibold leading-tight text-white">{{ activeReviewRowMeta.product.name || `Produto ${activeReviewRowMeta.index + 1}` }}</h3>
+                                <p class="mt-1 text-[10px] text-zinc-400">
+                                    {{ activeReviewRowMeta.product.brand || 'Sem marca' }}
+                                    <span v-if="activeReviewRowMeta.product.weight"> • {{ activeReviewRowMeta.product.weight }}</span>
+                                    <span v-if="activeReviewRowMeta.product.productCode"> • {{ activeReviewRowMeta.product.productCode }}</span>
+                                </p>
+                            </div>
+                            <button type="button" class="shrink-0 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 py-1.5 text-[9px] font-bold uppercase text-rose-200 transition-colors hover:bg-rose-500/20" @click="removeProduct(activeReviewRowMeta.index)">
+                                <X class="mr-1 inline h-3 w-3" />Remover
+                            </button>
+                        </div>
+
+                        <label class="flex items-center gap-2 text-xs text-zinc-300">
+                            <input v-model="removeBackgroundOnUpload" type="checkbox" :disabled="isReviewUploadSubmitting" class="accent-emerald-500" />
+                            Remover fundo ao enviar
+                        </label>
+                        <p v-if="activeReviewRowMeta.product.error" role="alert" class="text-xs text-rose-300">{{ activeReviewRowMeta.product.error }}</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button
+                                type="button"
+                                class="inline-flex h-8 items-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 text-[9px] font-bold uppercase text-emerald-100 transition-colors hover:bg-emerald-500/20"
+                                :disabled="isReviewUploadSubmitting"
+                                @click="openReviewImageUpload(activeReviewRowMeta.index)"
+                            >
+                                <Loader2 v-if="isReviewUploadSubmitting" class="mr-1 h-3 w-3 animate-spin" />
+                                <Upload v-else class="mr-1 h-3 w-3" />{{ isReviewUploadSubmitting ? 'Enviando imagem…' : 'Enviar imagem' }}
+                            </button>
+                            <button
+                                type="button"
+                                class="inline-flex h-8 items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 text-[9px] font-bold uppercase text-sky-100 transition-colors hover:bg-sky-500/20 disabled:cursor-wait disabled:opacity-60"
+                                :disabled="isActiveReviewSuggestionLoading"
+                                @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })"
+                            >
+                                <Loader2 v-if="isActiveReviewSuggestionLoading" class="mr-1 h-3 w-3 animate-spin" />
+                                <RefreshCw v-else class="mr-1 h-3 w-3" />
+                                {{ isActiveReviewSuggestionLoading ? 'Buscando...' : 'Trocar imagem' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <label class="mt-3 grid gap-1 rounded-xl border border-violet-500/20 bg-violet-500/5 px-2.5 py-2">
+                    <span class="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-widest text-violet-200">
+                        <span>Trocar etiqueta</span>
+                        <span class="font-normal tracking-normal text-violet-200/60">{{ activeProductLabelMode === 'multi' ? 'Atacado + varejo' : 'Valor simples' }}</span>
+                    </span>
+                    <select
+                        class="h-8 w-full rounded-lg border border-violet-400/20 bg-zinc-950/70 px-2 text-[10px] text-zinc-100 outline-none focus:border-violet-300/60"
+                        :value="selectedLabelTemplateId"
+                        aria-label="Trocar etiqueta de preço"
+                        @change="setSelectedLabelTemplate(String(($event.target as HTMLSelectElement).value || ''))"
+                    >
+                        <option value="">Padrão da zona</option>
+                        <option v-for="template in activeCompatibleLabelTemplates" :key="template.id" :value="template.id">{{ template.name }}</option>
+                    </select>
+                </label>
+            </section>
+
+            <section class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-300">Dados do produto</div>
+                        <div v-if="!isCommercialFieldsExpanded(activeReviewRowMeta.productId)" class="mt-1 text-[9px] text-zinc-600">ocultos até configurar</div>
+                    </div>
+                    <button
+                        type="button"
+                        class="inline-flex h-8 shrink-0 items-center rounded-lg border border-zinc-700 bg-zinc-800/60 px-2.5 text-[9px] font-bold uppercase text-zinc-300 transition-colors hover:bg-zinc-700/70"
+                        :aria-expanded="isCommercialFieldsExpanded(activeReviewRowMeta.productId)"
+                        :aria-controls="`quick-commercial-fields-${activeReviewRowMeta.productId}`"
+                        @click="toggleCommercialFields(activeReviewRowMeta.productId)"
+                    >
+                        <SlidersHorizontal class="mr-1 h-3 w-3" />
+                        {{ isCommercialFieldsExpanded(activeReviewRowMeta.productId) ? 'Ocultar dados' : 'Configurar dados' }}
+                    </button>
+                </div>
+
+                <div v-if="isCommercialFieldsExpanded(activeReviewRowMeta.productId)" :id="`quick-commercial-fields-${activeReviewRowMeta.productId}`" class="mt-3 grid gap-2 sm:grid-cols-2">
+                    <label class="text-[9px] font-bold uppercase tracking-widest text-zinc-500 sm:col-span-2">
+                        Nome
+                        <input v-model="activeReviewRowMeta.product.name" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 text-sm font-semibold text-white placeholder:text-zinc-600 focus:border-sky-400/50 focus:outline-none" placeholder="Nome do produto" />
+                    </label>
+                    <label class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                        Marca
+                        <input v-model="activeReviewRowMeta.product.brand" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-sky-400/50 focus:outline-none" placeholder="Marca" />
+                    </label>
+                    <label class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                        Peso
+                        <input v-model="activeReviewRowMeta.product.weight" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-sky-400/50 focus:outline-none" placeholder="500G, 1L" />
+                    </label>
+                    <label class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                        R$ Unidade
+                        <input v-model="activeReviewRowMeta.product.priceUnit" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 text-sm font-semibold text-white placeholder:text-zinc-600 focus:border-sky-400/50 focus:outline-none" placeholder="0,00" />
+                    </label>
+                    <label class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                        R$ Embalagem
+                        <input v-model="activeReviewRowMeta.product.pricePack" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 text-sm font-semibold text-white placeholder:text-zinc-600 focus:border-sky-400/50 focus:outline-none" placeholder="0,00" />
+                    </label>
+                    <label class="text-[9px] font-bold uppercase tracking-widest text-emerald-400">
+                        R$ Especial Un
+                        <input v-model="activeReviewRowMeta.product.priceSpecialUnit" class="mt-1 h-9 w-full rounded-lg border border-emerald-900/50 bg-emerald-950/20 px-3 text-sm text-emerald-100 placeholder:text-emerald-300/30 focus:border-emerald-500 focus:outline-none" placeholder="0,00" />
+                    </label>
+                    <label class="text-[9px] font-bold uppercase tracking-widest text-emerald-400">
+                        R$ Especial
+                        <input v-model="activeReviewRowMeta.product.priceSpecial" class="mt-1 h-9 w-full rounded-lg border border-emerald-900/50 bg-emerald-950/20 px-3 text-sm text-emerald-100 placeholder:text-emerald-300/30 focus:border-emerald-500 focus:outline-none" placeholder="0,00" />
+                    </label>
+                    <label class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                        EAN / Código
+                        <input v-model="activeReviewRowMeta.product.productCode" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-sky-400/50 focus:outline-none" placeholder="Código" />
+                    </label>
+                    <label class="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                        Condição
+                        <input :value="activeReviewRowMeta.product.specialCondition ?? ''" @input="setActiveReviewStringField('specialCondition', String(($event.target as any).value || ''))" class="mt-1 h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-sky-400/50 focus:outline-none" placeholder="ACIMA DE 36 UN." />
+                    </label>
+                </div>
+            </section>
+
+            <section class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
+                <button
+                    type="button"
+                    class="flex w-full items-center justify-between gap-3 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-300"
+                    :aria-expanded="isImageSuggestionsExpanded(activeReviewRowMeta.productId)"
+                    :aria-controls="`quick-image-suggestions-${activeReviewRowMeta.productId}`"
+                    @click="toggleImageSuggestions(activeReviewRowMeta.productId)"
+                >
+                    <span>Sugestões de imagem <span v-if="activeReviewCandidates.length" class="font-normal text-zinc-500">({{ activeReviewCandidates.length }})</span></span>
+                    <ChevronDown class="h-3.5 w-3.5 text-zinc-600 transition-transform" :class="isImageSuggestionsExpanded(activeReviewRowMeta.productId) ? 'rotate-180' : ''" />
+                </button>
+                <div v-if="isImageSuggestionsExpanded(activeReviewRowMeta.productId)" :id="`quick-image-suggestions-${activeReviewRowMeta.productId}`" class="mt-3 space-y-2">
+                    <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-5 text-center text-[10px] text-zinc-500">Buscando imagens...</div>
+                    <div v-else-if="activeReviewCandidates.length" class="grid grid-cols-2 gap-2">
+                        <button
+                            v-for="(candidate, candidateIndex) in activeReviewCandidates"
+                            :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
+                            type="button"
+                            class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-colors hover:border-emerald-500/40"
+                            @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
+                        >
+                            <div class="relative aspect-4/3 bg-zinc-900/60"><img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" /></div>
+                            <div class="p-2 text-[9px] text-zinc-300"><span class="line-clamp-1">{{ candidate.title || candidate.domain || 'Imagem' }}</span><span class="mt-0.5 block text-emerald-300 opacity-0 transition-opacity group-hover:opacity-100">Usar esta</span></div>
+                        </button>
+                    </div>
+                    <div v-else class="rounded-lg border border-dashed border-zinc-800 px-3 py-5 text-center text-[10px] text-zinc-500">{{ activeReviewSuggestionError || 'Nenhuma imagem compatível encontrada. Use Enviar imagem para escolher um arquivo.' }}</div>
+                </div>
+            </section>
+        </div>
+    </Dialog>
+
+    <Dialog
+        v-model="showReviewUploadOptions"
+        title="Enviar imagem"
+        width="min(360px, calc(100vw - 2rem))"
+        :header-class="isQrofertasPresentation ? 'px-4 py-3 bg-zinc-900/90' : ''"
+        :title-class="isQrofertasPresentation ? 'text-sm tracking-widest' : ''"
+        :close-class="isQrofertasPresentation ? 'p-1.5' : ''"
+    >
+        <div class="space-y-3">
+            <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-3 py-2.5">
+                <div class="text-[11px] font-semibold text-white">
+                    {{ pendingReviewUploadFiles.length }} {{ pendingReviewUploadFiles.length === 1 ? 'imagem selecionada' : 'imagens selecionadas' }}
+                </div>
+                <p class="mt-1 text-[10px] leading-relaxed text-zinc-400">
+                    A imagem será aplicada ao produto em foco e às próximas, na ordem escolhida.
+                </p>
+            </div>
+
+            <label class="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-800 bg-zinc-950/45 px-3 py-3 transition hover:border-emerald-500/35">
+                <input v-model="removeBackgroundOnUpload" type="checkbox" class="mt-0.5 h-4 w-4 accent-emerald-500" />
+                <span class="min-w-0">
+                    <span class="block text-[11px] font-semibold text-zinc-100">Remover fundo automaticamente</span>
+                    <span class="mt-1 block text-[10px] leading-relaxed text-zinc-500">O produto fica pronto para encaixar no card, com transparência e recorte automático.</span>
+                </span>
+            </label>
+
+            <div class="flex items-center justify-end gap-2 pt-1">
+                <Button variant="ghost" size="sm" class="h-8 px-3 text-[10px]" :disabled="isReviewUploadSubmitting" @click="cancelReviewImageUpload">
+                    Cancelar
+                </Button>
+                <Button size="sm" class="h-8 bg-emerald-600 px-3 text-[10px] text-white hover:bg-emerald-500" :disabled="isReviewUploadSubmitting" @click="confirmReviewImageUpload">
+                    <Loader2 v-if="isReviewUploadSubmitting" class="mr-1.5 h-3 w-3 animate-spin" />
+                    <Upload v-else class="mr-1.5 h-3 w-3" />
+                    {{ isReviewUploadSubmitting ? 'Enviando...' : 'Enviar imagem' }}
+                </Button>
+            </div>
         </div>
     </Dialog>
 

@@ -1,5 +1,15 @@
 <script setup lang="ts">
 import { ArrowLeft, Plus, Pencil, Trash2, X, Eye, Upload } from 'lucide-vue-next'
+import {
+  builderThemeFormatSummary,
+  normalizeBuilderThemeModelIds,
+} from '~/utils/builderThemeFormats'
+import type { BuilderThemeComposition } from '~/types/builder'
+import {
+  createDefaultBuilderThemeComposition,
+  ensureBuilderThemeComposition,
+  normalizeBuilderThemeComposition,
+} from '~/utils/builderThemeComposition'
 
 definePageMeta({
   layout: false,
@@ -54,14 +64,29 @@ type Theme = {
   thumbnail: string
   background_image: string
   tags: string[]
+  model_ids?: string[] | null
+  composition?: BuilderThemeComposition | null
   css_config: CssConfig
   header_config: HeaderConfig
   body_config: BodyConfig
   footer_config: FooterConfig
 }
 
+type Model = {
+  id: string
+  name: string
+  type: string
+  width: number
+  height: number
+  aspect_ratio: string | null
+  is_active: boolean
+  sort_order: number
+}
+
 const themes = ref<Theme[]>([])
+const models = ref<Model[]>([])
 const isLoading = ref(false)
+const isLoadingModels = ref(false)
 const error = ref<string | null>(null)
 const showForm = ref(false)
 const editingId = ref<string | null>(null)
@@ -69,22 +94,35 @@ const showDeleteConfirm = ref<string | null>(null)
 const isSaving = ref(false)
 const uploadingField = ref<string | null>(null)
 
-// Formatos para preview
-const previewFormats = [
-  { label: 'Feed 1:1', width: 1080, height: 1080 },
-  { label: 'Stories 9:16', width: 1080, height: 1920 },
-  { label: 'Feed 4:5', width: 1080, height: 1350 },
-  { label: 'A4 Vertical', width: 794, height: 1123 },
-  { label: 'A4 Horizontal', width: 1123, height: 794 },
-  { label: 'A3 Vertical', width: 1123, height: 1587 },
-  { label: 'A3 Horizontal', width: 1587, height: 1123 },
-  { label: 'TV 16:9', width: 1920, height: 1080 },
-] as const
+// O preview usa os mesmos modelos que o cliente verá. O fallback mantém a
+// tela utilizável enquanto o catálogo é carregado.
+type PreviewFormat = {
+  id?: string
+  label: string
+  width: number
+  height: number
+  aspect_ratio?: string | null
+}
+
+const fallbackPreviewFormats: PreviewFormat[] = [
+  { label: 'Feed 1:1', width: 1080, height: 1080, aspect_ratio: '1:1' },
+  { label: 'Stories 9:16', width: 1080, height: 1920, aspect_ratio: '9:16' },
+  { label: 'Feed 4:5', width: 1080, height: 1350, aspect_ratio: '4:5' },
+  { label: 'A4 Vertical', width: 794, height: 1123, aspect_ratio: '210:297' },
+  { label: 'A4 Horizontal', width: 1123, height: 794, aspect_ratio: '297:210' },
+  { label: 'TV 16:9', width: 1920, height: 1080, aspect_ratio: '16:9' },
+]
+const previewFormats = computed<PreviewFormat[]>(() => models.value.length
+  ? models.value.map(model => ({
+      id: model.id,
+      label: model.name,
+      width: model.width,
+      height: model.height,
+      aspect_ratio: model.aspect_ratio,
+    }))
+  : fallbackPreviewFormats)
 const previewFormatIdx = ref(0)
-const previewFormat = computed(() => previewFormats[previewFormatIdx.value] ?? previewFormats[0])
-const PREVIEW_WIDTH = 270
-const previewScale = computed(() => PREVIEW_WIDTH / previewFormat.value.width)
-const previewHeight = computed(() => Math.round(previewFormat.value.height * previewScale.value))
+const previewFormat = computed<PreviewFormat>(() => previewFormats.value[previewFormatIdx.value] ?? previewFormats.value[0] ?? fallbackPreviewFormats[0]!)
 
 const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
   if (!keyOrUrl) return ''
@@ -203,6 +241,9 @@ const form = ref({
   thumbnail: '',
   background_image: '',
   tags_text: '',
+  model_ids: [] as string[],
+  all_formats: true,
+  composition: createDefaultBuilderThemeComposition() as BuilderThemeComposition,
   css_config: defaultCssConfig(),
   header_config: defaultHeaderConfig(),
   body_config: defaultBodyConfig(),
@@ -230,6 +271,9 @@ const resetForm = () => {
     thumbnail: '',
     background_image: '',
     tags_text: '',
+    model_ids: [],
+    all_formats: true,
+    composition: createDefaultBuilderThemeComposition(),
     css_config: defaultCssConfig(),
     header_config: defaultHeaderConfig(),
     body_config: defaultBodyConfig(),
@@ -244,6 +288,10 @@ const openCreate = () => {
 }
 
 const openEdit = (theme: Theme) => {
+  const savedComposition = ensureBuilderThemeComposition(theme.composition)
+  const savedBackgroundImage = hasImageValue(theme.background_image)
+    ? theme.background_image
+    : (hasImageValue(savedComposition.background.image) ? savedComposition.background.image : '')
   editingId.value = theme.id
   form.value = {
     name: theme.name,
@@ -254,8 +302,11 @@ const openEdit = (theme: Theme) => {
     is_premium: theme.is_premium ?? false,
     is_public: theme.is_public ?? true,
     thumbnail: hasImageValue(theme.thumbnail) ? theme.thumbnail : '',
-    background_image: hasImageValue(theme.background_image) ? theme.background_image : '',
+    background_image: savedBackgroundImage || '',
     tags_text: (theme.tags || []).join(', '),
+    model_ids: normalizeBuilderThemeModelIds(theme.model_ids),
+    all_formats: normalizeBuilderThemeModelIds(theme.model_ids).length === 0,
+    composition: savedComposition,
     css_config: { ...defaultCssConfig(), ...(theme.css_config || {}) },
     header_config: {
       ...defaultHeaderConfig(),
@@ -267,6 +318,25 @@ const openEdit = (theme: Theme) => {
   }
   showForm.value = true
 }
+
+const isModelSelected = (modelId: string): boolean => {
+  return form.value.all_formats || form.value.model_ids.includes(modelId)
+}
+
+const toggleAllFormats = (checked: boolean) => {
+  form.value.all_formats = checked
+  if (checked) form.value.model_ids = []
+}
+
+const toggleModel = (modelId: string, checked: boolean) => {
+  form.value.all_formats = false
+  const ids = new Set(form.value.model_ids)
+  if (checked) ids.add(modelId)
+  else ids.delete(modelId)
+  form.value.model_ids = Array.from(ids)
+}
+
+const themeFormats = (theme: Theme): string => builderThemeFormatSummary(theme, models.value)
 
 const fetchThemes = async () => {
   isLoading.value = true
@@ -282,9 +352,31 @@ const fetchThemes = async () => {
   }
 }
 
+const fetchModels = async () => {
+  isLoadingModels.value = true
+  try {
+    const headers = await getApiAuthHeaders()
+    const data = await $fetch<any>('/api/admin/builder/models', { headers })
+    models.value = Array.isArray(data) ? data : data?.models ?? data?.data ?? data?.items ?? []
+  } catch (e: any) {
+    // A falha no catálogo não impede editar o tema; o admin ainda consegue
+    // salvar "todos os formatos" sem depender da prévia.
+    if (!error.value) {
+      error.value = String(e?.data?.message || e?.message || 'Falha ao carregar formatos')
+    }
+  } finally {
+    isLoadingModels.value = false
+  }
+}
+
 const saveTheme = async () => {
-  isSaving.value = true
   error.value = null
+  if (!form.value.all_formats && form.value.model_ids.length === 0) {
+    error.value = 'Selecione pelo menos um formato ou marque "Todos os formatos".'
+    return
+  }
+
+  isSaving.value = true
   try {
     const headers = await getApiAuthHeaders()
     const slug = form.value.slug || generateSlug(form.value.name)
@@ -293,6 +385,7 @@ const saveTheme = async () => {
       .map(t => t.trim())
       .filter(Boolean)
 
+    const compositionValue = normalizeBuilderThemeComposition(form.value.composition)
     const payload = {
       name: form.value.name,
       slug,
@@ -304,6 +397,16 @@ const saveTheme = async () => {
       thumbnail: form.value.thumbnail,
       background_image: form.value.background_image,
       tags,
+      // Lista vazia é persistida como "todos os formatos".
+      model_ids: form.value.all_formats ? [] : form.value.model_ids,
+      composition: {
+        ...compositionValue,
+        background: {
+          ...compositionValue.background,
+          color: form.value.css_config.bgColor,
+          image: form.value.background_image,
+        },
+      },
       css_config: form.value.css_config,
       header_config: form.value.header_config,
       body_config: form.value.body_config,
@@ -355,7 +458,7 @@ watch(() => form.value.name, (name) => {
 })
 
 onMounted(() => {
-  fetchThemes()
+  void Promise.all([fetchThemes(), fetchModels()])
 })
 </script>
 
@@ -401,6 +504,7 @@ onMounted(() => {
               <th class="px-4 py-3 font-medium text-zinc-300">Nome</th>
               <th class="px-4 py-3 font-medium text-zinc-300">Slug</th>
               <th class="px-4 py-3 font-medium text-zinc-300">Categoria</th>
+              <th class="px-4 py-3 font-medium text-zinc-300">Formatos</th>
               <th class="px-4 py-3 font-medium text-zinc-300">Status</th>
               <th class="px-4 py-3 font-medium text-zinc-300">Ordem</th>
               <th class="px-4 py-3 font-medium text-zinc-300 text-right">Acoes</th>
@@ -437,6 +541,11 @@ onMounted(() => {
               <td class="px-4 py-3 font-medium text-zinc-100">{{ theme.name }}</td>
               <td class="px-4 py-3 font-mono text-xs text-zinc-400">{{ theme.slug }}</td>
               <td class="px-4 py-3 text-zinc-300">{{ theme.category_name || '-' }}</td>
+              <td class="px-4 py-3 text-xs text-zinc-400 max-w-56">
+                <span class="inline-flex rounded-md bg-zinc-800 px-2 py-1 leading-tight">
+                  {{ themeFormats(theme) }}
+                </span>
+              </td>
               <td class="px-4 py-3">
                 <div class="flex gap-1.5">
                   <span
@@ -642,6 +751,62 @@ onMounted(() => {
             </div>
           </div>
 
+          <!-- Format Scope -->
+          <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 class="text-sm font-medium text-zinc-200 uppercase tracking-wider">Formatos disponíveis para o cliente</h3>
+                <p class="mt-1 text-xs text-zinc-400">
+                  Defina em quais modelos este tema aparece no Builder. A opção todos também inclui formatos adicionados no futuro.
+                </p>
+              </div>
+              <span class="text-xs font-medium text-emerald-300">
+                {{ form.all_formats ? 'Todos os formatos' : `${form.model_ids.length} selecionado(s)` }}
+              </span>
+            </div>
+
+            <label class="mt-4 flex items-center gap-2 text-sm text-zinc-200 cursor-pointer">
+              <input
+                :checked="form.all_formats"
+                type="checkbox"
+                class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50"
+                @change="toggleAllFormats(($event.target as HTMLInputElement).checked)"
+              />
+              Todos os formatos
+              <span class="text-xs text-zinc-500">(recomendado para temas universais)</span>
+            </label>
+
+            <div v-if="models.length" class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <label
+                v-for="model in models"
+                :key="model.id"
+                class="flex items-start gap-2 rounded-lg border px-3 py-2 transition-colors"
+                :class="isModelSelected(model.id)
+                  ? 'border-emerald-500/40 bg-emerald-500/10'
+                  : 'border-zinc-800 bg-zinc-900/60'"
+              >
+                <input
+                  :checked="isModelSelected(model.id)"
+                  :disabled="form.all_formats"
+                  type="checkbox"
+                  class="mt-0.5 rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50 disabled:opacity-50"
+                  @change="toggleModel(model.id, ($event.target as HTMLInputElement).checked)"
+                />
+                <span class="min-w-0">
+                  <span class="block truncate text-xs font-medium text-zinc-200">{{ model.name }}</span>
+                  <span class="block text-[10px] text-zinc-500">{{ model.width }} × {{ model.height }} · {{ model.aspect_ratio || model.type }}</span>
+                </span>
+              </label>
+            </div>
+            <p v-else-if="isLoadingModels" class="mt-3 text-xs text-zinc-500">Carregando formatos...</p>
+            <p v-else class="mt-3 text-xs text-amber-300">
+              O catálogo de formatos ainda não carregou. "Todos os formatos" continuará disponível.
+            </p>
+            <p v-if="!form.all_formats && !form.model_ids.length" class="mt-3 text-xs text-red-300">
+              Selecione pelo menos um formato para disponibilizar este tema.
+            </p>
+          </div>
+
           <!-- CSS Config -->
           <div>
             <h3 class="text-sm font-medium text-zinc-300 mb-4 uppercase tracking-wider">Configuracao Visual (CSS)</h3>
@@ -843,14 +1008,17 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- Live Preview -->
+          <!-- Visual composition editor -->
           <div>
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="text-sm font-medium text-zinc-300 uppercase tracking-wider">Preview do Encarte</h3>
-              <div class="flex items-center gap-1">
+            <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 class="text-sm font-medium uppercase tracking-wider text-zinc-300">Preview por formato</h3>
+                <p class="mt-1 text-[10px] text-zinc-500">Confira a mesma composição nos formatos disponíveis antes de publicar o tema.</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-1">
                 <button
                   v-for="(fmt, idx) in previewFormats"
-                  :key="idx"
+                  :key="fmt.id || `${fmt.label}-${idx}`"
                   type="button"
                   class="rounded-md px-2 py-1 text-[10px] font-medium transition-colors"
                   :class="previewFormatIdx === idx
@@ -862,129 +1030,20 @@ onMounted(() => {
                 </button>
               </div>
             </div>
-            <p class="text-[10px] text-zinc-500 mb-2">{{ previewFormat.width }}x{{ previewFormat.height }}px</p>
-
-            <div class="flex gap-6 items-start">
-              <!-- Mini encarte proporcional ao formato -->
-              <div
-                class="border border-zinc-700 overflow-hidden shrink-0 flex flex-col"
-                :style="{
-                  width: `${PREVIEW_WIDTH}px`,
-                  height: `${previewHeight}px`,
-                  borderRadius: form.css_config.borderRadius,
-                  backgroundColor: form.css_config.bgColor,
-                }"
-              >
-                <!-- HEADER -->
-                <div
-                  class="relative flex overflow-hidden shrink-0"
-                  :style="{
-                    backgroundColor: form.css_config.headerBg,
-                    color: '#fff',
-                    height: `${Math.round(form.header_config.height * previewScale)}px`,
-                    justifyContent: form.header_config.layout === 'left' ? 'flex-start' : form.header_config.layout === 'right' ? 'flex-end' : 'center',
-                    alignItems: 'center',
-                  }"
-                >
-                  <img
-                    v-if="hasImageValue(form.header_config.backgroundImage)"
-                    :src="storageProxyUrl(form.header_config.backgroundImage)"
-                    class="absolute inset-0 w-full h-full object-cover"
-                    @error="onImageError"
-                  />
-                  <div class="relative z-10 flex flex-col items-center gap-0.5 p-2">
-                    <div
-                      v-if="form.header_config.showLogo"
-                      class="w-7 h-7 rounded-full flex items-center justify-center text-[7px] font-bold"
-                      :style="{ backgroundColor: form.css_config.primaryColor, color: '#fff' }"
-                    >
-                      LOGO
-                    </div>
-                    <span
-                      v-if="form.header_config.showTitle"
-                      class="text-[10px] font-extrabold drop-shadow-sm"
-                      :style="{ color: form.css_config.primaryColor }"
-                    >
-                      OFERTAS DA SEMANA
-                    </span>
-                    <span v-if="form.header_config.showDates" class="text-[7px] opacity-70">01/04 a 07/04</span>
-                  </div>
-                </div>
-
-                <!-- BODY -->
-                <div
-                  class="relative flex-1 overflow-hidden"
-                  :style="{
-                    backgroundColor: form.css_config.bodyBg || form.css_config.bgColor,
-                    padding: `${Math.round(form.body_config.padding * previewScale)}px`,
-                  }"
-                >
-                  <img
-                    v-if="hasImageValue(form.background_image)"
-                    :src="storageProxyUrl(form.background_image)"
-                    class="absolute inset-0 w-full h-full object-cover opacity-15"
-                    @error="onImageError"
-                  />
-                  <div
-                    class="relative z-10 grid grid-cols-3"
-                    :style="{ gap: `${Math.round(form.body_config.gap * previewScale)}px` }"
-                  >
-                    <div
-                      v-for="i in 6"
-                      :key="i"
-                      class="flex flex-col items-center p-1 border"
-                      :style="{
-                        borderRadius: form.body_config.productCardStyle === 'pill' ? '999px' : form.body_config.productCardStyle === 'square' ? '0' : form.css_config.borderRadius,
-                        borderColor: form.css_config.primaryColor + '30',
-                        backgroundColor: form.css_config.bgColor,
-                      }"
-                    >
-                      <div
-                        class="w-full aspect-square rounded-sm mb-0.5"
-                        :style="{ backgroundColor: form.css_config.textColor + '10' }"
-                      />
-                      <span class="text-[6px] leading-tight" :style="{ color: form.css_config.textColor }">Produto {{ i }}</span>
-                      <span
-                        class="text-[8px] font-bold mt-0.5 px-0.5 rounded"
-                        :style="{ color: '#fff', backgroundColor: form.css_config.primaryColor, borderRadius: form.css_config.borderRadius }"
-                      >
-                        R$ 9,99
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- FOOTER -->
-                <div
-                  class="flex flex-col items-center justify-center shrink-0"
-                  :style="{
-                    backgroundColor: form.css_config.footerBg,
-                    height: `${Math.round(form.footer_config.height * previewScale)}px`,
-                    padding: '2px 6px',
-                  }"
-                >
-                  <span class="text-[6px]" :style="{ color: form.css_config.accentColor }">Tel: (11) 9999-9999</span>
-                  <span class="text-[5px] opacity-50" :style="{ color: '#fff' }">Ofertas validas enquanto durarem os estoques</span>
-                </div>
-              </div>
-
-              <!-- Thumbnail -->
-              <div v-if="hasImageValue(form.thumbnail)" class="shrink-0">
-                <p class="text-[10px] text-zinc-500 mb-1">Thumbnail</p>
-                <img
-                  :src="storageProxyUrl(form.thumbnail)"
-                  class="h-20 w-20 rounded-lg border border-zinc-700 object-cover"
-                  @error="onImageError"
-                />
-              </div>
-            </div>
+            <BuilderThemeCompositionEditor
+              v-model="form.composition"
+              :preview-format="previewFormat"
+              :background-color="form.css_config.bgColor"
+              :background-image="form.background_image"
+              @update:background-color="form.css_config.bgColor = $event"
+            />
           </div>
 
           <!-- Actions -->
           <div class="flex items-center gap-3 pt-4 border-t border-zinc-800">
             <button
               type="submit"
-              :disabled="isSaving || !form.name"
+              :disabled="isSaving || !form.name || (!form.all_formats && !form.model_ids.length)"
               class="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
             >
               {{ isSaving ? 'Salvando...' : (editingId ? 'Atualizar' : 'Criar Tema') }}

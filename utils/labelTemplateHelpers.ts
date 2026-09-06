@@ -10,6 +10,7 @@
 // IDs dos templates built-in (seed do app, nao customizados pelo usuario).
 export const BUILTIN_DEFAULT_LABEL_TEMPLATE_ID = 'tpl_default'
 export const BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID = 'tpl_atacarejo_10fd'
+export const BUILTIN_FARDO_SPECIAL_LABEL_TEMPLATE_ID = 'tpl_fardo_special'
 export const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
 export const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
 export const BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID = 'tpl_oferta_amarela'
@@ -22,6 +23,7 @@ export const BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID = 'tpl_barlow_black'
 export const BUILTIN_LABEL_TEMPLATE_IDS: ReadonlySet<string> = new Set([
     BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
     BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
+    BUILTIN_FARDO_SPECIAL_LABEL_TEMPLATE_ID,
     BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID,
     BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
     BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID,
@@ -84,6 +86,14 @@ export const shouldUseIncomingTemplateSnapshot = (prev: any, incoming: any): boo
  * Prefixo `__` evita colisao com props normais do canvas.
  */
 export const LABEL_TEMPLATES_JSON_KEY = '__labelTemplates'
+
+export const LABEL_TEMPLATE_NAME_MAX_LENGTH = 120
+
+export const normalizeLabelTemplateName = (value: unknown, fallback = 'Etiqueta'): string => {
+    const fallbackName = String(fallback || 'Etiqueta').trim() || 'Etiqueta'
+    const name = String(value ?? '').trim() || fallbackName
+    return name.slice(0, LABEL_TEMPLATE_NAME_MAX_LENGTH)
+}
 
 /**
  * Props de tipografia da zona que nao devem ser reaplicadas automaticamente
@@ -243,12 +253,29 @@ export const LABEL_TEMPLATE_EXTRA_PROPS: ReadonlyArray<string> = [
     'charSpacing',
     '__rawText',
     '__textCase',
+    'dynamicTextCase',
+    '__labelBackgroundImage',
     '__preserveManualLayout',
     '__forceAtacarejoCanonical',
+    '__autoCollapseMissingPrices',
+    '__atacarejoPalette',
+    '__atacarejoLabelVariant',
+    '__atacDisplayUnit',
+    '__atacPackLineCompact',
+    '__atacConditionFormat',
     '__atacValueVariants',
     '__atacVariantGroups',
     '__fontScale',
     '__yOffsetRatio',
+    '__priceRichText',
+    '__priceRichIntegerStyle',
+    '__priceRichDecimalStyle',
+    '__priceRichIntegerScale',
+    '__priceRichDecimalScale',
+    '__priceRichIntegerOffsetX',
+    '__priceRichIntegerOffsetY',
+    '__priceRichDecimalOffsetX',
+    '__priceRichDecimalOffsetY',
     '__manualScaleX',
     '__manualScaleY',
     '__strokeWidth',

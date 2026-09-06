@@ -2,7 +2,10 @@ import { useRuntimeConfig } from '#imports'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 export const CANVAS_ASSET_URLS_NORMALIZED_KEY = '__assetUrlsNormalized' as const
-const CANVAS_ASSET_URLS_NORMALIZED_VERSION = 1
+// Bump when a persisted canvas needs another normalization pass. Version 2
+// also rewrites loopback absolute URLs (often saved by a local preview on a
+// different port) to same-origin paths before Fabric starts loading images.
+const CANVAS_ASSET_URLS_NORMALIZED_VERSION = 2
 
 type NormalizeCanvasAssetUrlsOptions = {
   clone?: boolean
@@ -118,6 +121,27 @@ export const isCanvasAssetUrlsNormalized = (canvasData: any): boolean => (
   Number(canvasData?.[CANVAS_ASSET_URLS_NORMALIZED_KEY] || 0) >= CANVAS_ASSET_URLS_NORMALIZED_VERSION
 )
 
+const isLoopbackHost = (hostname: string): boolean => {
+  const value = String(hostname || '').trim().toLowerCase()
+  return value === 'localhost' || value.endsWith('.localhost') || value === '127.0.0.1' || value === '::1' || value === '[::1]'
+}
+
+const toSameOriginAssetPath = (value: string): string | null => {
+  const trimmed = String(value || '').trim()
+  if (!/^https?:\/\//i.test(trimmed)) return null
+
+  try {
+    const parsed = new URL(trimmed)
+    if (!isLoopbackHost(parsed.hostname)) return null
+    // Only rewrite paths that are served by this app. Leave arbitrary local
+    // URLs untouched because they may refer to a user's separate service.
+    if (!parsed.pathname.startsWith('/api/storage/') && !parsed.pathname.startsWith('/assets/')) return null
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return null
+  }
+}
+
 const markCanvasAssetUrlsNormalized = (canvasData: any): void => {
   if (!canvasData || typeof canvasData !== 'object') return
   canvasData[CANVAS_ASSET_URLS_NORMALIZED_KEY] = CANVAS_ASSET_URLS_NORMALIZED_VERSION
@@ -131,6 +155,20 @@ export const normalizeCanvasAssetUrls = (
   if (!normalized || typeof normalized !== 'object') {
     return { data: normalized, blobCount: 0, contaboCount: 0, wasabiCount: 0 }
   }
+
+  // A canvas saved from `localhost:3003` must remain usable when opened from
+  // `localhost:3004` (or production). Rewrite these stale absolute app URLs
+  // before checking the normalization marker; older payloads may already carry
+  // version 1 and would otherwise skip this repair forever.
+  walkCanvasObjects(normalized, (node) => {
+    const objType = String(node?.type || '').toLowerCase()
+    if (objType !== 'image' || typeof node?.src !== 'string') return
+    const relativePath = toSameOriginAssetPath(node.src)
+    if (relativePath && relativePath !== node.src) {
+      if (!node.__originalSrc) node.__originalSrc = node.src
+      node.src = relativePath
+    }
+  })
 
   if (isCanvasAssetUrlsNormalized(normalized)) {
     return { data: normalized, blobCount: 0, contaboCount: 0, wasabiCount: 0 }

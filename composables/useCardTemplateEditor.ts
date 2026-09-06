@@ -1,6 +1,7 @@
 // Composable para gerenciar estado e CRUD do editor de card templates
 import { ref, computed } from 'vue'
 import type { CardTemplateElement, CardTemplateStyle, BuilderCardTemplate } from '~/types/builder'
+import { normalizeBuilderThemeModelIds } from '~/utils/builderThemeFormats'
 
 // ── Produtos mock para preview ──
 const MOCK_PRODUCTS = [
@@ -127,6 +128,11 @@ export function useCardTemplateEditor() {
   const formCategory = ref('geral')
   const formIsActive = ref(true)
   const formSortOrder = ref(0)
+  // Lista vazia representa "todos os formatos", igual ao catálogo de temas.
+  const formModelIds = ref<string[]>([])
+  const formAllFormats = ref(true)
+  const models = ref<Array<{ id: string; name: string; width?: number; height?: number; aspect_ratio?: string | null; type?: string }>>([])
+  const isLoadingModels = ref(false)
 
   // ── Elementos e estilo do card ──
   const elements = ref<CardTemplateElement[]>([])
@@ -147,6 +153,7 @@ export function useCardTemplateEditor() {
     category: formCategory.value,
     elements: elements.value,
     card_style: cardStyle.value,
+    model_ids: formAllFormats.value ? [] : [...formModelIds.value],
     is_active: formIsActive.value,
     sort_order: formSortOrder.value,
   }))
@@ -169,11 +176,48 @@ export function useCardTemplateEditor() {
     }
   }
 
+  async function fetchModels() {
+    isLoadingModels.value = true
+    try {
+      const headers = await getApiAuthHeaders()
+      const data = await $fetch<any>('/api/admin/builder/models', { headers })
+      models.value = (Array.isArray(data) ? data : data?.models ?? data?.data ?? data?.items) ?? []
+    } catch (err: unknown) {
+      // A falha no catálogo não impede salvar "Todos os formatos".
+      console.warn('[useCardTemplateEditor] fetchModels:', err)
+    } finally {
+      isLoadingModels.value = false
+    }
+  }
+
+  function toggleAllFormats(enabled: boolean) {
+    formAllFormats.value = enabled
+    if (enabled) formModelIds.value = []
+  }
+
+  function isModelSelected(modelId: string) {
+    return !formAllFormats.value && formModelIds.value.includes(String(modelId))
+  }
+
+  function toggleModel(modelId: string, checked: boolean) {
+    const id = String(modelId || '').trim()
+    if (!id) return
+    formAllFormats.value = false
+    const ids = new Set(formModelIds.value)
+    if (checked) ids.add(id)
+    else ids.delete(id)
+    formModelIds.value = Array.from(ids)
+  }
+
   // ── CRUD: salvar (criar ou atualizar) ──
   async function saveTemplate() {
     isLoading.value = true
     error.value = null
     try {
+      if (!formAllFormats.value && formModelIds.value.length === 0) {
+        error.value = 'Selecione pelo menos um formato ou marque "Todos os formatos".'
+        return
+      }
       const headers = await getApiAuthHeaders()
       const body = {
         name: formName.value,
@@ -182,6 +226,8 @@ export function useCardTemplateEditor() {
         sort_order: formSortOrder.value,
         elements: elements.value,
         card_style: cardStyle.value,
+        // Lista vazia é o contrato persistido para templates universais.
+        model_ids: formAllFormats.value ? [] : [...formModelIds.value],
       }
 
       if (editingId.value) {
@@ -238,6 +284,8 @@ export function useCardTemplateEditor() {
       formCategory.value = item.category ?? 'geral'
       formIsActive.value = item.is_active ?? true
       formSortOrder.value = item.sort_order ?? 0
+      formModelIds.value = normalizeBuilderThemeModelIds(item.model_ids)
+      formAllFormats.value = formModelIds.value.length === 0
       elements.value = JSON.parse(JSON.stringify(item.elements ?? []))
       cardStyle.value = { ...defaultCardStyle(), ...JSON.parse(JSON.stringify(item.card_style ?? {})) }
     } else {
@@ -246,6 +294,8 @@ export function useCardTemplateEditor() {
       formCategory.value = 'geral'
       formIsActive.value = true
       formSortOrder.value = 0
+      formModelIds.value = []
+      formAllFormats.value = true
       elements.value = []
       cardStyle.value = defaultCardStyle()
     }
@@ -357,6 +407,10 @@ export function useCardTemplateEditor() {
     formCategory,
     formIsActive,
     formSortOrder,
+    formModelIds,
+    formAllFormats,
+    models,
+    isLoadingModels,
 
     // Elementos e estilo
     elements,
@@ -371,11 +425,15 @@ export function useCardTemplateEditor() {
 
     // CRUD
     fetchTemplates,
+    fetchModels,
     saveTemplate,
     deleteTemplate,
 
     // Editor
     openEditor,
+    toggleAllFormats,
+    isModelSelected,
+    toggleModel,
     addElement,
     removeElement,
     duplicateElement,

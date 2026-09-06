@@ -5,6 +5,7 @@ import {
   resolveStorageReadUrl
 } from '../utils/project-storage-refs'
 import { pgOneOrNull, pgQuery } from '../utils/postgres'
+import { ensureProjectTemplateColumn } from '../utils/project-templates'
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -43,6 +44,40 @@ const getProjectPreviewSize = (canvasData: any): { preview_width: number | null;
   }
 }
 
+const getProjectTemplateCounts = (canvasData: any, templateConfig?: any): {
+  template_page_count: number
+  template_model_count: number
+  template_format_count: number
+} => {
+  const pages = getProjectPages(canvasData)
+  const configuredModels = Array.isArray(templateConfig?.models)
+    ? templateConfig.models.filter((model: any) => String(model?.id || model?.name || '').trim())
+    : []
+  const configuredFormats = Array.isArray(templateConfig?.formatIds)
+    ? templateConfig.formatIds.filter((format: any) => String(format || '').trim())
+    : []
+  const models = new Set<string>()
+  const formats = new Set<string>()
+  pages.forEach((page: any) => {
+    const modelId = String(page?.templateModelId || '').trim()
+    const modelName = String(page?.templateModelName || '').trim()
+    const rawName = String(page?.name || '').trim()
+    const fallbackModel = rawName.includes(' · ') ? (rawName.split(' · ')[0] || 'legacy-model') : 'legacy-model'
+    models.add(modelId || modelName || fallbackModel)
+
+    const formatId = String(page?.templateFormatId || '').trim()
+    const formatLabel = String(page?.templateFormatLabel || '').trim()
+    const width = Number(page?.width || 0)
+    const height = Number(page?.height || 0)
+    formats.add(formatId || formatLabel || `${width}x${height}`)
+  })
+  return {
+    template_page_count: pages.length,
+    template_model_count: configuredModels.length || models.size,
+    template_format_count: configuredFormats.length || formats.size
+  }
+}
+
 const resolveProjectPreviewUrl = async (project: any, userId: string): Promise<string | null> => {
   // Prefer the current first-page thumbnail. Older projects may still have a
   // stale `preview_url` generated before thumbnail scaling/panning fixes.
@@ -61,6 +96,7 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event)
   const id = String(query.id || '').trim()
+  const templatesOnly = String(query.templates || '').trim() === '1'
   const limitParam = query.limit
   const requestedLimitRaw = Array.isArray(limitParam) ? limitParam[0] : limitParam
   const requestedLimit = Number.parseInt(String(requestedLimitRaw || ''), 10)
@@ -74,6 +110,7 @@ export default defineEventHandler(async (event) => {
     }
 
     try {
+      await ensureProjectTemplateColumn()
       const row = await pgOneOrNull<any>(
         `select *
          from public.projects
@@ -87,6 +124,7 @@ export default defineEventHandler(async (event) => {
         ...row,
         preview_url: await resolveProjectPreviewUrl(row, user.id),
         ...getProjectPreviewSize(row?.canvas_data),
+        ...getProjectTemplateCounts(row?.canvas_data, row?.template_config),
         canvas_data: await resolveProjectCanvasDataReadUrls(row?.canvas_data, user.id)
       }
     } catch (error: any) {
@@ -96,14 +134,16 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
+    await ensureProjectTemplateColumn()
     const baseSql = `
-      select id, name, created_at, updated_at, preview_url, canvas_data, folder_id, last_viewed, is_shared, shared_with, is_starred
+      select id, name, created_at, updated_at, preview_url, canvas_data, template_config, folder_id, last_viewed, is_shared, shared_with, is_starred, is_template
       from public.projects
       where user_id = $1
+        and coalesce(is_template, false) = $2
       order by updated_at desc
     `
-    const params: any[] = [user.id]
-    const sql = safeLimit !== null ? `${baseSql} limit $2` : baseSql
+    const params: any[] = [user.id, templatesOnly]
+    const sql = safeLimit !== null ? `${baseSql} limit $3` : baseSql
     if (safeLimit !== null) params.push(safeLimit)
 
     const { rows } = await pgQuery<any>(sql, params)
@@ -114,7 +154,8 @@ export default defineEventHandler(async (event) => {
         return {
           ...rest,
           preview_url: await resolveProjectPreviewUrl(p, user.id),
-          ...getProjectPreviewSize(p?.canvas_data)
+          ...getProjectPreviewSize(p?.canvas_data),
+          ...getProjectTemplateCounts(p?.canvas_data, p?.template_config)
         }
       })
     )

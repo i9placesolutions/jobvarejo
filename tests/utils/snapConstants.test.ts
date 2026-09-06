@@ -40,20 +40,21 @@ describe('snap constants', () => {
       .toBeLessThan(SNAP_HYSTERESIS_HOLD_FACTOR)
   })
 
-  it('SNAP_MOVE_EPSILON_PX = 1.8 vs RECT_IMAGE = 9 (rect mais "macio")', () => {
+  it('SNAP_MOVE_EPSILON_PX = 1.8 vs RECT_IMAGE levemente maior', () => {
     expect(SNAP_MOVE_EPSILON_PX).toBe(1.8)
-    expect(SNAP_MOVE_EPSILON_PX_RECT_IMAGE).toBe(9)
+    expect(SNAP_MOVE_EPSILON_PX_RECT_IMAGE).toBe(2.4)
     expect(SNAP_MOVE_EPSILON_PX_RECT_IMAGE).toBeGreaterThan(SNAP_MOVE_EPSILON_PX)
   })
 
-  it('SNAP_RANGE_FACTOR_RECT_IMAGE e 0.28 (~1/3.5 do range default)', () => {
-    expect(SNAP_RANGE_FACTOR_RECT_IMAGE).toBe(0.28)
-    expect(SNAP_RANGE_PX * SNAP_RANGE_FACTOR_RECT_IMAGE).toBeCloseTo(3.36, 2)
+  it('SNAP_RANGE_FACTOR_RECT_IMAGE deixa rect/image alinharem de verdade', () => {
+    expect(SNAP_RANGE_FACTOR_RECT_IMAGE).toBe(0.72)
+    expect(SNAP_RANGE_PX * SNAP_RANGE_FACTOR_RECT_IMAGE).toBeCloseTo(8.64, 2)
   })
 
-  it('SNAP_FAST_MOVE_SUPPRESSION_PX = 7 vs RECT_IMAGE = 9', () => {
+  it('SNAP_FAST_MOVE_SUPPRESSION_PX deixa janela para o snap agir', () => {
     expect(SNAP_FAST_MOVE_SUPPRESSION_PX).toBe(7)
-    expect(SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE).toBe(9)
+    expect(SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE).toBe(22)
+    expect(SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE).toBeGreaterThan(SNAP_MOVE_EPSILON_PX_RECT_IMAGE)
   })
 
   it('todos os valores numericos sao positivos', () => {

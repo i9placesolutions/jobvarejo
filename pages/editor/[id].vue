@@ -4,6 +4,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { useProject } from '~/composables/useProject'
 import { useApiAuth } from '~/composables/useApiAuth'
 import { useResponsive } from '~/composables/useResponsive'
+import { FLYER_TEMPLATE_FORMATS } from '~/utils/flyerTemplateApi'
 
 const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanvas.vue'))
 const { isMobile } = useResponsive()
@@ -17,6 +18,9 @@ const editorCanvasRef = ref<EditorCanvasInstance | null>(null)
 const route = useRoute()
 const projectId = route.params.id as string
 const runtimeConfig = useRuntimeConfig()
+const isQuickMode = computed(() => String(route.query.quick || '').trim() === '1')
+const isTemplateProject = computed(() => project.isTemplate === true)
+const editorExitPath = computed(() => isTemplateProject.value ? '/flyer-templates' : '/')
 
 // Page config
 definePageMeta({
@@ -55,6 +59,40 @@ const {
   projectServerUpdatedAt,
   realtimeClientId
 } = useProject()
+
+const activePageFormat = computed(() => {
+  const page = activePage.value as any
+  if (!page) return null
+
+  const width = Number(page.width || 0)
+  const height = Number(page.height || 0)
+  const exact = FLYER_TEMPLATE_FORMATS.find(format => (
+    format.width === Math.round(width) && format.height === Math.round(height)
+  ))
+  if (exact) return exact
+
+  const explicitId = String(page.templateFormatId || '').trim()
+  const explicit = FLYER_TEMPLATE_FORMATS.find(format => format.id === explicitId)
+  if (explicit) return explicit
+
+  if (!(width > 0 && height > 0)) return null
+  const ratio = width / height
+  return FLYER_TEMPLATE_FORMATS.reduce((best, format) => {
+    const bestDistance = Math.abs((best.width / best.height) - ratio)
+    const distance = Math.abs((format.width / format.height) - ratio)
+    return distance < bestDistance ? format : best
+  }, FLYER_TEMPLATE_FORMATS[0])
+})
+
+const activePageFormatLabel = computed(() => activePageFormat.value?.label || '')
+const activePageFormatSummary = computed(() => {
+  const page = activePage.value as any
+  const format = activePageFormat.value
+  const width = Math.round(Number(page?.width || format?.width || 0))
+  const height = Math.round(Number(page?.height || format?.height || 0))
+  if (!format && !(width > 0 && height > 0)) return ''
+  return `${format?.label || 'Formato personalizado'} · ${width}×${height}`
+})
 
 const hasPendingProjectSync = () => hasUnsavedChanges.value || project.pages.some((p: any) => !!p?.dirty || !!p?.thumbnailDirty)
 
@@ -515,7 +553,7 @@ const openPageHistory = () => {
     <div :class="['border-b border-white/5 flex items-center justify-between px-3 bg-[#1e1e1e] shrink-0', isMobile ? 'min-h-[calc(40px+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]' : 'h-8']">
       <div class="flex items-center gap-2 min-w-0">
         <button
-          @click="navigateTo('/')"
+          @click="navigateTo(editorExitPath)"
           class="p-1 hover:bg-white/5 rounded transition-colors text-zinc-400 hover:text-white shrink-0"
           title="Voltar"
         >
@@ -524,6 +562,23 @@ const openPageHistory = () => {
           </svg>
         </button>
         <span class="text-xs font-medium text-white truncate">{{ activePage?.name || 'Sem título' }}</span>
+        <span
+          v-if="activePageFormatSummary"
+          class="hidden max-w-[220px] shrink-0 truncate rounded border border-sky-300/25 bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-sky-200 sm:inline-flex"
+          :title="`Formato em edição: ${activePageFormatSummary}`"
+        >
+          {{ activePageFormatSummary }}
+        </span>
+        <span
+          v-if="activePageFormatLabel"
+          class="inline-flex max-w-[110px] shrink-0 truncate rounded border border-sky-300/25 bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-sky-200 sm:hidden"
+          :title="`Formato em edição: ${activePageFormatSummary}`"
+        >
+          {{ activePageFormatLabel }}
+        </span>
+        <span v-if="isTemplateProject" class="shrink-0 rounded border border-indigo-400/25 bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-indigo-300">Modelo de encarte</span>
+        <span v-if="isTemplateProject && !isQuickMode" class="hidden truncate text-[10px] text-zinc-500 lg:inline">Elementos → Dados da loja para posicionar logo, nome e contato. O usuário da rápida só envia produtos.</span>
+        <span v-if="isQuickMode" class="shrink-0 rounded border border-violet-400/25 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-violet-300">Edição rápida</span>
       </div>
 
       <!-- Save Status Indicator -->
@@ -567,7 +622,7 @@ const openPageHistory = () => {
           <span v-else>Atualização disponível</span>
         </button>
 
-        <template v-if="!isMobile">
+        <template v-if="!isMobile && !isQuickMode">
           <div class="w-px h-3 bg-white/8 mx-0.5"></div>
 
           <button
@@ -586,7 +641,7 @@ const openPageHistory = () => {
     <div class="flex-1 min-h-0 overflow-hidden">
       <ClientOnly>
         <template v-if="isProjectLoaded">
-          <EditorCanvas ref="editorCanvasRef" @auto-save="triggerAutoSave" />
+          <EditorCanvas ref="editorCanvasRef" :quick-mode="isQuickMode" @auto-save="triggerAutoSave" />
         </template>
         <template v-else>
           <div class="flex flex-col items-center justify-center h-full gap-3">

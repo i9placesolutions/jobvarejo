@@ -18,14 +18,47 @@ const compressGzip = async (text: string): Promise<ArrayBuffer> => {
   return outputPromise
 }
 
-const decompressGzip = async (data: ArrayBuffer): Promise<string> => {
+const decompressGzip = async (data: ArrayBuffer, signal?: AbortSignal): Promise<string> => {
   const stream = new DecompressionStream('gzip')
   const writer = stream.writable.getWriter()
   // FIX: mesma correção de deadlock — ler do readable antes de escrever
   const outputPromise = new Response(stream.readable).text()
-  await writer.write(data)
-  await writer.close()
-  return outputPromise
+  let abortHandler: (() => void) | null = null
+  const removeAbortListener = () => {
+    if (signal && abortHandler) signal.removeEventListener('abort', abortHandler)
+  }
+
+  try {
+    if (signal?.aborted) {
+      throw new Error('Descompressão do canvas abortada')
+    }
+
+    const abortPromise = signal
+      ? new Promise<never>((_, reject) => {
+          const onAbort = () => {
+            void writer.abort(signal.reason).catch(() => {})
+            reject(new Error('Descompressão do canvas abortada'))
+          }
+          abortHandler = onAbort
+          signal.addEventListener('abort', onAbort, { once: true })
+        })
+      : null
+
+    // Safari/WebKit can apply backpressure to a single multi-megabyte write.
+    // Feed bounded chunks so the readable side can keep draining while the
+    // timeout signal remains able to abort a stuck decompression.
+    const chunkSize = 256 * 1024
+    const bytes = new Uint8Array(data)
+    for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
+      if (signal?.aborted) throw new Error('Descompressão do canvas abortada')
+      await writer.write(bytes.subarray(offset, Math.min(offset + chunkSize, bytes.byteLength)))
+    }
+
+    await writer.close()
+    return abortPromise ? await Promise.race([outputPromise, abortPromise]) : await outputPromise
+  } finally {
+    removeAbortListener()
+  }
 }
 
 const isGzipBuffer = (buf: Uint8Array): boolean =>
@@ -304,36 +337,56 @@ const fetchJsonWithRetry = async (
   headers?: Record<string, string> | null
 ): Promise<any | null> => {
   for (let attempt = 1; attempt <= retries; attempt++) {
+    const controller = new AbortController()
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
     try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
+      // The timeout must cover headers, body, gzip decompression and JSON.parse.
+      // Clearing it immediately after fetch() allowed a stalled body/stream to
+      // keep loadProjectDB pending forever, leaving the editor spinner visible.
+      const work = (async () => {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          cache: 'no-store',
+          ...(headers ? { headers } : {})
+        })
 
-      const response = await fetch(url, {
-        signal: controller.signal,
-        cache: 'no-store',
-        ...(headers ? { headers } : {})
-      })
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        if (response.status === 404) return null
-        if (attempt === retries) {
-          throw new Error(`Falha ao carregar JSON (${response.status})`)
+        if (!response.ok) {
+          if (response.status === 404) return null
+          const error = new Error(`Falha ao carregar JSON (${response.status})`)
+          ;(error as any).statusCode = response.status
+          throw error
         }
-      } else {
-        // Detect gzip (magic bytes 0x1f 0x8b) and decompress before parsing
+
+        // Detect gzip (magic bytes 0x1f 0x8b) and decompress before parsing.
         const arrayBuf = await response.arrayBuffer()
         const header = new Uint8Array(arrayBuf, 0, Math.min(2, arrayBuf.byteLength))
         if (isGzipBuffer(header)) {
-          const text = await decompressGzip(arrayBuf)
+          const text = await decompressGzip(arrayBuf, controller.signal)
           return JSON.parse(text)
         }
         return JSON.parse(new TextDecoder().decode(arrayBuf))
-      }
+      })()
+
+      // A timed-out work promise can still reject after the race settles. Attach
+      // a rejection handler so a late stream error never becomes an unhandled
+      // rejection in the page while the proxy fallback is being attempted.
+      void work.catch(() => {})
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          controller.abort()
+          reject(new Error('Canvas JSON download timeout after 15s'))
+        }, 15_000)
+      })
+
+      return await Promise.race([work, timeoutPromise])
     } catch (error: any) {
       const msg = String(error?.message || '')
+      const statusCode = Number(error?.statusCode ?? error?.response?.status ?? 0)
       const isTransient =
         error?.name === 'AbortError' ||
+        msg.toLowerCase().includes('timeout') ||
+        statusCode >= 500 ||
         msg.includes('ERR_NETWORK_CHANGED') ||
         msg.includes('Failed to fetch') ||
         msg.includes('NetworkError')
@@ -341,6 +394,8 @@ const fetchJsonWithRetry = async (
       if (attempt === retries || !isTransient) {
         throw error
       }
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
     }
 
     await new Promise(resolve => setTimeout(resolve, attempt * 700))
@@ -759,21 +814,49 @@ const saveCanvasData = async (
       const headers = await tryGetApiAuthHeaders()
       if (!headers) return null
 
-      const presignedUrl = await getPresignedUrl(canvasDataPath, undefined, 'get', 2, headers, !!opts.forceRefresh)
-      if (presignedUrl) {
-        const canvasJson = await fetchJsonWithRetry(presignedUrl, 2)
-        if (canvasJson) {
-          console.log('✅ JSON carregado via presigned URL direta, objetos:', canvasJson?.objects?.length || 0)
-          return canvasJson
+      // Canvas JSON is private project data and already has a same-origin,
+      // authenticated proxy. Prefer it before the cross-origin presigned URL:
+      // WebKit can leave a presigned Wasabi response in a pending body state
+      // (especially for gzip), which used to keep the editor on the spinner
+      // until the browser gave up. Keep the presigned request as a fallback
+      // for deployments where the proxy is unavailable.
+      const proxyUrl = resolveProxyGetUrl(canvasDataPath)
+      if (proxyUrl) {
+        try {
+          const canvasJson = await fetchJsonWithRetry(proxyUrl, 3, headers)
+          if (canvasJson) {
+            console.log('✅ JSON carregado via proxy, objetos:', canvasJson?.objects?.length || 0)
+            return canvasJson
+          }
+        } catch (error: any) {
+          console.warn('⚠️ Falha ao ler JSON pelo proxy; tentando URL presignada:', error?.message || error)
         }
       }
 
-      const proxyUrl = resolveProxyGetUrl(canvasDataPath)
+      const presignedUrl = await getPresignedUrl(canvasDataPath, undefined, 'get', 2, headers, !!opts.forceRefresh)
+      if (presignedUrl) {
+        try {
+          const canvasJson = await fetchJsonWithRetry(presignedUrl, 2)
+          if (canvasJson) {
+            console.log('✅ JSON carregado via presigned URL direta, objetos:', canvasJson?.objects?.length || 0)
+            return canvasJson
+          }
+        } catch (error: any) {
+          // CORS, body timeout or a browser decompression failure must not stop
+          // the same-origin proxy fallback from serving the canvas.
+          console.warn('⚠️ Falha ao ler JSON pela URL presignada; tentando proxy:', error?.message || error)
+        }
+      }
+
       if (proxyUrl) {
-        const canvasJson = await fetchJsonWithRetry(proxyUrl, 3, headers)
-        if (canvasJson) {
-          console.log('✅ JSON carregado via proxy, objetos:', canvasJson?.objects?.length || 0)
-          return canvasJson
+        try {
+          const canvasJson = await fetchJsonWithRetry(proxyUrl, 3, headers)
+          if (canvasJson) {
+            console.log('✅ JSON carregado via proxy, objetos:', canvasJson?.objects?.length || 0)
+            return canvasJson
+          }
+        } catch (error: any) {
+          console.error('❌ Erro ao carregar JSON pelo proxy:', error?.message || error)
         }
         return null
       }
@@ -842,13 +925,21 @@ const saveCanvasData = async (
 
       const presignedUrl = await getPresignedUrl(key, undefined, 'get', 2, headers)
       if (presignedUrl) {
-        const json = await fetchJsonWithRetry(presignedUrl, 2)
-        if (json) return json
+        try {
+          const json = await fetchJsonWithRetry(presignedUrl, 2)
+          if (json) return json
+        } catch {
+          // Fall through to the same-origin proxy below.
+        }
       }
 
       const proxyUrl = resolveProxyGetUrl(key)
       if (proxyUrl) {
-        return await fetchJsonWithRetry(proxyUrl, 3, headers)
+        try {
+          return await fetchJsonWithRetry(proxyUrl, 3, headers)
+        } catch {
+          return null
+        }
       }
       return null
     } catch (error: any) {

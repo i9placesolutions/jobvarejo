@@ -107,24 +107,56 @@ export const deriveSelectionUiState = (opts: DeriveSelectionUiStateOptions): {
   }
 }
 
+export const applyViewportTransformToRect = (
+  rect: { left: number; top: number; width: number; height: number },
+  vpt: number[] | null | undefined
+): { left: number; top: number; width: number; height: number } => {
+  const raw = vpt as any
+  const m: [number, number, number, number, number, number] = raw && Number(raw.length) >= 6
+    ? [Number(raw[0]) || 1, Number(raw[1]) || 0, Number(raw[2]) || 0, Number(raw[3]) || 1, Number(raw[4]) || 0, Number(raw[5]) || 0]
+    : [1, 0, 0, 1, 0, 0]
+  const x1 = Number(rect.left || 0)
+  const y1 = Number(rect.top || 0)
+  const x2 = x1 + Number(rect.width || 0)
+  const y2 = y1 + Number(rect.height || 0)
+  const map = (x: number, y: number) => ({
+    x: m[0] * x + m[2] * y + m[4],
+    y: m[1] * x + m[3] * y + m[5]
+  })
+  const corners = [map(x1, y1), map(x2, y1), map(x1, y2), map(x2, y2)]
+  const xs = corners.map(point => point.x)
+  const ys = corners.map(point => point.y)
+  const left = Math.min(...xs)
+  const top = Math.min(...ys)
+  return {
+    left,
+    top,
+    width: Math.max(...xs) - left,
+    height: Math.max(...ys) - top
+  }
+}
+
 export const getSelectedObjectFloatingPos = (
   active: any,
-  isLikelyProductZone: (obj: any) => boolean
+  isLikelyProductZone: (obj: any) => boolean,
+  sceneRect?: { left: number; top: number; width: number; height: number } | null,
+  viewportTransform?: number[] | null
 ): { top: number; left: number; width: number; height: number; visible: boolean } => {
   if (active && isLikelyProductZone(active)) {
-    // FIX: getBoundingRect() can throw or return undefined if the object has been
-    // disposed, removed from canvas, or has degenerate dimensions (zero-area).
-    // Wrap in try-catch to prevent render crashes.
     try {
-      const boundingRect = active.getBoundingRect?.()
+      const boundingRect = sceneRect && Number(sceneRect.width) > 0 && Number(sceneRect.height) > 0
+        ? sceneRect
+        : active.getBoundingRect?.()
       if (!boundingRect) {
         return { top: 0, left: 0, width: 0, height: 0, visible: false }
       }
+      const vpt = viewportTransform || active?.canvas?.viewportTransform
+      const screenRect = applyViewportTransformToRect(boundingRect, vpt)
       return {
-        top: Number(boundingRect.top || 0),
-        left: Number(boundingRect.left || 0),
-        width: Number(boundingRect.width || 0),
-        height: Number(boundingRect.height || 0),
+        top: Number(screenRect.top || 0),
+        left: Number(screenRect.left || 0),
+        width: Number(screenRect.width || 0),
+        height: Number(screenRect.height || 0),
         visible: true
       }
     } catch {
@@ -159,8 +191,17 @@ export const buildZoneSelectionConfig = (active: any) => {
     cardAspectRatio: active?.cardAspectRatio || 'fill',
     lastRowBehavior: active?.lastRowBehavior || 'fill',
     verticalAlign: active?.verticalAlign || 'stretch',
+    structureByProductCountEnabled: active?.structureByProductCountEnabled === true,
+    structureByProductCount: active?.structureByProductCount,
+    structureByProductCountByPreviewFormat: active?.structureByProductCountByPreviewFormat,
+    structureVariantsByProductCount: active?.structureVariantsByProductCount,
+    structureVariantsByProductCountByPreviewFormat: active?.structureVariantsByProductCountByPreviewFormat,
+    structureVariantByProductCount: active?.structureVariantByProductCount,
+    structureVariantByProductCountByPreviewFormat: active?.structureVariantByProductCountByPreviewFormat,
     highlightCount: active?.highlightCount || 0,
     highlightPos: active?.highlightPos || 'first',
+    highlightSelection: active?.highlightSelection || active?.highlightPos || 'first',
+    highlightIndexes: active?.highlightIndexes || [1],
     highlightHeight: active?.highlightHeight || 1.5,
     isLocked: !!(
       active?.lockMovementX ||

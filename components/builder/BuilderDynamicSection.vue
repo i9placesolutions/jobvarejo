@@ -6,13 +6,14 @@
  */
 import type { BuilderSectionTemplate, CardTemplateElement } from '~/types/builder'
 import { paymentBrandSvg } from '~/utils/paymentBrandSvg'
+import { isBusinessPaymentCardId } from '~/utils/paymentCards'
 
 const props = defineProps<{
   template: BuilderSectionTemplate
   section: 'header' | 'footer'
 }>()
 
-const { flyer } = useBuilderFlyer()
+const { flyer, theme } = useBuilderFlyer()
 const { tenant } = useBuilderAuth()
 
 const fc = computed(() => (flyer.value?.font_config || {}) as Record<string, any>)
@@ -71,7 +72,7 @@ const resolveImageUrl = (slot: string): string | null => {
     return `/api/storage/p?key=${encodeURIComponent(logo)}`
   }
   if (slot === 'background_image') {
-    const img = (flyer.value as any)?.theme?.header_config?.backgroundImage
+    const img = theme.value?.header_config?.backgroundImage
     if (!img) return null
     if (img.startsWith('/api/') || img.startsWith('http')) return img
     return `/api/storage/p?key=${encodeURIComponent(img)}`
@@ -86,7 +87,15 @@ const pay = (key: string) => {
   return !!val
 }
 const PAYMENT_KEYS = ['dinheiro', 'pix', 'visa', 'mastercard', 'elo', 'hipercard', 'alelo', 'sodexo', 'ticket', 'americanexpress', 'vr', 'vale_alimentacao', 'cielo']
-const activePaymentKeys = computed(() => PAYMENT_KEYS.filter(k => pay(k)))
+const activePaymentKeys = computed(() => {
+  const configured = (flyer.value as any)?.payment_methods
+  if (Array.isArray(configured)) {
+    return configured.filter((key: unknown): key is string => (
+      typeof key === 'string' && (isBusinessPaymentCardId(key) || !!paymentBrandSvg[key])
+    ))
+  }
+  return PAYMENT_KEYS.filter(k => pay(k))
+})
 
 // ── Verificar se deve exibir ──
 const shouldShow = (el: CardTemplateElement): boolean => {
@@ -102,7 +111,7 @@ const shouldShow = (el: CardTemplateElement): boolean => {
 // ── Cores do tema ──
 const primaryColor = computed(() => (flyer.value as any)?.footer_primary || fc.value.footer_primary || '#e85d04')
 const secondaryColor = computed(() => (flyer.value as any)?.footer_secondary || fc.value.footer_secondary || '#f48c06')
-const headerBg = computed(() => (flyer.value as any)?.theme?.css_config?.headerBg || '#ffffff')
+const headerBg = computed(() => theme.value?.css_config?.headerBg || '#ffffff')
 const footerBg = computed(() => (flyer.value as any)?.footer_bg || fc.value.footer_bg || '#1a1a2e')
 const textColor = computed(() => (flyer.value as any)?.footer_text_color || '#ffffff')
 const footerLogoSize = computed(() => ((flyer.value as any)?.footer_logo_size || 52) + 'px')
@@ -182,8 +191,10 @@ const elementStyle = (el: CardTemplateElement) => ({
           <span
             v-for="pk in activePaymentKeys" :key="pk"
             :style="{ display: 'inline-block', width: '36px', height: '24px', borderRadius: '4px', overflow: 'hidden', lineHeight: 0 }"
-            v-html="paymentBrandSvg[pk]"
-          />
+          >
+            <img v-if="isBusinessPaymentCardId(pk)" :src="`/cartoes/${pk}.png`" :alt="pk" style="width: 100%; height: 100%; object-fit: contain" />
+            <span v-else v-html="paymentBrandSvg[pk]" />
+          </span>
         </div>
       </div>
 

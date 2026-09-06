@@ -57,6 +57,73 @@ export interface BuilderTenant {
 
 export type BuilderTenantPublic = Omit<BuilderTenant, 'last_login_at' | 'is_active'> & { _isAdmin?: boolean }
 
+// ── Composicao visual de temas ────────────────────────────────────────────
+
+export type BuilderThemeElementKind = 'shape' | 'text' | 'image' | 'business_field' | 'product_zone'
+
+export type BuilderThemeBusinessField =
+    | 'logo'
+    | 'company_name'
+    | 'slogan'
+    | 'title'
+    | 'promo_phrase'
+    | 'validity'
+    | 'whatsapp'
+    | 'phone'
+    | 'address'
+    | 'hours'
+    | 'instagram'
+    | 'facebook'
+    | 'website'
+    | 'payments'
+    | 'payment_notes'
+    | 'disclaimer'
+
+export interface BuilderThemeElementStyle {
+    backgroundColor?: string
+    color?: string
+    borderColor?: string
+    borderWidth?: number
+    borderRadius?: number
+    fontSize?: number
+    fontWeight?: number | string
+    fontFamily?: string
+    textAlign?: 'left' | 'center' | 'right'
+    objectFit?: 'contain' | 'cover' | 'fill'
+    opacity?: number
+    padding?: number
+    boxShadow?: string
+}
+
+export interface BuilderThemeElement {
+    id: string
+    kind: BuilderThemeElementKind
+    field?: BuilderThemeBusinessField
+    content?: string
+    // Posicoes e dimensoes sao percentuais do formato, permitindo adaptar
+    // a mesma composicao para Feed, Story, A4 e TV.
+    x: number
+    y: number
+    width: number
+    height: number
+    rotation?: number
+    zIndex?: number
+    locked?: boolean
+    visible?: boolean
+    style?: BuilderThemeElementStyle
+}
+
+export interface BuilderThemeComposition {
+    version: 1
+    background: {
+        color: string
+        image?: string
+        fit?: 'cover' | 'contain' | 'stretch'
+        opacity?: number
+    }
+    elements: BuilderThemeElement[]
+}
+
 export interface BuilderTheme {
     id: string
     name: string
@@ -69,6 +136,10 @@ export interface BuilderTheme {
     sort_order: number
     category_name: string | null
     tags: string[]
+    /** Lista vazia significa compatível com todos os formatos. */
+    model_ids?: string[] | null
+    /** Composicao visual posicionavel do tema; {}/null mantem o renderer legado. */
+    composition?: BuilderThemeComposition | null
     css_config: BuilderThemeCssConfig
     header_config: BuilderThemeHeaderConfig
     body_config: BuilderThemeBodyConfig
@@ -319,6 +390,8 @@ export interface BuilderCardTemplate {
     category: string
     elements: CardTemplateElement[]
     card_style: CardTemplateStyle
+    /** Lista de modelos/formats suportados. Vazia (ou nula) significa todos. */
+    model_ids?: string[] | null
     is_active?: boolean
     sort_order?: number
 }

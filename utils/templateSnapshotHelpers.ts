@@ -178,10 +178,16 @@ export const restoreMissingManualTemplateFlagsInCanvas = (
 
     const roots = canvasInstance.getObjects() || []
     const stack = [...roots]
+    // Fabric groups can expose the same child more than once after a failed
+    // rehydration (and malformed legacy snapshots may even contain a cycle).
+    // Keep traversal finite so a bad object graph never blocks the editor boot
+    // indefinitely in the loading overlay.
+    const visited = new Set<any>()
     let restored = 0
     while (stack.length) {
         const obj = stack.pop()
-        if (!obj) continue
+        if (!obj || visited.has(obj)) continue
+        visited.add(obj)
         if (isPriceGroupCheck(obj) && restoreMissingManualTemplateFlags(obj, shouldPreserveCheck)) {
             restored += 1
         }

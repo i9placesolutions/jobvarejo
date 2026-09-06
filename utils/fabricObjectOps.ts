@@ -27,6 +27,12 @@ import {
 } from './controlObjectClassifiers'
 import { isUserGuideObject } from './userGuideHelpers'
 import { isFrameLikeObject } from './frameGeometry'
+import {
+    captureDynamicBusinessTextBaseline,
+    fitDynamicBusinessTextObject,
+    isDynamicBusinessFieldObject,
+    syncDynamicBusinessTextHeight
+} from './dynamicBusinessFields'
 
 /**
  * Adiciona um objeto a um group Fabric com fallback compatibilidade
@@ -481,7 +487,18 @@ export const recalcAllTextMetrics = (obj: any): void => {
     if (!obj) return
     const t = String(obj.type || '').toLowerCase()
     if (t === 'i-text' || t === 'textbox' || t === 'text') {
+        // Capture the persisted box before Fabric replaces `height` with the
+        // natural height of the current string.
+        if (isDynamicBusinessFieldObject(obj)) captureDynamicBusinessTextBaseline(obj)
         if (typeof obj.initDimensions === 'function') obj.initDimensions()
+        // `Textbox.initDimensions()` recalculates the natural height and can
+        // discard a height that the designer deliberately enlarged in a
+        // dynamic business field. Reapply the persisted minimum after every
+        // metrics refresh (page load, font load and template hydration).
+        if (isDynamicBusinessFieldObject(obj)) {
+            fitDynamicBusinessTextObject(obj)
+            syncDynamicBusinessTextHeight(obj)
+        }
         obj.set?.('dirty', true)
         if (typeof obj.setCoords === 'function') obj.setCoords()
     }
@@ -619,8 +636,16 @@ export const normalizeRectScale = (
         scaleX: 1,
         scaleY: 1,
         flipX: false,
-        flipY: false
+        flipY: false,
+        objectCaching: false,
+        dirty: true
     })
+    try {
+        obj._cacheCanvas = null
+        obj._cacheContext = null
+    } catch {
+        // ignore
+    }
 
     obj.setCoords?.()
     return { width: newWidth, height: newHeight, rx: newRadius, ry: newRadius }

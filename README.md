@@ -70,6 +70,11 @@ Para busca externa de imagens de produto:
 - `NUXT_GOOGLE_CSE_API_KEY` (ou `GOOGLE_CSE_API_KEY`)
 - `NUXT_GOOGLE_CSE_CX` (ou `GOOGLE_CSE_CX`)
 
+Para processar listas em segundo plano e salvar as imagens no Wasabi, veja
+[`workers/README.md`](workers/README.md). O worker aceita JSON/JSONL/CSV/TSV,
+reutiliza as keys `imagens/smart-ext-*-v2.webp` e só atualiza o cache do editor
+quando executado com `--persist-db`.
+
 
 ## Migracao para PostgreSQL (operacao)
 

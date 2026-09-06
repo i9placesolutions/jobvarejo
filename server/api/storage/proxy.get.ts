@@ -1,4 +1,4 @@
-import { GetObjectCommand } from '@aws-sdk/client-s3'
+import { GetObjectCommand, ListObjectVersionsCommand } from '@aws-sdk/client-s3'
 import { Readable } from 'stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
@@ -126,11 +126,12 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    const sendGetObject = async (bucketCandidate: string, keyCandidate: string) => {
+    const sendGetObject = async (bucketCandidate: string, keyCandidate: string, versionId?: string) => {
       const s3Client = getS3Client()
       return s3Client.send(new GetObjectCommand({
         Bucket: bucketCandidate,
-        Key: keyCandidate
+        Key: keyCandidate,
+        ...(versionId ? { VersionId: versionId } : {})
       }))
     }
 
@@ -171,7 +172,60 @@ export default defineEventHandler(async (event) => {
           }
         }
       }
-      if (lastNotFoundError) throw lastNotFoundError
+      // A missing key is a normal condition for the image-recovery path below.
+      // Keep non-404 failures throwing so the caller still reports real storage
+      // outages instead of silently returning a placeholder.
+      if (lastNotFoundError) return null
+      return null
+    }
+
+    const recoverPreviousImageVersion = async () => {
+      // Wasabi keeps version history for the shared image library. If an image
+      // is removed from the asset panel while a saved canvas still references
+      // it, the current delete marker must not turn that canvas into a blank
+      // page. Recover only the newest non-delete version and serve it as a
+      // read-only fallback; this does not recreate the object or change the
+      // user's asset-library state.
+      for (const bucketCandidate of bucketCandidates) {
+        for (const keyCandidate of keyCandidates) {
+          try {
+            const versions = await getS3Client().send(new ListObjectVersionsCommand({
+              Bucket: bucketCandidate,
+              Prefix: keyCandidate,
+              MaxKeys: 50
+            }))
+            const candidates = (versions.Versions || [])
+              .filter((version: any) => (
+                String(version?.Key || '') === keyCandidate &&
+                String(version?.VersionId || '').trim()
+              ))
+              .sort((a: any, b: any) => (
+                new Date(String(b?.LastModified || 0)).getTime() -
+                new Date(String(a?.LastModified || 0)).getTime()
+              ))
+
+            for (const version of candidates) {
+              try {
+                const response = await sendGetObject(bucketCandidate, keyCandidate, version.VersionId)
+                if (response?.Body) {
+                  return {
+                    response,
+                    bucket: bucketCandidate,
+                    key: keyCandidate,
+                    recoveredVersion: String(version.VersionId)
+                  }
+                }
+              } catch {
+                // A version can have been purged between LIST and GET. Try the
+                // next newest version without breaking the image request.
+              }
+            }
+          } catch {
+            // Versioning is optional. The normal transparent-pixel fallback
+            // below remains available when this bucket has no history.
+          }
+        }
+      }
       return null
     }
 
@@ -196,9 +250,20 @@ export default defineEventHandler(async (event) => {
     let sourceBody: Buffer | null = null
     let resolvedContentType = contentTypes[ext || ''] || 'application/octet-stream'
     let resolvedLength: number | null = null
+    let recoveredVersion: string | null = null
 
     try {
-      const wasabiObject = await fetchFromWasabi()
+      let wasabiObject: any = await fetchFromWasabi()
+      if (!wasabiObject && looksLikeImage && !requestTargetsJson) {
+        wasabiObject = await recoverPreviousImageVersion()
+        recoveredVersion = wasabiObject?.recoveredVersion || null
+        if (wasabiObject) {
+          console.warn('⚠️ [storage-proxy] Imagem recuperada de uma versão anterior ainda referenciada pelo editor', {
+            key: wasabiObject.key,
+            versionId: recoveredVersion
+          })
+        }
+      }
       if (wasabiObject?.response?.Body) {
         const stream = wasabiObject.response.Body as Readable
         const chunks: Buffer[] = []
@@ -226,8 +291,8 @@ export default defineEventHandler(async (event) => {
           'X-Storage-Miss': '1'
         })
         setResponseHeader(event, 'Content-Length', TRANSPARENT_PIXEL_PNG.length)
-        return TRANSPARENT_PIXEL_PNG
-      }
+      return TRANSPARENT_PIXEL_PNG
+    }
 
       throw createError({
         statusCode: 404,
@@ -250,6 +315,9 @@ export default defineEventHandler(async (event) => {
 
     if (resolvedLength && resolvedLength > 0) {
       setResponseHeader(event, 'Content-Length', resolvedLength)
+    }
+    if (recoveredVersion) {
+      setResponseHeader(event, 'X-Storage-Recovered-Version', '1')
     }
     return sourceBody
 

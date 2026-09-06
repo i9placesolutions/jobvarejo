@@ -32,6 +32,7 @@ const props = defineProps<{
   productZone: any
   productZoneInspector: any
   productGlobalStyles: any
+  productZoneStructuresLoaded?: boolean
   labelTemplates: any[]
   viewShowGrid: boolean
   viewShowRulers: boolean
@@ -68,6 +69,7 @@ const emit = defineEmits<{
   updateGlobalStyles: [prop: string, value: any, meta?: any]
   updateCardStyle: [prop: string, value: any, cardId?: string]
   resetCardStyle: [cardId?: string]
+  updateCardConfigurationProfile: [profile: string, cardId?: string]
   applyTemplateToZone: []
   applyPreset: [payload: any]
   syncGaps: [padding: number, meta?: any]
@@ -165,10 +167,6 @@ const emit = defineEmits<{
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
             <span class="text-[11px]">Imagens</span>
           </button>
-          <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="emit('command', 'open-ai-generate')">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-            <span class="text-[11px]">IA Gerar</span>
-          </button>
         </div>
       </div>
     </div>
@@ -219,6 +217,7 @@ const emit = defineEmits<{
         :product-zone="productZone"
         :product-zone-inspector="productZoneInspector"
         :product-global-styles="productGlobalStyles"
+        :product-zone-structures-loaded="productZoneStructuresLoaded"
         :label-templates="labelTemplates"
         :view-show-grid="viewShowGrid"
         :view-show-rulers="viewShowRulers"
@@ -238,6 +237,7 @@ const emit = defineEmits<{
         @update-global-styles="(prop, value, meta) => emit('updateGlobalStyles', prop, value, meta)"
         @update-card-style="(prop, value, cardId) => emit('updateCardStyle', prop, value, cardId)"
         @reset-card-style="(cardId) => emit('resetCardStyle', cardId)"
+        @update-card-configuration-profile="(profile, cardId) => emit('updateCardConfigurationProfile', profile, cardId)"
         @apply-template-to-zone="emit('applyTemplateToZone')"
         @apply-preset="payload => emit('applyPreset', payload)"
         @sync-gaps="(padding, meta) => emit('syncGaps', padding, meta)"

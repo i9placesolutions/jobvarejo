@@ -1,12 +1,12 @@
 export type ExportImageFormat = 'png' | 'jpg'
-export type ExportQualityPreset = 'print-300' | 'ultra-600'
+export type ExportQualityPreset = 'digital' | 'print-300' | 'ultra-600'
 
-export const HIGH_RES_EXPORT_SCALE = 6
+export const HIGH_RES_EXPORT_SCALE = 1
 export const HIGH_RES_EXPORT_QUALITY = 1
 export const EXPORT_COLOR_SATURATION = 1.12
 export const EXPORT_COLOR_CONTRAST = 1.08
 export const EXPORT_COLOR_BRIGHTNESS = 1.02
-export const DEFAULT_EXPORT_QUALITY_PRESET: ExportQualityPreset = 'ultra-600'
+export const DEFAULT_EXPORT_QUALITY_PRESET: ExportQualityPreset = 'digital'
 export const DEFAULT_MULTI_FILE_MODE: 'zip' | 'separate' = 'zip'
 
 const EXPORT_MAX_CANVAS_DIMENSION = 16384
@@ -17,7 +17,7 @@ export const normalizeExportImageFormat = (format: any): ExportImageFormat => (
 )
 
 export const normalizeExportQualityPreset = (value: any): ExportQualityPreset => (
-  String(value) === 'print-300' ? 'print-300' : 'ultra-600'
+  String(value) === 'print-300' ? 'print-300' : String(value) === 'ultra-600' ? 'ultra-600' : 'digital'
 )
 
 export const roundExportMultiplier = (value: number): number => {

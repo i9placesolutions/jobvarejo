@@ -15,8 +15,23 @@ import {
   getSinglePriceBackgroundCandidate,
   getSinglePriceBackgroundImageCandidate,
   getSinglePriceCurrencyTextCandidate,
-  isLikelyPriceGroupObject
+  isLikelyPriceGroupObject,
+  repairAtacarejoTextNames
 } from '~/utils/priceLayoutClassifiers'
+
+describe('repairAtacarejoTextNames', () => {
+  it('preserva a etiqueta de preco rico como um unico texto', () => {
+    const retailBg = { name: 'atac_retail_bg', type: 'rect', top: -50, height: 80, scaleY: 1, originY: 'center' }
+    const wholesaleBg = { name: 'atac_wholesale_bg', type: 'rect', top: 50, height: 80, scaleY: 1, originY: 'center' }
+    const rich = { name: '', type: 'i-text', text: '6,25', __priceRichText: true, set(values: any) { Object.assign(this, values) } }
+    const currency = { name: '', type: 'i-text', text: 'R$', top: -50, set(values: any) { Object.assign(this, values) } }
+
+    repairAtacarejoTextNames([retailBg, wholesaleBg, rich, currency])
+
+    expect(rich.name).toBe('retail_price_text')
+    expect(currency.name).toBe('retail_currency_text')
+  })
+})
 
 describe('isLikelyPriceGroupObject', () => {
   const noPreserve = () => false
@@ -411,6 +426,12 @@ describe('hasCorruptedPriceLayout', () => {
   it('group com nodos validos → false', () => {
     const group = makeGroup({}, [validNode()])
     expect(hasCorruptedPriceLayout(group)).toBe(false)
+  })
+
+  it('rich price fora do fundo → true mesmo com coordenadas finitas', () => {
+    const background = { name: 'price_bg', type: 'rect', left: 0, top: 0, width: 470, height: 180, scaleX: 1, scaleY: 1, originY: 'top', visible: true }
+    const richPrice = { name: 'price_value_text', type: 'i-text', left: 0, top: -1857, width: 115, height: 40, scaleX: 1, scaleY: 1, originY: 'center', fontSize: 40, visible: true }
+    expect(hasCorruptedPriceLayout(makeGroup({}, [background, richPrice]))).toBe(true)
   })
 
   it('scaleX/Y do group invalido (NaN) → true', () => {

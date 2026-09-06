@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Check, User, Menu as MenuIcon } from 'lucide-vue-next'
+import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Check, User, Tag, SlidersHorizontal, Zap, Store, PenTool, Menu as MenuIcon, LayoutTemplate } from 'lucide-vue-next'
 	import FolderTreeItem from '~/components/FolderTreeItem.vue'
 	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
 	import FilterDropdown from '~/components/ui/FilterDropdown.vue'
 import type { Folder as FolderModel } from '~/types/folder'
 import { useResponsive } from '~/composables/useResponsive'
 import { getProjectPreviewSource } from '~/utils/dashboardProjectPreview'
+import { saveProjectAsFlyerTemplate } from '~/utils/flyerTemplateApi'
 
 const { isMobile: dashMobile, isTablet: dashTablet } = useResponsive()
 const showMobileDrawer = ref(false)
@@ -1044,6 +1045,17 @@ const duplicateProject = async (projectId: string) => {
   }
 }
 
+const saveAsFlyerTemplate = async (projectId: string) => {
+  try {
+    const headers = await getApiAuthHeaders()
+    await saveProjectAsFlyerTemplate({ headers, projectId })
+    showProjectMenu.value = null
+    showToast('Modelo de encarte salvo. Abra em Modelos de encarte.', 'success')
+  } catch (error: any) {
+    showToast(String(error?.data?.statusMessage || error?.message || 'Não foi possível salvar o modelo.'))
+  }
+}
+
 const moveProjectToFolder = async (projectId: string, folderId: string | null) => {
   const id = String(projectId || '').trim()
   if (!id) return
@@ -1520,6 +1532,24 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <button @click="activeView = 'shared'; showMobileDrawer = false" :class="['dash-nav-item w-full', activeView === 'shared' ? 'active' : '']">
                 <Users class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Compartilhados</span>
               </button>
+              <button @click="navigateTo('/label-templates'); showMobileDrawer = false" class="dash-nav-item w-full">
+                <Tag class="w-3.5 h-3.5 shrink-0 text-amber-500" /><span class="flex-1 text-left">Etiquetas de preço</span>
+              </button>
+              <button @click="navigateTo('/quick-editor'); showMobileDrawer = false" class="dash-nav-item w-full">
+                <Zap class="w-3.5 h-3.5 shrink-0 text-indigo-500" /><span class="flex-1 text-left">Edição rápida</span>
+              </button>
+              <button @click="navigateTo('/flyer-templates'); showMobileDrawer = false" class="dash-nav-item w-full">
+                <LayoutTemplate class="w-3.5 h-3.5 shrink-0 text-violet-500" /><span class="flex-1 text-left">Modelos de encarte</span>
+              </button>
+              <button @click="navigateTo('/business-profile'); showMobileDrawer = false" class="dash-nav-item w-full">
+                <Store class="w-3.5 h-3.5 shrink-0 text-emerald-500" /><span class="flex-1 text-left">Cadastro da loja</span>
+              </button>
+              <button @click="navigateTo('/zone-structures'); showMobileDrawer = false" class="dash-nav-item w-full">
+                <Grid class="w-3.5 h-3.5 shrink-0 text-cyan-500" /><span class="flex-1 text-left">Estruturas de zonas</span>
+              </button>
+              <button @click="navigateTo('/card-configurations'); showMobileDrawer = false" class="dash-nav-item w-full">
+                <SlidersHorizontal class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Configuração dos cards</span>
+              </button>
             </div>
             <div class="sidebar-divider mx-3 my-1"></div>
             <div class="flex-1 min-h-0 overflow-y-auto px-2 py-2">
@@ -1593,7 +1623,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
         <aside v-show="!dashMobile" class="dash-sidebar w-64 h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
 
           <!-- Nav Section -->
-          <div class="px-3 pt-4 pb-1 shrink-0">
+          <div class="px-3 pt-4 pb-1 shrink-0 overflow-y-auto max-h-[78%]">
             <p class="sidebar-section-label px-1 mb-2">Explorar</p>
             <button
               @click="activeView = 'recent'"
@@ -1640,6 +1670,54 @@ const handleDropOnRoot = async (event: DragEvent) => {
             >
               <Users class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Compartilhados</span>
+            </button>
+            <button
+              @click="navigateTo('/label-templates')"
+              class="dash-nav-item w-full"
+              aria-label="Abrir etiquetas de preço"
+            >
+              <Tag class="w-4 h-4 shrink-0 text-amber-500" />
+              <span class="flex-1 text-left">Etiquetas de preço</span>
+            </button>
+            <button
+              @click="navigateTo('/quick-editor')"
+              class="dash-nav-item w-full"
+              aria-label="Abrir edição rápida de encartes"
+            >
+              <Zap class="w-4 h-4 shrink-0 text-indigo-500" />
+              <span class="flex-1 text-left">Edição rápida</span>
+            </button>
+            <button
+              @click="navigateTo('/flyer-templates')"
+              class="dash-nav-item w-full"
+              aria-label="Abrir modelos de encarte"
+            >
+              <LayoutTemplate class="w-4 h-4 shrink-0 text-violet-500" />
+              <span class="flex-1 text-left">Modelos de encarte</span>
+            </button>
+            <button
+              @click="navigateTo('/business-profile')"
+              class="dash-nav-item w-full"
+              aria-label="Abrir cadastro da loja"
+            >
+              <Store class="w-4 h-4 shrink-0 text-emerald-500" />
+              <span class="flex-1 text-left">Cadastro da loja</span>
+            </button>
+            <button
+              @click="navigateTo('/zone-structures')"
+              class="dash-nav-item w-full"
+              aria-label="Configurar estruturas automáticas de zonas"
+            >
+              <Grid class="w-4 h-4 shrink-0 text-cyan-500" />
+              <span class="flex-1 text-left">Estruturas de zonas</span>
+            </button>
+            <button
+              @click="navigateTo('/card-configurations')"
+              class="dash-nav-item w-full"
+              aria-label="Configurar elementos internos dos cards"
+            >
+              <SlidersHorizontal class="w-4 h-4 shrink-0" />
+              <span class="flex-1 text-left">Configuração dos cards</span>
             </button>
           </div>
 
@@ -1737,14 +1815,29 @@ const handleDropOnRoot = async (event: DragEvent) => {
               </p>
             </div>
             <!-- Desktop: inline button / Mobile: FAB -->
-            <button
-              v-if="!dashMobile"
-              @click="showCreateProject = true"
-              class="dash-cta shrink-0 h-10 px-5 rounded-xl text-[13px] font-semibold flex items-center gap-2 transition-all"
-            >
-              <Plus class="w-4 h-4" />
-              Novo Projeto
-            </button>
+            <div v-if="!dashMobile" class="flex items-center gap-2 shrink-0">
+              <NuxtLink
+                to="/flyer-templates"
+                class="h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 border border-violet-200 bg-violet-50 text-violet-700 transition-all hover:bg-violet-100"
+              >
+                <LayoutTemplate class="w-4 h-4" />
+                Modelos de encarte
+              </NuxtLink>
+              <NuxtLink
+                to="/quick-editor"
+                class="dash-cta h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all"
+              >
+                <Zap class="w-4 h-4" />
+                Edição rápida
+              </NuxtLink>
+              <button
+                @click="showCreateProject = true"
+                class="dash-cta shrink-0 h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all"
+              >
+                <PenTool class="w-4 h-4" />
+                Modo avançado
+              </button>
+            </div>
           </div>
 
           <!-- Toolbar -->
@@ -2032,6 +2125,14 @@ const handleDropOnRoot = async (event: DragEvent) => {
         :class="['project-context-menu fixed z-100 bg-white border border-slate-200 py-1.5 shadow-xl shadow-black/10', dashMobile ? 'left-3 right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] rounded-3xl p-2' : 'rounded-xl min-w-40']"
         :style="dashMobile ? undefined : { left: `${projectMenuPosition.x}px`, top: `${projectMenuPosition.y}px` }"
       >
+        <button @click="navigateTo(`/quick-editor?id=${showProjectMenu}`); showProjectMenu = null" class="ctx-menu-item w-full">
+          <Zap class="w-3.5 h-3.5 text-indigo-500" />
+          Abrir na edição rápida
+        </button>
+        <button @click="saveAsFlyerTemplate(showProjectMenu)" class="ctx-menu-item w-full">
+          <LayoutTemplate class="w-3.5 h-3.5 text-violet-500" />
+          Salvar como modelo
+        </button>
         <button @click="startRenameProject(projects.find(p => p.id === showProjectMenu))" class="ctx-menu-item w-full">
           <Pencil class="w-3.5 h-3.5" />
           Renomear

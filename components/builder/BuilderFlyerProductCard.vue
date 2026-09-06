@@ -3,6 +3,7 @@ import type { BuilderFlyerProduct, BuilderBadgeStyle, BuilderPriceTagStyle } fro
 import { getLayoutForBox, parseXSplit, parseYSplit, parseInvasion, parseOrdem, type ProductBoxLayoutConfig } from '~/composables/useProductBoxLayout'
 import { getBuilderCardAdaptiveBudget, getBuilderCardBaseFont, getBuilderCardNameFont } from '~/utils/builder-card-responsive'
 import { getV2Preset, V2_PRESETS, type V2Preset } from '~/utils/qro-card-v2-presets'
+import { builderThemeSupportsModel } from '~/utils/builderThemeFormats'
 
 const props = defineProps<{
   product: BuilderFlyerProduct
@@ -12,15 +13,19 @@ const props = defineProps<{
   pageProductCount?: number
 }>()
 
-const { flyer, theme, priceTagStyles, cardTemplates } = useBuilderFlyer()
+const { flyer, model, theme, priceTagStyles, cardTemplates } = useBuilderFlyer()
 
 // Ler configuracoes do card template ativo (se houver)
 // Se o flyer tem card_template_id usa esse, senao usa o primeiro template ativo como padrao
 const activeCardTemplate = computed(() => {
   const tplId = (flyer.value as any)?.card_template_id
-  if (tplId) return cardTemplates.value.find((t: any) => t.id === tplId) || null
+  if (tplId) {
+    const selected = cardTemplates.value.find((t: any) => t.id === tplId)
+    if (selected && builderThemeSupportsModel(selected, model.value?.id)) return selected
+  }
   // Fallback: usa primeiro template ativo como padrao de configuracao
-  if (cardTemplates.value.length > 0) return cardTemplates.value[0] || null
+  const compatible = cardTemplates.value.find((t: any) => builderThemeSupportsModel(t, model.value?.id))
+  if (compatible) return compatible
   return null
 })
 const tplStyle = computed(() => activeCardTemplate.value?.card_style || {})

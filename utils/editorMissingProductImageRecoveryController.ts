@@ -98,7 +98,11 @@ const fetchRecoveryImageUrlFromAssets = async (
             headers,
             query: {
                 q: query,
-                limit: 1
+                limit: 1,
+                fresh: '1',
+                ai: '0',
+                expand: '0',
+                includeCache: '0'
             }
         })
         if (Array.isArray(result) && result[0]?.url) {
@@ -257,18 +261,22 @@ export const recoverMissingProductCardImages = async (
 
             if (!restored && remoteLookupsLeft > 0 && needsRemoteLookup) {
                 remoteLookupsLeft -= 1
-                const fetchedResult = await fetchRecoveryImageUrlForCard(card, ctx, { matchMode: 'precise' })
-                if (fetchedResult.url) {
-                    const normalizedFetched = normalizeRecoveryImageUrl(fetchedResult.url)
-                    restored = await tryApplyImageUrl(normalizedFetched)
-                }
                 const payload = buildCardRecoverySearchPayload(card)
-                const assetsResult = !restored
-                    ? await fetchRecoveryImageUrlFromAssets(String(payload?.term || ''), ctx)
-                    : { status: 'empty', url: null as string | null }
+                // O catálogo interno é a primeira tentativa. Isso evita
+                // chamar o pipeline de processamento quando a imagem já foi
+                // salva no Wasabi, além de impedir qualquer fallback externo.
+                const assetsResult = await fetchRecoveryImageUrlFromAssets(String(payload?.term || ''), ctx)
                 if (!restored && assetsResult.url) {
                     const normalizedAssetsUrl = normalizeRecoveryImageUrl(assetsResult.url)
                     restored = await tryApplyImageUrl(normalizedAssetsUrl)
+                }
+
+                const fetchedResult = !restored
+                    ? await fetchRecoveryImageUrlForCard(card, ctx, { matchMode: 'precise' })
+                    : { status: 'empty', url: null as string | null }
+                if (!restored && fetchedResult.url) {
+                    const normalizedFetched = normalizeRecoveryImageUrl(fetchedResult.url)
+                    restored = await tryApplyImageUrl(normalizedFetched)
                 }
 
                 const retryableError =

@@ -2,6 +2,21 @@ import { requireAdminUser } from '../../../../utils/auth'
 import { enforceRateLimit } from '../../../../utils/rate-limit'
 import { pgOneOrNull } from '../../../../utils/postgres'
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+const normalizeModelIds = (value: unknown): string[] => {
+  if (value == null) return []
+  if (!Array.isArray(value)) {
+    throw createError({ statusCode: 400, statusMessage: 'model_ids must be an array' })
+  }
+
+  const ids = Array.from(new Set(value.map(item => String(item || '').trim()).filter(Boolean)))
+  if (ids.some(id => !UUID_PATTERN.test(id))) {
+    throw createError({ statusCode: 400, statusMessage: 'model_ids contains an invalid model id' })
+  }
+  return ids
+}
+
 export default defineEventHandler(async (event) => {
   const { user } = await requireAdminUser(event)
   enforceRateLimit(event, `admin-card-templates-update:${user.id}`, 60, 60_000)
@@ -19,6 +34,7 @@ export default defineEventHandler(async (event) => {
     category: 'text',
     elements: 'jsonb',
     card_style: 'jsonb',
+    model_ids: 'uuid[]',
     is_active: 'boolean',
     sort_order: 'int',
   }
@@ -39,6 +55,9 @@ export default defineEventHandler(async (event) => {
       } else if (castType === 'int') {
         setClauses.push(`${key} = $${paramIndex}::int`)
         values.push(value)
+      } else if (castType === 'uuid[]') {
+        setClauses.push(`${key} = $${paramIndex}::uuid[]`)
+        values.push(normalizeModelIds(value))
       } else {
         setClauses.push(`${key} = $${paramIndex}`)
         values.push(value)

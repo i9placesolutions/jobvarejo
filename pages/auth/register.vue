@@ -18,6 +18,7 @@ const isLoading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const isFirstUser = ref(false)
+const BUSINESS_PROFILE_ONBOARDING_KEY = 'jobvarejo:business-profile-onboarding-pending'
 
 // Check if this will be the first user (super admin)
 const checkFirstUser = async () => {
@@ -97,6 +98,12 @@ const handleRegister = async () => {
     email.value = ''
     password.value = ''
     confirmPassword.value = ''
+
+    // O primeiro login leva o usuário diretamente ao cadastro comercial, que
+    // será reutilizado nos próximos encartes da edição rápida.
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(BUSINESS_PROFILE_ONBOARDING_KEY, '1')
+    }
 
     // Redirect to login after 2 seconds
     setTimeout(() => {

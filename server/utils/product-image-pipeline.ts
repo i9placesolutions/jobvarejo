@@ -178,8 +178,15 @@ export const runExternalPipelineOnce = async (opts: {
   weight?: string
   selectedImageUrl: string
   bgPolicy: BgPolicy
+  sourcePrefix?: string
 }): Promise<ProcessProductImageResponse> => {
   const safeSelectedImageUrl = assertSafeExternalHttpUrl(opts.selectedImageUrl, { maxLength: 2048 })
+  const sourcePrefix = String(opts.sourcePrefix || 'serper')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32) || 'external'
   const externalSourceKey = buildExternalSourceDerivedS3Key(safeSelectedImageUrl)
   const targetUploadKey = externalSourceKey || opts.deterministicKey
   const lockKey = `${opts.bucketName}:${targetUploadKey}`
@@ -247,7 +254,7 @@ export const runExternalPipelineOnce = async (opts: {
       weight: opts.weight,
       imageUrl: getPublicUrl(targetUploadKey),
       s3Key: targetUploadKey,
-      source: `serper-${opts.bgPolicy}`
+      source: `${sourcePrefix}-${opts.bgPolicy}`
     })
 
     return {

@@ -1,4 +1,4 @@
-import { requireBuilderTenant } from '../../../utils/builder-auth'
+import { invalidateBuilderTenantCache, requireBuilderTenant } from '../../../utils/builder-auth'
 import { enforceRateLimit } from '../../../utils/rate-limit'
 import { updateTenantProfile } from '../../../utils/builder-auth-db'
 
@@ -30,6 +30,8 @@ export default defineEventHandler(async (event) => {
   if (!updated) {
     throw createError({ statusCode: 404, statusMessage: 'Tenant not found' })
   }
+
+  invalidateBuilderTenantCache(tenant.id)
 
   return {
     tenant: {

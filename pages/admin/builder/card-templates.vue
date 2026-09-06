@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import type { CardTemplateElement } from '~/types/builder'
 import { useElementDragResize, type ResizeHandle } from '~/composables/useElementDragResize'
+import { normalizeBuilderThemeModelIds } from '~/utils/builderThemeFormats'
 
 definePageMeta({ layout: false, middleware: ['auth', 'admin'], ssr: false })
 
 const {
   items, isLoading, error,
   editingId, formName, formCategory, formIsActive,
+  formModelIds, formAllFormats, models, isLoadingModels,
   elements, cardStyle,
   selectedElementId, selectedElement,
   liveTemplate,
-  fetchTemplates, saveTemplate, deleteTemplate,
+  fetchTemplates, fetchModels, saveTemplate, deleteTemplate,
   openEditor, addElement, removeElement, duplicateElement,
   updateElement, updateSelectedElement, selectElement,
-  applyPreset, presets, mockProducts,
+  applyPreset, presets, mockProducts, toggleAllFormats, isModelSelected, toggleModel,
 } = useCardTemplateEditor()
 
 // ── Modo: lista ou editor ──
@@ -38,6 +40,17 @@ const elMeta: Record<string, { icon: string; label: string; color: string; borde
   unit:        { icon: 'g',  label: 'Unidade', color: '#8b5cf6', border: '#c4b5fd' },
   observation: { icon: '…',  label: 'Obs',     color: '#6366f1', border: '#a5b4fc' },
   shape:       { icon: '◆',  label: 'Forma',   color: '#ec4899', border: '#f9a8d4' },
+}
+
+const cardTemplateFormatSummary = (item: { model_ids?: unknown }) => {
+  const ids = normalizeBuilderThemeModelIds(item?.model_ids)
+  if (!ids.length) return 'Todos os formatos'
+  const names = ids
+    .map(id => models.value.find(model => String(model.id) === id)?.name)
+    .filter((name): name is string => !!name)
+  if (!names.length) return `${ids.length} formato(s)`
+  if (names.length <= 2) return names.join(' · ')
+  return `${names.slice(0, 2).join(' · ')} +${names.length - 2}`
 }
 // ── Formatos de card (aspect ratio) ──
 const CARD_FORMATS = [
@@ -112,7 +125,10 @@ const handlePos: Record<ResizeHandle, string> = {
 const goEdit = (item?: any) => { openEditor(item); mode.value = 'editor' }
 const goList = () => { mode.value = 'list' }
 const handleSave = async () => {
-  try { await saveTemplate(); goList() }
+  try {
+    await saveTemplate()
+    if (!error.value) goList()
+  }
   catch {}
 }
 const handleDelete = async (id: string) => {
@@ -138,7 +154,7 @@ const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'ArrowDown')  { updateSelectedElement({ y: `${Math.min(100 - pct(el.h), pct(el.y) + 1)}%` }); e.preventDefault() }
   }
 }
-onMounted(() => { fetchTemplates(); document.addEventListener('keydown', onKeyDown) })
+onMounted(() => { fetchTemplates(); fetchModels(); document.addEventListener('keydown', onKeyDown) })
 onUnmounted(() => { document.removeEventListener('keydown', onKeyDown) })
 
 // Mock para preview do BuilderDynamicCard
@@ -189,6 +205,9 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
                 <span class="text-gray-400">{{ item.category }}</span>
                 <span :class="item.is_active ? 'text-emerald-600' : 'text-gray-400'">{{ item.is_active ? 'Ativo' : 'Inativo' }}</span>
               </div>
+              <div class="mt-1 truncate text-[10px] text-blue-600" :title="cardTemplateFormatSummary(item)">
+                {{ cardTemplateFormatSummary(item) }}
+              </div>
               <div class="flex gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
                 <button @click="goEdit(item)" class="text-xs text-blue-600 hover:underline">Editar</button>
                 <button @click="handleDelete(item.id)" class="text-xs text-red-500 hover:underline">Excluir</button>
@@ -228,7 +247,7 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
 
           <!-- Formato do card -->
           <div class="flex items-center gap-1">
-            <span class="text-[10px] text-gray-400 font-medium">Formato:</span>
+            <span class="text-[10px] text-gray-400 font-medium">Prévia:</span>
             <div class="flex gap-0.5">
               <button
                 v-for="f in CARD_FORMATS" :key="f.id"
@@ -390,6 +409,51 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
 
             <!-- Nada selecionado: card style -->
             <template v-if="!selectedElement">
+              <!-- Escopo do template: vazio = todos os formatos -->
+              <div class="p-4 border-b border-gray-100 bg-blue-50/40">
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <p class="text-xs font-bold text-gray-800">Formatos disponíveis</p>
+                    <p class="mt-1 text-[10px] leading-relaxed text-gray-500">Defina onde este card pode ser usado no encarte.</p>
+                  </div>
+                  <span class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-semibold text-blue-700">
+                    {{ formAllFormats ? 'Todos' : `${formModelIds.length}` }}
+                  </span>
+                </div>
+                <label class="mt-3 flex items-start gap-2 text-[11px] font-medium text-gray-700 cursor-pointer">
+                  <input
+                    :checked="formAllFormats"
+                    type="checkbox"
+                    class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500/50"
+                    @change="toggleAllFormats(($event.target as HTMLInputElement).checked)"
+                  />
+                  <span>Todos os formatos <small class="block font-normal text-gray-400">Inclui formatos futuros</small></span>
+                </label>
+                <div v-if="models.length" class="mt-3 space-y-1.5">
+                  <label
+                    v-for="model in models"
+                    :key="model.id"
+                    class="flex items-start gap-2 rounded-md border px-2 py-1.5 transition-colors"
+                    :class="isModelSelected(model.id) ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'"
+                  >
+                    <input
+                      :checked="isModelSelected(model.id)"
+                      :disabled="formAllFormats"
+                      type="checkbox"
+                      class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500/50 disabled:opacity-50"
+                      @change="toggleModel(model.id, ($event.target as HTMLInputElement).checked)"
+                    />
+                    <span class="min-w-0">
+                      <span class="block truncate text-[10px] font-medium text-gray-700">{{ model.name }}</span>
+                      <span class="block truncate text-[9px] text-gray-400">{{ model.width }} × {{ model.height }}<span v-if="model.aspect_ratio"> · {{ model.aspect_ratio }}</span></span>
+                    </span>
+                  </label>
+                </div>
+                <p v-else-if="isLoadingModels" class="mt-3 text-[10px] text-gray-400">Carregando formatos...</p>
+                <p v-else class="mt-3 text-[10px] text-amber-600">Catálogo de formatos indisponível. “Todos” continua disponível.</p>
+                <p v-if="!formAllFormats && !formModelIds.length" class="mt-2 text-[10px] text-red-600">Selecione ao menos um formato.</p>
+              </div>
+
               <div class="p-4 border-b border-gray-100">
                 <p class="text-xs font-bold text-gray-800 mb-3">Aparencia do Card</p>
                 <div class="space-y-2.5">

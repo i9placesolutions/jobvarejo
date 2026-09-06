@@ -4,11 +4,14 @@ const publicBuilderRoutes = [
   '/builder/register',
 ]
 
+const sharedSaaSRoutes = ['/quick-editor', '/business-profile']
+
 export default defineNuxtRouteMiddleware(async (to) => {
   // Handle /builder/* and /canva/* routes
   const isBuilderRoute = to.path.startsWith('/builder')
   const isCanvaRoute = to.path.startsWith('/canva')
-  if (!isBuilderRoute && !isCanvaRoute) return
+  const isSharedSaaSRoute = sharedSaaSRoutes.some(route => to.path.startsWith(route))
+  if (!isBuilderRoute && !isCanvaRoute && !isSharedSaaSRoute) return
 
   const isPublicRoute = publicBuilderRoutes.some(route => to.path.startsWith(route))
   if (isPublicRoute) return
@@ -25,8 +28,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (!auth.isAuthenticated.value) {
     // Preservar destino original para redirecionar apos login
     const redirect = isCanvaRoute ? to.fullPath : undefined
+    const loginPath = isSharedSaaSRoute ? '/auth/login' : '/builder/login'
     return navigateTo({
-      path: '/builder/login',
+      path: loginPath,
       query: redirect ? { redirect } : undefined,
     })
   }

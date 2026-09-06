@@ -35,6 +35,7 @@ defineProps<{
   productZone: any
   productZoneInspector?: any
   productGlobalStyles: any
+  productZoneStructuresLoaded?: boolean
   labelTemplates: any[]
   viewShowGrid: boolean
   viewShowRulers: boolean
@@ -48,7 +49,6 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'update:showZoomMenu', value: boolean): void
   (e: 'present'): void
-  (e: 'open-ai-generate'): void
   (e: 'open-canva-import'): void
   (e: 'open-share'): void
   (e: 'zoom-50'): void
@@ -74,6 +74,7 @@ const emit = defineEmits<{
   (e: 'update-global-styles', prop: string, value: any, meta?: any): void
   (e: 'update-card-style', prop: string, value: any, cardId?: string): void
   (e: 'reset-card-style', cardId?: string): void
+  (e: 'update-card-configuration-profile', profile: string, cardId?: string): void
   (e: 'apply-template-to-zone'): void
   (e: 'apply-preset', presetId: string): void
   (e: 'sync-gaps', padding: number, meta?: any): void
@@ -110,7 +111,6 @@ const emit = defineEmits<{
         :grid-size="gridSize"
         @update:show-zoom-menu="emit('update:showZoomMenu', $event)"
         @present="emit('present')"
-        @open-ai-generate="emit('open-ai-generate')"
         @open-canva-import="emit('open-canva-import')"
         @open-share="emit('open-share')"
         @zoom-50="emit('zoom-50')"
@@ -131,7 +131,6 @@ const emit = defineEmits<{
 
     <div class="min-h-0 flex-1 flex flex-col">
       <PropertiesPanel
-        v-if="selectedObject"
         :selectedObject="selectedObject"
         :activeMode="activeMode"
         :pageSettings="pageSettings"
@@ -139,6 +138,7 @@ const emit = defineEmits<{
         :productZone="productZone"
         :productZoneInspector="productZoneInspector"
         :productGlobalStyles="productGlobalStyles"
+        :productZoneStructuresLoaded="productZoneStructuresLoaded"
         :labelTemplates="labelTemplates"
         @update-property="(prop, value) => emit('update-property', prop, value)"
         @update-smart-group="(payload) => emit('update-smart-group', payload)"
@@ -151,6 +151,7 @@ const emit = defineEmits<{
         @update-global-styles="(prop, value, meta) => emit('update-global-styles', prop, value, meta)"
         @update-card-style="(prop, value, cardId) => emit('update-card-style', prop, value, cardId)"
         @reset-card-style="(cardId) => emit('reset-card-style', cardId)"
+        @update-card-configuration-profile="(profile, cardId) => emit('update-card-configuration-profile', profile, cardId)"
         @apply-template-to-zone="emit('apply-template-to-zone')"
         @apply-preset="(payload) => emit('apply-preset', payload)"
         @sync-gaps="(padding, meta) => emit('sync-gaps', padding, meta)"

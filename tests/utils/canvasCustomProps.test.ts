@@ -72,6 +72,7 @@ describe('CANVAS_CUSTOM_PROPS', () => {
     expect(CANVAS_CUSTOM_PROPS).toContain('__visibleScaleY')
     expect(CANVAS_CUSTOM_PROPS).toContain('__rawText')
     expect(CANVAS_CUSTOM_PROPS).toContain('__textCase')
+    expect(CANVAS_CUSTOM_PROPS).toContain('dynamicTextCase')
   })
 
   it('contem props de shape utilities (cornerRadii, fill/stroke backups)', () => {

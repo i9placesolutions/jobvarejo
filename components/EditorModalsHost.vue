@@ -65,6 +65,10 @@ defineProps<{
   showDeletePageModal: boolean
   showProductReviewModal: boolean
   reviewProducts: any[]
+  productReviewInitialText?: string
+  productReviewAutoFillImages?: boolean
+  productReviewAutoParse?: boolean
+  productReviewQuickMode?: boolean
   showImportMode: boolean
   productImportExistingCount: number
   productReviewInitialImportMode: 'replace' | 'append'
@@ -211,6 +215,10 @@ const emit = defineEmits<{
     v-if="showProductReviewModal"
     :model-value="showProductReviewModal"
     :initial-products="reviewProducts"
+    :initial-text-input="productReviewInitialText"
+    :initial-auto-fill-images="productReviewAutoFillImages"
+    :auto-parse-on-open="productReviewAutoParse"
+    :quick-mode="productReviewQuickMode"
     :show-import-mode="showImportMode"
     :existing-count="productImportExistingCount"
     :initial-import-mode="productReviewInitialImportMode"

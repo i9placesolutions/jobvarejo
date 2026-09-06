@@ -4,7 +4,7 @@ import Button from './ui/Button.vue'
 
 type ExportScope = 'selected-object' | 'selected-frame' | 'all-frames'
 type ExportFormat = 'png' | 'jpeg' | 'pdf'
-type ExportQualityPreset = 'print-300' | 'ultra-600'
+type ExportQualityPreset = 'digital' | 'print-300' | 'ultra-600'
 type MultiFileMode = 'zip' | 'separate'
 
 const props = defineProps<{
@@ -115,11 +115,12 @@ const open = computed({
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Qualidade</label>
           <div class="flex gap-2">
-            <button @click="exportSettings.qualityPreset = 'print-300'" :class="exportSettings.qualityPreset === 'print-300' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">300 DPI</button>
-            <button @click="exportSettings.qualityPreset = 'ultra-600'" :class="exportSettings.qualityPreset === 'ultra-600' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">600 DPI</button>
+            <button @click="exportSettings.qualityPreset = 'digital'; exportSettings.format = 'png'" :class="exportSettings.qualityPreset === 'digital' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">Normal · sem perda</button>
+            <button @click="exportSettings.qualityPreset = 'print-300'" :class="exportSettings.qualityPreset === 'print-300' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">Tamanho original</button>
+            <button @click="exportSettings.qualityPreset = 'ultra-600'" :class="exportSettings.qualityPreset === 'ultra-600' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-transparent'" class="flex-1 py-2 text-xs font-bold rounded border transition-colors">Alta resolução</button>
           </div>
           <div class="rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-100">
-            600 DPI é padrão. Se o navegador atingir limite técnico, o editor reduz automaticamente para escala segura.
+            Normal usa PNG sem perda no tamanho original do design. Alta resolução amplia a imagem e aumenta o arquivo. JPG é uma opção com compressão e sem transparência.
           </div>
         </div>
 

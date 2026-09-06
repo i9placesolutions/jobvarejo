@@ -8,8 +8,8 @@ export default defineEventHandler(async (event) => {
 
   const result = await pgQuery(
     `SELECT id, name, slug, thumbnail, background_image, is_premium, is_public,
-            is_active, sort_order, category_name, tags, css_config, header_config,
-            body_config, footer_config, created_at, updated_at
+            is_active, sort_order, category_name, tags, model_ids, composition, css_config,
+            header_config, body_config, footer_config, created_at, updated_at
      FROM public.builder_themes
      ORDER BY sort_order ASC, name ASC`
   )

@@ -28,6 +28,7 @@ export interface ProjectRow {
   is_shared: boolean | null
   shared_with: string[] | null
   is_starred: boolean | null
+  is_template: boolean | null
   updated_at: string | null
 }
 

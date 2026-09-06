@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { paymentBrandSvg as paymentBrandSvgs } from '~/utils/paymentBrandSvg'
+import { builderThemeSupportsModel } from '~/utils/builderThemeFormats'
 import {
   ShoppingCart,
   Palette,
@@ -75,10 +76,21 @@ const tabs = [
 
 // ── Theme search ────────────────────────────────────────────────────────────
 const themeSearch = ref('')
+const compatibleThemes = computed(() => {
+  const compatible = themes.value.filter(t => builderThemeSupportsModel(t, model.value?.id))
+  // Mantém o tema já aplicado visível quando o usuário troca o formato do
+  // encarte. Ele não entra como sugestão para o novo formato, mas não some da
+  // edição de um encarte antigo.
+  const current = theme.value
+  if (current && !compatible.some(t => t.id === current.id)) {
+    return [current, ...compatible]
+  }
+  return compatible
+})
 const filteredThemes = computed(() => {
-  if (!themeSearch.value.trim()) return themes.value
+  if (!themeSearch.value.trim()) return compatibleThemes.value
   const q = themeSearch.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  return themes.value.filter((t: any) => {
+  return compatibleThemes.value.filter((t: any) => {
     const name = (t.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     return name.includes(q)
   })
@@ -682,12 +694,17 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
                 <div class="absolute bottom-0 inset-x-0 bg-black/60 px-1 py-0.5">
                   <span class="text-[7px] text-white leading-tight block truncate">{{ t.name }}</span>
                 </div>
+                <span
+                  v-if="!builderThemeSupportsModel(t, model?.id)"
+                  class="absolute top-1 left-1 rounded bg-amber-500/90 px-1 py-0.5 text-[6px] font-semibold text-white"
+                >Outro formato</span>
                 <div v-if="theme?.id === t.id" class="absolute inset-0 bg-emerald-500/10 flex items-center justify-center">
                   <div class="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center"><svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg></div>
                 </div>
               </button>
             </div>
             <p v-if="!filteredThemes.length && themeSearch" class="text-[10px] text-gray-400 text-center py-4">Nenhum tema encontrado para "{{ themeSearch }}"</p>
+            <p v-else-if="!filteredThemes.length && model" class="text-[10px] text-gray-400 text-center py-4">Nenhum tema disponível para este formato</p>
             <p v-else-if="!themes.length" class="text-[10px] text-gray-400 text-center py-4">Nenhum tema disponivel</p>
           </div>
 

@@ -51,21 +51,21 @@ describe('normalizeExportQualityPreset', () => {
     expect(normalizeExportQualityPreset('ultra-600')).toBe('ultra-600')
   })
 
-  it('valores desconhecidos caem em ultra-600 (default high-quality)', () => {
-    expect(normalizeExportQualityPreset('low')).toBe('ultra-600')
-    expect(normalizeExportQualityPreset('')).toBe('ultra-600')
-    expect(normalizeExportQualityPreset('print')).toBe('ultra-600')
+  it('valores desconhecidos caem em digital (default sem ampliacao)', () => {
+    expect(normalizeExportQualityPreset('low')).toBe('digital')
+    expect(normalizeExportQualityPreset('')).toBe('digital')
+    expect(normalizeExportQualityPreset('print')).toBe('digital')
   })
 
-  it('null/undefined caem em ultra-600', () => {
-    expect(normalizeExportQualityPreset(null as any)).toBe('ultra-600')
-    expect(normalizeExportQualityPreset(undefined as any)).toBe('ultra-600')
+  it('null/undefined caem em digital', () => {
+    expect(normalizeExportQualityPreset(null as any)).toBe('digital')
+    expect(normalizeExportQualityPreset(undefined as any)).toBe('digital')
   })
 })
 
 describe('export constantes', () => {
-  it('HIGH_RES_EXPORT_SCALE = 6 (suficiente para 300dpi)', () => {
-    expect(HIGH_RES_EXPORT_SCALE).toBe(6)
+  it('Compartilhar preserva o tamanho original', () => {
+    expect(HIGH_RES_EXPORT_SCALE).toBe(1)
   })
 
   it('HIGH_RES_EXPORT_QUALITY = 1 (max para JPG)', () => {
@@ -87,8 +87,8 @@ describe('export constantes', () => {
     expect(EXPORT_COLOR_BRIGHTNESS).toBeGreaterThan(1)
   })
 
-  it('DEFAULT_EXPORT_QUALITY_PRESET = ultra-600', () => {
-    expect(DEFAULT_EXPORT_QUALITY_PRESET).toBe('ultra-600')
+  it('DEFAULT_EXPORT_QUALITY_PRESET = digital', () => {
+    expect(DEFAULT_EXPORT_QUALITY_PRESET).toBe('digital')
   })
 
   it('DEFAULT_MULTI_FILE_MODE = zip', () => {

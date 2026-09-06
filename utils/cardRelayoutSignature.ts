@@ -52,8 +52,27 @@ export const buildCardRelayoutSignature = (
         ? ((group as any)._productData as Record<string, any>)
         : {}
     const s = (styles && typeof styles === 'object') ? styles : ({} as Partial<GlobalStyles>)
+    const directProductImages = typeof (group as any)?.getObjects === 'function'
+        ? ((group as any).getObjects() || []).filter((child: any) => {
+            const type = String(child?.type || '').toLowerCase()
+            const name = String(child?.name || '').toLowerCase()
+            if (type !== 'image' || name === 'label_bg_image' || name === 'price_bg_image' || name === 'splash_image') return false
+            const smartType = String(child?.data?.smartType || '').toLowerCase()
+            return smartType === 'product-image'
+                || name === 'smart_image'
+                || name === 'product_image'
+                || name === 'productimage'
+                || name.startsWith('extra_image_')
+        })
+        : []
 
     const styleSig = {
+        // Incrementado quando a receita visual do card muda sem alterar os
+        // estilos persistidos. Isso invalida o cache de relayout dos projetos
+        // existentes e reaplica a configuracao de dimensoes uma vez.
+        // Reaplica cards já salvos após a correção da seleção automática de
+        // perfil e do containment dos elementos dentro do próprio card.
+        cardLayoutRendererVersion: 5,
         __refCellW: num((s as any).__refCellW),
         __refCellH: num((s as any).__refCellH),
         splashTemplateId: txt((s as any).splashTemplateId),
@@ -85,7 +104,8 @@ export const buildCardRelayoutSignature = (
         prodNameWeight: txt((s as any).prodNameWeight),
         prodNameAlign: txt((s as any).prodNameAlign),
         limitColor: txt((s as any).limitColor),
-        limitFont: txt((s as any).limitFont)
+        limitFont: txt((s as any).limitFont),
+        cardLayout: (s as any).cardLayout ?? null
     }
 
     const pricingSig = {
@@ -102,6 +122,9 @@ export const buildCardRelayoutSignature = (
         packageLabel: txt((group as any)?.packageLabel ?? productData.packageLabel),
         specialCondition: txt((group as any)?.specialCondition ?? productData.specialCondition),
         imageUrl: txt((group as any)?.imageUrl ?? productData.imageUrl ?? productData.image),
+        productImageCount: directProductImages.length,
+        productImageLayout: txt((group as any)?._productImageLayout),
+        productImageLayoutVersion: num((group as any)?._productImageLayoutVersion),
         name: txt(productData.name),
         limitText: txt(productData.limitText || productData.limit)
     }

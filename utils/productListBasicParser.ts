@@ -23,7 +23,13 @@ export function parseProductList(text: string) {
       unit = unitMatch[0].toUpperCase()
     }
 
-    name = name.replace(/[-–]/g, '').trim()
+    // O separador entre nome e preco nao faz parte do produto. Remova apenas
+    // nas extremidades para preservar nomes validos como "COCA-COLA".
+    name = name
+      .replace(/^[\s\-‐‑‒–—―:|;,]+/u, '')
+      .replace(/[\s\-‐‑‒–—―:|;,]+$/u, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
 
     return {
       id: makeId(),

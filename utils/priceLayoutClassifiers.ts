@@ -172,6 +172,46 @@ export const hasCorruptedPriceLayout = (group: any): boolean => {
         }
     }
 
+    // A rich price can remain numerically valid while being rendered wholly
+    // outside its pill (a legacy migration persisted `top` around -1857).
+    // Treat that as corruption so the persistence stabilizer runs the manual
+    // layout recovery path. Only compare nodes that share the same parent
+    // plane; nested groups have independent local coordinate systems.
+    const richPrice = nodes.find((node: any) =>
+        (String(node?.name || '') === 'price_value_text' || String(node?.name || '') === 'smart_price') &&
+        String(node?.type || '').toLowerCase() !== 'group' &&
+        node?.visible !== false
+    )
+    const background = getSinglePriceBackgroundCandidate(nodes)
+    const sameParentPlane = !!richPrice && !!background &&
+        (!richPrice.group || !background.group || richPrice.group === background.group)
+    if (sameParentPlane) {
+        const backgroundHeight = Math.abs(Number(background.height || 0) * (Math.abs(Number(background.scaleY ?? 1)) || 1))
+        const richHeight = Math.abs(Number(richPrice.height || 0) * (Math.abs(Number(richPrice.scaleY ?? 1)) || 1))
+        const bgTop = Number(background.top || 0)
+        const richTop = Number(richPrice.top || 0)
+        if (
+            Number.isFinite(backgroundHeight) && backgroundHeight > 0 &&
+            Number.isFinite(richHeight) && richHeight > 0 &&
+            Number.isFinite(bgTop) && Number.isFinite(richTop)
+        ) {
+            const bgOriginY = String(background.originY || 'top')
+            const bgBounds = bgOriginY === 'center'
+                ? { top: bgTop - (backgroundHeight / 2), bottom: bgTop + (backgroundHeight / 2) }
+                : bgOriginY === 'bottom'
+                    ? { top: bgTop - backgroundHeight, bottom: bgTop }
+                    : { top: bgTop, bottom: bgTop + backgroundHeight }
+            const richOriginY = String(richPrice.originY || 'top')
+            const richBounds = richOriginY === 'center'
+                ? { top: richTop - (richHeight / 2), bottom: richTop + (richHeight / 2) }
+                : richOriginY === 'bottom'
+                    ? { top: richTop - richHeight, bottom: richTop }
+                    : { top: richTop, bottom: richTop + richHeight }
+            const margin = Math.min(18, Math.max(4, backgroundHeight * 0.08))
+            if (richBounds.bottom < (bgBounds.top - margin) || richBounds.top > (bgBounds.bottom + margin)) return true
+        }
+    }
+
     return false
 }
 
@@ -467,20 +507,23 @@ export const repairAtacarejoTextNames = (all: any[]): void => {
         let decimal: any = null
         let unit: any = null
         let pack: any = null
+        const richPrice = tierTexts.find((t: any) => t?.__priceRichText === true)
 
         if (findByName(all, `${prefix}_integer_text`)) return
 
         for (const t of tierTexts) {
+            if (t === richPrice) continue
             const txt = String(t?.text || '').trim()
             if (!txt) continue
             if (!currency && /^R?\$$/i.test(txt)) { currency = t; continue }
             if (!decimal && /^,\d{1,2}$/.test(txt)) { decimal = t; continue }
             if (!integer && /^\d{1,5}$/.test(txt)) { integer = t; continue }
-            if (!unit && /^[\/]?(?:UN[D.]?|KG|LT|ML|G|GR|PCT)\.?$/i.test(txt)) { unit = t; continue }
+            if (!unit && /^[\/]?(?:UN[D.]?|KG|CADA|LT|ML|G|GR|PCT|PCTE|PAC(?:OTE|OTES)?|CX|CAIXA(?:S)?|FD|FARDO(?:S)?|DZ|DUZIA(?:S)?|BD|BANDEJA(?:S)?|SC|SACO(?:S)?|EMB|EMBALAGEM(?:S)?)\.?$/i.test(txt)) { unit = t; continue }
             if (!pack && txt.length > 5 && /\d/.test(txt)) { pack = t; continue }
         }
 
         const shouldRename = (obj: any) => !obj.name || String(obj.name).startsWith('price_')
+        if (richPrice && shouldRename(richPrice)) richPrice.name = `${prefix}_price_text`
         if (currency && shouldRename(currency)) currency.name = `${prefix}_currency_text`
         if (integer && shouldRename(integer)) integer.name = `${prefix}_integer_text`
         if (decimal && shouldRename(decimal)) decimal.name = `${prefix}_decimal_text`

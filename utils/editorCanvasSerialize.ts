@@ -30,6 +30,8 @@ const PRICE_TEMPLATE_TEXT_NAME_HINTS = new Set([
   'price_decimal_text',
   'price_unit_text',
   'price_value_text',
+  'retail_price_text',
+  'wholesale_price_text',
   'smart_price',
   'price_header_text',
   'price_header_unit_text',

@@ -1,0 +1,9 @@
+# Dependencias do worker de imagens. O codigo importa boto3/psycopg apenas
+# quando a execucao realmente precisa acessar Wasabi/PostgreSQL.
+boto3>=1.34,<2
+psycopg[binary]>=3.1,<4
+Pillow>=10,<12
+
+playwright>=1.48,<2
+
+rembg[cpu]==2.0.61

@@ -1,3 +1,5 @@
+import { waitForFabricImagesDecoded } from './fabricImageHelpers'
+import { collectObjectsDeep } from './fabricObjectClassifiers'
 import { isValidClipPath } from '~/utils/canvasValidation'
 import {
     downloadFile,
@@ -129,12 +131,12 @@ const restoreViewportCullExportSnapshot = (snapshots: ViewportCullExportSnapshot
     })
 }
 
-const makeExportColorsVivid = async (
+const finalizeExportRaster = async (
     dataUrl: string,
     format: 'png' | 'jpg' | 'jpeg',
     quality = HIGH_RES_EXPORT_QUALITY
 ): Promise<string> => {
-    if (!dataUrl || typeof window === 'undefined') return dataUrl
+    if (!dataUrl || typeof window === 'undefined' || format === 'png') return dataUrl
 
     return await new Promise((resolve) => {
         const img = new Image()
@@ -153,7 +155,8 @@ const makeExportColorsVivid = async (
 
                 ctx.imageSmoothingEnabled = true
                 ;(ctx as any).imageSmoothingQuality = 'high'
-                ctx.filter = `saturate(${EXPORT_COLOR_SATURATION}) contrast(${EXPORT_COLOR_CONTRAST}) brightness(${EXPORT_COLOR_BRIGHTNESS})`
+                ctx.fillStyle = '#ffffff'
+                ctx.fillRect(0, 0, width, height)
                 ctx.drawImage(img, 0, 0, width, height)
                 ctx.filter = 'none'
 
@@ -177,10 +180,12 @@ const runWithNeutralViewport = async <T>(
     if (!ctx.canvas.value) return await action()
 
     const c: any = ctx.canvas.value
+    if (typeof document !== 'undefined') await document.fonts?.ready
+    await waitForFabricImagesDecoded(c)
     const prevVpt = Array.isArray(c.viewportTransform) ? [...c.viewportTransform] : [1, 0, 0, 1, 0, 0]
     const prevRenderOnAddRemove = c.renderOnAddRemove
     const prevSkipOffscreen = c.skipOffscreen
-    const canvasObjects = c.getObjects?.() || []
+    const canvasObjects = collectObjectsDeep(c)
     const cacheSnapshot = canvasObjects.map((obj: any) => ({
         obj,
         objectCaching: obj?.objectCaching,
@@ -205,7 +210,7 @@ const runWithNeutralViewport = async <T>(
         c.calcOffset?.()
         c.requestRenderAll?.()
         await new Promise(resolve => setTimeout(resolve, 0))
-        return await action()
+        return await withProductZonesHiddenForOutput(ctx, action)
     } finally {
         c.setViewportTransform(prevVpt)
         c.renderOnAddRemove = prevRenderOnAddRemove
@@ -225,14 +230,20 @@ const runWithNeutralViewport = async <T>(
     }
 }
 
-const withProductZonesHiddenForOutput = async <T>(
+export const withProductZonesHiddenForOutput = async <T>(
     ctx: EditorExportShareContext,
     action: () => Promise<T> | T
 ): Promise<T> => {
     if (!ctx.canvas.value) return await action()
 
-    const allObjects = ctx.canvas.value.getObjects() || []
-    const zones = allObjects.filter((o: any) => ctx.isLikelyProductZone(o))
+    const allObjects = collectObjectsDeep(ctx.canvas.value)
+    // Ocultar somente guias; grupos de zona podem conter os produtos.
+    const zones = allObjects.filter((o: any) => {
+        const name = String(o.name || '')
+        if (['zoneRect', 'zone-border', 'product-zone-outline'].includes(name)) return true
+        if (o.excludeFromExport === true && !ctx.isLikelyProductZone(o)) return true
+        return String(o.type).toLowerCase() === 'rect' && (o.isProductZone || o.isGridZone)
+    })
 
     if (!zones.length) return await action()
 
@@ -300,8 +311,8 @@ export const exportSelectedObject = async (
     try {
         dataURL = await runWithNeutralViewport(ctx, async () => (
             active.toDataURL({
-                format,
-                quality: 1,
+                format: format === 'jpg' ? 'jpeg' : format,
+                quality: HIGH_RES_EXPORT_QUALITY,
                 multiplier: exportMultiplier
             })
         ))
@@ -311,8 +322,8 @@ export const exportSelectedObject = async (
             active.set('clipPath', null)
             dataURL = await runWithNeutralViewport(ctx, async () => (
                 active.toDataURL({
-                    format,
-                    quality: 1,
+                    format: format === 'jpg' ? 'jpeg' : format,
+                    quality: HIGH_RES_EXPORT_QUALITY,
                     multiplier: exportMultiplier
                 })
             ))
@@ -323,7 +334,7 @@ export const exportSelectedObject = async (
         }
     }
 
-    dataURL = await makeExportColorsVivid(
+    dataURL = await finalizeExportRaster(
         dataURL,
         format === 'jpg' ? 'jpg' : 'png',
         HIGH_RES_EXPORT_QUALITY
@@ -358,7 +369,7 @@ const exportSingleFrame = async (
             await runWithNeutralViewport(ctx, async () => {
                 ctx.sanitizeAllClipPaths()
                 return ctx.canvas.value.toDataURL({
-                    format,
+                    format: format === 'jpg' ? 'jpeg' : format,
                     quality,
                     multiplier: frameMultiplier,
                     left: bounds.left,
@@ -375,7 +386,7 @@ const exportSingleFrame = async (
             dataURL = await withProductZonesHiddenForOutput(ctx, async () => (
                 await runWithNeutralViewport(ctx, async () => (
                     ctx.canvas.value.toDataURL({
-                        format,
+                        format: format === 'jpg' ? 'jpeg' : format,
                         quality,
                         multiplier: frameMultiplier,
                         left: bounds.left,
@@ -392,7 +403,7 @@ const exportSingleFrame = async (
         }
     }
 
-    dataURL = await makeExportColorsVivid(dataURL, format, quality)
+    dataURL = await finalizeExportRaster(dataURL, format, quality)
 
     return { dataURL, fileName }
 }
@@ -452,7 +463,7 @@ const exportSelectedObjectBlob = async (
             try {
                 return await runWithNeutralViewport(ctx, async () => (
                     active.toDataURL({
-                        format,
+                        format: format === 'jpg' ? 'jpeg' : format,
                         quality: HIGH_RES_EXPORT_QUALITY,
                         multiplier
                     })
@@ -461,14 +472,14 @@ const exportSelectedObjectBlob = async (
                 active.set('clipPath', null)
                 return await runWithNeutralViewport(ctx, async () => (
                     active.toDataURL({
-                        format,
+                        format: format === 'jpg' ? 'jpeg' : format,
                         quality: HIGH_RES_EXPORT_QUALITY,
                         multiplier
                     })
                 ))
             }
         },
-        postProcessDataUrl: async (dataUrl) => await makeExportColorsVivid(dataUrl, format, HIGH_RES_EXPORT_QUALITY)
+        postProcessDataUrl: async (dataUrl) => await finalizeExportRaster(dataUrl, format, HIGH_RES_EXPORT_QUALITY)
     })
 
     return {
@@ -510,7 +521,7 @@ const exportSingleFrameBlob = async (
                     await runWithNeutralViewport(ctx, async () => {
                         ctx.sanitizeAllClipPaths()
                         return ctx.canvas.value.toDataURL({
-                            format,
+                            format: format === 'jpg' ? 'jpeg' : format,
                             quality: HIGH_RES_EXPORT_QUALITY,
                             multiplier,
                             left: bounds.left,
@@ -525,7 +536,7 @@ const exportSingleFrameBlob = async (
                 return await withProductZonesHiddenForOutput(ctx, async () => (
                     await runWithNeutralViewport(ctx, async () => (
                         ctx.canvas.value.toDataURL({
-                            format,
+                            format: format === 'jpg' ? 'jpeg' : format,
                             quality: HIGH_RES_EXPORT_QUALITY,
                             multiplier,
                             left: bounds.left,
@@ -538,7 +549,7 @@ const exportSingleFrameBlob = async (
                 ))
             }
         },
-        postProcessDataUrl: async (dataUrl) => await makeExportColorsVivid(dataUrl, format, HIGH_RES_EXPORT_QUALITY)
+        postProcessDataUrl: async (dataUrl) => await finalizeExportRaster(dataUrl, format, HIGH_RES_EXPORT_QUALITY)
     })
 
     return {

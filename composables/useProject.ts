@@ -1,6 +1,10 @@
 import { reactive, ref, computed, watch } from 'vue'
 import { computeCanvasFingerprint } from '~/utils/editorCanvasState'
 import { normalizeCanvasAssetUrls } from '~/utils/canvasAssetUrls'
+import {
+    buildFlyerTemplatePageBlueprints,
+    FLYER_TEMPLATE_FORMATS
+} from '~/utils/flyerTemplateApi'
 
 export interface Page {
     id: string;
@@ -20,6 +24,17 @@ export interface Page {
     lastLoadedFingerprint?: string;
     lastSavedFingerprint?: string;
     lastPersistedObjectCount?: number;
+    /** Metadados opcionais usados pelos modelos de encarte multi-variação. */
+    templateModelId?: string;
+    templateModelName?: string;
+    templateFormatId?: string;
+    templateFormatLabel?: string;
+    templateThemeId?: string;
+    templateThemeName?: string;
+    /** A composição materializada do Modelo de encarte não deve ser reescrita por defaults globais. */
+    templateCompositionManaged?: boolean;
+    /** Página da composição original usada para materializar esta cópia. */
+    templateSourcePageId?: string;
     dirty?: boolean;
 }
 
@@ -30,6 +45,9 @@ export interface Project {
     activePageIndex: number;
     canvasStorageEnabled?: boolean; // Flag para usar Storage
     colorStyles?: any[]; // Color styles for the project
+    isTemplate?: boolean;
+    /** Biblioteca do tema; não representa páginas visíveis do projeto. */
+    templateConfig?: Record<string, any> | null;
 }
 
 // Estado Global (Singleton)
@@ -38,7 +56,9 @@ const project = reactive<Project>({
     name: 'Novo Encarte',
     pages: [],
     activePageIndex: 0,
-    canvasStorageEnabled: true
+    canvasStorageEnabled: true,
+    isTemplate: false,
+    templateConfig: undefined
 })
 
 const isSaving = ref(false)
@@ -108,6 +128,7 @@ type ProjectDraftPayload = {
         name: string
         pages: ProjectDraftPagePayload[]
         activePageIndex: number
+        templateConfig?: Record<string, any> | null
     }
 }
 type PendingLocalDraftOperation =
@@ -860,7 +881,29 @@ const serializeProjectDraftPages = (pages: Page[]): ProjectDraftPagePayload[] =>
         lastPersistedObjectCount: Number.isFinite(Number(page?.lastPersistedObjectCount))
             ? Number(page.lastPersistedObjectCount)
             : undefined,
-        dirty: !!page?.dirty
+        dirty: !!page?.dirty,
+        templateModelId: typeof page?.templateModelId === 'string'
+            ? (page.templateModelId.trim() || undefined)
+            : undefined,
+        templateModelName: typeof page?.templateModelName === 'string'
+            ? (page.templateModelName.trim() || undefined)
+            : undefined,
+        templateFormatId: typeof page?.templateFormatId === 'string'
+            ? (page.templateFormatId.trim() || undefined)
+            : undefined,
+        templateFormatLabel: typeof page?.templateFormatLabel === 'string'
+            ? (page.templateFormatLabel.trim() || undefined)
+            : undefined,
+        templateThemeId: typeof page?.templateThemeId === 'string'
+            ? (page.templateThemeId.trim() || undefined)
+            : undefined,
+        templateThemeName: typeof page?.templateThemeName === 'string'
+            ? (page.templateThemeName.trim() || undefined)
+            : undefined,
+        templateCompositionManaged: page?.templateCompositionManaged === true,
+        templateSourcePageId: typeof page?.templateSourcePageId === 'string'
+            ? (page.templateSourcePageId.trim() || undefined)
+            : undefined
     }))
 }
 
@@ -907,6 +950,28 @@ const hydratePagesFromProjectDraft = (projectId: string, pages: ProjectDraftPage
                 ? fingerprint
                 : (typeof page?.lastSavedFingerprint === 'string' ? page.lastSavedFingerprint : fingerprint),
             lastPersistedObjectCount: persistedObjectCount,
+            templateModelId: typeof page?.templateModelId === 'string'
+                ? (page.templateModelId.trim() || undefined)
+                : undefined,
+            templateModelName: typeof page?.templateModelName === 'string'
+                ? (page.templateModelName.trim() || undefined)
+                : undefined,
+            templateFormatId: typeof page?.templateFormatId === 'string'
+                ? (page.templateFormatId.trim() || undefined)
+                : undefined,
+            templateFormatLabel: typeof page?.templateFormatLabel === 'string'
+                ? (page.templateFormatLabel.trim() || undefined)
+                : undefined,
+            templateThemeId: typeof page?.templateThemeId === 'string'
+                ? (page.templateThemeId.trim() || undefined)
+                : undefined,
+            templateThemeName: typeof page?.templateThemeName === 'string'
+                ? (page.templateThemeName.trim() || undefined)
+                : undefined,
+            templateCompositionManaged: page?.templateCompositionManaged === true,
+            templateSourcePageId: typeof page?.templateSourcePageId === 'string'
+                ? (page.templateSourcePageId.trim() || undefined)
+                : undefined,
             dirty: !!pageDraft?.canvasData || page?.dirty !== false
         } as Page
     })
@@ -923,7 +988,8 @@ const writeProjectDraft = (opts: { immediate?: boolean } = {}) => {
                 id: project.id,
                 name: project.name,
                 pages: serializeProjectDraftPages(project.pages as Page[]),
-                activePageIndex: project.activePageIndex
+                activePageIndex: project.activePageIndex,
+                templateConfig: project.templateConfig
             }
         }
         pendingLocalDraftOperations.set(key, { type: 'set', value: payload })
@@ -1154,6 +1220,11 @@ export const useProject = () => {
         page.lastPersistedObjectCount = resolved.finalObjectCount
         if (resolved.needsRemoteSync) {
             page.dirty = true
+            // Keep an explicit marker across the canvas hydration pipeline.
+            // The editor can replace the reactive Page object while Fabric is
+            // loading; relying only on `dirty` then made a recovered local
+            // draft update the project metadata without uploading its canvas.
+            ;(page as any).__needsCanvasUpload = true
         }
     }
 
@@ -1261,6 +1332,7 @@ export const useProject = () => {
                 try {
                     project.id = local.project.id || project.id
                     project.name = local.project.name || project.name
+                    project.templateConfig = local.project.templateConfig ?? project.templateConfig
                     project.pages = hydratePagesFromProjectDraft(project.id, local.project.pages || [])
                     normalizeProjectPageIds(project.pages as any[], 'initProject:draft')
                     project.activePageIndex = Math.min(
@@ -1279,12 +1351,69 @@ export const useProject = () => {
         }
     }
 
-    const addPage = (type: 'RETAIL_OFFER' | 'FREE_DESIGN', width: number, height: number, name?: string) => {
+    const resolveTemplatePageMetadata = (
+        width: number,
+        height: number,
+        metadata: Partial<Pick<Page, 'templateModelId' | 'templateModelName' | 'templateFormatId' | 'templateFormatLabel' | 'templateThemeId' | 'templateThemeName' | 'templateCompositionManaged' | 'templateSourcePageId'>>
+    ) => {
+        if (!project.isTemplate) return metadata
+
+        const exactFormat = FLYER_TEMPLATE_FORMATS.find(format => (
+            format.width === Math.round(Number(width || 0)) &&
+            format.height === Math.round(Number(height || 0))
+        ))
+        const activeTemplatePage = project.pages?.[project.activePageIndex] as any
+        const configuredModels = Array.isArray(project.templateConfig?.models)
+            ? project.templateConfig.models
+            : []
+        const configuredDefaultModelId = String(project.templateConfig?.defaultModelId || '').trim()
+        const modelId = String(
+            metadata.templateModelId ||
+            activeTemplatePage?.templateModelId ||
+            configuredDefaultModelId ||
+            configuredModels[0]?.id ||
+            ''
+        ).trim()
+        const modelName = String(
+            metadata.templateModelName ||
+            activeTemplatePage?.templateModelName ||
+            configuredModels.find((model: any) => String(model?.id || '').trim() === modelId)?.name ||
+            'Modelo 1'
+        ).trim()
+        const formatId = exactFormat?.id || String(metadata.templateFormatId || '').trim()
+        const formatLabel = exactFormat?.label || String(metadata.templateFormatLabel || '').trim()
+
+        return {
+            ...metadata,
+            ...(modelId ? { templateModelId: modelId } : {}),
+            ...(modelName ? { templateModelName: modelName } : {}),
+            ...(formatId ? { templateFormatId: formatId } : {}),
+            ...(formatLabel ? { templateFormatLabel: formatLabel } : {}),
+            ...(!metadata.templateThemeId && activeTemplatePage?.templateThemeId
+                ? { templateThemeId: activeTemplatePage.templateThemeId }
+                : {}),
+            ...(!metadata.templateThemeName && activeTemplatePage?.templateThemeName
+                ? { templateThemeName: activeTemplatePage.templateThemeName }
+                : {})
+        }
+    }
+
+    const addPage = (
+        type: 'RETAIL_OFFER' | 'FREE_DESIGN',
+        width: number,
+        height: number,
+        name?: string,
+        metadata: Partial<Pick<Page, 'templateModelId' | 'templateModelName' | 'templateFormatId' | 'templateFormatLabel' | 'templateThemeId' | 'templateThemeName' | 'templateCompositionManaged' | 'templateSourcePageId'>> = {}
+    ) => {
+        const resolvedMetadata = resolveTemplatePageMetadata(width, height, metadata)
+        const resolvedName = project.isTemplate && resolvedMetadata.templateFormatLabel
+            ? `${resolvedMetadata.templateModelName || 'Modelo 1'} · ${resolvedMetadata.templateFormatLabel}`
+            : (name || `Página ${project.pages.length + 1}`)
         const existingIds = new Set((project.pages || []).map((p: any) => String(p?.id || '').trim()).filter(Boolean))
         const id = ensureUniquePageId(makePageId(), existingIds)
         const newPage: Page = {
             id,
-            name: name || `Página ${project.pages.length + 1}`,
+            name: resolvedName,
             width,
             height,
             type,
@@ -1293,6 +1422,14 @@ export const useProject = () => {
             lastLoadedFingerprint: 'empty',
             lastSavedFingerprint: 'empty',
             lastPersistedObjectCount: 0,
+            templateModelId: resolvedMetadata.templateModelId,
+            templateModelName: resolvedMetadata.templateModelName,
+            templateFormatId: resolvedMetadata.templateFormatId,
+            templateFormatLabel: resolvedMetadata.templateFormatLabel,
+            templateThemeId: resolvedMetadata.templateThemeId,
+            templateThemeName: resolvedMetadata.templateThemeName,
+            templateCompositionManaged: project.isTemplate === true || resolvedMetadata.templateCompositionManaged === true,
+            templateSourcePageId: resolvedMetadata.templateSourcePageId,
             dirty: false
         }
         project.pages.push(newPage)
@@ -1393,7 +1530,10 @@ export const useProject = () => {
     }
 
     // --- A Regra de Ouro: Smart Duplicate ---
-    const duplicatePage = async (index: number) => {
+    const duplicatePage = async (
+        index: number,
+        options: { preserveRetailOfferData?: boolean } = {}
+    ) => {
         const sourcePage = project.pages[index]
         if (!sourcePage) return
         if (!sourcePage.canvasData) {
@@ -1406,7 +1546,7 @@ export const useProject = () => {
         const clonedJson = clonePageCanvasDataWithFreshIds(sourcePage.canvasData)
 
         // 2. Lógica de "Sanitização" baseada no Tipo
-        if (sourcePage.type === 'RETAIL_OFFER') {
+        if (sourcePage.type === 'RETAIL_OFFER' && options.preserveRetailOfferData !== true) {
             // Smart Clean: Mantém layout, remove dados específicos de produtos
             if (clonedJson.objects && Array.isArray(clonedJson.objects)) {
                 clonedJson.objects.forEach((obj: any) => {
@@ -1445,6 +1585,14 @@ export const useProject = () => {
             lastLoadedFingerprint: computeCanvasFingerprint(clonedJson),
             lastSavedFingerprint: computeCanvasFingerprint(clonedJson),
             lastPersistedObjectCount: getCanvasObjectCount(clonedJson),
+            templateModelId: sourcePage.templateModelId,
+            templateModelName: sourcePage.templateModelName,
+            templateFormatId: sourcePage.templateFormatId,
+            templateFormatLabel: sourcePage.templateFormatLabel,
+            templateThemeId: sourcePage.templateThemeId,
+            templateThemeName: sourcePage.templateThemeName,
+            templateCompositionManaged: sourcePage.templateCompositionManaged,
+            templateSourcePageId: sourcePage.templateSourcePageId,
             dirty: true
         }
 
@@ -1454,10 +1602,172 @@ export const useProject = () => {
         markAsUnsaved()
     }
 
+    type TemplatePageSource = Partial<Page> & {
+        sourcePageId?: string | null
+        canvasDataPath?: string | null
+        thumbnailUrl?: string | null
+    }
+
+    type CreatePageFromTemplateSourceOptions = {
+        insertAfterIndex?: number
+        name?: string
+        metadata?: Partial<Pick<Page, 'templateModelId' | 'templateModelName' | 'templateFormatId' | 'templateFormatLabel' | 'templateThemeId' | 'templateThemeName' | 'templateCompositionManaged' | 'templateSourcePageId'>>
+    }
+
+    /**
+     * Materializa uma composição do projeto-modelo como uma nova página do
+     * projeto atual. A fonte pode estar em memória ou no Storage; em ambos os
+     * casos os IDs Fabric/zona/produto são regenerados antes da inserção.
+     */
+    const createPageFromTemplateSource = async (
+        source: TemplatePageSource | null | undefined,
+        options: CreatePageFromTemplateSourceOptions = {}
+    ): Promise<Page | null> => {
+        if (!source) return null
+
+        let sourceCanvasData = source.canvasData
+        const sourceCanvasPath = String(source.canvasDataPath || '').trim()
+        if (!sourceCanvasData && sourceCanvasPath) {
+            sourceCanvasData = await loadCanvasDataFromPath(sourceCanvasPath)
+        }
+        if (!sourceCanvasData || typeof sourceCanvasData !== 'object') return null
+
+        const clonedJson = clonePageCanvasDataWithFreshIds(sourceCanvasData)
+        const existingIds = new Set((project.pages || [])
+            .map((page: any) => String(page?.id || '').trim())
+            .filter(Boolean))
+        const sourceType = source.type === 'FREE_DESIGN' ? 'FREE_DESIGN' : 'RETAIL_OFFER'
+        const metadata = options.metadata || {}
+        const modelId = String(metadata.templateModelId ?? source.templateModelId ?? '').trim()
+        const modelName = String(metadata.templateModelName ?? source.templateModelName ?? '').trim()
+        const formatId = String(metadata.templateFormatId ?? source.templateFormatId ?? '').trim()
+        const formatLabel = String(metadata.templateFormatLabel ?? source.templateFormatLabel ?? '').trim()
+        const themeId = String(metadata.templateThemeId ?? source.templateThemeId ?? '').trim()
+        const themeName = String(metadata.templateThemeName ?? source.templateThemeName ?? '').trim()
+        const insertAfterIndex = Number.isInteger(options.insertAfterIndex)
+            ? Math.max(-1, Math.min(project.pages.length - 1, Number(options.insertAfterIndex)))
+            : project.pages.length - 1
+        const newPage: Page = {
+            id: ensureUniquePageId(makePageId(), existingIds),
+            name: String(options.name || source.name || 'Nova página').trim() || 'Nova página',
+            width: Math.max(320, Math.round(Number(source.width || 1080))),
+            height: Math.max(320, Math.round(Number(source.height || 1350))),
+            type: sourceType,
+            canvasData: clonedJson,
+            canvasDataPath: undefined,
+            thumbnail: undefined,
+            thumbnailUrl: String(source.thumbnailUrl || '').trim() || undefined,
+            lastLoadedFingerprint: computeCanvasFingerprint(clonedJson),
+            lastSavedFingerprint: computeCanvasFingerprint(clonedJson),
+            lastPersistedObjectCount: getCanvasObjectCount(clonedJson),
+            ...(modelId ? { templateModelId: modelId } : {}),
+            ...(modelName ? { templateModelName: modelName } : {}),
+            ...(formatId ? { templateFormatId: formatId } : {}),
+            ...(formatLabel ? { templateFormatLabel: formatLabel } : {}),
+            ...(themeId ? { templateThemeId: themeId } : {}),
+            ...(themeName ? { templateThemeName: themeName } : {}),
+            ...(String(source.sourcePageId || '').trim()
+                ? { templateSourcePageId: String(source.sourcePageId).trim() }
+                : {}),
+            templateCompositionManaged: true,
+            dirty: true
+        }
+
+        project.pages.splice(insertAfterIndex + 1, 0, newPage)
+        project.activePageIndex = insertAfterIndex + 1
+        markAsUnsaved()
+        writeProjectDraft()
+        return newPage
+    }
+
+    type ReplacePageFromTemplateSourceOptions = {
+        name?: string
+        metadata?: Partial<Pick<Page, 'templateModelId' | 'templateModelName' | 'templateFormatId' | 'templateFormatLabel' | 'templateThemeId' | 'templateThemeName' | 'templateCompositionManaged' | 'templateSourcePageId'>>
+    }
+
+    /**
+     * Reaplica a composição do tema sobre uma página já materializada.
+     *
+     * Esse caminho existe para projetos antigos que nasceram antes de
+     * `template_config.pageBlueprints`. A página mantém seu ID para que ela
+     * continue sendo a mesma página do cliente, mas recebe uma cópia isolada
+     * do canvas da fonte — nunca o caminho do Storage do modelo.
+     */
+    const replacePageFromTemplateSource = async (
+        pageId: string,
+        source: TemplatePageSource | null | undefined,
+        options: ReplacePageFromTemplateSourceOptions = {}
+    ): Promise<Page | null> => {
+        const normalizedPageId = String(pageId || '').trim()
+        if (!normalizedPageId || !source) return null
+
+        const pageIndex = getProjectPageIndexById(normalizedPageId)
+        if (pageIndex < 0) return null
+        const page = project.pages[pageIndex]
+        if (!page) return null
+
+        let sourceCanvasData = source.canvasData
+        const sourceCanvasPath = String(source.canvasDataPath || '').trim()
+        if (!sourceCanvasData && sourceCanvasPath) {
+            sourceCanvasData = await loadCanvasDataFromPath(sourceCanvasPath, { forceRefresh: true })
+        }
+        if (!sourceCanvasData || typeof sourceCanvasData !== 'object') return null
+
+        const clonedJson = clonePageCanvasDataWithFreshIds(sourceCanvasData)
+        const metadata = options.metadata || {}
+        const modelId = String(metadata.templateModelId ?? source.templateModelId ?? page.templateModelId ?? '').trim()
+        const modelName = String(metadata.templateModelName ?? source.templateModelName ?? page.templateModelName ?? '').trim()
+        const formatId = String(metadata.templateFormatId ?? source.templateFormatId ?? page.templateFormatId ?? '').trim()
+        const formatLabel = String(metadata.templateFormatLabel ?? source.templateFormatLabel ?? page.templateFormatLabel ?? '').trim()
+        const themeId = String(metadata.templateThemeId ?? source.templateThemeId ?? page.templateThemeId ?? '').trim()
+        const themeName = String(metadata.templateThemeName ?? source.templateThemeName ?? page.templateThemeName ?? '').trim()
+        const sourcePageId = String(metadata.templateSourcePageId ?? source.sourcePageId ?? '').trim()
+        const nextName = String(options.name || source.name || page.name || 'Nova página').trim() || 'Nova página'
+        const fingerprint = computeCanvasFingerprint(clonedJson)
+
+        page.name = nextName
+        page.width = Math.max(320, Math.round(Number(source.width || page.width || 1080)))
+        page.height = Math.max(320, Math.round(Number(source.height || page.height || 1350)))
+        page.type = source.type === 'FREE_DESIGN' ? 'FREE_DESIGN' : page.type
+        page.canvasData = clonedJson
+        // A origem do tema pertence ao projeto-modelo. A página do cliente
+        // precisa ganhar um caminho próprio no próximo upload.
+        page.canvasDataPath = undefined
+        page.canvasSavedAt = undefined
+        page.thumbnail = undefined
+        page.thumbnailUrl = String(source.thumbnailUrl || '').trim() || undefined
+        page.thumbnailDirty = false
+        page.lastLoadedFingerprint = fingerprint
+        page.lastSavedFingerprint = fingerprint
+        page.lastPersistedObjectCount = getCanvasObjectCount(clonedJson)
+        if (modelId) page.templateModelId = modelId
+        if (modelName) page.templateModelName = modelName
+        if (formatId) page.templateFormatId = formatId
+        if (formatLabel) page.templateFormatLabel = formatLabel
+        if (themeId) page.templateThemeId = themeId
+        if (themeName) page.templateThemeName = themeName
+        if (sourcePageId) page.templateSourcePageId = sourcePageId
+        page.templateCompositionManaged = true
+        page.dirty = true
+        ;(page as any).__needsCanvasUpload = true
+
+        markAsUnsaved()
+        if (project.id && page.id) {
+            writeDraft(project.id, page.id, clonedJson)
+        }
+        writeProjectDraft()
+        return page
+    }
+
     const deletePage = (index: number) => {
         if (project.pages.length <= 1) return // Não deletar a última
+        if (!Number.isInteger(index) || index < 0 || index >= project.pages.length) return
+        const activeIndexBeforeDelete = project.activePageIndex
         project.pages.splice(index, 1)
-        if (project.activePageIndex >= project.pages.length) {
+        if (index < activeIndexBeforeDelete) {
+            // A página ativa continua sendo a mesma página visual, mas seu índice recuou.
+            project.activePageIndex = Math.max(0, activeIndexBeforeDelete - 1)
+        } else if (project.activePageIndex >= project.pages.length) {
             project.activePageIndex = project.pages.length - 1
         }
         markAsUnsaved()
@@ -1614,15 +1924,19 @@ export const useProject = () => {
                         height: p.height,
                         type: p.type
                     }))
+                    const preflightBody: Record<string, any> = {
+                        name: project.name,
+                        canvas_data: preflightPages.length > 0
+                            ? preflightPages
+                            : [{ id: project.pages[0]?.id || 'page_1', name: 'Página 1', width: 1080, height: 1920, type: 'RETAIL_OFFER' }]
+                    }
+                    if (project.templateConfig !== undefined) {
+                        preflightBody.template_config = project.templateConfig
+                    }
                     const preflightResponse = await $fetch<any>('/api/projects', {
                         method: 'POST',
                         headers: preflightHeaders,
-                        body: {
-                            name: project.name,
-                            canvas_data: preflightPages.length > 0
-                                ? preflightPages
-                                : [{ id: project.pages[0]?.id || 'page_1', name: 'Página 1', width: 1080, height: 1920, type: 'RETAIL_OFFER' }]
-                        }
+                        body: preflightBody
                     })
                     const createdPreflight = preflightResponse?.project || null
                     if (!createdPreflight?.id || !isUuid(String(createdPreflight.id))) {
@@ -1656,7 +1970,11 @@ export const useProject = () => {
                 if (abortIfStaleSaveContext()) return
 
                 // Salvar canvas JSON no Storage (com retry automático)
-                const shouldUploadCanvas = !!page?.canvasData && (!!page?.dirty || !page?.canvasDataPath)
+                const shouldUploadCanvas = !!page?.canvasData && (
+                    !!page?.dirty ||
+                    !page?.canvasDataPath ||
+                    !!(page as any).__needsCanvasUpload
+                )
                 // log por pagina removido — disparava N vezes por save
                 if (shouldUploadCanvas && page?.canvasData) {
                     try {
@@ -1698,6 +2016,7 @@ export const useProject = () => {
                                 page.canvasDataPath = path
                                 page.canvasSavedAt = confirmedCanvasSavedAt
                                 page.lastPersistedObjectCount = currentCount
+                                delete (page as any).__needsCanvasUpload
                                 console.log('✅ Canvas salvo na Wasabi:', path)
                             } else {
                                 failedCanvasSyncPageIds.add(page.id)
@@ -1831,36 +2150,62 @@ export const useProject = () => {
 
 	            // 2. Preparar payload mínimo para o banco (apenas metadados)
 	                setSaveStage('prepare-db-payload')
-		            const pageMetadata = project.pages.map((page) => {
+            const pageMetadata = project.pages.map((page) => {
                 const canvasDataPath = storagePathsById.get(page.id) || page.canvasDataPath
                 const didUploadCanvas = confirmedCanvasUploadPageIds.has(page.id)
                 const liveCanvasSavedAt = getCanvasSavedAt(page.canvasData)
                 const confirmedCanvasSavedAt = didUploadCanvas
                     ? (liveCanvasSavedAt || Number(page.canvasSavedAt || 0) || Date.now())
                     : (Number(page.canvasSavedAt || 0) || liveCanvasSavedAt || undefined)
-		                const metadata: any = {
-	                    id: page.id,
-	                    name: page.name,
-	                    width: page.width,
-	                    height: page.height,
-	                    type: page.type,
+                const metadata: any = {
+                    id: page.id,
+                    name: page.name,
+                    width: page.width,
+                    height: page.height,
+                    type: page.type,
 		                    canvasDataPath, // Caminho no Storage
-	                    thumbnailUrl: thumbnailUrlsById.get(page.id) || page.thumbnailUrl, // URL do thumbnail
+                    thumbnailUrl: thumbnailUrlsById.get(page.id) || page.thumbnailUrl, // URL do thumbnail
 		                    // Timestamp do canvas confirmado no Storage. Não renovar para
 		                    // páginas que apenas preservaram o canvasDataPath anterior.
-	                }
+                }
+                if (page.templateModelId) metadata.templateModelId = page.templateModelId
+                if (page.templateModelName) metadata.templateModelName = page.templateModelName
+                if (page.templateFormatId) metadata.templateFormatId = page.templateFormatId
+                if (page.templateFormatLabel) metadata.templateFormatLabel = page.templateFormatLabel
+                if (page.templateThemeId) metadata.templateThemeId = page.templateThemeId
+                if (page.templateThemeName) metadata.templateThemeName = page.templateThemeName
+                if (page.templateCompositionManaged) metadata.templateCompositionManaged = true
+                if (page.templateSourcePageId) metadata.templateSourcePageId = page.templateSourcePageId
                 if (confirmedCanvasSavedAt) metadata.canvasSavedAt = confirmedCanvasSavedAt
 
 	                return metadata
 	            })
 
+            // Um projeto-modelo guarda as composições por modelo/formato fora
+            // da lista de páginas da instância. A edição rápida usa estas
+            // referências para materializar a página correta sob demanda.
+            if (project.isTemplate && project.templateConfig && typeof project.templateConfig === 'object') {
+                const blueprintSourcePages = project.pages.map((page) => ({
+                    ...page,
+                    canvasDataPath: storagePathsById.get(page.id) || page.canvasDataPath,
+                    thumbnailUrl: thumbnailUrlsById.get(page.id) || page.thumbnailUrl
+                }))
+                project.templateConfig = {
+                    ...project.templateConfig,
+                    pageBlueprints: buildFlyerTemplatePageBlueprints(blueprintSourcePages)
+                }
+            }
+
 	            const firstPageId = project.pages[0]?.id
-	            let payload = {
-	                name: project.name,
+		            const payload: Record<string, any> = {
+		                name: project.name,
                 // Armazenar apenas metadados, não o canvas completo
                 canvas_data: pageMetadata,
-	                preview_url: (firstPageId && thumbnailUrlsById.get(firstPageId)) || project.pages[0]?.thumbnailUrl
-	            }
+		                preview_url: (firstPageId && thumbnailUrlsById.get(firstPageId)) || project.pages[0]?.thumbnailUrl
+		            }
+                    if (project.templateConfig !== undefined) {
+                        payload.template_config = project.templateConfig
+                    }
 	            if (!Array.isArray(payload.canvas_data) || payload.canvas_data.length === 0) {
                     saveStatus.value = 'idle'
                     console.warn('[saveProjectDB] Save pulado: payload sem páginas válidas.')
@@ -2077,7 +2422,9 @@ export const useProject = () => {
     let saveTimeout: ReturnType<typeof setTimeout> | null = null
     let scheduledAutoSaveRevision = -1
     let scheduledAutoSaveProjectId = ''
-    const AUTO_SAVE_DELAY = 12_000 // 12 segundos: debounce para upload remoto após ações do usuário
+    // Draft local e salvo imediatamente; o upload remoto e mais caro
+    // (canvas grande + Wasabi), entao coalesce melhor pequenas edicoes seguidas.
+    const AUTO_SAVE_DELAY = 30_000
 
     const triggerAutoSave = () => {
         if (_moduleDisposed) return
@@ -2196,7 +2543,9 @@ export const useProject = () => {
         queuedSaveAfterCurrent.value = false
         unsavedRevision.value = 0
         project.pages = []
-        
+        project.isTemplate = false
+        project.templateConfig = undefined
+
         // Limpar flags de estado do upload/retry para começar fresh
         ;(project as any).__uploadFailed = false
         ;(project as any).__isUploading = false
@@ -2239,6 +2588,10 @@ export const useProject = () => {
 
             project.id = data.id
             project.name = data.name
+            project.isTemplate = Boolean(data.is_template)
+            project.templateConfig = data.template_config && typeof data.template_config === 'object'
+                ? data.template_config
+                : undefined
             projectServerUpdatedAt.value = data.updated_at || null
 
             // Verificar se os dados estão no novo formato (com caminhos do Storage)
@@ -2302,6 +2655,28 @@ export const useProject = () => {
                     lastLoadedFingerprint: 'deferred',
                     lastSavedFingerprint: 'deferred',
                     lastPersistedObjectCount: 0,
+                    templateModelId: typeof pageMeta.templateModelId === 'string'
+                        ? (pageMeta.templateModelId.trim() || undefined)
+                        : undefined,
+                    templateModelName: typeof pageMeta.templateModelName === 'string'
+                        ? (pageMeta.templateModelName.trim() || undefined)
+                        : undefined,
+                    templateFormatId: typeof pageMeta.templateFormatId === 'string'
+                        ? (pageMeta.templateFormatId.trim() || undefined)
+                        : undefined,
+                    templateFormatLabel: typeof pageMeta.templateFormatLabel === 'string'
+                        ? (pageMeta.templateFormatLabel.trim() || undefined)
+                        : undefined,
+                    templateThemeId: typeof pageMeta.templateThemeId === 'string'
+                        ? (pageMeta.templateThemeId.trim() || undefined)
+                        : undefined,
+                    templateThemeName: typeof pageMeta.templateThemeName === 'string'
+                        ? (pageMeta.templateThemeName.trim() || undefined)
+                        : undefined,
+                    templateCompositionManaged: pageMeta.templateCompositionManaged === true,
+                    templateSourcePageId: typeof pageMeta.templateSourcePageId === 'string'
+                        ? (pageMeta.templateSourcePageId.trim() || undefined)
+                        : undefined,
                     dirty: false
                 }
 
@@ -2411,7 +2786,7 @@ export const useProject = () => {
                             
                             const pendingRecoveredPages = project.pages.filter((page) =>
                                 recoveredDraftPages.includes(String(page?.id || '')) &&
-                                !!page?.dirty &&
+                                (!!page?.dirty || !!(page as any).__needsCanvasUpload) &&
                                 !(page as any).__needsUploadRetry
                             );
                             
@@ -2452,6 +2827,7 @@ export const useProject = () => {
                 console.log('📝 Restaurando projeto do rascunho local (offline fallback):', id)
                 project.id = local.project.id || id
                 project.name = local.project.name || project.name
+                project.templateConfig = local.project.templateConfig ?? project.templateConfig
                 project.pages = hydratePagesFromProjectDraft(project.id, local.project.pages || []).map((page) => ({
                     ...page,
                     dirty: true
@@ -2552,6 +2928,8 @@ export const useProject = () => {
         updatePageData,
         updatePageThumbnail,
         duplicatePage,
+        createPageFromTemplateSource,
+        replacePageFromTemplateSource,
         deletePage,
         renamePage,
         resizePage,

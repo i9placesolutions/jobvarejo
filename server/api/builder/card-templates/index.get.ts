@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   enforceRateLimit(event, `builder-card-templates-list:${tenant.id}`, 120, 60_000)
 
   const result = await pgQuery(
-    `SELECT id, name, thumbnail, category, elements, card_style, sort_order
+    `SELECT id, name, thumbnail, category, elements, card_style, model_ids, sort_order
      FROM public.builder_card_templates
      WHERE is_active = true
      ORDER BY sort_order ASC, name ASC`

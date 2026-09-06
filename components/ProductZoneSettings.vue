@@ -6,17 +6,19 @@ import {
   ChevronRight,
   Lock,
   Unlock,
-  AlignVerticalSpaceAround,
-  Star,
   Settings2,
-  LayoutGrid,
   CreditCard,
   Type,
   Tag,
   PackagePlus,
   Sparkles
 } from 'lucide-vue-next';
-import { LAYOUT_PRESETS, SPLASH_STYLES, type LayoutPreset } from '~/types/product-zone';
+import {
+  SPLASH_STYLES,
+  type LayoutPreset,
+  type ProductZoneStructure,
+  type ProductZoneStructureMap
+} from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
 import type { GlobalStyles, ProductZone } from '~/types/product-zone';
 import ColorPicker from './ui/ColorPicker.vue';
@@ -28,6 +30,11 @@ import {
 } from '~/utils/font-catalog';
 import type { ProductZoneDiagnostic } from '~/utils/product-zone-diagnostics';
 import { getZoneRoleLabel, getZoneStatusLabel } from '~/utils/product-zone-metadata';
+import {
+  getProductZoneStructureFormatLabel,
+  normalizeProductZoneStructure,
+  normalizeProductZoneStructureVariantMap
+} from '~/utils/product-zone-structure';
 
 type ZoneUpdateTargetMeta = {
   targetId: string | null;
@@ -51,6 +58,10 @@ const props = defineProps<{
     cardAspectRatio?: string;
     lastRowBehavior?: 'fill' | 'center' | 'stretch' | 'left';
     verticalAlign?: 'top' | 'center' | 'bottom' | 'stretch';
+    structureByProductCountEnabled?: boolean;
+    structureByProductCount?: ProductZoneStructureMap;
+    structureVariantsByProductCount?: ProductZone['structureVariantsByProductCount'];
+    structureVariantByProductCount?: ProductZone['structureVariantByProductCount'];
     highlightCount?: number;
     highlightPos?: string;
     highlightHeight?: number;
@@ -64,6 +75,8 @@ const props = defineProps<{
   };
   globalStyles?: Partial<GlobalStyles>;
   labelTemplates?: LabelTemplate[];
+  globalStructuresLoaded?: boolean;
+  compact?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -100,13 +113,10 @@ const priceCurrencyColorPickerRef = ref<HTMLElement | null>(null);
 
 const expandedSections = ref({
   content: false,
-  presets: true,
-  layout: false,
-  spacing: false,
-  highlight: false,
-  cardStyle: true,
+  structure: true,
+  cardStyle: false,
   typography: false,
-  priceTag: true,
+  priceTag: false,
   diagnostics: false
 });
 
@@ -127,10 +137,7 @@ const overflowPolicyOptions = [
 ] as const;
 
 const lastRowBehaviorOptions = [
-  { value: 'fill', label: 'Expandir', hint: 'Alarga a linha final para evitar buracos.' },
-  { value: 'center', label: 'Centralizar', hint: 'Mantém os últimos cards agrupados.' },
-  { value: 'left', label: 'À esquerda', hint: 'Fecha a linha no mesmo lado da leitura.' },
-  { value: 'stretch', label: 'Distribuir', hint: 'Espalha o espaço entre os cards restantes.' }
+  { value: 'fill', label: 'Sempre preencher', hint: 'Alarga a linha final para evitar espaços vazios.' }
 ] as const;
 
 const layoutDirectionOptions = [
@@ -150,6 +157,7 @@ const cardAspectRatioOptions = [
   { value: 'auto', label: 'Automático' },
   { value: 'square', label: '1:1' },
   { value: '3:4', label: '3:4' },
+  { value: '4:5', label: '4:5' },
   { value: '4:3', label: '4:3' },
   { value: '16:9', label: '16:9' },
   { value: '9:16', label: '9:16' }
@@ -172,22 +180,6 @@ const priceTagFitPresets = [
   { id: 'normal', label: 'Padrão', splashScale: 1, splashTextScale: 1, priceFontSize: 60, splashOffsetY: 0 },
   { id: 'large', label: 'Grande', splashScale: 1.16, splashTextScale: 1.08, priceFontSize: 68, splashOffsetY: 0 }
 ] as const;
-
-const isSpacingSynced = () => {
-  const pad = Number(props.zone.padding ?? 15);
-  const gapH = Number(props.zone.gapHorizontal ?? pad);
-  const gapV = Number(props.zone.gapVertical ?? pad);
-  return Math.abs(gapH - pad) < 1 && Math.abs(gapV - pad) < 1;
-};
-
-const syncGaps = ref(isSpacingSynced());
-
-watch(
-  () => [props.zone.padding, props.zone.gapHorizontal, props.zone.gapVertical],
-  () => {
-    syncGaps.value = isSpacingSynced();
-  }
-);
 
 // Auto-expandir diagnóstico quando há alertas críticos
 watch(
@@ -259,45 +251,54 @@ const normalizedZoneState = computed<NormalizedZonePresetState>(() => ({
   gapVertical: Math.max(0, Math.round(toSafeNumber(props.zone.gapVertical, props.zone.padding ?? 15))),
   layoutDirection: props.zone.layoutDirection === 'vertical' ? 'vertical' : 'horizontal',
   cardAspectRatio: props.zone.cardAspectRatio ?? 'fill',
-  lastRowBehavior: (props.zone.lastRowBehavior ?? 'fill') as NormalizedZonePresetState['lastRowBehavior'],
+  lastRowBehavior: 'fill',
   verticalAlign: (props.zone.verticalAlign ?? 'stretch') as NormalizedZonePresetState['verticalAlign'],
   highlightCount: Math.max(0, Math.round(toSafeNumber(props.zone.highlightCount, 0))),
   highlightPos: normalizeHighlightPos(props.zone.highlightPos),
   highlightHeight: toSafeNumber(props.zone.highlightHeight, 1.5)
 }));
 
-const presetMatchesZone = (preset: LayoutPreset, zone: NormalizedZonePresetState) => {
-  const presetRole = preset.role ?? 'grid';
-  const presetColumns = Math.max(0, Math.round(toSafeNumber(preset.columns, 0)));
-  const presetRows = Math.max(0, Math.round(toSafeNumber(preset.rows, 0)));
-  const presetPadding = Math.max(0, Math.round(toSafeNumber(preset.padding, 15)));
-  const presetGapHorizontal = Math.max(0, Math.round(toSafeNumber(preset.gapHorizontal, presetPadding)));
-  const presetGapVertical = Math.max(0, Math.round(toSafeNumber(preset.gapVertical, presetPadding)));
-  const presetLayout = (preset.layoutDirection ?? 'horizontal') as NormalizedZonePresetState['layoutDirection'];
-  const presetAspect = preset.cardAspectRatio ?? 'fill';
-  const presetLastRow = (preset.lastRowBehavior ?? 'fill') as NormalizedZonePresetState['lastRowBehavior'];
-  const presetHighlightCount = Math.max(0, Math.round(toSafeNumber(preset.highlightCount, 0)));
+const currentStructureCount = computed(() =>
+  clamp(Math.round(toSafeNumber(props.zone.productCount, 1)), 1, 24)
+);
 
-  if (zone.role !== presetRole) return false;
-  if (zone.columns !== presetColumns) return false;
-  if (zone.rows !== presetRows) return false;
-  if (zone.padding !== presetPadding) return false;
-  if (zone.gapHorizontal !== presetGapHorizontal) return false;
-  if (zone.gapVertical !== presetGapVertical) return false;
-  if (zone.layoutDirection !== presetLayout) return false;
-  if (zone.cardAspectRatio !== presetAspect) return false;
-  if (zone.lastRowBehavior !== presetLastRow) return false;
-  if (preset.verticalAlign && zone.verticalAlign !== preset.verticalAlign) return false;
-  if (zone.highlightCount !== presetHighlightCount) return false;
+const currentStructure = computed<ProductZoneStructure>(() => {
+  const count = currentStructureCount.value;
+  const resolved = normalizeProductZoneStructureVariantMap(
+    props.zone.structureVariantsByProductCount,
+    props.zone as Partial<ProductZone>,
+    props.zone.structureByProductCount
+  )[String(count)] || [];
+  const selectedId = String(props.zone.structureVariantByProductCount?.[String(count)] || '').trim();
+  const selected = resolved.find((variant) => variant.id === selectedId) || resolved[0];
+  const entry = selected || props.zone.structureByProductCount?.[String(count)];
+  return normalizeProductZoneStructure(entry, count, props.zone as Partial<ProductZone>);
+});
 
-  if (presetHighlightCount > 0) {
-    const presetPos = normalizeHighlightPos(preset.highlightPos ?? 'first');
-    const presetHeight = toSafeNumber(preset.highlightHeight, 1.5);
-    if (zone.highlightPos !== presetPos) return false;
-    if (Math.abs(zone.highlightHeight - presetHeight) > 0.05) return false;
+const currentStructureVariants = computed(() => normalizeProductZoneStructureVariantMap(
+  props.zone.structureVariantsByProductCount,
+  props.zone as Partial<ProductZone>,
+  props.zone.structureByProductCount
+)[String(currentStructureCount.value)] || []);
+
+const currentStructureVariantId = computed(() => {
+  const selectedId = String(props.zone.structureVariantByProductCount?.[String(currentStructureCount.value)] || '').trim();
+  if (selectedId && currentStructureVariants.value.some((variant) => variant.id === selectedId)) {
+    return selectedId;
   }
+  return currentStructureVariants.value[0]?.id || '';
+});
 
-  return true;
+const selectCurrentStructureVariant = (event: Event) => {
+  const nextId = String((event.target as HTMLSelectElement)?.value || '').trim();
+  if (!nextId || !currentStructureVariants.value.some((variant) => variant.id === nextId)) return;
+
+  const countKey = String(currentStructureCount.value);
+  const nextSelection = {
+    ...(props.zone.structureVariantByProductCount || {}),
+    [countKey]: nextId
+  };
+  updateZone('structureVariantByProductCount', nextSelection);
 };
 
 const isRightBiasedPreset = (preset: LayoutPreset) =>
@@ -410,23 +411,9 @@ const createPreviewCells = (preset: LayoutPreset): PresetPreviewCell[] => {
   return cells.slice(0, maxCells);
 };
 
-const previewCellsByPreset = computed<Record<string, PresetPreviewCell[]>>(() => {
-  const map: Record<string, PresetPreviewCell[]> = {};
-  for (const preset of LAYOUT_PRESETS) {
-    map[preset.id] = createPreviewCells(preset);
-  }
-  return map;
-});
-
-const getPreviewCells = (preset: LayoutPreset) => previewCellsByPreset.value[preset.id] ?? [];
-
-const matchedPreset = computed(() =>
-  LAYOUT_PRESETS.find(preset => presetMatchesZone(preset, normalizedZoneState.value)) ?? null
+const currentPresetName = computed(() =>
+  `${getProductZoneStructureFormatLabel(currentStructure.value.format)} · ${currentStructureCount.value}`
 );
-
-const currentPreset = computed(() => matchedPreset.value?.id ?? 'custom');
-
-const currentPresetName = computed(() => matchedPreset.value?.name ?? 'Layout customizado');
 
 const getCustomPreviewKind = (zone: NormalizedZonePresetState): LayoutPreset['previewKind'] => {
   if (zone.highlightCount <= 0) return 'grid';
@@ -439,70 +426,60 @@ const getCustomPreviewKind = (zone: NormalizedZonePresetState): LayoutPreset['pr
 
 const customPreviewPreset = computed<LayoutPreset>(() => {
   const zone = normalizedZoneState.value;
-  const previewCols = clamp(zone.columns > 0 ? zone.columns : 4, 1, 6);
-  const previewRows = clamp(zone.rows > 0 ? zone.rows : 3, 2, 4);
+  const structure = currentStructure.value;
+  const previewZone: NormalizedZonePresetState = {
+    ...zone,
+    role: structure.role,
+    columns: structure.columns,
+    rows: structure.rows,
+    padding: structure.padding,
+    gapHorizontal: structure.gapHorizontal,
+    gapVertical: structure.gapVertical,
+    layoutDirection: structure.layoutDirection,
+    cardAspectRatio: structure.cardAspectRatio,
+    lastRowBehavior: structure.lastRowBehavior,
+    verticalAlign: structure.verticalAlign,
+    highlightCount: structure.highlightCount,
+    highlightPos: structure.highlightPos,
+    highlightHeight: structure.highlightHeight
+  };
+  const previewCols = clamp(structure.columns > 0 ? structure.columns : 4, 1, 6);
+  const previewRows = clamp(structure.rows > 0 ? structure.rows : 3, 2, 4);
   return {
     id: 'custom-preview',
     name: 'Atual',
-    category: zone.highlightCount > 0 ? 'special' : 'grid',
-    columns: zone.columns,
-    rows: zone.rows,
-    layoutDirection: zone.layoutDirection,
-    cardAspectRatio: zone.cardAspectRatio as LayoutPreset['cardAspectRatio'],
-    lastRowBehavior: zone.lastRowBehavior,
-    verticalAlign: zone.verticalAlign,
-    highlightCount: zone.highlightCount,
-    highlightPos: zone.highlightPos,
-    highlightHeight: zone.highlightHeight,
-    previewKind: getCustomPreviewKind(zone),
+    category: structure.highlightCount > 0 ? 'special' : 'grid',
+    columns: structure.columns,
+    rows: structure.rows,
+    layoutDirection: structure.layoutDirection,
+    cardAspectRatio: structure.cardAspectRatio as LayoutPreset['cardAspectRatio'],
+    lastRowBehavior: structure.lastRowBehavior,
+    verticalAlign: structure.verticalAlign,
+    highlightCount: structure.highlightCount,
+    highlightPos: structure.highlightPos,
+    highlightHeight: structure.highlightHeight,
+    previewKind: getCustomPreviewKind(previewZone),
     previewCols,
     previewRows,
     previewCount: previewCols * previewRows
   };
 });
 
-const activePreviewPreset = computed(() => matchedPreset.value ?? customPreviewPreset.value);
+const activePreviewPreset = computed(() => customPreviewPreset.value);
 const activePreviewStyle = computed(() => getPreviewGridStyle(activePreviewPreset.value));
-// Reuse precomputed cells for standard presets; only call createPreviewCells for the custom preview
-const activePreviewCells = computed(() =>
-  previewCellsByPreset.value[activePreviewPreset.value.id] ?? createPreviewCells(activePreviewPreset.value)
-);
+const activePreviewCells = computed(() => createPreviewCells(activePreviewPreset.value));
 
 const zoneColumnsLabel = computed(() =>
-  normalizedZoneState.value.columns > 0
-    ? `${normalizedZoneState.value.columns} por linha`
+  currentStructure.value.columns > 0
+    ? `${currentStructure.value.columns} por linha`
     : 'Colunas automáticas'
 );
 
 const zoneRowsLabel = computed(() =>
-  normalizedZoneState.value.rows > 0
-    ? `${normalizedZoneState.value.rows} linhas`
+  currentStructure.value.rows > 0
+    ? `${currentStructure.value.rows} linhas`
     : 'Altura livre'
 );
-
-const spacingSummaryLabel = computed(() => {
-  const pad = Math.round(toSafeNumber(props.zone.padding, 15));
-  if (syncGaps.value) return `Padding ${pad}px com gaps vinculados`;
-  const gapH = Math.round(toSafeNumber(props.zone.gapHorizontal, pad));
-  const gapV = Math.round(toSafeNumber(props.zone.gapVertical, pad));
-  return `Padding ${pad}px · X ${gapH}px · Y ${gapV}px`;
-});
-
-const highlightSummaryLabel = computed(() => {
-  const count = Math.max(0, Math.round(toSafeNumber(props.zone.highlightCount, 0)));
-  if (count <= 0) return 'Sem produto hero';
-
-  const posMap: Record<HighlightPos, string> = {
-    first: 'primeiros',
-    last: 'últimos',
-    random: 'aleatório',
-    center: 'centro',
-    top: 'topo',
-    bottom: 'base'
-  };
-  const pos = posMap[normalizeHighlightPos(props.zone.highlightPos)];
-  return `${count} destaque${count > 1 ? 's' : ''} · ${pos}`;
-});
 
 const activeTemplateName = computed(() => {
   const templateId = String(props.globalStyles?.splashTemplateId || '').trim();
@@ -600,9 +577,6 @@ const overviewMetrics = computed(() => ([
   { label: 'Etiqueta', value: styleSummaryLabel.value }
 ] as const));
 
-const gridPresets = computed(() => LAYOUT_PRESETS.filter(preset => preset.category === 'grid'));
-const specialPresets = computed(() => LAYOUT_PRESETS.filter(preset => preset.category === 'special'));
-
 const getZoneUpdateTargetMeta = (): ZoneUpdateTargetMeta => ({
   targetId: String((props.zone as any)?._customId || (props.zone as any)?.id || '').trim() || null
 });
@@ -610,6 +584,12 @@ const getZoneUpdateTargetMeta = (): ZoneUpdateTargetMeta => ({
 const updateZone = (prop: string, value: any, meta: ZoneUpdateTargetMeta = getZoneUpdateTargetMeta()) => {
   emit('update:zone', prop, value, meta);
 };
+
+const structureSummaryLabel = computed(() => {
+  const count = Math.min(24, Math.max(1, Math.round(toSafeNumber(props.zone.productCount, 1))));
+  if (!(props.zone.productCount ?? 0)) return 'Aguardando lista';
+  return `${getProductZoneStructureFormatLabel(currentStructure.value.format)} para ${count}`;
+});
 
 const updateGlobal = (prop: string, value: any, meta: ZoneUpdateTargetMeta = getZoneUpdateTargetMeta()) => {
   emit('update:global-styles', prop, value, meta);
@@ -716,26 +696,6 @@ const handlePriceFontChange = (event: Event) => {
   }
 };
 
-const handlePaddingChange = (value: unknown, meta: ZoneUpdateTargetMeta = getZoneUpdateTargetMeta()) => {
-  const next = clamp(Math.round(toSafeNumber(value, props.zone.padding ?? 15)), 0, 60);
-  if (syncGaps.value) {
-    emit('sync-gaps', next, meta);
-  } else {
-    updateZone('padding', next, meta);
-  }
-};
-
-const handleSyncToggle = (checked: boolean) => {
-  syncGaps.value = checked;
-  if (checked) {
-    emit('sync-gaps', clamp(Math.round(toSafeNumber(props.zone.padding, 15)), 0, 60), getZoneUpdateTargetMeta());
-  }
-};
-
-const applyPreset = (presetId: string) => {
-  emit('apply-preset', presetId);
-};
-
 // ── Debounce helper ──────────────────────────────────────────────────────────
 // Used for numeric text inputs so rapid keystrokes don't flood the reactive
 // update pipeline. Range sliders keep using the direct (non-debounced) versions
@@ -758,7 +718,6 @@ const _dUpdateZoneInt = _debounceWithZoneTarget(updateZoneInt, 180);
 const _dUpdateZoneFloat = _debounceWithZoneTarget(updateZoneFloat, 180);
 const _dUpdateGlobalInt = _debounceWithZoneTarget(updateGlobalInt, 180);
 const _dUpdateGlobalFloat = _debounceWithZoneTarget(updateGlobalFloat, 180);
-const _dHandlePadding = _debounceWithZoneTarget(handlePaddingChange, 180);
 const _dUpdateZoneName = _debounceWithZoneTarget((v: string, meta: ZoneUpdateTargetMeta) => updateZone('name', v, meta), 300);
 
 const toggleSection = (section: keyof typeof expandedSections.value) => {
@@ -767,8 +726,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
 const focusZoneSettingsFromCanvas = () => {
   expandedSections.value.content = true;
-  expandedSections.value.presets = true;
-  expandedSections.value.layout = true;
+  expandedSections.value.structure = true;
 };
 
 const handleDiagnosticAction = (actionId?: ProductZoneDiagnostic['actionId']) => {
@@ -778,9 +736,7 @@ const handleDiagnosticAction = (actionId?: ProductZoneDiagnostic['actionId']) =>
     return;
   }
   if (actionId === 'open-layout') {
-    expandedSections.value.layout = true;
-    expandedSections.value.spacing = true;
-    expandedSections.value.highlight = true;
+    expandedSections.value.structure = true;
     return;
   }
   if (actionId === 'open-template') {
@@ -826,7 +782,7 @@ onBeforeUnmount(() => {
       <div class="overview-card__preview">
         <div class="overview-card__preview-head">
           <span class="inspector-eyebrow inspector-eyebrow--muted">Mapa rápido</span>
-          <span class="text-[11px] text-zinc-400">{{ currentPreset === 'custom' ? 'Ajuste manual' : 'Base ativa' }}</span>
+          <span class="text-[11px] text-zinc-400">Estrutura ativa</span>
         </div>
         <div class="layout-preview layout-preview--large" :style="activePreviewStyle">
           <span
@@ -849,7 +805,7 @@ onBeforeUnmount(() => {
     </section>
 
     <div class="section-stack">
-      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.content }">
+      <section v-if="!compact" class="inspector-card" :class="{ 'inspector-card--active': expandedSections.content }">
         <button type="button" class="section-toggle" @click="toggleSection('content')">
           <div class="section-toggle__lead">
             <div class="section-icon section-icon--violet">
@@ -968,495 +924,70 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.presets }">
-        <button type="button" class="section-toggle" @click="toggleSection('presets')">
+      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.structure }">
+        <button type="button" class="section-toggle" @click="toggleSection('structure')">
           <div class="section-toggle__lead">
-            <div class="section-icon section-icon--emerald">
-              <LayoutGrid class="h-4 w-4" />
-            </div>
-            <div class="section-toggle__copy">
-              <div class="section-toggle__title-row">
-                <span class="section-title">Bases de layout</span>
-                <span class="section-summary">{{ currentPresetName }}</span>
-              </div>
-              <p class="section-description">Estruturas prontas para a grade.</p>
-            </div>
-          </div>
-          <component :is="expandedSections.presets ? ChevronDown : ChevronRight" class="section-chevron" />
-        </button>
-
-        <div v-show="expandedSections.presets" class="section-panel">
-          <div class="section-block">
-            <div class="section-block__head">
-              <p class="section-kicker">Grades equilibradas</p>
-              <p class="section-note">Boas para listas regulares e tabloides densos.</p>
-            </div>
-            <div class="preset-grid">
-              <button
-                v-for="preset in gridPresets"
-                :key="preset.id"
-                type="button"
-                class="preset-card"
-                :class="{ 'preset-card--active': currentPreset === preset.id }"
-                @click="applyPreset(preset.id)"
-              >
-                <div class="layout-preview" :style="getPreviewGridStyle(preset)">
-                  <span
-                    v-for="cell in getPreviewCells(preset)"
-                    :key="cell.id"
-                    :class="[
-                      'layout-preview__cell',
-                      cell.tone === 'highlight' ? 'layout-preview__cell--highlight' : 'layout-preview__cell--base'
-                    ]"
-                    :style="getPreviewCellStyle(cell)"
-                  />
-                </div>
-                <div class="preset-card__content">
-                  <strong>{{ preset.name }}</strong>
-                  <span>{{ preset.description }}</span>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div class="section-block">
-            <div class="section-block__head">
-              <p class="section-kicker">Com produto hero</p>
-              <p class="section-note">Para destacar campeões de oferta sem quebrar a grade.</p>
-            </div>
-            <div class="preset-grid">
-              <button
-                v-for="preset in specialPresets"
-                :key="preset.id"
-                type="button"
-                class="preset-card preset-card--special"
-                :class="{ 'preset-card--active': currentPreset === preset.id }"
-                @click="applyPreset(preset.id)"
-              >
-                <div class="layout-preview" :style="getPreviewGridStyle(preset)">
-                  <span
-                    v-for="cell in getPreviewCells(preset)"
-                    :key="cell.id"
-                    :class="[
-                      'layout-preview__cell',
-                      cell.tone === 'highlight' ? 'layout-preview__cell--highlight' : 'layout-preview__cell--base'
-                    ]"
-                    :style="getPreviewCellStyle(cell)"
-                  />
-                </div>
-                <div class="preset-card__content">
-                  <strong>{{ preset.name }}</strong>
-                  <span>{{ preset.description }}</span>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.layout }">
-        <button type="button" class="section-toggle" @click="toggleSection('layout')">
-          <div class="section-toggle__lead">
-            <div class="section-icon section-icon--blue">
+            <div class="section-icon section-icon--cyan">
               <Columns3 class="h-4 w-4" />
             </div>
             <div class="section-toggle__copy">
               <div class="section-toggle__title-row">
-                <span class="section-title">Estrutura da grade</span>
-                <span class="section-summary">{{ zoneColumnsLabel }}</span>
+                <span class="section-title">Estrutura por quantidade</span>
+                <span class="section-summary">{{ structureSummaryLabel }}</span>
               </div>
-              <p class="section-description">Colunas, linhas e formato dos cards.</p>
+              <p class="section-description">Uma receita independente para cada total de produtos.</p>
             </div>
           </div>
-          <component :is="expandedSections.layout ? ChevronDown : ChevronRight" class="section-chevron" />
+          <component :is="expandedSections.structure ? ChevronDown : ChevronRight" class="section-chevron" />
         </button>
 
-        <div v-show="expandedSections.layout" class="section-panel">
-          <div class="control-card">
-            <div class="control-card__head control-card__head--stacked">
-              <div class="control-card__copy">
-                <div class="control-card__title-row">
-                  <label for="product-zone-columns" class="field-label">Colunas</label>
-                  <span class="value-badge">{{ zone.columns === 0 ? 'Autoajuste' : 'Quantidade fixa' }}</span>
-                </div>
-                <p id="product-zone-columns-hint" class="field-hint">0 = autoajuste</p>
-              </div>
-              <div class="value-editor value-editor--full">
-                <input
-                  id="product-zone-columns"
-                  type="number"
-                  min="0"
-                  max="8"
-                  step="1"
-                  inputmode="numeric"
-                  class="value-input"
-                  :value="zone.columns ?? 0"
-                  aria-describedby="product-zone-columns-hint"
-                  aria-label="Colunas da grade"
-                  title="0 = autoajuste"
-                  @input="_dUpdateZoneInt('columns', ($event.target as HTMLInputElement).valueAsNumber, zone.columns ?? 0, 0, 8)"
-                />
-                <span class="value-suffix">{{ zone.columns === 0 ? 'Auto' : 'col' }}</span>
-              </div>
+        <div v-show="expandedSections.structure" class="section-panel">
+          <div class="automatic-structure-card">
+            <div class="automatic-structure-card__icon">
+              <Columns3 class="h-4 w-4" />
             </div>
-            <input
-              type="range"
-              min="0"
-              max="8"
-              :value="zone.columns ?? 0"
-              class="slider text-sky-400"
-              aria-label="Controle deslizante de colunas da grade"
-              @input="updateZoneInt('columns', ($event.target as HTMLInputElement).value, zone.columns ?? 0, 0, 8)"
-            />
-            <div class="range-scale">
-              <span>Autoajuste</span>
-              <span>8 colunas</span>
+            <div class="automatic-structure-card__copy">
+              <strong>Receita aplicada automaticamente</strong>
+              <p>
+                O editor usa a estrutura de {{ zone.productCount || 0 }} produto{{ (zone.productCount || 0) === 1 ? '' : 's' }}
+                assim que a lista é importada.
+              </p>
+              <span class="automatic-structure-card__recipe">
+                {{ structureSummaryLabel }} · {{ currentStructure.columns || 'auto' }} colunas · {{ currentStructure.rows || 'auto' }} linhas
+              </span>
             </div>
-          </div>
-
-          <div class="control-card">
-            <div class="control-card__head control-card__head--stacked">
-              <div class="control-card__copy">
-                <div class="control-card__title-row">
-                  <label for="product-zone-rows" class="field-label">Linhas</label>
-                  <span class="value-badge">{{ zone.rows === 0 ? 'Altura livre' : 'Moldura fixa' }}</span>
-                </div>
-                <p id="product-zone-rows-hint" class="field-hint">0 = altura livre</p>
-              </div>
-              <div class="value-editor value-editor--full">
-                <input
-                  id="product-zone-rows"
-                  type="number"
-                  min="0"
-                  max="8"
-                  step="1"
-                  inputmode="numeric"
-                  class="value-input"
-                  :value="zone.rows ?? 0"
-                  aria-describedby="product-zone-rows-hint"
-                  aria-label="Linhas da grade"
-                  title="0 = altura livre"
-                  @input="_dUpdateZoneInt('rows', ($event.target as HTMLInputElement).valueAsNumber, zone.rows ?? 0, 0, 8)"
-                />
-                <span class="value-suffix">{{ zone.rows === 0 ? 'Auto' : 'lin' }}</span>
-              </div>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="8"
-              :value="zone.rows ?? 0"
-              class="slider text-sky-400"
-              aria-label="Controle deslizante de linhas da grade"
-              @input="updateZoneInt('rows', ($event.target as HTMLInputElement).value, zone.rows ?? 0, 0, 8)"
-            />
-            <div class="range-scale">
-              <span>Altura livre</span>
-              <span>8 linhas</span>
-            </div>
-          </div>
-
-          <div class="field-stack">
-            <div class="field-stack__head">
-              <label class="field-label">Ordem de preenchimento</label>
-              <p class="field-hint">Direção do preenchimento da grade.</p>
-            </div>
-            <div class="segmented-grid segmented-grid--2">
-              <button
-                v-for="option in layoutDirectionOptions"
-                :key="option.value"
-                type="button"
-                class="segmented-option"
-                :class="{ 'segmented-option--active': (zone.layoutDirection ?? 'horizontal') === option.value }"
-                @click="updateZone('layoutDirection', option.value)"
+            <div v-if="currentStructureVariants.length > 1" class="automatic-structure-card__variant">
+              <label for="product-zone-structure-variant" class="field-label">Variação para esta zona</label>
+              <select
+                id="product-zone-structure-variant"
+                class="automatic-structure-card__variant-select"
+                :value="currentStructureVariantId"
+                @change="selectCurrentStructureVariant"
               >
-                <strong>{{ option.label }}</strong>
-                <span>{{ option.hint }}</span>
-              </button>
+                <option v-for="variant in currentStructureVariants" :key="variant.id" :value="variant.id">
+                  {{ variant.name }}
+                </option>
+              </select>
+              <small v-if="globalStructuresLoaded">
+                A biblioteca vem de Estruturas por quantidade. Esta escolha vale somente para a zona selecionada.
+              </small>
+              <small v-else>
+                Carregando a biblioteca global de estruturas. A configuração do projeto é apenas um fallback temporário.
+              </small>
             </div>
-          </div>
-
-          <div class="field-stack">
-            <div class="field-stack__head">
-              <label class="field-label">Fechamento da última linha</label>
-              <p class="field-hint">Como preencher os cards restantes.</p>
+            <div class="flex flex-wrap gap-2">
+              <NuxtLink to="/zone-structures" class="automatic-structure-card__link">
+                Estruturas por quantidade
+              </NuxtLink>
+              <NuxtLink to="/card-configurations" class="automatic-structure-card__link">
+                Elementos do card
+              </NuxtLink>
             </div>
-            <div class="segmented-grid segmented-grid--2">
-              <button
-                v-for="option in lastRowBehaviorOptions"
-                :key="option.value"
-                type="button"
-                class="segmented-option"
-                :class="{ 'segmented-option--active': (zone.lastRowBehavior ?? 'fill') === option.value }"
-                @click="updateZone('lastRowBehavior', option.value)"
-              >
-                <strong>{{ option.label }}</strong>
-                <span>{{ option.hint }}</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="field-stack">
-            <div class="field-stack__head">
-              <label class="field-label">Ocupação vertical</label>
-              <p class="field-hint">Como os cards ocupam a altura do slot.</p>
-            </div>
-            <div class="segmented-grid segmented-grid--2">
-              <button
-                v-for="option in verticalAlignOptions"
-                :key="option.value"
-                type="button"
-                class="segmented-option"
-                :class="{ 'segmented-option--active': (zone.verticalAlign ?? 'stretch') === option.value }"
-                @click="updateZone('verticalAlign', option.value)"
-              >
-                <strong>{{ option.label }}</strong>
-              </button>
-            </div>
-          </div>
-
-          <div class="field-stack">
-            <div class="field-stack__head">
-              <label class="field-label">Formato dos cards</label>
-              <p class="field-hint">Proporção dos cards na grade.</p>
-            </div>
-            <select
-              :value="zone.cardAspectRatio ?? 'fill'"
-              class="field-select"
-              @change="updateZone('cardAspectRatio', ($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="option in cardAspectRatioOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
           </div>
         </div>
       </section>
 
-      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.spacing }">
-        <button type="button" class="section-toggle" @click="toggleSection('spacing')">
-          <div class="section-toggle__lead">
-            <div class="section-icon section-icon--cyan">
-              <AlignVerticalSpaceAround class="h-4 w-4" />
-            </div>
-            <div class="section-toggle__copy">
-              <div class="section-toggle__title-row">
-                <span class="section-title">Ritmo e espaçamento</span>
-                <span class="section-summary">{{ spacingSummaryLabel }}</span>
-              </div>
-              <p class="section-description">Padding e gaps entre os cards.</p>
-            </div>
-          </div>
-          <component :is="expandedSections.spacing ? ChevronDown : ChevronRight" class="section-chevron" />
-        </button>
-
-        <div v-show="expandedSections.spacing" class="section-panel">
-          <label class="switch-card">
-            <div>
-              <span class="field-label">Vincular gaps ao padding</span>
-              <p class="field-hint">Gaps acompanham o padding automaticamente.</p>
-            </div>
-            <span class="switch" :class="{ 'switch--checked': syncGaps }">
-              <input
-                type="checkbox"
-                class="sr-only"
-                :checked="syncGaps"
-                @change="handleSyncToggle(($event.target as HTMLInputElement).checked)"
-              />
-              <span class="switch__track"></span>
-              <span class="switch__thumb"></span>
-            </span>
-          </label>
-
-          <div class="control-card">
-            <div class="control-card__head">
-              <div>
-                <label class="field-label">Padding externo</label>
-                <p class="field-hint">Respiro externo da zona.</p>
-              </div>
-              <div class="value-editor">
-                <input
-                  type="number"
-                  min="0"
-                  max="60"
-                  step="1"
-                  inputmode="numeric"
-                  class="value-input"
-                  :value="Math.round(zone.padding ?? 15)"
-                  aria-label="Padding externo"
-                  @input="_dHandlePadding(($event.target as HTMLInputElement).valueAsNumber)"
-                />
-                <span class="value-suffix">px</span>
-              </div>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="60"
-              :value="zone.padding ?? 15"
-              class="slider text-cyan-400"
-              @input="handlePaddingChange(($event.target as HTMLInputElement).value)"
-            />
-          </div>
-
-          <template v-if="!syncGaps">
-            <div class="control-card">
-              <div class="control-card__head">
-                <div>
-                  <label class="field-label">Gap horizontal</label>
-                  <p class="field-hint">Espaço entre colunas.</p>
-                </div>
-                <div class="value-editor">
-                  <input
-                    type="number"
-                    min="0"
-                    max="60"
-                    step="1"
-                    inputmode="numeric"
-                    class="value-input"
-                    :value="Math.round(zone.gapHorizontal ?? zone.padding ?? 15)"
-                    aria-label="Gap horizontal"
-                    @input="_dUpdateZoneInt('gapHorizontal', ($event.target as HTMLInputElement).valueAsNumber, zone.gapHorizontal ?? zone.padding ?? 15, 0, 60)"
-                  />
-                  <span class="value-suffix">px</span>
-                </div>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="60"
-                :value="zone.gapHorizontal ?? zone.padding ?? 15"
-                class="slider text-cyan-400"
-                @input="updateZoneInt('gapHorizontal', ($event.target as HTMLInputElement).value, zone.gapHorizontal ?? zone.padding ?? 15, 0, 60)"
-              />
-            </div>
-
-            <div class="control-card">
-              <div class="control-card__head">
-                <div>
-                  <label class="field-label">Gap vertical</label>
-                  <p class="field-hint">Espaço entre linhas.</p>
-                </div>
-                <div class="value-editor">
-                  <input
-                    type="number"
-                    min="0"
-                    max="60"
-                    step="1"
-                    inputmode="numeric"
-                    class="value-input"
-                    :value="Math.round(zone.gapVertical ?? zone.padding ?? 15)"
-                    aria-label="Gap vertical"
-                    @input="_dUpdateZoneInt('gapVertical', ($event.target as HTMLInputElement).valueAsNumber, zone.gapVertical ?? zone.padding ?? 15, 0, 60)"
-                  />
-                  <span class="value-suffix">px</span>
-                </div>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="60"
-                :value="zone.gapVertical ?? zone.padding ?? 15"
-                class="slider text-cyan-400"
-                @input="updateZoneInt('gapVertical', ($event.target as HTMLInputElement).value, zone.gapVertical ?? zone.padding ?? 15, 0, 60)"
-              />
-            </div>
-          </template>
-        </div>
-      </section>
-
-      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.highlight }">
-        <button type="button" class="section-toggle" @click="toggleSection('highlight')">
-          <div class="section-toggle__lead">
-            <div class="section-icon section-icon--amber">
-              <Star class="h-4 w-4" />
-            </div>
-            <div class="section-toggle__copy">
-              <div class="section-toggle__title-row">
-                <span class="section-title">Produto hero</span>
-                <span class="section-summary">{{ highlightSummaryLabel }}</span>
-              </div>
-              <p class="section-description">Cards em destaque na grade.</p>
-            </div>
-          </div>
-          <component :is="expandedSections.highlight ? ChevronDown : ChevronRight" class="section-chevron" />
-        </button>
-
-        <div v-show="expandedSections.highlight" class="section-panel">
-          <div class="field-stack">
-            <div class="field-stack__head">
-              <label class="field-label">Quantidade de destaques</label>
-              <p class="field-hint">0 = sem destaque.</p>
-            </div>
-            <div class="segmented-grid segmented-grid--5">
-              <button
-                v-for="count in [0, 1, 2, 3, 4]"
-                :key="count"
-                type="button"
-                class="segmented-option segmented-option--compact"
-                :class="{ 'segmented-option--active': (zone.highlightCount ?? 0) === count }"
-                @click="updateZone('highlightCount', count)"
-              >
-                <strong>{{ count }}</strong>
-              </button>
-            </div>
-          </div>
-
-          <template v-if="(zone.highlightCount ?? 0) > 0">
-            <div class="field-stack">
-              <div class="field-stack__head">
-                <label class="field-label">Posição preferida</label>
-                <p class="field-hint">Onde o destaque aparece na grade.</p>
-              </div>
-              <div class="segmented-grid segmented-grid--2">
-                <button
-                  v-for="option in highlightPositionOptions"
-                  :key="option.value"
-                  type="button"
-                  class="segmented-option segmented-option--compact"
-                  :class="{ 'segmented-option--active': (zone.highlightPos ?? 'first') === option.value }"
-                  @click="updateZone('highlightPos', option.value)"
-                >
-                  <strong>{{ option.label }}</strong>
-                </button>
-              </div>
-            </div>
-
-            <div class="control-card">
-              <div class="control-card__head">
-                <div>
-                  <label class="field-label">Altura do hero</label>
-                  <p class="field-hint">Multiplicador de altura do hero.</p>
-                </div>
-                <div class="value-editor">
-                  <input
-                    type="number"
-                    min="1"
-                    max="2.5"
-                    step="0.1"
-                    inputmode="decimal"
-                    class="value-input"
-                    :value="(zone.highlightHeight ?? 1.5).toFixed(1)"
-                    aria-label="Altura do hero"
-                    @input="_dUpdateZoneFloat('highlightHeight', ($event.target as HTMLInputElement).valueAsNumber, zone.highlightHeight ?? 1.5, 1, 2.5)"
-                  />
-                  <span class="value-suffix">x</span>
-                </div>
-              </div>
-              <input
-                type="range"
-                min="10"
-                max="25"
-                :value="Math.round((zone.highlightHeight ?? 1.5) * 10)"
-                class="slider text-amber-400"
-                @input="updateZoneFloat('highlightHeight', Number(($event.target as HTMLInputElement).value) / 10, zone.highlightHeight ?? 1.5, 1, 2.5)"
-              />
-            </div>
-          </template>
-        </div>
-      </section>
-
-      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.cardStyle }">
+      <section v-if="!compact" class="inspector-card" :class="{ 'inspector-card--active': expandedSections.cardStyle }">
         <button type="button" class="section-toggle" @click="toggleSection('cardStyle')">
           <div class="section-toggle__lead">
             <div class="section-icon section-icon--neutral">
@@ -1644,7 +1175,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.typography }">
+      <section v-if="!compact" class="inspector-card" :class="{ 'inspector-card--active': expandedSections.typography }">
         <button type="button" class="section-toggle" @click="toggleSection('typography')">
           <div class="section-toggle__lead">
             <div class="section-icon section-icon--green">
@@ -1857,7 +1388,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.priceTag }">
+      <section v-if="!compact" class="inspector-card" :class="{ 'inspector-card--active': expandedSections.priceTag }">
         <button type="button" class="section-toggle" @click="toggleSection('priceTag')">
           <div class="section-toggle__lead">
             <div class="section-icon section-icon--magenta">
@@ -1887,7 +1418,7 @@ onBeforeUnmount(() => {
                 <p class="field-hint">Etiqueta compartilhada por todos os cards.</p>
               </div>
               <button type="button" class="ghost-button" @click="emit('manage-label-templates')">
-                Gerenciar
+                Biblioteca global
               </button>
             </div>
 
@@ -2340,7 +1871,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="inspector-card" :class="{ 'inspector-card--active': expandedSections.diagnostics }">
+      <section v-if="!compact" class="inspector-card" :class="{ 'inspector-card--active': expandedSections.diagnostics }">
         <button type="button" class="section-toggle" @click="toggleSection('diagnostics')">
           <div class="section-toggle__lead">
             <div class="section-icon section-icon--rose">
@@ -2387,7 +1918,7 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <div class="sticky-dock">
+    <div v-if="!compact" class="sticky-dock">
       <button
         type="button"
         class="dock-button dock-button--lock"
@@ -3458,6 +2989,190 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
+.structure-panel__head,
+.structure-editor__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.structure-panel__head {
+  margin-bottom: 12px;
+}
+
+.structure-count-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.structure-count-button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 700;
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.structure-count-button:hover {
+  border-color: rgba(45, 212, 191, 0.34);
+  color: #ccfbf1;
+}
+
+.structure-count-button--active {
+  border-color: rgba(45, 212, 191, 0.62);
+  background: rgba(45, 212, 191, 0.16);
+  color: #ccfbf1;
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.12);
+}
+
+.structure-count-button--current:not(.structure-count-button--active) {
+  border-color: rgba(251, 191, 36, 0.42);
+  color: #fde68a;
+}
+
+.automatic-structure-card {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 11px;
+  padding: 13px;
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 12px;
+  background: rgba(8, 145, 178, 0.07);
+}
+
+.automatic-structure-card__icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  color: #67e8f9;
+  background: rgba(8, 145, 178, 0.18);
+}
+
+.automatic-structure-card__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.automatic-structure-card__copy strong {
+  color: #f0fdfa;
+  font-size: 12px;
+}
+
+.automatic-structure-card__copy p {
+  margin: 0;
+  color: #a5f3fc;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.automatic-structure-card__recipe {
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.automatic-structure-card__variant {
+  display: grid;
+  flex: 1 1 100%;
+  gap: 5px;
+  min-width: 0;
+}
+
+.automatic-structure-card > .flex {
+  flex: 1 1 100%;
+}
+
+.automatic-structure-card__variant-select {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  border-radius: 7px;
+  outline: none;
+  color: #e0f2fe;
+  background: rgba(15, 23, 42, 0.7);
+  font-size: 11px;
+}
+
+.automatic-structure-card__variant-select:focus {
+  border-color: #22d3ee;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+}
+
+.automatic-structure-card__variant small {
+  color: #94a3b8;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.automatic-structure-card__link {
+  flex: 0 0 auto;
+  color: #fef08a;
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.automatic-structure-card__link:hover {
+  color: #fff7ed;
+  text-decoration: underline;
+}
+
+.structure-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(9, 9, 11, 0.34);
+}
+
+.structure-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.structure-fields-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.structure-number-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.structure-number-field input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.055);
+  padding: 0 10px;
+  color: #fafafa;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @media (max-width: 360px) {
   .preset-grid,
   .segmented-grid--2,
@@ -3475,6 +3190,17 @@ input:focus-visible {
 
   .content-metrics-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .structure-fields-grid,
+  .structure-fields-grid--three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .structure-panel__head,
+  .structure-editor__title-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .color-field,

@@ -6,6 +6,9 @@
 CREATE TABLE IF NOT EXISTS public.label_templates (
   id text PRIMARY KEY,
   user_id uuid NULL,
+  -- Canonical key for built-in models; allows one user-owned copy per user
+  -- while keeping the public/template ID stable in the editor.
+  template_key text NULL,
   name text NOT NULL,
   kind text NOT NULL DEFAULT 'priceGroup-v1',
   "group" jsonb NOT NULL,
@@ -15,6 +18,9 @@ CREATE TABLE IF NOT EXISTS public.label_templates (
 );
 
 CREATE INDEX IF NOT EXISTS label_templates_user_id_idx ON public.label_templates(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS label_templates_user_template_key_idx
+  ON public.label_templates (user_id, template_key)
+  WHERE template_key IS NOT NULL;
 
 -- Optional: keep updated_at in sync (Supabase supports this via triggers too).
 -- This lightweight trigger works in vanilla Postgres.
@@ -39,4 +45,3 @@ BEGIN
     EXECUTE FUNCTION public.set_updated_at();
   END IF;
 END $$;
-

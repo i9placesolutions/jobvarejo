@@ -1,20 +1,27 @@
 import { requireAuthenticatedUser } from '../utils/auth'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull } from '../utils/postgres'
+import { ensureBusinessProfileColumn, normalizeBusinessProfile } from '../utils/business-profile'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   await enforceRateLimit(event, `profile-get:${user.id}`, 240, 60_000)
+  await ensureBusinessProfileColumn()
 
   try {
     const row = await pgOneOrNull<any>(
-      `select id, email, name, avatar_url, role, created_at, updated_at
+      `select id, email, name, avatar_url, role, created_at, updated_at, business_profile
        from public.profiles
        where id = $1
        limit 1`,
       [user.id]
     )
-    if (row) return row
+    if (row) {
+      return {
+        ...row,
+        business_profile: normalizeBusinessProfile(row.business_profile)
+      }
+    }
 
     const metadata = (user.user_metadata && typeof user.user_metadata === 'object')
       ? user.user_metadata as Record<string, any>
@@ -27,7 +34,8 @@ export default defineEventHandler(async (event) => {
       email: user.email || null,
       name: fallbackName,
       avatar_url: metadata.avatar_url || metadata.picture || null,
-      role: 'user'
+      role: 'user',
+      business_profile: normalizeBusinessProfile(null)
     }
   } catch (error: any) {
     throw createError({ statusCode: 500, statusMessage: error?.message || 'Failed to load profile' })

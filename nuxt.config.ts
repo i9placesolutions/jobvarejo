@@ -164,11 +164,20 @@ export default defineNuxtConfig({
             if (id.includes('vite/preload-helper')) return 'app-preload-helper'
 
             // Editor local code splitting (non-node_modules)
+            if (id.includes('/components/EditorCanvas.vue')) return 'editor-canvas'
             if (
               id.includes('/types/product-zone.ts') ||
               id.includes('/composables/useProductZone.ts') ||
+              id.includes('/composables/useQuickEditorControls.ts') ||
               id.includes('/utils/product-zone-helpers')
             ) return 'editor-core-tools'
+            if (
+              id.includes('/utils/priceGroupLayout.ts') ||
+              id.includes('/utils/priceGroupBuilders.ts') ||
+              id.includes('/utils/priceTemplateFitting.ts') ||
+              id.includes('/utils/priceGroupPricing.ts')
+            ) return 'editor-price-tools'
+            if (id.includes('/utils/pasteListErrorHelpers.ts')) return 'editor-shared-tools'
             if (
               id.includes('/src/ai/') ||
               id.includes('/server/utils/ai-') ||
@@ -197,12 +206,15 @@ export default defineNuxtConfig({
               id.includes('/utils/snap') ||
               id.includes('/utils/userGuide') ||
               id.includes('/utils/product') ||
-              id.includes('/utils/zone') ||
-              id.includes('/utils/missingProduct') ||
-              id.includes('/utils/card') ||
-              id.includes('/utils/imageMatchMode') ||
-              id.includes('/utils/editor')
-            ) return 'editor-core-tools'
+               id.includes('/utils/zone') ||
+               id.includes('/utils/missingProduct') ||
+               id.includes('/utils/card') ||
+               id.includes('/utils/imageMatchMode') ||
+               id.includes('/utils/editor') ||
+               id.includes('/utils/stickerOutline') ||
+               id.includes('/utils/exportSelectionHelpers') ||
+               id.includes('/utils/storageUrlHelpers')
+             ) return 'editor-core-tools'
 
             if (!id.includes('node_modules')) return
 
@@ -227,6 +239,14 @@ export default defineNuxtConfig({
   srcDir: '.',
 
   routeRules: {
+    // The dashboard is client-only: its data bootstrap depends on the
+    // authenticated browser session and must not be served as a permanent SSR spinner.
+    '/': {
+      ssr: false,
+    },
+    '/label-templates': {
+      ssr: false,
+    },
     '/editor/**': {
       ssr: false,
       headers: {

@@ -282,12 +282,14 @@ export const isTextLikeObject = (obj: any): boolean => {
  */
 export const collectObjectsDeep = (root: any): any[] => {
     const out: any[] = []
+    const visited = new Set<any>()
     const isGroupLike = (obj: any): boolean => {
         const t = String(obj?.type || '').toLowerCase()
         return t === 'group' && typeof obj.getObjects === 'function'
     }
     const walk = (obj: any) => {
-        if (!obj) return
+        if (!obj || visited.has(obj)) return
+        visited.add(obj)
         out.push(obj)
         if (isGroupLike(obj)) {
             const children = obj.getObjects() || []

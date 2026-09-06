@@ -7,6 +7,7 @@ import {
   resolveAutoOfferImageRef,
   scoreAutoOfferProduct
 } from '~/utils/autoOfferEngine'
+import { createDefaultProductZoneStructureMap } from '~/utils/product-zone-structure'
 
 const product = (id: string, overrides: Partial<Product> = {}): Partial<Product> => ({
   id,
@@ -36,6 +37,37 @@ describe('autoOfferEngine', () => {
     expect(update.rows).toBe(0)
     expect(update.gapHorizontal).toBeGreaterThan(0)
     expect(update.padding).toBeGreaterThan(0)
+  })
+
+  it('aplica a receita configurada para a quantidade atual da lista', () => {
+    const structures = createDefaultProductZoneStructureMap({ padding: 12 })
+    structures['6'] = {
+      ...structures['6']!,
+      columns: 2,
+      rows: 3,
+      layoutDirection: 'vertical',
+      padding: 8,
+      gapHorizontal: 6,
+      gapVertical: 10
+    }
+    const plan = buildAutoOfferLayoutPlan(
+      Array.from({ length: 6 }, (_, index) => product(String(index + 1))),
+      {
+        zone: {
+          x: 0,
+          y: 0,
+          width: 900,
+          height: 620,
+          structureByProductCount: structures,
+          structureByProductCountEnabled: true
+        }
+      }
+    )
+
+    expect(plan.zones[0]?.zone.columns).toBe(2)
+    expect(plan.zones[0]?.zone.rows).toBe(3)
+    expect(plan.zones[0]?.zone.layoutDirection).toBe('vertical')
+    expect(plan.zones[0]?.zone.padding).toBe(8)
   })
 
   it('prioriza produtos com preco especial quando promocao automatica esta ativa', () => {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ChevronLeft, ArrowRight } from 'lucide-vue-next'
+import { STORE_DYNAMIC_FIELDS } from '~/utils/storeDynamicFields'
 
 const props = defineProps<{
     searchQuery?: string
@@ -244,7 +245,24 @@ const decoratives: ElementItem[] = [
 ]
 
 // ── Montagem das categorias ───────────────────────────────────────────────
+const storeFields: ElementItem[] = STORE_DYNAMIC_FIELDS.map(field => ({
+    id: field.id,
+    name: field.label,
+    type: 'store-field',
+    preview: field.preview,
+    data: {
+        field: field.field,
+        kind: field.kind,
+        sample: field.sample,
+        fontSize: field.fontSize,
+        fontWeight: field.fontWeight,
+        label: field.label
+    },
+    tags: ['loja', 'dinamico', 'cadastro', ...field.tags]
+}))
+
 const categories = computed<Category[]>(() => [
+    { id: 'store-fields', name: 'Dados da loja', items: storeFields },
     { id: 'shapes', name: 'Formas', items: basicShapes },
     { id: 'lines', name: 'Linhas & Setas', items: lines },
     { id: 'icons', name: 'Ícones', items: icons },
@@ -261,12 +279,13 @@ const allItems = computed(() =>
 )
 
 const filteredItems = computed(() => {
-    const q = effectiveSearch.value.toLowerCase().trim()
+    const normalizeSearchText = (value: unknown) => String(value ?? '').toLowerCase()
+    const q = normalizeSearchText(effectiveSearch.value).trim()
     if (!q) return null
     return allItems.value.filter(item =>
-        item.name.toLowerCase().includes(q) ||
-        (item.tags || []).some(t => t.toLowerCase().includes(q)) ||
-        item.categoryName.toLowerCase().includes(q)
+        normalizeSearchText(item.name).includes(q) ||
+        (Array.isArray(item.tags) && item.tags.some(tag => normalizeSearchText(tag).includes(q))) ||
+        normalizeSearchText(item.categoryName).includes(q)
     )
 })
 

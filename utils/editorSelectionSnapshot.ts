@@ -135,6 +135,13 @@ export const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>
     'originX', 'originY', 'fontSize', 'fontFamily', 'fontWeight',
     'fontStyle', 'textAlign', 'text', 'underline', 'linethrough',
     'lineHeight', 'charSpacing', 'textBackgroundColor', 'src',
+    'businessProfileField', 'quickDataField', 'quickFieldEnabled',
+    'quickValidityStartDate', 'quickValidityEndDate', 'quickOfferScope',
+    'quickValidityMode', 'quickValidityWhileStocks', 'quickLogoBackdropId', 'quickLogoBackdropPadding', 'quickLogoBackdropMode',
+    'isQuickGenerated', 'quickSeedId',
+    'dynamicFieldResizeMode', 'dynamicFieldKey', 'dynamicFieldHeight',
+    'dynamicFieldBaseFontSize', 'dynamicFieldAutoFitFontSize',
+    '__rawText', '__textCase', 'dynamicTextCase',
     '__originalSrc', 'cropX', 'cropY', 'filters',
     '__stickerOutlineEnabled', '__stickerOutlineWidth',
     '__stickerOutlineColor', '__stickerOutlineMode',
@@ -192,6 +199,9 @@ export const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>
   if (cardAncestor) {
     snap.parentCardId = cardAncestor._customId
     if (cardAncestor._cardStyleOverrides != null) snap._cardStyleOverrides = cardAncestor._cardStyleOverrides
+    if (cardAncestor.__cardConfigurationProfile != null) {
+      snap.__cardConfigurationProfile = cardAncestor.__cardConfigurationProfile
+    }
   }
 
   if (obj.lockMovementX != null) snap.lockMovementX = obj.lockMovementX

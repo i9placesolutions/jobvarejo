@@ -47,7 +47,7 @@ export const SNAP_MOVE_EPSILON_PX = 1.8
  * Maior que o default — 9px — porque rect/image costumam ser
  * arrastados em movimentos mais amplos.
  */
-export const SNAP_MOVE_EPSILON_PX_RECT_IMAGE = 9
+export const SNAP_MOVE_EPSILON_PX_RECT_IMAGE = 2.4
 
 /**
  * Range factor para rect/image: range_efetivo = SNAP_RANGE_PX *
@@ -55,7 +55,7 @@ export const SNAP_MOVE_EPSILON_PX_RECT_IMAGE = 9
  * para evitar snap "fantasma" em rect/image que sao tipicamente
  * grandes e costumam ter cantos fora do alvo desejado.
  */
-export const SNAP_RANGE_FACTOR_RECT_IMAGE = 0.28
+export const SNAP_RANGE_FACTOR_RECT_IMAGE = 0.72
 
 /**
  * Velocidade limite (px) acima da qual o snap e suprimido. Movimentos
@@ -67,7 +67,7 @@ export const SNAP_FAST_MOVE_SUPPRESSION_PX = 7
  * Velocidade limite para rect/image (9px) — maior que o default porque
  * rect/image mais "macios" no snap geral.
  */
-export const SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE = 9
+export const SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE = 22
 
 /**
  * Cor das guias do usuario (manuais, criadas via toolbar — distinta das

@@ -18,6 +18,11 @@ describe('resolveProductImageRef', () => {
       .toBe('produtos/suco.webp')
   })
 
+  it('aceita image como objeto sem produzir [object Object]', () => {
+    expect(resolveProductImageRef({ image: { key: 'produtos/feijao-preto.webp' } }))
+      .toBe('produtos/feijao-preto.webp')
+  })
+
   it('procura em raw/productData quando a referencia vem aninhada', () => {
     expect(resolveProductImageRef({
       productData: {

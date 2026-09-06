@@ -13,9 +13,10 @@ export const useUpload = () => {
         storedBytes?: number
     }
 
-    const uploadSingle = async (file: File): Promise<UploadResult> => {
+    const uploadSingle = async (file: File, removeBackground = false): Promise<UploadResult> => {
         const formData = new FormData()
         formData.append('file', file)
+        formData.append('removeBackground', String(removeBackground))
         const headers = await getApiAuthHeaders()
         const data = await $fetch('/api/upload', {
             method: 'POST',
@@ -44,6 +45,7 @@ export const useUpload = () => {
         opts?: {
             onProgress?: (info: { done: number; total: number; file: File; ok: boolean }) => void
             continueOnError?: boolean
+            removeBackground?: boolean
         }
     ): Promise<Array<{ file: File; result?: UploadResult; error?: any }>> => {
         const list = Array.isArray(files) ? files.filter(Boolean) : []
@@ -57,7 +59,7 @@ export const useUpload = () => {
             let done = 0
             for (const file of list) {
                 try {
-                    const result = await uploadSingle(file)
+                    const result = await uploadSingle(file, opts?.removeBackground)
                     done += 1
                     out.push({ file, result })
                     opts?.onProgress?.({ done, total, file, ok: true })

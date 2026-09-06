@@ -501,7 +501,8 @@ export default defineEventHandler(async (event) => {
 
         if (!key) {
             // Keep derived images in imagens/ folder
-            key = `imagens/bg-removed-${timestamp}.${outputFormat === 'png' ? 'png' : 'webp'}`;
+            const outputPrefix = sourceKey?.startsWith('uploads/') ? 'uploads' : 'imagens';
+            key = `${outputPrefix}/bg-removed-${timestamp}.${outputFormat === 'png' ? 'png' : 'webp'}`;
         }
 
         // Process (remove BG obrigatório para ação explícita do botão "Fundo")

@@ -5,8 +5,10 @@ import {
   getImageSourceFromObject,
   findImageTargetInSelection,
   applyImageTrimBounds,
+  autoTrimFabricImage,
   fitImageIntoSlot,
-  detectImageTrimBounds
+  detectImageTrimBounds,
+  inspectImageTrimBounds
 } from '~/utils/fabricImageHelpers'
 
 const group = (children: any[]) => ({
@@ -113,6 +115,17 @@ describe('getImageTrimmedDimensions', () => {
       height: 75,
       getElement: () => ({ naturalWidth: 0, naturalHeight: 0 })
     })).toEqual({ width: 50, height: 75 })
+  })
+
+  it('usa o tamanho aparado quando o marker indica crop rente sem deslocamento', () => {
+    expect(getImageTrimmedDimensions({
+      width: 320,
+      height: 180,
+      cropX: 0,
+      cropY: 0,
+      __productImageTrimVersion: 1,
+      getElement: () => ({ naturalWidth: 800, naturalHeight: 600 })
+    })).toEqual({ width: 320, height: 180 })
   })
 })
 
@@ -277,6 +290,29 @@ describe('applyImageTrimBounds', () => {
     expect(img.left).toBe(210)
     expect(img.top).toBe(100)
   })
+
+  it('mantem a posicao ao reaplicar os mesmos bounds em imagem ja cortada', () => {
+    const img = {
+      cropX: 50,
+      cropY: 20,
+      width: 200,
+      height: 160,
+      left: 150,
+      top: 100,
+      scaleX: 1,
+      scaleY: 1,
+      originX: 'center',
+      originY: 'center',
+      set(props: any) { Object.assign(this, props) },
+      setCoords() {}
+    } as any
+    const trim = { left: 50, top: 20, width: 200, height: 160 }
+
+    applyImageTrimBounds(img, trim, { preserveVisualPosition: true })
+
+    expect(img.left).toBe(150)
+    expect(img.top).toBe(100)
+  })
 })
 
 describe('detectImageTrimBounds', () => {
@@ -319,6 +355,80 @@ describe('detectImageTrimBounds', () => {
       }, { alphaThreshold: 8, padding: 0 })
 
       expect(bounds).toEqual({ left: 1, top: 1, width: 2, height: 2 })
+    })
+  })
+
+  it('corta fundo opaco uniforme dos cantos', () => {
+    const width = 4
+    const height = 4
+    const data = new Uint8ClampedArray(width * height * 4)
+    const setPixel = (x: number, y: number, r: number, g: number, b: number, a = 255) => {
+      const i = (y * width + x) * 4
+      data[i] = r
+      data[i + 1] = g
+      data[i + 2] = b
+      data[i + 3] = a
+    }
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) setPixel(x, y, 0, 0, 0, 255)
+    }
+    setPixel(1, 1, 240, 240, 240, 255)
+    setPixel(2, 1, 240, 240, 240, 255)
+    setPixel(1, 2, 240, 240, 240, 255)
+    setPixel(2, 2, 240, 240, 240, 255)
+
+    withFakeImageData(width, height, data, () => {
+      const inspected = inspectImageTrimBounds({
+        getElement: () => ({ width, height })
+      }, { alphaThreshold: 8, padding: 0, colorTolerance: 20 })
+
+      expect(inspected.hasContent).toBe(true)
+      expect(inspected.bounds).toEqual({ left: 1, top: 1, width: 2, height: 2 })
+    })
+  })
+
+  it('corta borda preta opaca mesmo com cantos levemente diferentes', () => {
+    const width = 6
+    const height = 6
+    const data = new Uint8ClampedArray(width * height * 4)
+    const setPixel = (x: number, y: number, r: number, g: number, b: number, a = 255) => {
+      const i = (y * width + x) * 4
+      data[i] = r
+      data[i + 1] = g
+      data[i + 2] = b
+      data[i + 3] = a
+    }
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) setPixel(x, y, 8, 8, 8, 255)
+    }
+    setPixel(0, 0, 0, 0, 0, 255)
+    setPixel(5, 0, 18, 18, 18, 255)
+    setPixel(2, 2, 240, 240, 240, 255)
+    setPixel(3, 2, 240, 240, 240, 255)
+    setPixel(2, 3, 240, 240, 240, 255)
+    setPixel(3, 3, 240, 240, 240, 255)
+
+    withFakeImageData(width, height, data, () => {
+      const inspected = inspectImageTrimBounds({
+        getElement: () => ({ width, height })
+      }, { alphaThreshold: 8, padding: 0, colorTolerance: 20 })
+
+      expect(inspected.hasContent).toBe(true)
+      expect(inspected.bounds).toEqual({ left: 2, top: 2, width: 2, height: 2 })
+    })
+  })
+
+  it('nao marca como conteudo quando o canvas esta vazio', () => {
+    const width = 4
+    const height = 4
+    const data = new Uint8ClampedArray(width * height * 4)
+    withFakeImageData(width, height, data, () => {
+      const inspected = inspectImageTrimBounds({
+        getElement: () => ({ width, height })
+      }, { padding: 0 })
+      expect(inspected.hasContent).toBe(false)
+      expect(inspected.bounds).toBeNull()
+      expect(autoTrimFabricImage({ type: 'image', getElement: () => ({ width, height }) }).undecodable).toBe(true)
     })
   })
 })

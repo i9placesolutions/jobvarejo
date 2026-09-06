@@ -558,6 +558,19 @@ describe('isRedBurstTemplateGroupJson', () => {
     expect(isRedBurstTemplateGroupJson(tpl)).toBe(true)
   })
 
+  it('aceita o preço rico no lugar do par legado', () => {
+    const tpl = {
+      objects: [
+        { name: 'price_bg' },
+        { name: 'price_header_bg' },
+        { name: 'price_header_text' },
+        { name: 'price_burst_line_a' },
+        { name: 'price_value_text', __priceRichText: true }
+      ]
+    }
+    expect(isRedBurstTemplateGroupJson(tpl)).toBe(true)
+  })
+
   it('rejeita quando algum nome esta faltando', () => {
     const partial = {
       objects: [

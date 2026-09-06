@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { hasBuilderThemeComposition } from '~/utils/builderThemeComposition'
+
 const {
   model,
   zoom,
@@ -56,6 +58,7 @@ const backgroundImage = computed(() => {
 })
 
 const bgColor = computed(() => theme.value?.css_config?.bgColor || '#ffffff')
+const hasThemeComposition = computed(() => hasBuilderThemeComposition(theme.value?.composition))
 
 // Ink economy affects background opacity
 const inkEconomyOpacity = computed(() => {
@@ -97,7 +100,7 @@ defineExpose({ canvasRef })
     >
       <!-- Background image -->
       <img
-        v-if="backgroundImage"
+        v-if="backgroundImage && !hasThemeComposition"
         :src="backgroundImage"
         class="absolute inset-0 w-full h-full object-cover pointer-events-none"
         :style="{ opacity: inkEconomyOpacity }"
@@ -120,8 +123,11 @@ defineExpose({ canvasRef })
         alt=""
       />
 
-      <!-- Content layers -->
-      <div class="relative z-10 flex flex-col h-full">
+      <!-- Composicao visual criada no catalogo de temas -->
+      <BuilderThemeCompositionRenderer v-if="hasThemeComposition" class="relative z-10 h-full" />
+
+      <!-- Content layers legados -->
+      <div v-else class="relative z-10 flex flex-col h-full">
         <!-- Header: template dinamico ou legado -->
         <BuilderDynamicSection v-if="activeHeaderTemplate" :template="activeHeaderTemplate" section="header" />
         <BuilderFlyerHeader v-else />

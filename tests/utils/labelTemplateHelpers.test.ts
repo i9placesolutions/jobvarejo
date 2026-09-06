@@ -6,6 +6,7 @@ import {
   BUILTIN_LABEL_TEMPLATE_IDS,
   BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
   BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
+  BUILTIN_FARDO_SPECIAL_LABEL_TEMPLATE_ID,
   BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
   LABEL_TEMPLATE_EXTRA_PROPS,
   MANUAL_TEMPLATE_STABLE_PROPS,
@@ -106,10 +107,11 @@ describe('shouldUseIncomingTemplateSnapshot', () => {
 })
 
 describe('BUILTIN_LABEL_TEMPLATE_IDS', () => {
-  it('contem os 6 IDs built-in', () => {
-    expect(BUILTIN_LABEL_TEMPLATE_IDS.size).toBe(6)
+  it('contem os 7 IDs built-in', () => {
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.size).toBe(7)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_default')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_atacarejo_10fd')).toBe(true)
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_fardo_special')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_black_yellow')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_red_burst')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_oferta_amarela')).toBe(true)
@@ -119,6 +121,7 @@ describe('BUILTIN_LABEL_TEMPLATE_IDS', () => {
   it('constantes individuais batem com IDs do Set', () => {
     expect(BUILTIN_DEFAULT_LABEL_TEMPLATE_ID).toBe('tpl_default')
     expect(BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID).toBe('tpl_atacarejo_10fd')
+    expect(BUILTIN_FARDO_SPECIAL_LABEL_TEMPLATE_ID).toBe('tpl_fardo_special')
     expect(BUILTIN_RED_BURST_LABEL_TEMPLATE_ID).toBe('tpl_red_burst')
   })
 })
@@ -162,6 +165,8 @@ describe('LABEL_TEMPLATE_EXTRA_PROPS', () => {
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('fontStyle')
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('charSpacing')
     expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__preserveManualLayout')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__autoCollapseMissingPrices')
+    expect(LABEL_TEMPLATE_EXTRA_PROPS).toContain('__atacarejoPalette')
   })
 
   it('contem estado custom de texto do mini editor', () => {

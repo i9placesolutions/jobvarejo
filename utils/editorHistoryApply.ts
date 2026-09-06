@@ -1,3 +1,10 @@
+import {
+  captureDynamicBusinessTextBaseline,
+  fitDynamicBusinessTextObject,
+  isDynamicBusinessFieldObject,
+  syncDynamicBusinessTextHeight
+} from './dynamicBusinessFields'
+
 type HistoryMode = 'undo' | 'redo'
 
 type ApplyHistoryStateToCanvasOptions = {
@@ -8,7 +15,12 @@ type ApplyHistoryStateToCanvasOptions = {
   getSavedViewportTransform: (state: any) => number[] | null
   loadFromJsonSafe: (state: any) => Promise<void>
   sanitizeAllClipPaths: () => void
-  rehydrateCanvasZones: (opts: { relayout: boolean; applyZoneStyles: boolean }) => void
+  rehydrateCanvasZones: (opts: {
+    relayout: boolean
+    applyZoneStyles: boolean
+    applyGlobalLibraries: boolean
+    recoverZoneSnapshots: boolean
+  }) => void
   repairZoneCardsAfterHistoryRestore: () => void
   getFallbackPageState: () => any | null
   updateZoomState: () => void
@@ -20,11 +32,44 @@ type ApplyHistoryStateToCanvasOptions = {
   removeAllClipPaths: () => void
 }
 
+const normalizeUsableViewportTransform = (raw: unknown): number[] | null => {
+  if (!Array.isArray(raw) || raw.length < 6) return null
+
+  const viewport = raw.slice(0, 6).map(Number)
+  if (viewport.some(value => !Number.isFinite(value))) return null
+
+  // Fabric's viewport is an affine transform. Undo/redo must never apply a
+  // zero, negative or absurd scale that can make the whole workspace appear
+  // empty or massively enlarged after loading an otherwise valid snapshot.
+  const scaleX = Math.hypot(viewport[0] ?? 0, viewport[1] ?? 0)
+  const scaleY = Math.hypot(viewport[2] ?? 0, viewport[3] ?? 0)
+  if (scaleX < 0.0001 || scaleY < 0.0001 || scaleX > 20 || scaleY > 20) return null
+
+  return viewport
+}
+
+export const chooseHistoryViewportTransform = (
+  currentViewport: unknown,
+  savedViewport: unknown
+): number[] | null => {
+  // Camera navigation is not document history. Prefer the live camera so
+  // Ctrl+Z changes content without jumping the user to another zoom/pan.
+  return normalizeUsableViewportTransform(currentViewport)
+    || normalizeUsableViewportTransform(savedViewport)
+}
+
 const recalcTextDimensionsDeep = (obj: any): void => {
   if (!obj) return
   const tt = String(obj.type || '').toLowerCase()
   if (tt === 'i-text' || tt === 'textbox' || tt === 'text') {
+    if (isDynamicBusinessFieldObject(obj)) captureDynamicBusinessTextBaseline(obj)
     if (typeof obj.initDimensions === 'function') obj.initDimensions()
+    // Undo/redo also rebuilds text metrics. Keep the manual height configured
+    // for dynamic store fields after Fabric recalculates the natural height.
+    if (isDynamicBusinessFieldObject(obj)) {
+      fitDynamicBusinessTextObject(obj)
+      syncDynamicBusinessTextHeight(obj)
+    }
     obj.set('dirty', true)
     if (typeof obj.setCoords === 'function') obj.setCoords()
   }
@@ -38,16 +83,19 @@ export const applyHistoryStateToCanvas = async (
   opts: ApplyHistoryStateToCanvasOptions
 ): Promise<boolean> => {
   const savedViewport = opts.getSavedViewportTransform(opts.state)
-  const currentViewport = Array.isArray(opts.canvas?.viewportTransform)
-    ? [...opts.canvas.viewportTransform]
-    : null
+  const currentViewport = normalizeUsableViewportTransform(opts.canvas?.viewportTransform)
   const prevRenderOnAddRemove = opts.canvas.renderOnAddRemove
   opts.canvas.renderOnAddRemove = false
 
   try {
     await opts.loadFromJsonSafe(opts.state)
     opts.sanitizeAllClipPaths()
-    opts.rehydrateCanvasZones({ relayout: false, applyZoneStyles: false })
+    opts.rehydrateCanvasZones({
+      relayout: false,
+      applyZoneStyles: false,
+      applyGlobalLibraries: false,
+      recoverZoneSnapshots: false
+    })
     opts.repairZoneCardsAfterHistoryRestore()
     opts.sanitizeAllClipPaths()
 
@@ -64,7 +112,12 @@ export const applyHistoryStateToCanvas = async (
         try {
           await opts.loadFromJsonSafe(fallbackPageState)
           opts.sanitizeAllClipPaths()
-          opts.rehydrateCanvasZones({ relayout: false, applyZoneStyles: false })
+          opts.rehydrateCanvasZones({
+            relayout: false,
+            applyZoneStyles: false,
+            applyGlobalLibraries: false,
+            recoverZoneSnapshots: false
+          })
           opts.repairZoneCardsAfterHistoryRestore()
         } catch (fallbackErr) {
           console.error('❌ Fallback page state also failed:', fallbackErr)
@@ -72,17 +125,12 @@ export const applyHistoryStateToCanvas = async (
       }
     }
 
-    // FIX: after a fallback recovery, prefer the current viewport or zoom-to-fit
-    // instead of applying the viewport from the failed state (which may not match
-    // the fallback content dimensions).
-    if (savedViewport) {
-      opts.canvas.setViewportTransform(savedViewport)
-      opts.updateZoomState()
-      opts.updateScrollbars()
-    } else if (currentViewport) {
-      // Keep current viewport when old history entries don't contain viewport metadata.
-      // This avoids visible "jump/flash" to zoom-to-fit on Ctrl+Z.
-      opts.canvas.setViewportTransform(currentViewport as any)
+    // Camera navigation is independent from content history. Preserve the live
+    // viewport during undo/redo; only use the snapshot viewport for old entries
+    // loaded into a canvas that has no usable camera yet.
+    const viewportToRestore = chooseHistoryViewportTransform(currentViewport, savedViewport)
+    if (viewportToRestore) {
+      opts.canvas.setViewportTransform(viewportToRestore)
       opts.updateZoomState()
       opts.updateScrollbars()
     } else {

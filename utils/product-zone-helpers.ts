@@ -3,9 +3,17 @@
  * Ported from legacy system - Utility functions for Product Zone
  */
 
-import type { Product, ProductImage, Splash, ProductZone, GlobalStyles } from '~/types/product-zone';
+import type { Product, ProductImage, Splash, ProductZone, ProductZonePreviewFormat, GlobalStyles } from '~/types/product-zone';
 import { DEFAULT_PRODUCT_ZONE, DEFAULT_GLOBAL_STYLES, DEFAULT_SPLASH } from '~/types/product-zone';
 import { resolveProductImageRef } from '~/utils/productImageRef';
+import {
+  DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT,
+  createDefaultProductZoneStructureMap,
+  normalizeProductZoneStructureMapByPreviewFormat,
+  normalizeProductZoneStructureVariantMapByPreviewFormat,
+  PRODUCT_ZONE_PREVIEW_FORMAT_VALUES,
+  resolveProductZoneStructure
+} from '~/utils/product-zone-structure';
 
 // =============================================================================
 // CALCULATE OPTIMAL IMAGE SIZE (CORE ALGORITHM - DO NOT MODIFY)
@@ -213,19 +221,22 @@ export const getSplashOffsetByRow = (zone: ProductZone, rowIndex: number): numbe
  */
 export const calculateGridLayout = (
   zone: ProductZone,
-  productCount: number
+  productCount: number,
+  previewFormat: ProductZonePreviewFormat = DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT
 ): { cols: number; rows: number; itemWidth: number; itemHeight: number } => {
-  const padding = getZonePadding(zone);
-  const gapH = getGapHorizontal(zone);
-  const gapV = getGapVertical(zone);
-  const layoutDirection = zone.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection ?? 'horizontal';
+  const structure = resolveProductZoneStructure(zone, productCount, previewFormat);
+  const effectiveZone: ProductZone = structure ? { ...zone, ...structure } : zone;
+  const padding = getZonePadding(effectiveZone);
+  const gapH = getGapHorizontal(effectiveZone);
+  const gapV = getGapVertical(effectiveZone);
+  const layoutDirection = effectiveZone.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection ?? 'horizontal';
   
-  const availableWidth = Math.max(1, zone.width - (padding * 2));
-  const availableHeight = Math.max(1, zone.height - (padding * 2));
+  const availableWidth = Math.max(1, effectiveZone.width - (padding * 2));
+  const availableHeight = Math.max(1, effectiveZone.height - (padding * 2));
   let cols: number;
   let rows: number;
-  const fixedCols = typeof zone.columns === 'number' && zone.columns > 0 ? zone.columns : 0;
-  const fixedRows = typeof zone.rows === 'number' && zone.rows > 0 ? zone.rows : 0;
+  const fixedCols = typeof effectiveZone.columns === 'number' && effectiveZone.columns > 0 ? effectiveZone.columns : 0;
+  const fixedRows = typeof effectiveZone.rows === 'number' && effectiveZone.rows > 0 ? effectiveZone.rows : 0;
 
   // Colunas fixas ou automáticas
   if (fixedCols > 0) {
@@ -243,8 +254,8 @@ export const calculateGridLayout = (
       ? Math.min(productCount, maxColsByWidth) 
       : 1;
 
-    const applyRatio = zone.cardAspectRatio && zone.cardAspectRatio !== 'auto' && zone.cardAspectRatio !== 'fill';
-    const ratioValue = applyRatio ? getAspectRatioValue(zone.cardAspectRatio ?? '') : null;
+    const applyRatio = effectiveZone.cardAspectRatio && effectiveZone.cardAspectRatio !== 'auto' && effectiveZone.cardAspectRatio !== 'fill';
+    const ratioValue = applyRatio ? getAspectRatioValue(effectiveZone.cardAspectRatio ?? '') : null;
     const cardRatio = ratioValue ?? 0.72;
     const zoneRatio = availableWidth / Math.max(1, availableHeight);
     
@@ -343,8 +354,8 @@ export const calculateGridLayout = (
   if (itemHeight < 10) itemHeight = 10;
 
   // Aplicar aspect ratio se definido
-  if (zone.cardAspectRatio && zone.cardAspectRatio !== 'auto' && zone.cardAspectRatio !== 'fill') {
-    const ratio = getAspectRatioValue(zone.cardAspectRatio ?? '');
+  if (effectiveZone.cardAspectRatio && effectiveZone.cardAspectRatio !== 'auto' && effectiveZone.cardAspectRatio !== 'fill') {
+    const ratio = getAspectRatioValue(effectiveZone.cardAspectRatio ?? '');
     if (ratio) {
       const heightFromRatio = itemWidth / ratio;
       if (heightFromRatio <= itemHeight) {
@@ -366,6 +377,7 @@ export const getAspectRatioValue = (ratio: string): number | null => {
     'square': 1,
     '1:1': 1,
     '3:4': 3/4,
+    '4:5': 4/5,
     '4:3': 4/3,
     '16:9': 16/9,
     '9:16': 9/16,
@@ -384,16 +396,19 @@ export const calculateProductPosition = (
   cols: number,
   itemWidth: number,
   itemHeight: number,
-  productCount: number
+  productCount: number,
+  previewFormat: ProductZonePreviewFormat = DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT
 ): { x: number; y: number } => {
-  const padding = getZonePadding(zone);
-  const gapH = getGapHorizontal(zone);
-  const gapV = getGapVertical(zone);
-  const layoutDirection = zone.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection ?? 'horizontal';
+  const structure = resolveProductZoneStructure(zone, productCount, previewFormat);
+  const effectiveZone: ProductZone = structure ? { ...zone, ...structure } : zone;
+  const padding = getZonePadding(effectiveZone);
+  const gapH = getGapHorizontal(effectiveZone);
+  const gapV = getGapVertical(effectiveZone);
+  const layoutDirection = effectiveZone.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection ?? 'horizontal';
   const totalRows = Math.max(1, Math.ceil(Math.max(1, productCount) / Math.max(1, cols)));
   const effectiveRows =
-    layoutDirection === 'vertical' && typeof zone.rows === 'number' && zone.rows > 0
-      ? zone.rows
+    layoutDirection === 'vertical' && typeof effectiveZone.rows === 'number' && effectiveZone.rows > 0
+      ? effectiveZone.rows
       : totalRows;
   const effectiveCols =
     layoutDirection === 'vertical'
@@ -417,11 +432,11 @@ export const calculateProductPosition = (
 
     if (isLastCol && itemsInCol < Math.max(1, effectiveRows)) {
       if (behavior === 'fill' || behavior === 'stretch') {
-        const colItemH = (zone.height - (padding * 2) - ((itemsInCol - 1) * gapV)) / Math.max(1, itemsInCol);
+        const colItemH = (effectiveZone.height - (padding * 2) - ((itemsInCol - 1) * gapV)) / Math.max(1, itemsInCol);
         yOffset = padding + (row * (colItemH + gapV));
       } else if (behavior === 'center') {
         const colHeight = (itemsInCol * itemHeight) + ((itemsInCol - 1) * gapV);
-        yOffset = padding + ((zone.height - (padding * 2) - colHeight) / 2) + (row * (itemHeight + gapV));
+        yOffset = padding + ((effectiveZone.height - (padding * 2) - colHeight) / 2) + (row * (itemHeight + gapV));
       }
     }
   } else {
@@ -430,18 +445,18 @@ export const calculateProductPosition = (
 
     if (isLastRow && itemsInRow < Math.max(1, effectiveCols)) {
       if (behavior === 'fill' || behavior === 'stretch') {
-        const rowItemW = (zone.width - (padding * 2) - ((itemsInRow - 1) * gapH)) / Math.max(1, itemsInRow);
+        const rowItemW = (effectiveZone.width - (padding * 2) - ((itemsInRow - 1) * gapH)) / Math.max(1, itemsInRow);
         xOffset = padding + (col * (rowItemW + gapH));
       } else if (behavior === 'center') {
         const rowWidth = (itemsInRow * itemWidth) + ((itemsInRow - 1) * gapH);
-        xOffset = padding + ((zone.width - (padding * 2) - rowWidth) / 2) + (col * (itemWidth + gapH));
+        xOffset = padding + ((effectiveZone.width - (padding * 2) - rowWidth) / 2) + (col * (itemWidth + gapH));
       }
     }
   }
 
   return {
-    x: zone.x + xOffset,
-    y: zone.y + yOffset
+    x: effectiveZone.x + xOffset,
+    y: effectiveZone.y + yOffset
   };
 };
 
@@ -555,7 +570,7 @@ export const migrateProduct = (oldProduct: any): Product => {
  */
 export const migrateProductZone = (oldZone: any): ProductZone => {
   const padding = oldZone.padding ?? oldZone.margin ?? DEFAULT_PRODUCT_ZONE.padding;
-  return {
+  const migratedZone: ProductZone = {
     ...DEFAULT_PRODUCT_ZONE,
     id: oldZone.id ?? DEFAULT_PRODUCT_ZONE.id,
     name: oldZone.name ?? oldZone.zoneName ?? DEFAULT_PRODUCT_ZONE.name,
@@ -576,8 +591,21 @@ export const migrateProductZone = (oldZone: any): ProductZone => {
     layoutDirection: oldZone.layoutDirection ?? DEFAULT_PRODUCT_ZONE.layoutDirection,
     cardAspectRatio: oldZone.cardAspectRatio ?? DEFAULT_PRODUCT_ZONE.cardAspectRatio,
     lastRowBehavior: oldZone.lastRowBehavior ?? oldZone.orphanBehavior ?? DEFAULT_PRODUCT_ZONE.lastRowBehavior,
+    structureByProductCountEnabled: oldZone.structureByProductCountEnabled !== false,
+    structureByProductCount: undefined,
+    structureByProductCountByPreviewFormat: undefined,
+    structureVariantsByProductCount: undefined,
+    structureVariantsByProductCountByPreviewFormat: undefined,
+    structureVariantByProductCount: oldZone.structureVariantByProductCount && typeof oldZone.structureVariantByProductCount === 'object'
+      ? oldZone.structureVariantByProductCount
+      : {},
+    structureVariantByProductCountByPreviewFormat: {},
     highlightCount: oldZone.highlightCount ?? 0,
     highlightPos: oldZone.highlightPos ?? DEFAULT_PRODUCT_ZONE.highlightPos,
+    highlightSelection: oldZone.highlightSelection ?? oldZone.highlightPos ?? DEFAULT_PRODUCT_ZONE.highlightSelection,
+    highlightIndexes: Array.isArray(oldZone.highlightIndexes)
+      ? oldZone.highlightIndexes
+      : DEFAULT_PRODUCT_ZONE.highlightIndexes,
     highlightHeight: oldZone.highlightHeight ?? DEFAULT_PRODUCT_ZONE.highlightHeight,
     highlightStyle: oldZone.highlightStyle ?? DEFAULT_PRODUCT_ZONE.highlightStyle,
     verticalAlign: oldZone.verticalAlign ?? DEFAULT_PRODUCT_ZONE.verticalAlign,
@@ -595,17 +623,79 @@ export const migrateProductZone = (oldZone: any): ProductZone => {
       ? oldZone.splashOffsetByRow
       : DEFAULT_PRODUCT_ZONE.splashOffsetByRow
   };
+
+  const migratedStructureMaps = normalizeProductZoneStructureMapByPreviewFormat(
+    oldZone.structureByProductCountByPreviewFormat,
+    migratedZone,
+    oldZone.structureByProductCount
+  );
+  const migratedVariantMaps = normalizeProductZoneStructureVariantMapByPreviewFormat(
+    oldZone.structureVariantsByProductCountByPreviewFormat,
+    migratedZone,
+    migratedStructureMaps,
+    oldZone.structureVariantsByProductCount
+  );
+  migratedZone.structureByProductCountByPreviewFormat = migratedStructureMaps;
+  migratedZone.structureByProductCount = migratedStructureMaps[DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT];
+  migratedZone.structureVariantsByProductCountByPreviewFormat = migratedVariantMaps;
+  migratedZone.structureVariantsByProductCount = migratedVariantMaps[DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT];
+
+  const legacyVariantSelection = oldZone.structureVariantByProductCount && typeof oldZone.structureVariantByProductCount === 'object'
+    ? oldZone.structureVariantByProductCount
+    : {};
+  const rawVariantSelections = oldZone.structureVariantByProductCountByPreviewFormat && typeof oldZone.structureVariantByProductCountByPreviewFormat === 'object'
+    ? oldZone.structureVariantByProductCountByPreviewFormat
+    : {};
+  migratedZone.structureVariantByProductCountByPreviewFormat = Object.fromEntries(
+    PRODUCT_ZONE_PREVIEW_FORMAT_VALUES.map((format) => [
+      format,
+      rawVariantSelections[format] && typeof rawVariantSelections[format] === 'object'
+        ? rawVariantSelections[format]
+        : { ...legacyVariantSelection }
+    ])
+  );
+
+  return migratedZone;
 };
 
 /**
  * Cria um ProductZone padrão
  */
 export const createDefaultProductZone = (overrides?: Partial<ProductZone>): ProductZone => {
-  return {
+  const zone: ProductZone = {
     ...DEFAULT_PRODUCT_ZONE,
     id: `zone_${Date.now()}`,
     ...overrides
   };
+
+  const structureMaps = normalizeProductZoneStructureMapByPreviewFormat(
+    overrides?.structureByProductCountByPreviewFormat,
+    zone,
+    overrides?.structureByProductCount ?? createDefaultProductZoneStructureMap(zone)
+  );
+  zone.structureByProductCountByPreviewFormat = structureMaps;
+  zone.structureByProductCount = structureMaps[DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT];
+
+  const variantMaps = normalizeProductZoneStructureVariantMapByPreviewFormat(
+    overrides?.structureVariantsByProductCountByPreviewFormat,
+    zone,
+    structureMaps,
+    overrides?.structureVariantsByProductCount
+  );
+  zone.structureVariantsByProductCountByPreviewFormat = variantMaps;
+  zone.structureVariantsByProductCount = variantMaps[DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT];
+  zone.structureVariantByProductCountByPreviewFormat = overrides?.structureVariantByProductCountByPreviewFormat
+    ? Object.fromEntries(PRODUCT_ZONE_PREVIEW_FORMAT_VALUES.map((format) => [
+        format,
+        overrides.structureVariantByProductCountByPreviewFormat?.[format] || {}
+      ]))
+    : Object.fromEntries(PRODUCT_ZONE_PREVIEW_FORMAT_VALUES.map((format) => [
+        format,
+        { ...(overrides?.structureVariantByProductCount || {}) }
+      ]));
+  zone.structureByProductCountEnabled = true;
+
+  return zone;
 };
 
 /**

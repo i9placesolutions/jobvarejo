@@ -7,6 +7,7 @@ import { saveProductImageCache } from "../utils/product-image-cache";
 import { buildProductIdentityKey, upsertProductImageRegistry } from "../utils/product-image-registry";
 import { normalizeSearchTerm as normalizeSharedSearchTerm } from "../utils/product-image-matching";
 import { resolveStorageReadUrl } from "../utils/project-storage-refs";
+import { processImageWithOptions } from "../utils/image-processor";
 
 const UNIT_MAP: Record<string, string> = {
     mililitros: 'ml', mililitro: 'ml', mls: 'ml',
@@ -19,7 +20,7 @@ const UNIT_MAP: Record<string, string> = {
     fardo: 'fd', fardos: 'fd',
 };
 const STOP_WORDS = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'e', 'para', 'por', 'no', 'na']);
-const PROCESS_VERSION = 'v2';
+const PROCESS_VERSION = 'birefnet-v1';
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024; // 12MB
 
 const normalizeSearchTerm = (term: string): string => {
@@ -59,6 +60,7 @@ export default defineEventHandler(async (event) => {
     const flavorPart = form.find(p => p.name === 'flavor');
     const weightPart = form.find(p => p.name === 'weight');
     const productCodePart = form.find(p => p.name === 'productCode');
+    const removeBackgroundPart = form.find(p => p.name === 'removeBackground');
 
     if (!filePart?.data || !productNamePart?.data) {
         throw createError({ statusCode: 400, statusMessage: "File and product name required" });
@@ -80,6 +82,13 @@ export default defineEventHandler(async (event) => {
     const flavor = flavorPart?.data ? Buffer.from(flavorPart.data).toString('utf8').trim() : null;
     const weight = weightPart?.data ? Buffer.from(weightPart.data).toString('utf8').trim() : null;
     const productCode = productCodePart?.data ? Buffer.from(productCodePart.data).toString('utf8').trim().replace(/[^a-zA-Z0-9]/g, '') : null;
+    const removeBackgroundValue = removeBackgroundPart?.data
+        ? Buffer.from(removeBackgroundPart.data).toString('utf8').trim().toLowerCase()
+        : '';
+    // Uploads de produto já entram prontos para o card por padrão. A opção
+    // explícita do modo rápido pode desligar o processamento quando o usuário
+    // precisa preservar o fundo original.
+    const shouldRemoveBackground = !['false', '0', 'off', 'never', 'no'].includes(removeBackgroundValue);
     if (!productName || productName.length > 180) {
         throw createError({ statusCode: 400, statusMessage: "Invalid product name" });
     }
@@ -92,22 +101,44 @@ export default defineEventHandler(async (event) => {
     const bucketName = config.wasabiBucket;
 
     try {
-        // Processamento rápido e estável para upload manual (sem remoção de fundo automática)
+        // Retain source bytes so a damaged segmentation can be reprocessed.
+        const originalHash = createHash('sha256').update(fileBuffer).digest('hex');
+        const originalKey = `imagens/originals/${originalHash}`;
+        await s3.send(new PutObjectCommand({ Bucket: bucketName, Key: originalKey, Body: fileBuffer, ContentType: mime || 'application/octet-stream' }));
+        // Processamento automático para upload manual: remoção de fundo +
+        // recorte/otimização. O utilitário tem fallback seguro para a imagem
+        // original caso o modelo não esteja disponível ou seja inconclusivo.
         let processedBuffer: Buffer = fileBuffer as Buffer;
         let contentType = mime || 'image/png';
-        
-        try {
-            const sharp = (await import('sharp')).default;
-            processedBuffer = await sharp(fileBuffer)
-                .rotate()
-                .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
-                .webp({ quality: 88, effort: 4 })
-                .toBuffer();
-            contentType = 'image/webp';
-            console.log('✅ [Manual Upload] Otimização rápida aplicada');
-        } catch (err) {
-            console.warn('⚠️ [Manual Upload] Otimização falhou, usando original:', (err as any)?.message);
-            // Usar original somente no pior caso
+        const canRemoveBackground = shouldRemoveBackground && !['image/gif', 'image/svg+xml'].includes(mime);
+        if (canRemoveBackground) {
+            try {
+                processedBuffer = await processImageWithOptions(fileBuffer, {
+                    outputFormat: 'webp',
+                    forceBgRemoval: true,
+                    strict: true
+                });
+                contentType = 'image/webp';
+                console.log('✅ [Manual Upload] Fundo removido e imagem otimizada');
+            } catch (err) {
+                throw createError({ statusCode: 422, statusMessage: 'Não foi possível remover o fundo com segurança. A imagem não foi alterada.' });
+            }
+        }
+
+        if (contentType !== 'image/webp') {
+            try {
+                const sharp = (await import('sharp')).default;
+                processedBuffer = await sharp(fileBuffer)
+                    .rotate()
+                    .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+                    .webp({ quality: 88, effort: 4 })
+                    .toBuffer();
+                contentType = 'image/webp';
+                console.log('✅ [Manual Upload] Otimização rápida aplicada');
+            } catch (err) {
+                console.warn('⚠️ [Manual Upload] Otimização falhou, usando original:', (err as any)?.message);
+                // Usar original somente no pior caso
+            }
         }
 
         // Upload para Wasabi
@@ -128,7 +159,8 @@ export default defineEventHandler(async (event) => {
             .substring(0, 50);
         const hash = createHash('sha256').update(normalizedTerm || productName).digest('hex').substring(0, 12);
         const ext = contentType === 'image/webp' ? 'webp' : mime.split('/')[1] || 'png';
-        const key = `imagens/manual-${safeName}-${hash}-${PROCESS_VERSION}.${ext}`;
+        const variant = canRemoveBackground ? 'bg' : 'original';
+        const key = `imagens/manual-${safeName}-${hash}-${PROCESS_VERSION}-${variant}.${ext}`;
 
         const putCommand = new PutObjectCommand({
             Bucket: bucketName,
@@ -179,11 +211,14 @@ export default defineEventHandler(async (event) => {
             url: readUrl || canonicalUrl,
             publicUrl: readUrl || canonicalUrl,
             canonicalUrl,
-            key: key
+            key: key,
+            originalKey,
+            backgroundRemovalRequested: shouldRemoveBackground,
+            backgroundRemovalApplied: canRemoveBackground
         };
 
     } catch (err: any) {
         console.error("Upload failed:", err);
-        throw createError({ statusCode: 500, statusMessage: "Failed to upload image: " + (err?.message || String(err)) });
+        throw createError({ statusCode: err?.statusCode || 500, statusMessage: "Failed to upload image: " + (err?.message || String(err)) });
     }
 });

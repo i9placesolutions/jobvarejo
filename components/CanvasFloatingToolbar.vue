@@ -7,8 +7,7 @@ import {
   Circle,
   Type,
   PenTool,
-  LayoutGrid,
-  Tag
+  LayoutGrid
 } from 'lucide-vue-next'
 
 defineProps<{
@@ -25,7 +24,6 @@ const emit = defineEmits<{
   (e: 'toggle-drawing'): void
   (e: 'set-pen-width', width: number): void
   (e: 'add-grid-zone'): void
-  (e: 'open-label-templates'): void
 }>()
 </script>
 
@@ -100,10 +98,6 @@ const emit = defineEmits<{
 
     <button @click="emit('add-grid-zone')" title="Nova Zona de Produtos" class="w-9 h-9 flex items-center justify-center rounded-xl transition-all cursor-pointer shadow-inner border border-transparent hover:border-violet-500/30 hover:bg-violet-500/10 text-cyan-400">
       <LayoutGrid class="w-4 h-4 drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]" />
-    </button>
-
-    <button @click="emit('open-label-templates')" title="Modelos de Etiqueta" class="w-9 h-9 flex items-center justify-center rounded-xl transition-all cursor-pointer shadow-inner border border-transparent hover:border-amber-500/30 hover:bg-amber-500/10 text-amber-400">
-      <Tag class="w-4 h-4 drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]" />
     </button>
   </div>
 </template>

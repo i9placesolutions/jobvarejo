@@ -1,3 +1,5 @@
+import { autoTrimFabricImage, trimImageFile } from './fabricImageHelpers'
+
 type ProductImageMode = 'replace' | 'add'
 
 type ProductImageAsset = { id?: string; name?: string; url: string }
@@ -16,6 +18,7 @@ export type EditorProductImageActionsContext = {
     pendingLocalImageActionMode: { value: ProductImageMode | null }
     showProductImageUploadPicker: { value: boolean }
     refreshAiStudioUploads: () => Promise<void>
+    refreshProductImagePickerAssets?: () => Promise<void>
     replaceImageByCustomId: (targetId: string, newUrl: string, opts?: { save?: boolean; setActive?: boolean }) => Promise<boolean>
     insertAssetToCanvas: (asset: ProductImageAsset, opts?: { pos?: { x: number; y: number } }) => Promise<void>
     findProductCardByCustomId: (id: string) => any | null
@@ -77,14 +80,14 @@ export const openLocalProductImagePicker = (
 export const openProductImageUploadPickerModal = async (
     ctx: EditorProductImageActionsContext,
     mode: ProductImageMode,
-    opts: { imageId?: string | null; cardId?: string | null } = {}
+    opts: { imageId?: string | null; cardId?: string | null; search?: string | null } = {}
 ) => {
     ctx.productImagePickerMode.value = mode
     ctx.productImagePickerTargetImageId.value = mode === 'replace' ? (opts.imageId || null) : null
     ctx.productImagePickerTargetCardId.value = mode === 'add' ? (opts.cardId || null) : null
-    ctx.productImagePickerSearch.value = ''
+    ctx.productImagePickerSearch.value = String(opts.search || '').trim()
     ctx.showProductImageUploadPicker.value = true
-    await ctx.refreshAiStudioUploads()
+    await (ctx.refreshProductImagePickerAssets || ctx.refreshAiStudioUploads)()
 }
 
 export const applyProductImageFromUploadPicker = async (
@@ -131,7 +134,7 @@ export const handleFileUpload = async (
                 clearPendingProductImageOperation(ctx)
                 return
             }
-            const uploaded = await ctx.uploadFile(file)
+            const uploaded = await ctx.uploadFile(await trimImageFile(file))
             if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou')
             await ctx.replaceImageByCustomId(ctx.pendingImageReplaceTargetId.value, uploaded.url)
             return
@@ -142,7 +145,7 @@ export const handleFileUpload = async (
             if (!card) throw new Error('Card de produto não encontrado.')
 
             for (const file of files) {
-                const uploaded = await ctx.uploadFile(file)
+                const uploaded = await ctx.uploadFile(await trimImageFile(file))
                 if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou')
                 const added = await ctx.addImageToProductCardByUrl(card, uploaded.url)
                 if (!added) throw new Error('Não foi possível adicionar imagem ao card.')
@@ -155,7 +158,7 @@ export const handleFileUpload = async (
         const gap = 34
         for (let i = 0; i < files.length; i++) {
             const file = files[i]!
-            const uploaded = await ctx.uploadFile(file)
+            const uploaded = await ctx.uploadFile(await trimImageFile(file))
             if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou')
             const row = Math.floor(i / cols)
             const col = i % cols
@@ -222,17 +225,24 @@ export const handleClipboardImagePaste = async (
         const item = items[i]
         if (!item || item.type.indexOf('image') === -1) continue
 
-        event.preventDefault()
-        const file = item.getAsFile()
-        if (!file) continue
+            event.preventDefault()
+            const file = item.getAsFile()
+            if (!file) continue
 
-        try {
-            const result = await ctx.uploadFile(file)
+            try {
+                const result = await ctx.uploadFile(await trimImageFile(file))
             if (!result.success || !result.url) continue
 
             const pasteProxyUrl = ctx.toWasabiProxyUrl(result.url) || result.url
             const img = await ctx.fabric.Image.fromURL(pasteProxyUrl, { crossOrigin: 'anonymous' })
             if (!img) continue
+
+            autoTrimFabricImage(img, {
+                alphaThreshold: 12,
+                padding: 0,
+                colorTolerance: 20,
+                preserveVisualPosition: true
+            })
 
             if (img.width > 500) {
                 img.scaleToWidth(500)

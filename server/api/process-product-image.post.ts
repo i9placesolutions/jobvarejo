@@ -1,3 +1,4 @@
+import { searchChromiumImageCandidates } from '../utils/product-image-chromium';
 import { getS3Client, getPublicUrl } from "../utils/s3";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { pgQuery } from "../utils/postgres";
@@ -19,9 +20,15 @@ import {
 } from "../utils/product-image-matching";
 import {
     ensureBgRemoved,
+    runExternalPipelineOnce,
     s3KeyExists,
     type BgPolicy
 } from "../utils/product-image-pipeline";
+import {
+    rankGoogleCseImageCandidates,
+    type GoogleCseImageCandidate,
+    type RankedGoogleCseImageCandidate
+} from "../utils/product-image-google-cse";
 import {
     buildProductIdentityKey,
     findRegistryApprovedImage,
@@ -209,6 +216,40 @@ const buildInternalReviewCandidates = async (
         });
     }));
     return results;
+};
+
+const buildGoogleReviewCandidates = (
+    list: RankedGoogleCseImageCandidate[]
+): ReviewCandidate[] => {
+    const limited = Array.isArray(list) ? list.slice(0, 6) : [];
+    return limited.map((entry, index) => ({
+        id: `google-cse-${index + 1}-${Buffer.from(entry.url).toString('base64url').slice(0, 10)}`,
+        url: entry.url,
+        previewUrl: entry.url,
+        title: String(entry.title || '').trim() || undefined,
+        source: 'external' as const,
+        provider: 'chromium-search',
+        domain: String(entry.domain || '').trim() || undefined,
+        score: Number.isFinite(Number(entry.score)) ? Number(Number(entry.score).toFixed(3)) : undefined,
+        confidence: Number.isFinite(Number(entry.confidence)) ? Number(Number(entry.confidence).toFixed(3)) : undefined,
+        reason: String(entry.reason || '').trim() || undefined,
+        recommended: index === 0
+    }));
+};
+
+const mergeReviewCandidates = (...lists: ReviewCandidate[][]): ReviewCandidate[] => {
+    const merged: ReviewCandidate[] = [];
+    const seen = new Set<string>();
+    for (const list of lists) {
+        for (const candidate of Array.isArray(list) ? list : []) {
+            const key = String(candidate?.key || candidate?.url || candidate?.id || '').trim();
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            merged.push(candidate);
+            if (merged.length >= 6) return merged;
+        }
+    }
+    return merged;
 };
 
 const tokenizeNormalized = (value: string, minLen = 3): string[] =>
@@ -499,14 +540,71 @@ export default defineEventHandler(async (event) => {
                 };
             }
 
-            // Busca externa removida — apenas candidatas do storage (source === 's3') são suportadas.
-            return noImageResponse('only_s3_candidates_supported', {
-                provider: 'internal',
-                reviewPending: true,
-                decision: 'blocked',
-                nextAction: 'Escolha uma imagem do storage ou faça upload manual.',
-                imageReviewReason: 'Apenas imagens do storage Wasabi são suportadas. Faça upload manual para usar imagens externas.'
-            });
+            if (!candidateUrl) {
+                return noImageResponse('selected_candidate_invalid', {
+                    provider: candidate.provider || 'chromium-search',
+                    reviewPending: true,
+                    decision: 'blocked',
+                    nextAction: 'Escolha outra imagem ou faça upload manual.',
+                    imageReviewReason: 'A candidata escolhida não possui uma URL válida.'
+                });
+            }
+
+            try {
+                const processed = await runExternalPipelineOnce({
+                    s3,
+                    bucketName,
+                    deterministicKey,
+                    normalizedTerm,
+                    term,
+                    brand,
+                    flavor,
+                    weight,
+                    selectedImageUrl: candidateUrl,
+                    bgPolicy,
+                    sourcePrefix: String(candidate.provider || 'chromium-search').toLowerCase().includes('google')
+                        ? 'chromium-search'
+                        : 'external'
+                });
+                const processedKey = String(processed?.key || '').trim();
+                if (!processedKey) throw new Error('pipeline_external_semantic_empty');
+
+                await safeUpsertRegistry({
+                    productCode,
+                    identityKey,
+                    canonicalName: term,
+                    brand,
+                    flavor,
+                    weight,
+                    s3Key: processedKey,
+                    source: candidate.provider || 'external-choice',
+                    validationLevel: 'manual-review-choice-external',
+                    validatedBy: user.id,
+                    status: 'approved'
+                });
+
+                return {
+                    source: 'external',
+                    url: await resolveStorageReadUrl(processedKey, user.id) || processed.url,
+                    key: processedKey,
+                    provider: candidate.provider || 'external',
+                    confidence: candidateConfidence,
+                    candidateCount: 1,
+                    attempts: 1,
+                    reviewPending: false,
+                    decision: 'approved' as ReviewDecision,
+                    candidates: []
+                };
+            } catch (error: any) {
+                console.warn('⚠️ [External Candidate] Falha ao processar escolha:', error?.message || String(error));
+                return noImageResponse('selected_external_candidate_failed', {
+                    provider: candidate.provider || 'external',
+                    reviewPending: true,
+                    decision: 'blocked',
+                    nextAction: 'A imagem escolhida não pôde ser processada. Escolha outra ou faça upload manual.',
+                    imageReviewReason: 'Não foi possível baixar/processar a imagem escolhida.'
+                });
+            }
         };
 
         if (!String(bucketName || '').trim()) {
@@ -893,9 +991,104 @@ export default defineEventHandler(async (event) => {
     }
 
     // ========================================
-    // Nenhuma imagem encontrada no Wasabi
-    // Busca externa removida — apenas storage interno.
+    // 2. BUSCA EXTERNA (Google CSE) - somente depois de esgotar Wasabi/cache
     // ========================================
+    let chromiumSearchError = '';
+    const externalSearchConfigured = true;
+    const googleReviewCandidates: ReviewCandidate[] = [];
+    let googleAttempts = 0;
+    let rankedGoogleCandidates: RankedGoogleCseImageCandidate[] = [];
+
+    if (externalSearchConfigured) {
+        const googleQueries = [...new Set([
+            combinedFullTerm,
+            primarySearchInput,
+            ...searchHints,
+            term
+        ].map(value => String(value || '').trim()).filter(Boolean))].slice(0, 3);
+        const rawGoogleCandidates: GoogleCseImageCandidate[] = [];
+        const seenGoogleUrls = new Set<string>();
+
+        for (const query of googleQueries) {
+            const result = await searchChromiumImageCandidates(query);
+            if (result.error) {
+                chromiumSearchError = result.error.message;
+                break;
+            }
+            for (const candidate of result.candidates || []) {
+                const url = String(candidate?.url || '').trim();
+                if (!url || seenGoogleUrls.has(url)) continue;
+                seenGoogleUrls.add(url);
+                rawGoogleCandidates.push(candidate);
+            }
+            if (rawGoogleCandidates.length >= 10) break;
+        }
+
+        rankedGoogleCandidates = rankGoogleCseImageCandidates(rawGoogleCandidates, {
+            query: primarySearchInput,
+            brand,
+            flavor,
+            weight,
+            productCode
+        }).slice(0, 6);
+        googleReviewCandidates.push(...buildGoogleReviewCandidates(rankedGoogleCandidates));
+
+        for (const candidate of rankedGoogleCandidates) {
+            googleAttempts += 1;
+            try {
+                const processed = await runExternalPipelineOnce({
+                    s3,
+                    bucketName,
+                    deterministicKey,
+                    normalizedTerm,
+                    term,
+                    brand,
+                    flavor,
+                    weight,
+                    selectedImageUrl: candidate.url,
+                    bgPolicy,
+                    sourcePrefix: 'chromium-search'
+                });
+                const processedKey = String(processed?.key || '').trim();
+                if (!processedKey) throw new Error('pipeline_external_semantic_empty');
+
+                await safeUpsertRegistry({
+                    productCode,
+                    identityKey,
+                    canonicalName: term,
+                    brand,
+                    flavor,
+                    weight,
+                    s3Key: processedKey,
+                    source: 'chromium-search',
+                    validationLevel: 'external-ranked',
+                    validatedBy: user.id,
+                    status: 'approved',
+                    reason: candidate.reason
+                });
+
+                return {
+                    found: true,
+                    source: 'external',
+                    imageSource: 'external',
+                    url: await resolveStorageReadUrl(processedKey, user.id) || processed.url,
+                    key: processedKey,
+                    provider: 'chromium-search',
+                    confidence: candidate.confidence,
+                    candidateCount: rankedGoogleCandidates.length,
+                    attempts: googleAttempts,
+                    reviewPending: false,
+                    decision: 'approved' as ReviewDecision,
+                    // Mantem as outras opcoes disponiveis para troca sem nova busca.
+                    candidates: googleReviewCandidates
+                };
+            } catch (error: any) {
+                console.warn('⚠️ [Google CSE] Candidata rejeitada no download/processamento:', error?.message || String(error));
+            }
+        }
+    }
+
+    const allReviewCandidates = mergeReviewCandidates(internalReviewCandidates, googleReviewCandidates);
     await safeUpsertRegistry({
         productCode,
         identityKey,
@@ -903,35 +1096,47 @@ export default defineEventHandler(async (event) => {
         brand,
         flavor,
         weight,
-        source: 'internal',
+        source: externalSearchConfigured ? 'chromium-search' : 'internal',
         validationLevel: 'bucket-no-match',
         validatedBy: user.id,
         status: 'review_pending',
-        reason: 'no_internal_match'
+        reason: chromiumSearchError || 'no_external_match_processed'
     });
 
-    if (internalReviewCandidates.length > 0) {
-        return noImageResponse(`No exact match in storage for "${term}"`, {
-            provider: 'internal',
-            candidateCount: internalReviewCandidates.length,
+    if (!externalSearchConfigured) {
+        return noImageResponse('external_search_config_missing', {
+            provider: 'chromium-search',
+            candidateCount: allReviewCandidates.length,
             attempts: 0,
-            confidence: 0.62,
-            reviewPending: true,
-            decision: 'ambiguous',
-            candidates: internalReviewCandidates,
-            imageReviewReason: 'Não encontramos imagem exata no storage. Escolha uma das sugestões ou faça upload manual.',
-            nextAction: 'Escolha uma imagem do storage ou faça upload manual.'
+            confidence: 0,
+            reviewPending: allReviewCandidates.length > 0,
+            decision: allReviewCandidates.length > 0 ? 'ambiguous' : 'blocked',
+            candidates: allReviewCandidates,
+            imageReviewReason: 'Não encontramos a imagem no Wasabi e a busca do Google não está configurada no servidor.',
+            nextAction: allReviewCandidates.length > 0
+                ? 'Escolha uma imagem do storage ou faça upload manual.'
+                : 'Configure Google CSE ou faça upload manual da imagem.'
         });
     }
 
-    return noImageResponse(`No image found in storage for "${term}"`, {
-        provider: 'internal',
-        candidateCount: 0,
-        attempts: 0,
-        confidence: 0,
-        imageReviewReason: 'Nenhuma imagem encontrada no storage para este produto.',
-        nextAction: 'Faça upload manual da imagem do produto.'
-    });
+    return noImageResponse(
+        googleReviewCandidates.length > 0 ? 'external_processing_failed' : 'no_external_candidates',
+        {
+            provider: 'chromium-search',
+            candidateCount: rankedGoogleCandidates.length || allReviewCandidates.length,
+            attempts: googleAttempts,
+            confidence: googleReviewCandidates[0]?.confidence || 0,
+            reviewPending: allReviewCandidates.length > 0,
+            decision: allReviewCandidates.length > 0 ? 'ambiguous' : 'blocked',
+            candidates: allReviewCandidates,
+            imageReviewReason: chromiumSearchError || (googleReviewCandidates.length > 0
+                ? 'Encontramos sugestões, mas não foi possível processar automaticamente. Escolha uma delas ou faça upload manual.'
+                : 'Nenhuma imagem adequada foi encontrada na busca de imagens para este produto.'),
+            nextAction: allReviewCandidates.length > 0
+                ? 'Escolha uma sugestão ou faça upload manual.'
+                : 'Confira marca e peso, tente novamente ou faça upload manual.'
+        }
+    );
     } catch (err: any) {
         // Preserve expected HTTP errors (auth, validation, rate limit).
         const statusCode = Number(err?.statusCode || err?.status || 0) || 0;

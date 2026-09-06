@@ -1,4 +1,4 @@
-import type { Product, ProductZone } from '~/types/product-zone'
+import type { Product, ProductZone, ProductZonePreviewFormat } from '~/types/product-zone'
 import { DEFAULT_PRODUCT_ZONE } from '~/types/product-zone'
 import {
   calculateGridLayout,
@@ -7,6 +7,10 @@ import {
   parsePrice
 } from '~/utils/product-zone-helpers'
 import { resolveProductImageRef } from '~/utils/productImageRef'
+import {
+  DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT,
+  resolveProductZoneStructure
+} from '~/utils/product-zone-structure'
 
 export type AutoOfferDensity = 'compact' | 'balanced' | 'premium'
 export type AutoOfferStrategy = 'single-zone' | 'review-overflow' | 'paginate'
@@ -52,6 +56,7 @@ export type AutoOfferPlanOptions = {
   overflowPolicy?: ProductZone['overflowPolicy']
   promoteHighlights?: boolean
   maxProductsPerZone?: number
+  previewFormat?: ProductZonePreviewFormat
 }
 
 const DENSITY_PRESETS: Record<AutoOfferDensity, {
@@ -223,9 +228,21 @@ const getBaseZone = (zone: Partial<ProductZone> | null | undefined, density: Aut
 const chooseColumnCount = (
   baseZone: ProductZone,
   productCount: number,
-  density: AutoOfferDensity
+  density: AutoOfferDensity,
+  previewFormat: ProductZonePreviewFormat
 ): number => {
   if (productCount <= 0) return 0
+
+  if (typeof baseZone.columns === 'number' && baseZone.columns > 0) {
+    return Math.max(1, Math.round(baseZone.columns))
+  }
+  if (
+    typeof baseZone.rows === 'number' &&
+    baseZone.rows > 0 &&
+    baseZone.layoutDirection === 'horizontal'
+  ) {
+    return Math.max(1, Math.ceil(productCount / Math.max(1, Math.round(baseZone.rows))))
+  }
 
   const preset = DENSITY_PRESETS[density]
   const upper = Math.max(1, Math.min(productCount, preset.maxColumns))
@@ -239,14 +256,18 @@ const chooseColumnCount = (
       rows: 0,
       cardAspectRatio: 'fill'
     }
-    const layout = calculateGridLayout(candidateZone, productCount)
+    const layout = calculateGridLayout(candidateZone, productCount, previewFormat)
     const readability = Math.min(layout.itemWidth / preset.minCardWidth, layout.itemHeight / preset.minCardHeight)
     const rows = Math.max(1, Math.ceil(productCount / cols))
     const emptySlots = rows * cols - productCount
+    const lastRowItemCount = productCount % cols || cols
+    const lastRowFillRatio = lastRowItemCount / cols
     const area = layout.itemWidth * layout.itemHeight
     const balance = Math.abs(cols - rows) / Math.max(cols, rows)
     let score = readability * 4 + Math.log(Math.max(1, area)) * 0.25
     score -= emptySlots * 0.35
+    if (rows > 1 && lastRowFillRatio < 0.6) score -= 0.8
+    else if (rows > 1 && lastRowFillRatio < 0.75) score -= 0.35
     score -= balance * 0.45
     if (readability < 1) score -= (1 - readability) * 6
     if (productCount >= 5 && cols === 1) score -= 3
@@ -280,9 +301,10 @@ const getRoleForPlan = (productCount: number, highlightCount: number): ProductZo
 const assignProductPositions = (
   products: Product[],
   zone: ProductZone,
-  decisionsById: Map<string, AutoOfferProductDecision>
+  decisionsById: Map<string, AutoOfferProductDecision>,
+  previewFormat: ProductZonePreviewFormat
 ): Product[] => {
-  const layout = calculateGridLayout(zone, products.length)
+  const layout = calculateGridLayout(zone, products.length, previewFormat)
   return products.map((product, index) => {
     const position = calculateProductPosition(
       zone,
@@ -290,7 +312,8 @@ const assignProductPositions = (
       layout.cols,
       layout.itemWidth,
       layout.itemHeight,
-      products.length
+      products.length,
+      previewFormat
     )
     const decision = decisionsById.get(String(product.id))
     return {
@@ -315,6 +338,7 @@ const buildSingleZonePlan = (
   opts: Required<Pick<AutoOfferPlanOptions, 'density' | 'sourceMode' | 'overflowPolicy' | 'promoteHighlights'>> & AutoOfferPlanOptions
 ): AutoOfferZonePlan => {
   const baseZone = getBaseZone(opts.zone, opts.density)
+  const previewFormat = opts.previewFormat || DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT
   const decisions = inputProducts.map((product, index) => scoreAutoOfferProduct(product, index))
   const rankedIds = new Set(
     decisions
@@ -333,23 +357,48 @@ const buildSingleZonePlan = (
     })
     : inputProducts
 
-  const columns = chooseColumnCount(baseZone, orderedProducts.length, opts.density)
-  const highlightCount = getHighlightCount(orderedProducts.length, decisions, opts.density)
+  const structure = resolveProductZoneStructure(baseZone, orderedProducts.length, previewFormat)
+  const structuredBaseZone: ProductZone = structure
+    ? {
+      ...baseZone,
+      role: structure.role,
+      padding: structure.padding,
+      gapHorizontal: structure.gapHorizontal,
+      gapVertical: structure.gapVertical,
+      columns: structure.columns,
+      rows: structure.rows,
+      layoutDirection: structure.layoutDirection,
+      cardAspectRatio: structure.cardAspectRatio,
+      lastRowBehavior: structure.lastRowBehavior,
+      verticalAlign: structure.verticalAlign,
+      highlightCount: structure.highlightCount,
+      highlightPos: structure.highlightPos,
+      highlightSelection: structure.highlightSelection,
+      highlightIndexes: structure.highlightIndexes,
+      highlightHeight: structure.highlightHeight
+    }
+    : baseZone
+  const columns = chooseColumnCount(structuredBaseZone, orderedProducts.length, opts.density, previewFormat)
+  const highlightCount = structure
+    ? Math.min(structure.highlightCount, Math.max(0, orderedProducts.length - 1))
+    : getHighlightCount(orderedProducts.length, decisions, opts.density)
   const zone: ProductZone = {
-    ...baseZone,
+    ...structuredBaseZone,
     enabled: true,
     contentSource: opts.sourceMode,
     overflowPolicy: opts.overflowPolicy,
-    role: getRoleForPlan(orderedProducts.length, highlightCount),
+    role: structure?.role || getRoleForPlan(orderedProducts.length, highlightCount),
     contentStatus: orderedProducts.length > 0 ? 'filled' : 'empty',
     columns,
-    rows: 0,
-    cardAspectRatio: 'fill',
-    lastRowBehavior: orderedProducts.length <= 3 && opts.density === 'premium' ? 'center' : 'fill',
-    verticalAlign: 'stretch',
+    rows: structure?.rows ?? 0,
+    cardAspectRatio: structure?.cardAspectRatio || 'fill',
+    lastRowBehavior: structure?.lastRowBehavior || 'fill',
+    verticalAlign: structure?.verticalAlign || 'stretch',
     highlightCount,
-    highlightPos: 'first',
-    highlightHeight: DENSITY_PRESETS[opts.density].highlightHeight
+    highlightPos: structure?.highlightPos || 'first',
+    highlightSelection: structure?.highlightSelection || 'first',
+    highlightIndexes: structure?.highlightIndexes || [1],
+    highlightHeight: structure?.highlightHeight || DENSITY_PRESETS[opts.density].highlightHeight
   }
   const capacity = estimateAutoOfferCapacity(zone, opts.density)
   const overflowCount = Math.max(0, orderedProducts.length - capacity)
@@ -359,11 +408,11 @@ const buildSingleZonePlan = (
     warnings.push(`overflow:${overflowCount}`)
   }
 
-  const layout = calculateGridLayout(zone, orderedProducts.length)
+  const layout = calculateGridLayout(zone, orderedProducts.length, previewFormat)
   const decisionsById = new Map(decisions.map((decision) => [decision.id, decision]))
   return {
     zone,
-    products: assignProductPositions(orderedProducts, zone, decisionsById),
+    products: assignProductPositions(orderedProducts, zone, decisionsById, previewFormat),
     decisions,
     layout: {
       ...layout,
@@ -463,8 +512,12 @@ export const buildAutoOfferZoneUpdate = (
     cardAspectRatio: zone.cardAspectRatio,
     lastRowBehavior: zone.lastRowBehavior,
     verticalAlign: zone.verticalAlign,
+    structureByProductCountEnabled: true,
+    structureByProductCount: zone.structureByProductCount,
     highlightCount: zone.highlightCount,
     highlightPos: zone.highlightPos,
+    highlightSelection: zone.highlightSelection,
+    highlightIndexes: zone.highlightIndexes,
     highlightHeight: zone.highlightHeight,
     highlightStyle: zone.highlightStyle
   }

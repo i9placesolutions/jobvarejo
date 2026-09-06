@@ -12,7 +12,7 @@ async function testBgRemoval() {
     const buf = Buffer.from(await res.arrayBuffer());
     console.log('Buffer:', buf.length, 'bytes');
     
-    const resized = await sharp(buf).resize(400, 400, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
+    const resized = await sharp(buf).flatten({ background: '#ffffff' }).resize(400, 400, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
     console.log('Resized:', resized.length, 'bytes');
     
     const meta = await sharp(resized).metadata();
@@ -41,8 +41,10 @@ async function testBgRemoval() {
         console.log('Transparente:', (transparent / total * 100).toFixed(1) + '%');
         console.log('Opaco:', (opaque / total * 100).toFixed(1) + '%');
         console.log(transparent > total * 0.1 ? '✅ BG REMOVIDO com sucesso' : '❌ BG NÃO foi removido');
+        if (transparent <= total * 0.1 || opaque <= total * 0.05) process.exitCode = 1;
     } catch (e) {
         console.error('❌ ERRO no removeBackground:', e);
+        process.exitCode = 1;
     }
 }
 

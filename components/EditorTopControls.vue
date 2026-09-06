@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Play, Share2, ChevronDown, View, Check, LayoutGrid, Sparkles } from 'lucide-vue-next'
+import { Play, Share2, ChevronDown, View, Check, LayoutGrid } from 'lucide-vue-next'
 
 const props = defineProps<{
   collaborators: any[]
@@ -21,7 +21,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:showZoomMenu', value: boolean): void
   (e: 'present'): void
-  (e: 'open-ai-generate'): void
   (e: 'open-share'): void
   (e: 'zoom-50'): void
   (e: 'zoom-100'): void
@@ -83,14 +82,6 @@ const closeViewMenu = () => { showViewMenu.value = false }
     </button>
 
     <div class="w-px h-5 bg-white/10 mx-1 shrink-0"></div>
-
-    <button
-      @click="emit('open-ai-generate')"
-      class="h-8 px-3.5 bg-gradient-to-r from-violet-600/30 to-fuchsia-600/30 hover:from-violet-600/40 hover:to-fuchsia-600/40 border border-violet-500/30 hover:border-violet-500/50 text-violet-100 rounded-full text-[12px] font-semibold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap shadow-[0_0_12px_rgba(139,92,246,0.15)] hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-    >
-      <Sparkles class="w-4 h-4 shrink-0 text-violet-300" />
-      <span>Gerar IA</span>
-    </button>
 
     <button
       @click="emit('open-share')"

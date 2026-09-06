@@ -1,6 +1,7 @@
 import { isTransientParseError } from './pasteListErrorHelpers'
 import { parseProductList } from './productListBasicParser'
 import { splitTextIntoChunks } from './textChunking'
+import { inferUnitLabelFromProduct } from './priceTagText'
 
 export { parseProductList as parseBasicProductList }
 
@@ -36,7 +37,14 @@ const mapParsedProduct = (p: any, i: number) => ({
   imageUrl: null,
   image: null,
   status: 'pending',
-  unit: 'UN',
+  // Alguns provedores retornam `unit: UN` como default mesmo quando o nome
+  // informa a unidade real (ex.: "Picanha kg"). Recalcular aqui evita que o
+  // default do importador chegue ate a etiqueta como se fosse dado explicito.
+  unit: inferUnitLabelFromProduct({
+    ...p,
+    name: p.name || 'Produto sem nome',
+    unit: p.unit || ''
+  }) || String(p.unit || 'UN').trim().toUpperCase(),
   color: '#ffffff'
 })
 
