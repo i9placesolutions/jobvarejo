@@ -18450,7 +18450,9 @@ const setupReactivity = () => {
         }
         applyVisibleSelectionChrome(selected);
         if (selected && isLikelyProductZone(selected)) ensureZoneSanity(selected);
-        if (selected && (selected.isFrame || String(selected.type || '').toLowerCase() === 'image')) {
+        // Selecionar a página não pode aparar seu tamanho até os filhos.
+        // O formato pertence ao frame; auto trim automático é exclusivo de imagens.
+        if (selected && !selected.isFrame && String(selected.type || '').toLowerCase() === 'image') {
             if (trimContainerEmptySpace(selected)) {
                 applyVisibleSelectionChrome(selected);
                 safeRequestRenderAll();
