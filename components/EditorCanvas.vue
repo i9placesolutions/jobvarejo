@@ -8209,7 +8209,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 legacyImageRepairMode: legacyProductCardImageRepairMode,
                 // Reload must preserve the exact card/label geometry already saved in canvas JSON.
                 // Reapplying zone styles here can relayout price groups and resurrect broken labels.
-                applyZoneStyles: false
+                applyZoneStyles: false,
+                applyGlobalLibraries: false,
+                relayout: false
             });
 
             // Clear suppression after multiple ticks to allow Vue's reactive system to settle.
@@ -8268,19 +8270,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 // FIX: Reparar elementos de fundo de etiquetas de preço que ficaram
                 // invisíveis após deserialização (viewport culling corruption, image load fail).
                 repairLivePriceGroupBackgrounds(canvas.value);
-                if (isQuickMode.value) {
-                    for (const text of collectObjectsDeep(canvas.value).filter(isDynamicBusinessFieldObject)) {
-                        const top = text.getPointByOrigin?.('center', 'top');
-                        text.dynamicFieldAutoHeight = true;
-                        fitDynamicBusinessTextObject(text);
-                        text.initDimensions?.();
-                        if (top) text.setPositionByOrigin?.(top, 'center', 'top');
-                        text.setCoords?.();
-                    }
-                }
-                for (const zone of getRuntimeProductZones()) {
-                    harmonizeProductCardTypography(getZoneChildren(zone));
-                }
+                // Reabrir não é editar: preserve a tipografia e a geometria serializadas.
                 if (!degradedNewPage) {
                     syncPreparedCanvasStateToPage(pageToLoad, canonicalCanvasDataToLoad);
                 }
@@ -9964,7 +9954,9 @@ onMounted(async () => {
                       rehydrateCanvasZones({
                           legacyImageRepairMode: legacyProductCardImageRepairMode,
                           // Same safeguard for the legacy loader path: trust persisted canvas visuals on reload.
-                          applyZoneStyles: false
+                          applyZoneStyles: false,
+                          applyGlobalLibraries: false,
+                          relayout: false
                       });
                       requestAnimationFrame(() => { requestAnimationFrame(() => { nextTick(() => { _suppressGlobalStyleUpdates = false; }); }); });
 
@@ -22004,6 +21996,9 @@ const exportSelectedObject = async (
 }
 
 const performExport = async () => {
+    // A exportação deve corresponder à última edição também após reabrir.
+    await Promise.resolve(saveCurrentState({ reason: 'before-export', source: 'user', skipCoalesce: true, skipIfUnchanged: false }))
+    await flushPersistenceNow('before-export', { force: true })
     const controller = await loadExportShareController()
     await controller.performExport(getExportShareContext())
 }
@@ -22244,7 +22239,9 @@ const loadCanvasData = async (data: any) => {
     // CRITICAL: Suppress global style updates during rehydrate (same as main load paths).
     _suppressGlobalStyleUpdates = true;
     rehydrateCanvasZones({
-        applyZoneStyles: false
+        applyZoneStyles: false,
+                          applyGlobalLibraries: false,
+                          relayout: false
     });
     requestAnimationFrame(() => { nextTick(() => { _suppressGlobalStyleUpdates = false; }); });
 
