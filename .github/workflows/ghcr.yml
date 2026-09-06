@@ -77,6 +77,8 @@ jobs:
             "$COOLIFY_URL/api/v1/applications/$COOLIFY_APPLICATION_UUID" \
             -d "{\"docker_registry_image_name\":\"${IMAGE}\",\"docker_registry_image_tag\":\"${IMAGE_TAG}\"}"
 
-          curl -fsS \
+          curl -fsS -X POST \
             -H "Authorization: Bearer $COOLIFY_TOKEN" \
-            "$COOLIFY_URL/api/v1/deploy?uuid=$COOLIFY_APPLICATION_UUID&force=true"
+            -H "Content-Type: application/json" \
+            "$COOLIFY_URL/api/v1/deploy" \
+            -d "{\"uuid\":\"$COOLIFY_APPLICATION_UUID\",\"force\":true}"
