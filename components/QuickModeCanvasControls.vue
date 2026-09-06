@@ -196,7 +196,6 @@ const onZoomInput = (event: Event) => {
     @pointerdown.stop
     @keydown.esc="closePanel"
   >
-    <button type="button" class="quick-export-button" aria-label="Exportar encarte" @click="emit('export')"><Download :size="18" /><span>Exportar</span></button>
     <div class="quick-mode-canvas-controls__group quick-mode-canvas-controls__zoom" aria-label="Zoom">
       <button type="button" class="quick-mode-canvas-controls__icon-button" aria-label="Diminuir zoom" title="Diminuir zoom" @click="emit('zoom-out')">
         <ZoomOut :size="15" aria-hidden="true" />
@@ -359,6 +358,7 @@ const onZoomInput = (event: Event) => {
         </div>
       </div>
     </div>
+    <button type="button" class="quick-export-button" aria-label="Exportar encarte" @click="emit('export')"><Download :size="18" /><span>Exportar</span></button>
   </div>
 </template>
 
@@ -368,15 +368,20 @@ const onZoomInput = (event: Event) => {
   z-index: 245;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
   width: max-content;
-  max-width: min(calc(100% - 28px), 640px);
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+  font-size: 13px;
+  line-height: 1.2;
   border: 1px solid rgba(159, 192, 255, 0.18);
-  border-radius: 9px;
-  background: rgba(18, 23, 32, 0.82);
+  border-radius: 16px;
+  background: #191c24;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
   color: rgba(255, 255, 255, 0.82);
-  padding: 3px 4px;
+  padding: 8px;
   backdrop-filter: blur(12px);
 }
 
@@ -394,7 +399,7 @@ const onZoomInput = (event: Event) => {
 }
 
 .quick-mode-canvas-controls button {
-  font: inherit;
+  font-family: inherit;
 }
 
 .quick-mode-canvas-controls__icon-button,
@@ -404,7 +409,7 @@ const onZoomInput = (event: Event) => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  min-height: 24px;
+  min-height: 36px;
   border: 1px solid transparent;
   border-radius: 7px;
   background: transparent;
@@ -420,8 +425,8 @@ const onZoomInput = (event: Event) => {
 .quick-mode-canvas-controls__fit,
 .quick-mode-canvas-controls__tool-button {
   padding: 0 6px;
-  font-size: 7px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 500;
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
@@ -458,7 +463,7 @@ const onZoomInput = (event: Event) => {
   flex: 0 0 auto;
   font-size: 8px;
   font-variant-numeric: tabular-nums;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .quick-mode-canvas-controls__zoom-value input {
@@ -478,7 +483,7 @@ const onZoomInput = (event: Event) => {
   border-radius: 999px;
   background: rgba(159, 192, 255, 0.16);
   color: #a9c7ff;
-  font-size: 7px;
+  font-size: 13px;
   font-style: normal;
   line-height: 13px;
   text-align: center;
@@ -575,7 +580,7 @@ const onZoomInput = (event: Event) => {
 .quick-mode-canvas-controls__font-option small {
   color: #a9c7ff;
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .quick-mode-canvas-controls__swatches {
@@ -658,7 +663,7 @@ const onZoomInput = (event: Event) => {
   overflow: hidden;
   color: rgba(255, 255, 255, 0.93);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -704,7 +709,7 @@ const onZoomInput = (event: Event) => {
   background: rgba(159, 192, 255, 0.16);
   color: #a9c7ff;
   font-size: 8px;
-  font-weight: 800;
+  font-weight: 500;
   padding: 3px 6px;
 }
 
@@ -743,7 +748,7 @@ const onZoomInput = (event: Event) => {
   color: #fecaca;
   cursor: pointer;
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 500;
   padding: 7px 8px;
   transition: background-color 0.16s ease, border-color 0.16s ease;
 }
@@ -856,11 +861,25 @@ const onZoomInput = (event: Event) => {
 </style>
 
 <style scoped>
-.quick-export-button { display:flex; align-items:center; gap:7px; min-height:40px; padding:0 12px; border-radius:9px; background:#7c3aed; color:white; font-size:12px; font-weight:600; }
+.quick-export-button { order:3; flex-shrink:0; display:flex; align-items:center; gap:7px; min-height:36px; padding:0 14px; border-radius:9px; background:#7c3aed; color:white; font-size:12px; font-weight:600; }
 .quick-export-button:hover { background:#8b5cf6; }
-.quick-mode-canvas-controls__zoom-value { gap:10px; }
+.quick-mode-canvas-controls__zoom { order:0; flex-shrink:0; }
+.quick-mode-canvas-controls__divider { order:1; }
+.quick-mode-canvas-controls__tool-group { order:2; flex-shrink:0; }
+.quick-mode-canvas-controls__tool-button, .quick-mode-canvas-controls__fit { gap:6px; padding:0 10px; }
+.quick-mode-canvas-controls__tool-button > svg, .quick-mode-canvas-controls__fit > svg { width:17px; height:17px; }
+.quick-mode-canvas-controls__zoom-value { gap:8px; }
+.quick-mode-canvas-controls button:focus-visible { outline:2px solid #c4b5fd; outline-offset:2px; }
+@media(max-width:767px) {
+ .quick-mode-canvas-controls { gap:4px; padding:6px; }
+ .quick-mode-canvas-controls__zoom { gap:0; }
+ .quick-mode-canvas-controls__divider { display:none; }
+ .quick-mode-canvas-controls__tool-button, .quick-mode-canvas-controls__fit { padding:0; }
+ .quick-mode-canvas-controls__tool-group { gap:0; }
+}
+
 .quick-mode-canvas-controls__zoom-value > span { min-width:38px; font-size:12px; font-weight:600; }
-.quick-mode-canvas-controls__zoom-value input { appearance:none; -webkit-appearance:none; width:110px; flex:0 0 110px; height:5px; border-radius:8px; background:linear-gradient(to right,#a78bfa var(--zoom-progress),#474952 var(--zoom-progress)); }
+.quick-mode-canvas-controls__zoom-value input { appearance:none; -webkit-appearance:none; width:88px; flex:0 0 88px; height:5px; border-radius:8px; background:linear-gradient(to right,#a78bfa var(--zoom-progress),#474952 var(--zoom-progress)); }
 .quick-mode-canvas-controls__zoom-value input::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#f5f3ff; border:2px solid #a78bfa; box-shadow:0 1px 5px #0005; }
 .quick-mode-canvas-controls__zoom-value input::-moz-range-thumb { width:12px; height:12px; border-radius:50%; background:#f5f3ff; border:2px solid #a78bfa; }
 .quick-mode-canvas-controls__zoom-value input:focus-visible { outline:2px solid #c4b5fd; outline-offset:6px; }

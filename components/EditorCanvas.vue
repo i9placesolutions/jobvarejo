@@ -8250,6 +8250,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 // FIX: Reparar elementos de fundo de etiquetas de preço que ficaram
                 // invisíveis após deserialização (viewport culling corruption, image load fail).
                 repairLivePriceGroupBackgrounds(canvas.value);
+                for (const zone of getRuntimeProductZones()) {
+                    harmonizeProductCardTypography(getZoneChildren(zone));
+                }
                 if (!degradedNewPage) {
                     syncPreparedCanvasStateToPage(pageToLoad, canonicalCanvasDataToLoad);
                 }
@@ -11522,10 +11525,8 @@ const _handleObjectModifiedInner = (e: any) => {
                             // repeatedly. Same-size slot moves only need position/order updates.
                             (card as any)._cardWidth = prevW || slotW;
                             (card as any)._cardHeight = prevH || slotH;
-                            reapplyProductCardConfigurationLayout(card, zone, {
-                                width: slotW,
-                                height: slotH
-                            });
+                            // Mesmo tamanho: mover o card não deve refazer a tipografia.
+
                         }
                         card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
                     } else {
@@ -11558,7 +11559,6 @@ const _handleObjectModifiedInner = (e: any) => {
                             }
                             obj.setCoords?.();
                         }
-                        reapplyProductCardConfigurationLayout(obj, zone);
                         // Card voltou ao mesmo slot — não precisa recalcular toda a zona.
                         safeRequestRenderAll();
                         return;
@@ -18269,13 +18269,8 @@ const setupReactivity = () => {
                         null,
                         { preserveScale: transformAction === 'drag' || transformAction === 'move' }
                     );
-                    const card = getCardHostForPriceGroup(obj) || getCardGroupFromAny(obj);
-                    const zoneId = String((card as any)?.parentZoneId || '').trim();
-                    reapplyProductCardConfigurationLayout(
-                        card,
-                        zoneId ? findProductZoneById(zoneId) : undefined,
-                        cardSize
-                    );
+                    // A etiqueta já foi posicionada acima. Reaplicar a receita aqui
+                    // encolhia o preço e recalculava o nome após um simples arraste.
                 }
             }
 
@@ -27232,6 +27227,7 @@ const reapplyProductCardConfigurationLayout = (
         cardLayout: productCardConfigurationState.configuration.value
     });
     productCardConfiguration.applyProductCardConfigurationLayout(card, width, height, effectiveStyles);
+    if (zone) harmonizeProductCardTypography(getZoneChildren(zone));
     return true;
 };
 // Resolve o card alvo: por _customId, senao a selecao atual (se for card de produto).

@@ -61,7 +61,12 @@ export const harmonizeProductCardTypography = (cards: any[]) => {
     for (const title of titles) {
       if (!Number.isFinite(font)) continue
       const top = title.getPointByOrigin?.('center', 'top')
-      title.set({ fontSize: font })
+      for (const line of Object.values(title.styles || {})) {
+        for (const style of Object.values(line as any)) {
+          if (style && typeof style === 'object') delete (style as any).fontSize
+        }
+      }
+      title.set({ fontSize: font, scaleX: 1, scaleY: 1 })
       title.initDimensions?.()
       if (top) title.setPositionByOrigin?.(top, 'center', 'top')
       title.setCoords?.()
