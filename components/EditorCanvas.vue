@@ -10734,6 +10734,12 @@ const prepareCanvasDataForLoad = (raw: any, opts: PrepareCanvasDataForLoadOption
 
 	    const saveState = async (opts: SaveStateOptions = {}) => {
 	        if (isHistoryProcessing.value) return; // Prevent loop
+            // Um canvas carregado com falhas não representa o documento salvo.
+            // Impede que ações posteriores persistam a versão sem as imagens.
+            if (storageDegraded.value) {
+                storageDegradedHint.value = 'Salvamento pausado: recupere as imagens antes de salvar para não perder conteúdo.'
+                return
+            }
 	        const canvasInstance = canvas.value as any;
 	        if (!canvasInstance || isCanvasDestroyed.value) return;
 	        // Prevent cross-page contamination: while the editor is switching/loading pages,
