@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
+
 /**
  * Admin: Gestao de Segmentos/Interesses
  * Permite criar, editar e remover segmentos de mercado
@@ -110,7 +112,7 @@ const handleSave = async () => {
 }
 
 const handleDelete = async (id: string) => {
-  if (!confirm('Tem certeza que deseja excluir este segmento?')) return
+  if (!await confirmInSystem('Tem certeza que deseja excluir este segmento?')) return
   try {
     await $fetch(`/api/admin/builder/segments/${id}`, {
       method: 'DELETE',

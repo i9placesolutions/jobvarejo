@@ -13,6 +13,7 @@ const reloadEditor = () => window.location.reload()
     <span>Salve as alterações antes de atualizar esta aba para carregar as novas ferramentas.</span>
     <button type="button" @click="reloadEditor">Já salvei, atualizar</button>
   </div>
+  <ClientOnly><SystemMessageDialog /></ClientOnly>
   <NuxtLayout>
     <NuxtPage :page-key="(route) => route.fullPath" />
   </NuxtLayout>

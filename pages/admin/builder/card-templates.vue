@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
+
 import type { CardTemplateElement } from '~/types/builder'
 import { useElementDragResize, type ResizeHandle } from '~/composables/useElementDragResize'
 import { normalizeBuilderThemeModelIds } from '~/utils/builderThemeFormats'
@@ -132,7 +134,7 @@ const handleSave = async () => {
   catch {}
 }
 const handleDelete = async (id: string) => {
-  if (!confirm('Excluir este template?')) return
+  if (!await confirmInSystem('Excluir este template?')) return
   try { await deleteTemplate(id) } catch {}
 }
 

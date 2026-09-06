@@ -1,3 +1,4 @@
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
 import { waitForFabricImagesDecoded } from './fabricImageHelpers'
 import { collectObjectsDeep } from './fabricObjectClassifiers'
 import { isValidClipPath } from '~/utils/canvasValidation'
@@ -636,7 +637,7 @@ export const performExport = async (ctx: EditorExportShareContext) => {
         const message = `Encontramos ${preflightWarnings.length} problema(s) antes da exportacao:\n\n` +
             preflightWarnings.map((w) => `• ${w}`).join('\n') +
             '\n\nDeseja exportar mesmo assim?'
-        if (!window.confirm(message)) {
+        if (!await confirmInSystem(message)) {
             return
         }
     }

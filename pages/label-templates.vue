@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
+
 import {
   ArrowLeft,
   Check,
@@ -507,7 +509,7 @@ const duplicateTemplate = async (template: LabelTemplate) => {
 
 const deleteTemplate = async (template: LabelTemplate) => {
   if (template.isBuiltIn || deletingTemplateId.value) return
-  if (!window.confirm(`Excluir o modelo “${template.name}”?`)) return
+  if (!await confirmInSystem(`Excluir o modelo “${template.name}”?`)) return
 
   deletingTemplateId.value = template.id
   try {

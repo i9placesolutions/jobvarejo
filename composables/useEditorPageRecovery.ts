@@ -1,3 +1,4 @@
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { findPageIndexById } from '~/utils/editorPageLookup'
 import type { PageHistoryItem } from '~/utils/pageHistoryHelpers'
@@ -59,7 +60,7 @@ export const useEditorPageRecovery = ({
         const capturedPageId = pageId
 
         const ok = typeof window !== 'undefined'
-            ? window.confirm('Recuperar a ultima versao nao-vazia desta pagina? Isso pode desfazer alteracoes recentes.')
+            ? await confirmInSystem('Recuperar a ultima versao nao-vazia desta pagina? Isso pode desfazer alteracoes recentes.')
             : true
         if (!ok) return
 
@@ -131,7 +132,7 @@ export const useEditorPageRecovery = ({
         if (!canRecoverLatestNonEmpty.value) return
 
         const ok = typeof window !== 'undefined'
-            ? window.confirm('Restaurar esta versao? Isso vai substituir o conteudo atual desta pagina.')
+            ? await confirmInSystem('Restaurar esta versao? Isso vai substituir o conteudo atual desta pagina.')
             : true
         if (!ok) return
 

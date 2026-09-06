@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
+
 import { Plus, FileText, Trash2, Calendar, Clock, Filter, LayoutGrid, Archive, Send, Loader2 } from 'lucide-vue-next'
 import type { BuilderFlyerStatus } from '~/types/builder'
 
@@ -71,7 +73,7 @@ const createFlyer = async () => {
     }
   } catch (err: any) {
     console.error('Erro ao criar encarte:', err)
-    alert('Erro ao criar encarte. Tente novamente.')
+    alertInSystem('Erro ao criar encarte. Tente novamente.')
   } finally {
     isCreating.value = false
   }
@@ -96,7 +98,7 @@ const confirmDelete = async () => {
     flyers.value = flyers.value.filter(f => f.id !== id)
   } catch (err: any) {
     console.error('Erro ao excluir encarte:', err)
-    alert('Erro ao excluir encarte. Tente novamente.')
+    alertInSystem('Erro ao excluir encarte. Tente novamente.')
   } finally {
     deletingId.value = null
   }

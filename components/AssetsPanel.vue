@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
+
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { Upload, Folder, Clock, Tag, Image as ImageIcon, Grip, Edit, Trash, FolderInput, Move, ArrowLeft, ChevronRight } from 'lucide-vue-next'
 import ContextMenu from './ui/ContextMenu.vue'
@@ -658,7 +660,7 @@ const handleAction = async (action: string) => {
             })
             await fetchUploadsPage({ reset: true, fresh: true })
         } catch (error: any) {
-            window.alert(error?.data?.message || 'Não foi possível remover o fundo. Tente novamente.')
+            alertInSystem(error?.data?.message || 'Não foi possível remover o fundo. Tente novamente.')
         } finally {
             removingBackground.value = false
         }

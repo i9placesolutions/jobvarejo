@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmInSystem } from '~/utils/systemMessages'
 import { harmonizeProductCardTypography } from '~/utils/productCardResponsiveTypography'
 import { isProductNameText, collectProductNameTexts } from '~/utils/productNameTypographyScope'
 import { fitResponsiveProductName } from '~/utils/productCardResponsiveTypography'
@@ -13794,7 +13795,7 @@ const relayoutProductZonesAfterCardRemoval = (zones: Iterable<any>): boolean => 
     return didRelayout;
 };
 
-const deleteActiveSelectionFromCanvas = (): boolean => {
+const deleteActiveSelectionFromCanvas = (confirmed = false): boolean => {
     if (!canvas.value) return false;
 
     // Node-editing delete parity (same behavior as keyboard Delete/Backspace).
@@ -13817,15 +13818,10 @@ const deleteActiveSelectionFromCanvas = (): boolean => {
     const containsFrameLikeObject = (items: any[]): boolean =>
         items.some((item: any) => !!item && (item.isFrame || isFrameLikeObject(item)));
 
-    const confirmFrameDeletion = (origin: 'canvas' | 'layers'): boolean => {
-        if (typeof window === 'undefined') return true;
-        const where = origin === 'layers' ? 'painel de camadas' : 'canvas';
-        return window.confirm(
-            `Excluir Frame no ${where}? Isso remove tambem todo o conteudo dentro dele.`
-        );
-    };
-
-    if (containsFrameLikeObject(active) && !confirmFrameDeletion('canvas')) {
+    if (containsFrameLikeObject(active) && !confirmed) {
+        void confirmInSystem('Excluir frame e todo o conteúdo dentro dele?').then(ok => {
+            if (ok) deleteActiveSelectionFromCanvas(true);
+        });
         return false;
     }
 
@@ -21751,7 +21747,7 @@ const toggleLock = (id: string) => {
     }
 }
 
-const deleteObject = (id: string) => {
+const deleteObject = async (id: string) => {
     if (!canvas.value) return;
     const obj = canvas.value.getObjects().find((o: any) => o._customId === id);
     if (obj) {
@@ -21770,7 +21766,7 @@ const deleteObject = (id: string) => {
             }
         }
         if (isFrameTarget && typeof window !== 'undefined') {
-            const ok = window.confirm(
+            const ok = await confirmInSystem(
                 'Excluir Frame no painel de camadas? Isso remove tambem todo o conteudo dentro dele.'
             );
             if (!ok) return;

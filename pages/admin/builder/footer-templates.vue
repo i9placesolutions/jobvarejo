@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
+
 import type { CardTemplateElement, CardTemplateStyle } from '~/types/builder'
 
 definePageMeta({ layout: false, middleware: ['auth', 'admin'], ssr: false })
@@ -156,7 +158,7 @@ const saveItem = async () => {
 }
 
 const deleteItem = async (id: string) => {
-  if (!confirm('Excluir este template?')) return
+  if (!await confirmInSystem('Excluir este template?')) return
   try {
     await $fetch(`/api/admin/builder/footer-templates/${id}`, { method: 'DELETE', headers: await getApiAuthHeaders() })
     await fetchData()

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmInSystem } from '~/utils/systemMessages'
 import type { LabelTemplate } from '~/types/label-template'
 import ColorPicker from './ui/ColorPicker.vue'
 import {
@@ -2337,8 +2338,8 @@ const hasUnsavedChanges = computed(() => (
 const requestClose = (): boolean => {
   if (isSaving.value) return false
   if (hasUnsavedChanges.value && typeof window !== 'undefined') {
-    const shouldDiscard = window.confirm('Existem alterações não salvas nesta etiqueta. Deseja sair mesmo assim?')
-    if (!shouldDiscard) return false
+    void confirmInSystem('Existem alterações não salvas nesta etiqueta. Deseja sair mesmo assim?').then(ok => { if (ok) emit('close') })
+    return false
   }
   emit('close')
   return true

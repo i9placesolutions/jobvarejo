@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
+
 import { ref, onMounted } from 'vue'
 import { useStyleReferences, type StyleReference } from '~/composables/useStyleReferences'
 import { Upload, Trash2, Sparkles, X, Tag } from 'lucide-vue-next'
@@ -50,7 +52,7 @@ const handleFileSelect = async (event: Event) => {
 }
 
 const handleDelete = async (id: string) => {
-  if (!confirm('Remover esta inspiracao?')) return
+  if (!await confirmInSystem('Remover esta inspiracao?')) return
   await deleteReference(id).catch(() => {})
 }
 

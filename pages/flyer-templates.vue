@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
+
 import {
   ArrowLeft,
   Copy,
@@ -201,7 +203,7 @@ const duplicateTemplate = async (template: FlyerTemplateSummary) => {
 }
 
 const deleteTemplate = async (template: FlyerTemplateSummary) => {
-  if (!window.confirm(`Excluir o modelo “${template.name}”? Os encartes já criados a partir dele continuam intactos.`)) return
+  if (!await confirmInSystem(`Excluir o modelo “${template.name}”? Os encartes já criados a partir dele continuam intactos.`)) return
   deletingTemplateId.value = template.id
   try {
     const headers = await getApiAuthHeaders()
