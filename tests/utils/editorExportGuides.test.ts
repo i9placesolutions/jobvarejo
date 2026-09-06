@@ -29,6 +29,24 @@ describe('Exportação sem perda e sem guias', () => {
     expect(product.visible).toBe(true)
   })
 
+  it('oculta o contorno sem nome dos modelos antigos sem ocultar decoração tracejada fora da zona', async () => {
+    const outline = Object.assign(object(''), { strokeDashArray: [10, 10] })
+    const decoration = Object.assign(object('decoracao'), { strokeDashArray: [10, 10] })
+    const card = object('productCard', [object('background')])
+    const zone = object('productZoneContainer', [outline, card])
+    const ctx: any = {
+      canvas: { value: { getObjects: () => [zone, decoration] } },
+      isLikelyProductZone: (o: any) => o === zone, safeRequestRenderAll() {}
+    }
+    await withProductZonesHiddenForOutput(ctx, () => {
+      expect(outline.visible).toBe(false)
+      expect(zone.visible).toBe(true)
+      expect(card.visible).toBe(true)
+      expect(decoration.visible).toBe(true)
+    })
+    expect(outline.visible).toBe(true)
+  })
+
   it('recompressão preserva cada canal RGBA, inclusive semitransparência', async () => {
     const raw = Buffer.alloc(128 * 128 * 4)
     for (let i = 0; i < raw.length; i++) raw[i] = (i * 17 + Math.floor(i / 128)) % 256

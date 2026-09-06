@@ -239,8 +239,21 @@ export const withProductZonesHiddenForOutput = async <T>(
     if (!ctx.canvas.value) return await action()
 
     const allObjects = collectObjectsDeep(ctx.canvas.value)
+    // Modelos antigos salvam o contorno como Rect sem nome/flags dentro da zona.
+    // Identifique pelo pai e pelo tracejado, sem ocultar os cards desse grupo.
+    const legacyZoneOutlines = new Set<any>()
+    for (const parent of allObjects) {
+        if (!ctx.isLikelyProductZone(parent)) continue
+        for (const child of parent.getObjects?.() || []) {
+            if (String(child.type).toLowerCase() === 'rect' &&
+                Array.isArray(child.strokeDashArray) && child.strokeDashArray.length > 0) {
+                legacyZoneOutlines.add(child)
+            }
+        }
+    }
     // Ocultar somente guias; grupos de zona podem conter os produtos.
     const zones = allObjects.filter((o: any) => {
+        if (legacyZoneOutlines.has(o)) return true
         const name = String(o.name || '')
         if (['zoneRect', 'zone-border', 'product-zone-outline'].includes(name)) return true
         if (o.excludeFromExport === true && !ctx.isLikelyProductZone(o)) return true
