@@ -77,6 +77,7 @@ defineProps<{
   showExportModal: boolean
   exportSettings: any
   availableFramesForExport: any[]
+  availablePagesForExport: any[]
   hasExportableSelectedObject: boolean
   availableFramesForImport: any[]
   availableZonesForImport: any[]
@@ -236,6 +237,7 @@ const emit = defineEmits<{
     :model-value="showExportModal"
     :export-settings="exportSettings"
     :available-frames-for-export="availableFramesForExport"
+    :available-pages-for-export="availablePagesForExport"
     :has-selected-object="hasExportableSelectedObject"
     @update:model-value="emit('update:showExportModal', $event)"
     @export="emit('export')"

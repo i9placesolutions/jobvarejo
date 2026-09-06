@@ -43,6 +43,8 @@ export type EditorExportShareContext = {
     showExportModal: RefLike<boolean>
     showShareModal: RefLike<boolean>
     isExportDownloadInProgress: RefLike<boolean>
+    getExportPageIds?: () => string[]
+    exportProjectPages?: (ids: string[], format: ExportImageFormat, quality: ExportQualityPreset) => Promise<ScopedBlobExport[]>
     getAllFrames: () => any[]
     getFrameById: (id: string) => any
     isLikelyProductZone: (obj: any) => boolean
@@ -562,6 +564,23 @@ const exportSingleFrameBlob = async (
     }
 }
 
+/** Render complete pages without navigating or changing the user's project. */
+export const exportCanvasPage = async (
+    ctx: EditorExportShareContext, page: { id: string; name?: string; width: number; height: number },
+    format: ExportImageFormat, quality: ExportQualityPreset
+): Promise<ScopedBlobExport[]> => {
+    const frames = ctx.getAllFrames()
+    const targets = frames.length ? frames : [{ left: page.width / 2, top: page.height / 2, width: page.width, height: page.height, scaleX: 1, scaleY: 1 }]
+    const results: ScopedBlobExport[] = []
+    for (let index = 0; index < targets.length; index++) {
+        const result = await exportSingleFrameBlob(ctx, targets[index], format, quality, index)
+        if (!result) throw new Error(`Falha ao exportar a página ${page.name || page.id}`)
+        result.fileName = `${(page.name || 'pagina').replace(/[^a-z0-9]/gi, '-')}-${page.id}-${index + 1}`
+        results.push(result)
+    }
+    return results
+}
+
 const maybeWarnLargeBatchExport = (ctx: EditorExportShareContext, frames: any[], qualityPreset: ExportQualityPreset) => {
     const estimatedBytes = (frames || []).reduce((sum: number, frame: any) => {
         const bounds = getFrameBounds(frame)
@@ -675,15 +694,23 @@ export const performExport = async (ctx: EditorExportShareContext) => {
             } else {
                 downloadBlob(frameExport.blob, `${frameExport.fileName}.${imageFormat}`)
             }
-        } else if (exportScope === 'all-frames') {
-            const frames = ctx.getAllFrames()
-            if (!frames.length) {
+        } else if (['all-frames', 'all-pages', 'selected-pages'].includes(exportScope)) {
+            const isProjectExport = exportScope !== 'all-frames'
+            const frames = isProjectExport ? [] : ctx.getAllFrames()
+            if (!isProjectExport && !frames.length) {
                 ctx.notifyEditorInfo('Nenhum frame encontrado no canvas.')
                 return
             }
 
             maybeWarnLargeBatchExport(ctx, frames, qualityPreset)
-            const results: ScopedBlobExport[] = []
+            const pageIds = exportScope === 'all-pages' ? ctx.getExportPageIds?.() || [] : ctx.exportSettings.value.selectedPageIds || []
+            if (isProjectExport && !pageIds.length) {
+                ctx.notifyEditorInfo('Selecione pelo menos uma página.')
+                return
+            }
+            const results: ScopedBlobExport[] = isProjectExport
+                ? await ctx.exportProjectPages!(pageIds, isPdf ? 'png' : imageFormat, qualityPreset)
+                : []
             for (let i = 0; i < frames.length; i++) {
                 const frame = frames[i]
                 const result = await exportSingleFrameBlob(ctx, frame, isPdf ? 'png' : imageFormat, qualityPreset, i)
@@ -707,6 +734,8 @@ export const performExport = async (ctx: EditorExportShareContext) => {
                 const { buildPdfBlob } = await loadEditorExportPipeline()
                 const pdfBlob = await buildPdfBlob(pages)
                 downloadBlob(pdfBlob, `${ctx.makeExportBatchBaseName()}.pdf`)
+            } else if (results.length === 1) {
+                downloadBlob(results[0]!.blob, `${results[0]!.fileName}.${imageFormat}`)
             } else if (multiFileMode === 'zip') {
                 const zipEntries = results.map((result) => ({
                     fileName: `${result.fileName}.${imageFormat}`,

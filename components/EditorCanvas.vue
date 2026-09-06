@@ -7547,8 +7547,14 @@ const exportSettings = ref({
     qualityPreset: DEFAULT_EXPORT_QUALITY_PRESET as ExportQualityPreset,
     multiFileMode: DEFAULT_MULTI_FILE_MODE as 'zip' | 'separate',
     exportScope: 'selected-frame', // 'selected-object' | 'selected-frame' | 'all-frames'
+    selectedPageIds: [] as string[],
     selectedFrameId: '' // ID of the frame to export
 })
+
+const availablePagesForExport = computed(() => project.pages.map((page: any, index: number) => ({
+    id: String(page.id), name: page.name || `Página ${index + 1}`,
+    width: page.width, height: page.height
+})))
 
 const makeExportBatchBaseName = () => {
     const pageName = String(activePage.value?.name || 'design')
@@ -21851,6 +21857,8 @@ const exportQuickDesign = () => {
         exportSettings.value.exportScope = 'selected-frame'
         exportSettings.value.selectedFrameId = String(availableFramesForExport.value[0]?.id || '')
     }
+    exportSettings.value.exportScope = 'selected-pages'
+    exportSettings.value.selectedPageIds = [String(activePage.value?.id || '')]
 }
 
 // isExportableSelectionObject extraido para utils/exportSelectionHelpers.ts.
@@ -21888,7 +21896,7 @@ const getExportZoneDiagnostics = () => {
         });
 };
 
-const getExportShareContext = () => ({
+const getExportShareContext = (): import('~/utils/editorExportShareController').EditorExportShareContext => ({
     canvas,
     exportSettings,
     shareSettings,
@@ -21897,6 +21905,34 @@ const getExportShareContext = () => ({
     isExportDownloadInProgress,
     getAllFrames,
     getFrameById,
+    exportProjectPages: async (ids: string[], format: any, qualityPreset: any) => {
+        const controller = await loadExportShareController()
+        const results = []
+        for (const page of project.pages.filter((page: any) => ids.includes(String(page.id)))) {
+            if (page.id === activePage.value?.id) {
+                results.push(...await controller.exportCanvasPage(getExportShareContext(), page, format, qualityPreset))
+                continue
+            }
+            await ensurePageCanvasDataLoaded(page.id, { triggerSync: false })
+            if (!page.canvasData) throw new Error(`Não foi possível carregar a página ${page.name}`)
+            const offscreen = new fabric.StaticCanvas(document.createElement('canvas'), {
+                width: page.width, height: page.height, renderOnAddRemove: false
+            })
+            try {
+                await offscreen.loadFromJSON(prepareCanvasDataForLoad(page.canvasData, { silent: true }))
+                const pageContext = {
+                    ...getExportShareContext(), canvas: { value: offscreen },
+                    getAllFrames: () => offscreen.getObjects().filter(isFrameLikeObject),
+                    sanitizeAllClipPaths: () => {}, safeRequestRenderAll: () => {}
+                }
+                results.push(...await controller.exportCanvasPage(pageContext, page, format, qualityPreset))
+            } finally {
+                await offscreen.dispose()
+            }
+        }
+        return results
+    },
+    getExportPageIds: () => project.pages.map((page: any) => String(page.id)),
     isLikelyProductZone,
     getExportZoneDiagnostics,
     resolveExportableSelectedObject,
@@ -39826,6 +39862,7 @@ const handleAutoOfferLayout = async () => {
         :show-export-modal="showExportModal"
         :export-settings="exportSettings"
         :available-frames-for-export="availableFramesForExport"
+        :available-pages-for-export="availablePagesForExport"
         :has-exportable-selected-object="hasExportableSelectedObject"
         :available-frames-for-import="availableFramesForImport"
         :available-zones-for-import="availableZonesForImport"
