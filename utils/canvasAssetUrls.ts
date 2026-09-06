@@ -1,3 +1,4 @@
+import { normalizePortableAssetUrls } from './portableAssetUrls'
 import { useRuntimeConfig } from '#imports'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
@@ -155,6 +156,8 @@ export const normalizeCanvasAssetUrls = (
   if (!normalized || typeof normalized !== 'object') {
     return { data: normalized, blobCount: 0, contaboCount: 0, wasabiCount: 0 }
   }
+
+  normalizePortableAssetUrls(normalized)
 
   // A canvas saved from `localhost:3003` must remain usable when opened from
   // `localhost:3004` (or production). Rewrite these stale absolute app URLs

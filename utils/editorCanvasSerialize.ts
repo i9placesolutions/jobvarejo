@@ -1,3 +1,4 @@
+import { normalizePortableAssetUrls } from './portableAssetUrls'
 type FinalizeSerializedCanvasJsonOptions = {
   json: any
   canvasInstance: any
@@ -668,6 +669,7 @@ export const finalizeSerializedCanvasJson = (opts: FinalizeSerializedCanvasJsonO
     opts.canvasFramesForDebug || []
   )
   normalizePersistedImageUrls(opts.json, opts.convertPresignedToPermanentUrl)
+  normalizePortableAssetUrls(opts.json)
   stripNestedInlinePayloads(opts.json)
   stripHeavyweightMetadata(opts.json)
 }
