@@ -18,11 +18,16 @@ import {
   type OfferValidityScope
 } from '~/utils/offerValidity'
 import { FLYER_TEMPLATE_FORMATS } from '~/utils/flyerTemplateApi'
+import type { ProductZoneStructure, ProductZoneStructureVariant } from '~/types/product-zone'
+import { getProductZoneStructureFormatLabel } from '~/utils/product-zone-structure'
 
 type QuickModeZone = {
   id: string
   name: string
   count: number
+  structure?: ProductZoneStructure | null
+  structureVariants?: ProductZoneStructureVariant[]
+  selectedStructureVariantId?: string
 }
 
 type QuickModeProduct = {
@@ -112,13 +117,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'select-zone', zoneId: string): void
+  (event: 'select-zone-structure', payload: { zoneId: string; variantId: string }): void
   (event: 'select-product', productId: string): void
   (event: 'open-product-image-picker', productId: string): void
   (event: 'clear-products'): void
   (event: 'delete-product', productId: string): void
   (event: 'move-product', payload: { productId: string; direction: 'up' | 'down' }): void
   (event: 'change-all-labels', templateId: string): void
-  (event: 'import', payload: { mode: QuickModeImportMode; text: string; autoFillImages: boolean }): void
+  (event: 'import', payload: { mode: QuickModeImportMode; text: string; autoFillImages: boolean; oneProductPerPage: boolean }): void
   (event: 'toggle-business-field', payload: { field: BusinessFieldId; enabled: boolean }): void
   (event: 'update-validity', payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean; show: boolean; scope: OfferValidityScope }): void
   (event: 'open-business-profile'): void
@@ -131,6 +137,7 @@ const mobileSection = ref<'products' | 'pages' | 'preview'>('preview')
 const activeTab = ref<'search' | 'mine'>('search')
 const listText = ref('')
 const autoFillImages = ref(false)
+const oneProductPerPage = ref(false)
 // Os dados da loja não devem competir com a revisão dos produtos.
 const dataPanelOpen = ref(false)
 const validityStartDate = ref(String(props.validityStartDate || ''))
@@ -158,6 +165,39 @@ const selectedZone = computed(() => {
 const productCount = computed(() => selectedZone.value?.count || 0)
 const products = computed(() => Array.isArray(props.products) ? props.products : [])
 const hasListText = computed(() => listText.value.trim().length > 0)
+const selectedZoneStructure = computed(() => selectedZone.value?.structure || null)
+const selectedZoneStructureVariants = computed<ProductZoneStructureVariant[]>(() => (
+  Array.isArray(selectedZone.value?.structureVariants)
+    ? selectedZone.value.structureVariants
+    : []
+))
+const selectedZoneStructureVariant = computed(() => {
+  const selectedId = String(selectedZone.value?.selectedStructureVariantId || '').trim()
+  return selectedZoneStructureVariants.value.find(variant => String(variant?.id || '').trim() === selectedId)
+    || selectedZoneStructureVariants.value[0]
+    || null
+})
+const selectedZoneStructureLabel = computed(() => {
+  const formatLabel = getProductZoneStructureFormatLabel(selectedZoneStructure.value?.format)
+  const variantName = String(selectedZoneStructureVariant.value?.name || '').trim()
+  if (!variantName || variantName.toLowerCase() === 'padrão') return formatLabel
+  return `${variantName} · ${formatLabel}`
+})
+const getStructureDimensionsLabel = (structure: Partial<ProductZoneStructure> | null | undefined) => {
+  const columns = Number(structure?.columns || 0)
+  const rows = Number(structure?.rows || 0)
+  if (columns > 0 && rows > 0) return `${columns} × ${rows}`
+  if (columns > 0) return `${columns} colunas`
+  if (rows > 0) return `${rows} linhas`
+  return 'Automático'
+}
+const selectedZoneStructureDimensions = computed(() => {
+  return getStructureDimensionsLabel(selectedZoneStructure.value)
+})
+const selectedZoneStructureDirection = computed(() => (
+  selectedZoneStructure.value?.layoutDirection === 'vertical' ? 'de cima para baixo' : 'em linhas'
+))
+const hasAlternativeZoneStructures = computed(() => selectedZoneStructureVariants.value.length > 1 && productCount.value > 0)
 
 const markProductImageError = (productId: string) => {
   const id = String(productId || '').trim()
@@ -358,11 +398,19 @@ const handleZoneChange = (event: Event) => {
   emit('select-zone', (event.target as HTMLSelectElement).value)
 }
 
+const handleZoneStructureChange = (event: Event) => {
+  const zoneId = String(selectedZone.value?.id || '').trim()
+  const variantId = String((event.target as HTMLSelectElement)?.value || '').trim()
+  if (!zoneId || !variantId || productCount.value <= 0) return
+  emit('select-zone-structure', { zoneId, variantId })
+}
+
 const submitList = (mode: QuickModeImportMode = 'replace') => {
   emit('import', {
     mode,
     text: listText.value.trim(),
-    autoFillImages: autoFillImages.value
+    autoFillImages: autoFillImages.value,
+    oneProductPerPage: oneProductPerPage.value
   })
 }
 
@@ -555,6 +603,46 @@ const useTemplateModel = (modelId: string) => {
         </select>
       </div>
 
+      <section v-if="selectedZone" class="quick-mode-structure-card" aria-label="Estrutura da zona">
+        <div class="quick-mode-structure-card__header">
+          <span class="quick-mode-structure-card__icon" aria-hidden="true"><Layers :size="15" /></span>
+          <div class="quick-mode-structure-card__title">
+            <span>Estrutura da zona</span>
+            <strong>{{ selectedZoneStructureLabel }}</strong>
+          </div>
+          <span class="quick-mode-structure-card__count">
+            {{ productCount }} {{ productCount === 1 ? 'item' : 'itens' }}
+          </span>
+        </div>
+
+        <div class="quick-mode-structure-card__summary">
+          <strong>{{ selectedZoneStructureDimensions }}</strong>
+          <span>{{ selectedZoneStructureDirection }}</span>
+        </div>
+
+        <label v-if="hasAlternativeZoneStructures" class="quick-mode-structure-card__select">
+          <span>Escolher outra estrutura para {{ productCount }} produtos</span>
+          <select
+            :value="selectedZoneStructureVariant?.id || ''"
+            :disabled="props.busy"
+            aria-label="Escolher outra estrutura para a quantidade atual de produtos"
+            @change="handleZoneStructureChange"
+          >
+            <option
+              v-for="variant in selectedZoneStructureVariants"
+              :key="variant.id"
+              :value="variant.id"
+            >
+              {{ variant.name }} · {{ getProductZoneStructureFormatLabel(variant.format) }} · {{ getStructureDimensionsLabel(variant) }}
+            </option>
+          </select>
+          <small>A troca reorganiza somente esta zona e é salva automaticamente.</small>
+        </label>
+        <p v-else class="quick-mode-structure-card__hint">
+          A receita é ajustada automaticamente conforme a quantidade de produtos.
+        </p>
+      </section>
+
       <div class="quick-mode-tabs" role="tablist" aria-label="Produtos">
         <button
           type="button"
@@ -591,6 +679,10 @@ const useTemplateModel = (modelId: string) => {
             placeholder="Cole / Escreva a lista aqui. Ex: Picanha kg R$ 49,90"
           ></textarea>
 
+          <label class="flex items-start gap-3 rounded-lg border border-white/15 p-3 mb-3 text-white">
+            <input v-model="oneProductPerPage" type="checkbox" :disabled="props.busy" class="mt-1 accent-violet-500" />
+            <span><strong class="block text-sm">Um produto por página</strong><small class="block text-zinc-400">Cria uma página para cada produto, no formato atual. Mantém a página original.</small></span>
+          </label>
           <label class="quick-fill-option">
             <span><strong>Preencher imagens</strong><small>Duplica e organiza as imagens no espaço de cada produto.</small></span>
             <input v-model="autoFillImages" type="checkbox" role="switch" :disabled="props.busy" aria-label="Preencher imagens automaticamente" />
@@ -1444,6 +1536,128 @@ const useTemplateModel = (modelId: string) => {
   gap: 12px;
   min-height: 42px;
   margin-bottom: 14px;
+}
+
+.quick-mode-structure-card {
+  margin: 0 0 12px;
+  border: 1px solid rgba(159, 192, 255, 0.28);
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgba(37, 57, 82, 0.76), rgba(31, 32, 34, 0.96));
+  padding: 11px;
+}
+
+.quick-mode-structure-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.quick-mode-structure-card__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid rgba(159, 192, 255, 0.32);
+  border-radius: 7px;
+  background: rgba(76, 139, 245, 0.16);
+  color: #b9d0ff;
+}
+
+.quick-mode-structure-card__title {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.quick-mode-structure-card__title span,
+.quick-mode-structure-card__select > span {
+  color: rgba(244, 245, 247, 0.58);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.quick-mode-structure-card__title strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-mode-structure-card__count {
+  flex: 0 0 auto;
+  color: #9fc0ff;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.quick-mode-structure-card__summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  margin: 10px 0;
+  color: rgba(244, 245, 247, 0.6);
+  font-size: 10px;
+}
+
+.quick-mode-structure-card__summary strong {
+  color: #f4f5f7;
+  font-size: 12px;
+}
+
+.quick-mode-structure-card__summary span::before {
+  content: '·';
+  margin-right: 8px;
+  color: rgba(159, 192, 255, 0.72);
+}
+
+.quick-mode-structure-card__select {
+  display: grid;
+  gap: 6px;
+}
+
+.quick-mode-structure-card__select select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(159, 192, 255, 0.35);
+  border-radius: 7px;
+  background: #171819;
+  color: #f4f5f7;
+  cursor: pointer;
+  padding: 0 9px;
+  outline: none;
+  font-size: 11px;
+}
+
+.quick-mode-structure-card__select select:focus-visible {
+  border-color: #8eb9ff;
+  box-shadow: 0 0 0 3px rgba(76, 139, 245, 0.16);
+}
+
+.quick-mode-structure-card__select select:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.quick-mode-structure-card__select small,
+.quick-mode-structure-card__hint {
+  margin: 0;
+  color: rgba(244, 245, 247, 0.5);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.quick-mode-structure-card__hint {
+  margin-top: 9px;
 }
 
 .quick-mode-sidebar__title-wrap {

@@ -670,6 +670,7 @@ const isCanvasDestroyed = ref(false)
 // utilitarios logo a seguir precisam capturar esses refs no mesmo escopo.
 // Usos reais acontecem em handlers/funcoes chamadas depois do setup concluir.
 const canvas = shallowRef<any>(null)
+provide('editorColorObjects', () => canvas.value?.getObjects?.() || [])
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const wrapperEl = ref<HTMLDivElement | null>(null)
 
@@ -4033,7 +4034,13 @@ import {
   resolveProductZoneStructure
 } from '~/utils/product-zone-structure'
 import { DEFAULT_GLOBAL_STYLES, DEFAULT_PRODUCT_ZONE } from '~/types/product-zone'
-import type { ProductZone, ProductZonePreviewFormat, GlobalStyles } from '~/types/product-zone'
+import type {
+    ProductZone,
+    ProductZonePreviewFormat,
+    ProductZoneStructure,
+    ProductZoneStructureVariant,
+    GlobalStyles
+} from '~/types/product-zone'
 import { useProject } from '~/composables/useProject'
 import { useUpload } from '~/composables/useUpload'
 import { useAuth } from '~/composables/useAuth'
@@ -6830,6 +6837,9 @@ const selectedProductImageSelectionKind = ref<'image' | 'card' | 'other' | 'none
 // O Fabric altera objetos fora da reatividade do Vue. Esta versao permite que
 // o inspector da zona atualize quando cards e vinculos sao reidratados.
 const productZoneUiVersion = ref(0)
+const invalidateQuickModeUi = () => {
+    productZoneUiVersion.value += 1
+}
 
 /** Refresh selectedObjectRef with a fresh snapshot so Vue detects changes in PropertiesPanel props */
 const refreshSelectedRef = (extra?: Record<string, any>) => {
@@ -6840,7 +6850,7 @@ const refreshSelectedRef = (extra?: Record<string, any>) => {
         triggerSelectedObjectRef: () => triggerRef(selectedObjectRef),
         extra
     })
-    productZoneUiVersion.value += 1
+    invalidateQuickModeUi()
 }
 
 const selectedObjectPos = ref<{top: number, left: number, width: number, height: number, visible: boolean}>({ top: 0, left: 0, width: 0, height: 0, visible: false })
@@ -7271,12 +7281,14 @@ const targetGridZone = ref<any>(null) // Reference to the Grid Zone that was dou
 const targetGridZones = ref<any[]>([])
 const activeProductZoneId = ref<string | null>(null)
 const isConfirmingProductImport = ref(false)
+const quickModeOneProductPerPage = ref(false)
 
 type ImportTargetMode = 'zone' | 'multi-frame'
 type FrameAssignment = { productId: string; frameId: string | null }
 type ZoneAssignment = { productId: string; zoneId: string | null }
 // ImageMatchMode tipo extraido para utils/imageMatchMode.ts.
 type ProductImportOptions = {
+    oneProductPerPage?: boolean
     mode?: 'replace' | 'append'
     labelTemplateId?: string
     targetMode?: ImportTargetMode
@@ -24028,6 +24040,59 @@ const importProductsToMultipleZones = async (products: any[], zones: any[], opts
     }
 }
 
+// Reuse the ordinary renderer; keep intermediate cards out of autosave/history.
+const importOneProductPerPage = async (products: any[], opts?: ProductImportOptions) => {
+    const sourcePage = activePage.value
+    const zone = (opts?.targetZoneId ? findProductZoneById(opts.targetZoneId) : null) || resolveImportTargetZone()
+    if (!sourcePage || !zone || !canvas.value) throw new Error('Selecione uma zona de produtos na página que será usada como base.')
+    await saveCurrentState({ reason: 'before-one-product-per-page', source: 'system', markUnsaved: true, skipCoalesce: true })
+    const original = sourcePage.canvasData ? JSON.parse(JSON.stringify(sourcePage.canvasData)) : null
+    if (!original || !Array.isArray(original.objects)) throw new Error('Não foi possível salvar a página base. Tente novamente antes de criar os encartes.')
+    const snapshots: any[] = []
+    const getCards = () => collectObjectsDeep(canvas.value).filter((obj: any) => {
+        if (isLikelyProductZone(obj) || !(isProductCardContainer(obj) || isLikelyProductCard(obj))) return false
+        for (let parent = obj.group; parent; parent = parent.group) {
+            if (!isLikelyProductZone(parent) && (isProductCardContainer(parent) || isLikelyProductCard(parent))) return false
+        }
+        return true
+    })
+    const zoneId = getProductZoneId(zone)
+    isHistoryProcessing.value = true
+    try {
+        // Other product zones must not carry products into each generated page.
+        for (const card of getCards()) {
+            if (card.group?.remove) card.group.remove(card)
+            else canvas.value.remove(card)
+        }
+        for (const product of products) {
+            await simulateSmartGrid([product], { margin: 10, gap: 15, orphanBehavior: 'fill' }, findProductZoneById(zoneId) || zone, {
+                mode: 'replace', labelTemplateId: opts?.labelTemplateId, autoLayout: true, persist: false
+            })
+            syncAllZoneStateSnapshots(canvas.value, 'one-product-per-page')
+            restoreViewportCulledObjects(canvas.value.getObjects())
+            const json = canvas.value.toObject([...CANVAS_CUSTOM_PROPS])
+            const cards = getCards()
+            if (cards.length !== 1) {
+                console.error('[one-product-per-page]', cards.length, canvas.value.getObjects().map((obj: any) => ({ name: obj.name, type: obj.type, card: obj.isProductCard, smart: obj.isSmartObject, zone: obj.isProductZone })))
+                throw new Error('Não foi possível montar uma página com apenas um produto.')
+            }
+            snapshots.push(JSON.parse(JSON.stringify(json)))
+        }
+    } finally {
+        try { await loadFromJsonSafe(original) } finally { isHistoryProcessing.value = false }
+        refreshCanvasObjects({ immediate: true })
+        safeRequestRenderAll()
+    }
+    for (let index = 0; index < snapshots.length; index++) {
+        await createPageFromTemplateSource({ ...sourcePage, canvasData: snapshots[index], canvasDataPath: undefined, thumbnailUrl: undefined }, {
+            activate: false,
+            name: String(products[index]?.name || products[index]?.productName || `Produto ${index + 1}`)
+        })
+    }
+    await flushPersistenceNow('one-product-per-page', { force: true })
+    notifyEditorInfo(`${snapshots.length} páginas criadas, com um produto em cada. Abra Páginas para ver os encartes.`)
+}
+
 // Confirm import from review modal
 const confirmProductImport = async (products: any[], opts?: ProductImportOptions) => {
     if (isConfirmingProductImport.value) {
@@ -24045,6 +24110,10 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
             return
         }
 
+        if (opts?.oneProductPerPage) {
+            await importOneProductPerPage(products, opts)
+            return
+        }
         const targetMode: ImportTargetMode = opts?.targetMode === 'multi-frame' ? 'multi-frame' : 'zone'
         if (targetMode === 'multi-frame') {
             await importProductsToMultipleFrames(products, opts)
@@ -24084,6 +24153,8 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
                 syncZoneDerivedMetadata(zone)
             }
         }
+    } catch (error: any) {
+        notifyEditorError(error?.message || 'Não foi possível importar os produtos.')
     } finally {
         // Clear review state and zone reference
         reviewProducts.value = []
@@ -25323,6 +25394,7 @@ const simulateSmartGrid = async (
         isBulkProductMutation = false;
         isProcessing.value = false;
         refreshCanvasObjects();
+        if (isQuickMode.value) invalidateQuickModeUi();
         invalidateScrollbarBounds();
         updateScrollbars();
         safeRequestRenderAll();
@@ -28512,8 +28584,7 @@ const GLOBAL_PRODUCT_ZONE_STRUCTURE_PROPS = new Set([
     'structureByProductCount',
     'structureByProductCountByPreviewFormat',
     'structureVariantsByProductCount',
-    'structureVariantsByProductCountByPreviewFormat',
-    'structureVariantByProductCountByPreviewFormat'
+    'structureVariantsByProductCountByPreviewFormat'
 ]);
 
 const stripLocalProductZoneStructureUpdates = (updates: Record<string, any>): Record<string, any> => {
@@ -28575,6 +28646,7 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
         'structureByProductCount',
         'structureVariantsByProductCount',
         'structureVariantByProductCount',
+        'structureVariantByProductCountByPreviewFormat',
         'highlightCount',
         'highlightPos',
         'highlightSelection',
@@ -28703,7 +28775,8 @@ const applyZoneUpdates = async (zone: any, updates: Record<string, any>, opts: {
             prop === 'structureByProductCountEnabled' ||
             prop === 'structureByProductCount' ||
             prop === 'structureVariantsByProductCount' ||
-            prop === 'structureVariantByProductCount'
+            prop === 'structureVariantByProductCount' ||
+            prop === 'structureVariantByProductCountByPreviewFormat'
         ) {
             hasRelayoutPropUpdate = true;
             shouldRelayout = true;
@@ -36854,6 +36927,109 @@ const getZoneChildren = (zone: any) => {
 
 // O modo rápido reutiliza a mesma zona e o mesmo importador do editor completo;
 // este composable só organiza a superfície reduzida apresentada ao usuário.
+const getQuickModeZoneStructureForUi = (
+    zone: any,
+    productCount: number
+): {
+    structure: ProductZoneStructure | null
+    variants: ProductZoneStructureVariant[]
+    selectedVariantId: string
+} => {
+    const previewFormat = getCurrentProductZonePreviewFormat()
+    const count = Math.min(24, Math.max(1, Math.round(Number(productCount) || 1)))
+    const baseZone = zone && typeof zone === 'object' ? zone : {}
+    const globalLibraryReady = productZoneStructuresState.isLoaded.value
+        && baseZone.templateCompositionManaged !== true
+    const structureMaps = normalizeProductZoneStructureMapByPreviewFormat(
+        globalLibraryReady
+            ? productZoneStructuresState.structureMapsByPreviewFormat.value
+            : baseZone.structureByProductCountByPreviewFormat,
+        baseZone,
+        globalLibraryReady
+            ? productZoneStructuresState.structureMap.value
+            : baseZone.structureByProductCount
+    )
+    const structureVariantsByPreviewFormat = normalizeProductZoneStructureVariantMapByPreviewFormat(
+        globalLibraryReady
+            ? productZoneStructuresState.structureVariantsByPreviewFormat.value
+            : baseZone.structureVariantsByProductCountByPreviewFormat,
+        baseZone,
+        structureMaps,
+        globalLibraryReady
+            ? productZoneStructuresState.structureVariants.value
+            : baseZone.structureVariantsByProductCount
+    )
+    const viewZone = {
+        ...baseZone,
+        structureByProductCountByPreviewFormat: structureMaps,
+        structureByProductCount: structureMaps[previewFormat],
+        structureVariantsByProductCountByPreviewFormat: structureVariantsByPreviewFormat,
+        structureVariantsByProductCount: structureVariantsByPreviewFormat[previewFormat]
+    }
+    const key = String(count)
+    const variants = Array.isArray(structureVariantsByPreviewFormat[previewFormat]?.[key])
+        ? structureVariantsByPreviewFormat[previewFormat][key]
+        : []
+    const requestedVariantId = String(
+        baseZone.structureVariantByProductCountByPreviewFormat?.[previewFormat]?.[key]
+            ?? baseZone.structureVariantByProductCount?.[key]
+            ?? ''
+    ).trim()
+    const selectedVariant = variants.find((variant) => String(variant?.id || '').trim() === requestedVariantId)
+        || variants[0]
+        || null
+    const structure = resolveProductZoneStructure(viewZone, count, previewFormat)
+        || (selectedVariant
+            ? normalizeProductZoneStructure(selectedVariant, count, baseZone)
+            : normalizeProductZoneStructure(structureMaps[previewFormat]?.[key], count, baseZone))
+
+    return {
+        structure,
+        variants,
+        selectedVariantId: String(selectedVariant?.id || '').trim()
+    }
+}
+
+const handleQuickModeZoneStructureChange = async (payload: { zoneId?: string; variantId?: string }) => {
+    const zoneId = String(payload?.zoneId || '').trim()
+    const variantId = String(payload?.variantId || '').trim()
+    if (!zoneId || !variantId || !canvas.value || isProcessing.value) return
+
+    const zone = findProductZoneById(zoneId)
+    const count = zone ? getZoneCardsForUi(zone).length : 0
+    if (!zone || count <= 0) return
+
+    const structureInfo = getQuickModeZoneStructureForUi(zone, count)
+    if (!structureInfo.variants.some((variant) => String(variant?.id || '').trim() === variantId)) {
+        notifyEditorError('A estrutura escolhida não está disponível para esta quantidade de produtos.')
+        return
+    }
+
+    const previewFormat = getCurrentProductZonePreviewFormat()
+    const key = String(Math.min(24, Math.max(1, Math.round(count))))
+    const currentByPreviewFormat = zone.structureVariantByProductCountByPreviewFormat
+        && typeof zone.structureVariantByProductCountByPreviewFormat === 'object'
+        ? zone.structureVariantByProductCountByPreviewFormat
+        : {}
+    const nextByPreviewFormat = {
+        ...currentByPreviewFormat,
+        [previewFormat]: {
+            ...(currentByPreviewFormat[previewFormat] || {}),
+            [key]: variantId
+        }
+    }
+    const nextFlatSelection = {
+        ...(zone.structureVariantByProductCount || {}),
+        [key]: variantId
+    }
+
+    setActiveProductZone(zone, { syncImportTarget: true })
+    await handleUpdateZone({
+        structureVariantByProductCount: nextFlatSelection,
+        structureVariantByProductCountByPreviewFormat: nextByPreviewFormat
+    }, undefined, { targetId: zoneId })
+}
+
 const {
     quickModeZones,
     quickModeTargetZoneId,
@@ -36874,7 +37050,9 @@ const {
     addGridZone,
     openProductReviewForZone,
     notifyEditorError,
-    refreshCanvasObjects
+    refreshCanvasObjects,
+    getZoneStructureForUi: getQuickModeZoneStructureForUi,
+    refreshQuickModeUi: invalidateQuickModeUi
 })
 
 type QuickModeProductItem = {
@@ -36986,6 +37164,7 @@ const handleQuickModeClearProducts = async () => {
     discardQuickModeCardSelection(cards)
     zones.forEach((zone: any) => clearProductZoneCards(zone))
     refreshCanvasObjects({ immediate: true })
+    invalidateQuickModeUi()
     safeRequestRenderAll()
     updateSelection()
     await persistQuickModeDataChange('quick-products-clear')
@@ -37005,6 +37184,7 @@ const handleQuickModeDeleteProduct = async (productId: string) => {
         relayoutProductZonesAfterCardRemoval([zone])
     }
     refreshCanvasObjects({ immediate: true })
+    invalidateQuickModeUi()
     safeRequestRenderAll()
     updateSelection()
     await persistQuickModeDataChange('quick-product-delete')
@@ -37039,6 +37219,7 @@ const handleQuickModeMoveProduct = async (payload: { productId?: string; directi
         preserveStyles: true
     })
     refreshCanvasObjects({ immediate: true })
+    invalidateQuickModeUi()
     safeRequestRenderAll()
     await persistQuickModeDataChange('quick-product-reorder')
 }
@@ -37153,7 +37334,8 @@ const handleQuickModeBulkLabelChange = async (templateId: string) => {
     await persistQuickModeDataChange('quick-products-label-bulk')
 }
 
-const handleQuickModeImport = async (payload: { mode?: 'replace' | 'append'; text?: string; autoFillImages?: boolean }) => {
+const handleQuickModeImport = async (payload: { mode?: 'replace' | 'append'; text?: string; autoFillImages?: boolean; oneProductPerPage?: boolean }) => {
+    quickModeOneProductPerPage.value = payload.oneProductPerPage === true
     quickModeAutoFillImages.value = payload.autoFillImages === true
     quickModeInitialProductText.value = String(payload?.text || '').trim()
     quickModeAutoParseProductText.value = quickModeInitialProductText.value.length > 0
@@ -39405,6 +39587,7 @@ const handleAutoOfferLayout = async () => {
             :validity-prompt-ready="isFabricReady && isInitialDesignLoadDone"
             :offer-scope="quickOfferScope"
             @select-zone="selectQuickModeZone"
+            @select-zone-structure="handleQuickModeZoneStructureChange"
             @select-product="handleQuickModeSelectProduct"
             @open-product-image-picker="handleQuickModeOpenProductImagePicker"
             @clear-products="handleQuickModeClearProducts"
@@ -39988,6 +40171,7 @@ const handleAutoOfferLayout = async () => {
         :review-products="reviewProducts"
         :product-review-initial-text="quickModeInitialProductText"
         :product-review-auto-fill-images="quickModeAutoFillImages"
+        :product-review-one-product-per-page="quickModeOneProductPerPage"
         :product-review-auto-parse="quickModeAutoParseProductText"
         :product-review-quick-mode="isQuickMode"
         :show-import-mode="!!(targetGridZone && isLikelyProductZone(targetGridZone))"

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, inject, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { collectProjectColors } from '~/utils/projectColors'
+import { useProject } from '~/composables/useProject'
 import { sampleCanvasColor } from '~/utils/canvasColorSampler'
 import { X, Pipette } from 'lucide-vue-next'
 
@@ -29,7 +31,11 @@ const saturation = ref(0) // 0-100
 const lightness = ref(0) // 0-100
 const alpha = ref(100) // 0-100
 const colorFormat = ref<'hex' | 'rgb' | 'hsl'>('hex')
-const colorScope = ref<'page' | 'document'>('page')
+const colorScope = ref<'page' | 'document'>('document')
+const { project, activePage } = useProject()
+const getLiveColors = inject<() => any[]>('editorColorObjects', () => [])
+const pageColors = ref<string[]>([])
+const documentColors = ref<string[]>([])
 const saveToDocument = ref(false)
 const savedColors = ref<string[]>([])
 
@@ -221,8 +227,8 @@ const alphaGradient = computed(() => {
 // Handle color area click/drag
 const handleColorAreaMouseDown = (e: MouseEvent) => {
   if (!colorAreaRef.value) return
-  isDraggingColor.value = true
   updateColorFromArea(e)
+  close()
 }
 
 const updateColorFromArea = (e: MouseEvent) => {
@@ -273,6 +279,7 @@ const updateAlphaFromSlider = (e: MouseEvent) => {
 
 // Mouse move handlers
 const handleMouseMove = (e: MouseEvent) => {
+  if (!props.show || e.buttons === 0) { handleMouseUp(); return }
   if (isDraggingColor.value) {
     updateColorFromArea(e)
   } else if (isDraggingHue.value) {
@@ -289,13 +296,17 @@ const handleMouseUp = () => {
 }
 
 onMounted(() => {
-  document.addEventListener('mousemove', handleMouseMove)
-  document.addEventListener('mouseup', handleMouseUp)
+  document.addEventListener('pointermove', handleMouseMove)
+  document.addEventListener('pointerup', handleMouseUp, true)
+  window.addEventListener('blur', handleMouseUp)
+  document.addEventListener('pointercancel', handleMouseUp, true)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('mousemove', handleMouseMove)
-  document.removeEventListener('mouseup', handleMouseUp)
+  document.removeEventListener('pointermove', handleMouseMove)
+  document.removeEventListener('pointerup', handleMouseUp, true)
+  window.removeEventListener('blur', handleMouseUp)
+  document.removeEventListener('pointercancel', handleMouseUp, true)
 })
 
 // Color area selector position
@@ -498,19 +509,21 @@ const startEyedropper = (event: MouseEvent) => {
 }
 
 const close = () => {
+  handleMouseUp()
   // Emit final color value before closing
   emit('update:modelValue', currentColor.value)
   internalShow.value = false
 }
 
 // Saved colors functionality
-const filteredSavedColors = computed(() => {
-  if (colorScope.value === 'page') {
-    // Filter colors used on current page (would need access to canvas objects)
-    return savedColors.value.slice(0, 12)
-  }
-  return savedColors.value.slice(0, 12)
-})
+const refreshProjectColors = () => {
+  const live = getLiveColors()
+  pageColors.value = collectProjectColors(live.length ? live : [activePage.value?.canvasData])
+  documentColors.value = collectProjectColors([...live, ...project.pages.map(page => page.canvasData), ...(project.colorStyles || [])])
+  try { savedColors.value = JSON.parse(localStorage.getItem(`colorPicker:${project.id}:colors`) || '[]') } catch { savedColors.value = [] }
+}
+watch(() => props.show, (show) => { handleMouseUp(); if (show) refreshProjectColors() }, { immediate: true })
+const filteredSavedColors = computed(() => [...new Set([...(colorScope.value === 'page' ? pageColors.value : documentColors.value), ...savedColors.value])])
 
 const handleSaveToDocument = () => {
   if (saveToDocument.value) {
@@ -519,33 +532,17 @@ const handleSaveToDocument = () => {
       savedColors.value.push(color)
       // Persist to localStorage
       if (typeof window !== 'undefined') {
-        localStorage.setItem('colorPicker:savedColors', JSON.stringify(savedColors.value))
+        localStorage.setItem(`colorPicker:${project.id}:colors`, JSON.stringify(savedColors.value))
       }
     }
   }
 }
 
 const selectSavedColor = (color: string) => {
-  const hsl = hexToHsl(color)
-  hue.value = hsl.h
-  saturation.value = hsl.s
-  lightness.value = hsl.l
-  hexInput.value = color.replace('#', '').toUpperCase()
+  handleMouseUp()
+  emit('update:modelValue', color)
+  internalShow.value = false
 }
-
-// Load saved colors from localStorage
-onMounted(() => {
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('colorPicker:savedColors')
-    if (stored) {
-      try {
-        savedColors.value = JSON.parse(stored)
-      } catch (e) {
-        savedColors.value = []
-      }
-    }
-  }
-})
 
 // Position relative to trigger element
 const pickerPosition = ref({ top: 0, left: 0 })
@@ -652,13 +649,13 @@ watch(() => props.show, (newVal) => {
         </div>
         <div
           v-show="!isCanvasEyedropperActive"
-          class="fixed bg-[#2a2a2a] border border-white/10 rounded-xl shadow-2xl w-70 overflow-visible z-10101"
+          class="fixed bg-[#2a2a2a] border border-white/10 rounded-xl shadow-2xl w-70 max-h-[calc(100dvh-24px)] overflow-y-auto z-10101"
           :style="{ top: `${pickerPosition.top}px`, left: `${pickerPosition.left}px` }"
           @click.stop
         >
           <!-- Header -->
           <div class="px-4 py-3 border-b border-white/5 flex items-center justify-between bg-[#2a2a2a] rounded-t-xl">
-            <span class="text-xs font-semibold text-white">Custom</span>
+            <span class="text-xs font-semibold text-white">Escolher cor</span>
             <button
               @click="close"
               class="w-6 h-6 hover:bg-white/10 rounded-lg flex items-center justify-center transition-all"
@@ -674,7 +671,7 @@ watch(() => props.show, (newVal) => {
               ref="colorAreaRef"
               class="w-full h-45 rounded-lg relative cursor-crosshair overflow-hidden"
               :style="{ background: colorAreaGradient }"
-              @mousedown="handleColorAreaMouseDown"
+              @click.prevent="handleColorAreaMouseDown"
             >
               <!-- Selector -->
               <div
@@ -703,9 +700,9 @@ watch(() => props.show, (newVal) => {
               <!-- Hue Slider -->
               <div
                 ref="hueSliderRef"
-                class="flex-1 h-6 rounded-lg relative cursor-pointer overflow-hidden border border-white/10"
+                class="touch-none flex-1 h-6 rounded-lg relative cursor-pointer overflow-hidden border border-white/10"
                 :style="{ background: hueGradient }"
-                @mousedown="handleHueMouseDown"
+                @pointerdown.prevent="handleHueMouseDown"
               >
                 <div
                   class="absolute top-0 w-1 h-full bg-white border-l border-r border-black/30 transform -translate-x-1/2 pointer-events-none shadow-lg z-10"
@@ -717,9 +714,9 @@ watch(() => props.show, (newVal) => {
             <!-- Alpha Slider -->
             <div
               ref="alphaSliderRef"
-              class="w-full h-6 rounded-lg relative cursor-pointer overflow-hidden border border-white/10"
+              class="touch-none w-full h-6 rounded-lg relative cursor-pointer overflow-hidden border border-white/10"
               :style="{ background: `repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%) 50% / 8px 8px, ${alphaGradient}` }"
-              @mousedown="handleAlphaMouseDown"
+              @pointerdown.prevent="handleAlphaMouseDown"
             >
               <div
                 class="absolute top-0 w-1 h-full bg-white border-l border-r border-black/30 transform -translate-x-1/2 pointer-events-none shadow-lg z-10"
@@ -833,8 +830,8 @@ watch(() => props.show, (newVal) => {
                 v-model="colorScope"
                 class="w-full h-7 bg-[#1a1a1a] border border-white/10 rounded text-xs text-white px-2 focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer"
               >
-                <option value="page">On this page</option>
-                <option value="document">In document</option>
+                <option value="page">Cores desta página</option>
+                <option value="document">Cores deste projeto</option>
               </select>
               <div class="flex items-center gap-2">
                 <input 
@@ -844,11 +841,11 @@ watch(() => props.show, (newVal) => {
                   @change="handleSaveToDocument"
                   class="w-3.5 h-3.5 rounded border-white/10 bg-[#1a1a1a] text-violet-500 focus:ring-violet-500 cursor-pointer" 
                 />
-                <label for="save-to-doc" class="text-[10px] text-zinc-400 cursor-pointer">Save to document</label>
+                <label for="save-to-doc" class="text-[10px] text-zinc-400 cursor-pointer">Guardar cor neste projeto</label>
               </div>
               
               <!-- Saved Colors Grid -->
-              <div v-if="savedColors.length > 0" class="grid grid-cols-6 gap-1.5 mt-2">
+              <div v-if="filteredSavedColors.length > 0" class="grid grid-cols-6 gap-1.5 mt-2">
                 <button
                   v-for="(color, idx) in filteredSavedColors"
                   :key="idx"
@@ -857,6 +854,7 @@ watch(() => props.show, (newVal) => {
                   style="box-shadow: 0 0 0 1px rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.2);"
                   :style="{ backgroundColor: color }"
                   :title="color"
+                  :aria-label="`Usar cor ${color}`"
                 >
                   <!-- Inner white ring for better visibility of dark colors -->
                   <div class="absolute inset-0.5 border border-white/70 rounded pointer-events-none" style="box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);"></div>

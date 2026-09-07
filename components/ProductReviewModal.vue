@@ -20,6 +20,7 @@ type ZoneCandidate = { id: string; name: string; left?: number; top?: number; ex
 type FrameAssignment = { productId: string; frameId: string | null }
 type ZoneAssignment = { productId: string; zoneId: string | null }
 type ProductImportOptions = {
+    oneProductPerPage?: boolean
     mode?: 'replace' | 'append'
     labelTemplateId?: string
     targetMode?: ImportTargetMode
@@ -53,6 +54,7 @@ type ReviewDecisionState = 'approved' | 'ambiguous' | 'blocked' | 'pending'
 
 const props = defineProps<{
     initialAutoFillImages?: boolean
+    initialOneProductPerPage?: boolean
     modelValue: boolean
     initialProducts?: SmartProduct[]
     initialTextInput?: string
@@ -637,6 +639,8 @@ const backToReviewWithoutAppending = () => {
     step.value = 'review'
 }
 
+const oneProductPerPage = ref(props.initialOneProductPerPage === true)
+watch(() => props.modelValue, (open) => { if (open) oneProductPerPage.value = props.initialOneProductPerPage === true })
 const autoFillImages = ref(props.initialAutoFillImages === true)
 watch(() => props.modelValue, (open) => { if (open) autoFillImages.value = props.initialAutoFillImages === true })
 const handleImport = () => {
@@ -644,6 +648,7 @@ const handleImport = () => {
     isSubmittingImport.value = true
 
     const opts: ProductImportOptions = {
+        oneProductPerPage: oneProductPerPage.value,
         mode: importMode.value,
         labelTemplateId: selectedLabelTemplateId.value || undefined,
         targetMode: targetMode.value,
@@ -3109,7 +3114,7 @@ const getAssetDisplayName = (asset: any): string => {
                     <div :class="['flex items-center justify-between gap-2', isQrofertasPresentation ? 'flex-nowrap' : 'flex-wrap']">
                         <div class="flex items-center gap-1.5 min-w-0">
                             <h2 :class="[isQrofertasPresentation ? 'text-base' : 'text-lg', 'font-semibold text-white shrink-0']">Revisão</h2>
-                            <label class="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                              <label class="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
                                 <input v-model="autoFillImages" type="checkbox" class="accent-violet-500" />
                                 Preenchimento automático de imagens
                                 <span class="text-zinc-500" title="Usa até 4 imagens conforme o espaço do card. Você pode ajustar depois.">ⓘ</span>
@@ -4077,6 +4082,10 @@ const getAssetDisplayName = (asset: any): string => {
 
         </div>
         <template v-if="isQrofertasPresentation" #footer>
+            <label class="mb-3 flex items-start gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 text-sm text-white">
+                <input v-model="oneProductPerPage" type="checkbox" class="mt-1 accent-violet-500" :disabled="isSubmittingImport" />
+                <span>Um produto por página<small class="mt-1 block text-zinc-400">{{ products.length }} produtos criam {{ products.length }} novas páginas no formato atual. Mantém a página original.</small></span>
+            </label>
             <button
                 type="button"
                 class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-lg shadow-emerald-950/30 transition-colors hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-50"

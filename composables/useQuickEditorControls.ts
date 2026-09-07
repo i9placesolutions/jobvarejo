@@ -1,4 +1,11 @@
 import { computed, type Ref } from 'vue'
+import type { ProductZoneStructure, ProductZoneStructureVariant } from '~/types/product-zone'
+
+type QuickModeZoneStructure = {
+  structure: ProductZoneStructure | null
+  variants: ProductZoneStructureVariant[]
+  selectedVariantId: string
+}
 
 type QuickEditorControlOptions = {
   productZoneUiVersion: Ref<number>
@@ -6,6 +13,8 @@ type QuickEditorControlOptions = {
   getZoneChildren: (zone: any) => any[]
   /** Read-only lookup for values consumed by the sidebar render. */
   getZoneCardsForUi?: (zone: any) => any[]
+  /** Read-only lookup for the recipe applied to the current product count. */
+  getZoneStructureForUi?: (zone: any, productCount: number) => QuickModeZoneStructure
   getProductZoneId: (zone: any) => string
   resolveImportTargetZone: () => any | null
   setActiveProductZone: (zone: any, opts?: { syncImportTarget?: boolean }) => void
@@ -16,21 +25,29 @@ type QuickEditorControlOptions = {
   openProductReviewForZone: (zone: any, opts?: { mode?: 'replace' | 'append' }) => boolean
   notifyEditorError: (message: string) => void
   refreshCanvasObjects: () => void
+  refreshQuickModeUi?: () => void
 }
 
 export const useQuickEditorControls = (options: QuickEditorControlOptions) => {
   const quickModeZones = computed(() => {
     void options.productZoneUiVersion.value
-    return options.getRuntimeProductZones().map((zone: any, index: number) => ({
-      id: options.getProductZoneId(zone) || `quick-zone-${index + 1}`,
-      name: String(zone?.zoneName || zone?.name || `Zona ${index + 1}`).trim(),
+    return options.getRuntimeProductZones().map((zone: any, index: number) => {
       // `getZoneChildren` also normalizes Fabric runtime flags and starts
       // image work. The sidebar is rendered while the canvas is hydrating, so
       // use the read-only lookup there to avoid mutating reactive Fabric
       // objects from inside a computed value.
-      count: (options.getZoneCardsForUi || options.getZoneChildren)(zone).length,
-      zone
-    }))
+      const count = (options.getZoneCardsForUi || options.getZoneChildren)(zone).length
+      const structure = options.getZoneStructureForUi?.(zone, count)
+      return {
+        id: options.getProductZoneId(zone) || `quick-zone-${index + 1}`,
+        name: String(zone?.zoneName || zone?.name || `Zona ${index + 1}`).trim(),
+        count,
+        structure: structure?.structure || null,
+        structureVariants: structure?.variants || [],
+        selectedStructureVariantId: structure?.selectedVariantId || '',
+        zone
+      }
+    })
   })
 
   const quickModeTargetZoneId = computed(() => {
@@ -48,6 +65,7 @@ export const useQuickEditorControls = (options: QuickEditorControlOptions) => {
     if (!selected) return
     options.setActiveProductZone(selected, { syncImportTarget: true })
     options.refreshCanvasObjects()
+    options.refreshQuickModeUi?.()
   }
 
   const openQuickProductImport = async (mode: 'replace' | 'append' = 'replace') => {

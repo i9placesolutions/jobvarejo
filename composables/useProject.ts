@@ -1609,6 +1609,7 @@ export const useProject = () => {
     }
 
     type CreatePageFromTemplateSourceOptions = {
+        activate?: boolean
         insertAfterIndex?: number
         name?: string
         metadata?: Partial<Pick<Page, 'templateModelId' | 'templateModelName' | 'templateFormatId' | 'templateFormatLabel' | 'templateThemeId' | 'templateThemeName' | 'templateCompositionManaged' | 'templateSourcePageId'>>
@@ -1674,8 +1675,9 @@ export const useProject = () => {
         }
 
         project.pages.splice(insertAfterIndex + 1, 0, newPage)
-        project.activePageIndex = insertAfterIndex + 1
+        if (options.activate !== false) project.activePageIndex = insertAfterIndex + 1
         markAsUnsaved()
+        if (project.id) writeDraft(project.id, newPage.id, clonedJson, { immediate: true })
         writeProjectDraft()
         return newPage
     }

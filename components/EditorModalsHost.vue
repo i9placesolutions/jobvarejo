@@ -7,6 +7,7 @@ type ImageMatchMode = 'precise' | 'fast'
 type FrameAssignment = { productId: string; frameId: string | null }
 type ZoneAssignment = { productId: string; zoneId: string | null }
 type ProductImportOptions = {
+    oneProductPerPage?: boolean
   mode?: 'replace' | 'append'
   labelTemplateId?: string
   targetMode?: ImportTargetMode
@@ -67,6 +68,7 @@ defineProps<{
   reviewProducts: any[]
   productReviewInitialText?: string
   productReviewAutoFillImages?: boolean
+  productReviewOneProductPerPage?: boolean
   productReviewAutoParse?: boolean
   productReviewQuickMode?: boolean
   showImportMode: boolean
@@ -218,6 +220,7 @@ const emit = defineEmits<{
     :initial-products="reviewProducts"
     :initial-text-input="productReviewInitialText"
     :initial-auto-fill-images="productReviewAutoFillImages"
+    :initial-one-product-per-page="productReviewOneProductPerPage"
     :auto-parse-on-open="productReviewAutoParse"
     :quick-mode="productReviewQuickMode"
     :show-import-mode="showImportMode"
