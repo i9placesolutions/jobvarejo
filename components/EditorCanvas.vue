@@ -4031,7 +4031,8 @@ import {
   normalizeProductZoneStructureVariantMapByPreviewFormat,
   normalizeProductZoneStructureVariantMap,
   getProductZonePreviewFormatForDimensions,
-  resolveProductZoneStructure
+  resolveProductZoneStructure,
+  getProductZoneStructureLibraryPatch
 } from '~/utils/product-zone-structure'
 import { DEFAULT_GLOBAL_STYLES, DEFAULT_PRODUCT_ZONE } from '~/types/product-zone'
 import type {
@@ -24691,6 +24692,10 @@ const simulateSmartGrid = async (
         existingCount = existingZoneCardsAtStart.length;
     }
     const countForLayout = targetZone ? (existingCount + count) : count;
+    if (targetZone && opts.autoLayout !== false) {
+        await productZoneStructuresState.load()
+        applyCurrentStructureRecipe(targetZone, countForLayout)
+    }
 
     if (targetZone) {
         products = applyAutoOfferRuntimeLayout(
@@ -36927,6 +36932,18 @@ const getZoneChildren = (zone: any) => {
 
 // O modo rápido reutiliza a mesma zona e o mesmo importador do editor completo;
 // este composable só organiza a superfície reduzida apresentada ao usuário.
+const applyCurrentStructureRecipe = (zone: any, count: number) => {
+    if (!zone || !productZoneStructuresState.isLoaded.value) return
+    const patch = getProductZoneStructureLibraryPatch(zone,
+        productZoneStructuresState.structureMapsByPreviewFormat.value,
+        productZoneStructuresState.structureVariantsByPreviewFormat.value,
+        count, getCurrentProductZonePreviewFormat())
+    Object.assign(zone, patch)
+    // ensureZoneSanity also reads this persisted snapshot during relayout.
+    const layout = zone._zoneStateSnapshot?.zone?.layout
+    if (layout) Object.assign(layout, JSON.parse(JSON.stringify(patch)))
+}
+
 const getQuickModeZoneStructureForUi = (
     zone: any,
     productCount: number
@@ -36939,7 +36956,6 @@ const getQuickModeZoneStructureForUi = (
     const count = Math.min(24, Math.max(1, Math.round(Number(productCount) || 1)))
     const baseZone = zone && typeof zone === 'object' ? zone : {}
     const globalLibraryReady = productZoneStructuresState.isLoaded.value
-        && baseZone.templateCompositionManaged !== true
     const structureMaps = normalizeProductZoneStructureMapByPreviewFormat(
         globalLibraryReady
             ? productZoneStructuresState.structureMapsByPreviewFormat.value
@@ -37023,6 +37039,7 @@ const handleQuickModeZoneStructureChange = async (payload: { zoneId?: string; va
         [key]: variantId
     }
 
+    applyCurrentStructureRecipe(zone, count)
     setActiveProductZone(zone, { syncImportTarget: true })
     await handleUpdateZone({
         structureVariantByProductCount: nextFlatSelection,

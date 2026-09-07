@@ -584,3 +584,26 @@ export const getProductZonePreviewFormatForDimensions = (
 export const getProductZoneStructureFormatLabel = (format: unknown): string => {
   return PRODUCT_ZONE_STRUCTURE_FORMATS.find((item) => item.value === format)?.label ?? 'Automático'
 }
+
+/** Atualiza apenas a receita solicitada por uma ação explícita, sem refazer páginas no boot. */
+export const getProductZoneStructureLibraryPatch = (
+  zone: Partial<ProductZone>,
+  maps: ProductZoneStructureMapByPreviewFormat,
+  variants: ProductZoneStructureVariantMapByPreviewFormat,
+  count: number,
+  format: ProductZonePreviewFormat
+): Partial<ProductZone> => {
+  const key = String(normalizeProductZoneStructureCount(count, 1))
+  const entry = maps[format]?.[key]
+  if (!entry) return {}
+  const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value))
+  const nextMap = { ...(zone.structureByProductCountByPreviewFormat?.[format] || zone.structureByProductCount), [key]: copy(entry) }
+  const nextVariants = { ...(zone.structureVariantsByProductCountByPreviewFormat?.[format] || zone.structureVariantsByProductCount), [key]: copy(variants[format]?.[key] || []) }
+  return {
+    structureByProductCountEnabled: true,
+    structureByProductCount: nextMap,
+    structureByProductCountByPreviewFormat: { ...zone.structureByProductCountByPreviewFormat, [format]: nextMap } as ProductZoneStructureMapByPreviewFormat,
+    structureVariantsByProductCount: nextVariants,
+    structureVariantsByProductCountByPreviewFormat: { ...zone.structureVariantsByProductCountByPreviewFormat, [format]: nextVariants } as ProductZoneStructureVariantMapByPreviewFormat
+  }
+}

@@ -641,6 +641,13 @@ const useTemplateModel = (modelId: string) => {
         <p v-else class="quick-mode-structure-card__hint">
           A receita é ajustada automaticamente conforme a quantidade de produtos.
         </p>
+        <button
+          v-if="selectedZoneStructureVariant && selectedZone"
+          type="button"
+          :disabled="props.busy"
+          class="mt-3 min-h-10 w-full rounded-lg border border-blue-400/30 bg-blue-500/10 px-3 text-xs font-semibold text-blue-200 disabled:opacity-50"
+          @click="emit('select-zone-structure', { zoneId: selectedZone.id, variantId: selectedZoneStructureVariant.id })"
+        >Aplicar grade configurada</button>
       </section>
 
       <div class="quick-mode-tabs" role="tablist" aria-label="Produtos">
