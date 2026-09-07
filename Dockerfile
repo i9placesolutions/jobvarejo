@@ -68,9 +68,9 @@ RUN /opt/image-worker/bin/python -m playwright install-deps chromium \
 RUN /opt/image-worker/bin/python -m playwright install --only-shell chromium
 RUN --mount=type=cache,target=/root/.cache/birefnet \
     mkdir -p /opt/image-models \
-    && curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 30 \
+    && if ! echo "7a35a0141cbbc80de11d9c9a28f52697  /root/.cache/birefnet/birefnet-general.onnx" | md5sum -c --status; then curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 30 \
       --continue-at - --output /root/.cache/birefnet/birefnet-general.onnx \
-      https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-epoch_244.onnx \
+      https://s3.wasabisys.com/jobvarejo/models/birefnet-general-7a35a0141cbbc80de11d9c9a28f52697.onnx; fi \
     && echo "7a35a0141cbbc80de11d9c9a28f52697  /root/.cache/birefnet/birefnet-general.onnx" | md5sum -c - \
     && cp /root/.cache/birefnet/birefnet-general.onnx /opt/image-models/ \
     && /opt/image-worker/bin/python -c "from rembg import new_session; new_session('birefnet-general', providers=['CPUExecutionProvider'])"
