@@ -24693,8 +24693,14 @@ const simulateSmartGrid = async (
     }
     const countForLayout = targetZone ? (existingCount + count) : count;
     if (targetZone && opts.autoLayout !== false) {
-        await productZoneStructuresState.load()
+        await Promise.all([productZoneStructuresState.load(), productCardConfigurationState.load()])
         applyCurrentStructureRecipe(targetZone, countForLayout)
+        if (productCardConfigurationState.isLoaded.value) {
+            targetZone._zoneGlobalStyles = normalizeGlobalStyles({
+                ...getZoneGlobalStyles(targetZone),
+                cardLayout: normalizeProductCardConfiguration(productCardConfigurationState.configuration.value)
+            })
+        }
     }
 
     if (targetZone) {
@@ -38151,13 +38157,13 @@ function handleGlobalProductZoneStructuresUpdated() {
     scheduleGlobalProductLibrariesApply('global-structure-update');
 }
 
-const applyGlobalProductCardConfigurationToCanvas = (reason = 'global-card-configuration-update') => {
+const applyGlobalProductCardConfigurationToCanvas = (reason = 'global-card-configuration-update', includeTemplates = false) => {
     if (!canvas.value || !productCardConfigurationState.isLoaded.value) return;
 
     const cardLayout = normalizeProductCardConfiguration(productCardConfigurationState.configuration.value);
     const zones = canvas.value.getObjects().filter((obj: any) => (
         isLikelyProductZone(obj) &&
-        !(isTemplateCompositionManagedZone(obj) && hasPersistedCardLayout(obj))
+        (includeTemplates || !(isTemplateCompositionManagedZone(obj) && hasPersistedCardLayout(obj)))
     ));
     if (zones.length === 0) return;
 
@@ -38199,6 +38205,7 @@ const applyGlobalProductCardConfigurationToCanvas = (reason = 'global-card-confi
 let globalProductLibrariesApplyTimer: number | null = null;
 let globalProductLibrariesApplyReason = 'global-library-sync';
 let globalProductLibrariesApplyRetry = 0;
+let pendingExplicitCardConfigurationUpdate = false;
 
 const scheduleGlobalProductLibrariesApply = (reason = 'global-library-sync') => {
     if (typeof window === 'undefined' || isCanvasDestroyed.value) return;
@@ -38224,7 +38231,8 @@ const scheduleGlobalProductLibrariesApply = (reason = 'global-library-sync') => 
 
         globalProductLibrariesApplyRetry = 0;
         applyGlobalProductZoneStructuresToCanvas(globalProductLibrariesApplyReason);
-        applyGlobalProductCardConfigurationToCanvas(globalProductLibrariesApplyReason);
+        applyGlobalProductCardConfigurationToCanvas(globalProductLibrariesApplyReason, pendingExplicitCardConfigurationUpdate);
+        pendingExplicitCardConfigurationUpdate = false;
     };
 
     globalProductLibrariesApplyTimer = window.setTimeout(run, 0);
@@ -38467,7 +38475,9 @@ watch(
     { flush: 'post', immediate: true }
 );
 
-function handleGlobalProductCardConfigurationUpdated() {
+function handleGlobalProductCardConfigurationUpdated(event?: Event) {
+    const origin = (event as CustomEvent | undefined)?.detail?.origin
+    if (origin === 'local' || origin === 'remote') pendingExplicitCardConfigurationUpdate = true
     scheduleGlobalProductLibrariesApply('global-card-configuration-update');
 }
 

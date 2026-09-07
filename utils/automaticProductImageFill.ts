@@ -28,7 +28,8 @@ export const planAutomaticProductImageFill = (width: number, height: number, ima
   const dy = step.dy * best.scale
   return Array.from({ length: best.count }, (_, index) => ({
     left: (index - (best.count - 1) / 2) * dx,
-    top: -(index - (best.count - 1) / 2) * dy,
+    // As cópias posteriores ficam à frente no Fabric: desenhar de cima para baixo.
+    top: (index - (best.count - 1) / 2) * dy,
     scale: best.scale
   }))
 }

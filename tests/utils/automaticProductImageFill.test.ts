@@ -23,3 +23,13 @@ it('preenche o card estreito com cópias verticais alinhadas e na largura máxim
     expect(Math.abs(image.top) + 50 * image.scale).toBeLessThanOrEqual(102.001)
   }
 })
+it('desenha a pilha de cima para baixo para as cópias inferiores ficarem à frente', () => {
+  const plan = planAutomaticProductImageFill(200, 380, 200, 150, 4, 'vertical')
+  expect(plan).toHaveLength(4)
+  for (let index = 1; index < plan.length; index++) {
+    expect(plan[index]!.top).toBeGreaterThan(plan[index - 1]!.top)
+    expect(plan[index]!.top - plan[index - 1]!.top).toBeLessThan(150 * plan[index]!.scale)
+    expect(plan[index]!.left).toBeCloseTo(plan[0]!.left)
+    expect(plan[index]!.scale).toBe(plan[0]!.scale)
+  }
+})
