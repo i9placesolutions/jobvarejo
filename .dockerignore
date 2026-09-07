@@ -20,3 +20,6 @@ test-results
 /*.md
 /*.sql
 /bun.lockb
+
+_to_delete
+**/__pycache__
