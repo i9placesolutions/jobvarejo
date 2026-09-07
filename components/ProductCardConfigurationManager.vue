@@ -84,6 +84,7 @@ const profileMeta: Array<{
   label: string;
   description: string;
 }> = [
+  { key: 'tall', label: 'Vertical estreito', description: 'Cards altos e estreitos' },
   { key: 'compact', label: 'Compacto', description: 'Cards pequenos' },
   { key: 'standard', label: 'Médio', description: 'Card regular' },
   { key: 'wide', label: 'Largo', description: 'Card horizontal' },
@@ -107,7 +108,7 @@ const selectedMeta = computed(() =>
 )
 
 const selectedProfileMeta = computed(() =>
-  profileMeta.find((item) => item.key === selectedProfile.value) ?? profileMeta[1]!
+  profileMeta.find((item) => item.key === selectedProfile.value) ?? profileMeta.find((item) => item.key === 'standard')!
 )
 
 // O perfil Largo é aplicado pelo editor em cards horizontais (os cards de
@@ -117,7 +118,7 @@ const selectedProfileMeta = computed(() =>
 // mesma proporção aqui faz a prévia representar o card real e também mantém
 // o cálculo de `contain` dos elementos consistente entre as duas superfícies.
 const previewCardAspectRatio = computed(() =>
-  selectedProfile.value === 'wide' ? 1.96 : (4 / 5)
+  selectedProfile.value === 'tall' ? (1 / 3) : selectedProfile.value === 'wide' ? 1.96 : (4 / 5)
 )
 
 const selectedProfileElements = computed(() =>

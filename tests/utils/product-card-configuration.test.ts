@@ -241,3 +241,11 @@ describe('product-card-configuration', () => {
     expect(price.getScaledHeight()).toBeCloseTo(firstHeight, 6)
   })
 })
+
+it('oferece perfil próprio para card estreito sem substituir receitas existentes', () => {
+  const config = normalizeProductCardConfiguration({ profiles: { standard: { elements: { image: { width: 75 } } } } } as any)
+  expect(resolveProductCardConfigurationProfileKey(90, 270)).toBe('tall')
+  expect(config.profiles?.tall.elements.image.width).toBe(94)
+  expect(config.profiles?.tall.elements.image.height).toBe(68)
+  expect(config.profiles?.standard.elements.image.width).toBe(75)
+})

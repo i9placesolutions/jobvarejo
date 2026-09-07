@@ -11,6 +11,7 @@ const ELEMENT_KEYS: ProductCardElementKey[] = ['name', 'image', 'price', 'alcoho
 export const PRODUCT_ALCOHOL_BADGE_ASSET_URL = '/assets/alcohol-under-18-badge.png'
 
 export const PRODUCT_CARD_CONFIGURATION_PROFILE_KEYS: ProductCardConfigurationProfileKey[] = [
+  'tall',
   'compact',
   'standard',
   'wide',
@@ -29,6 +30,13 @@ const PROFILE_OVERRIDES: Record<
   ProductCardConfigurationProfileKey,
   Partial<Record<ProductCardElementKey, Partial<ProductCardElementLayout>>>
 > = {
+  tall: {
+    name: { y: 8, width: 94, height: 10 },
+    image: { y: 49, width: 94, height: 68 },
+    price: { y: 91, width: 90, height: 14 },
+    alcoholBadge: { x: 87, y: 7, width: 16, height: 8 },
+    limit: { y: 15, width: 90, height: 7 }
+  },
   compact: {
     name: { y: 13, width: 92, height: 14 },
     image: { y: 51, width: 80, height: 46 },
@@ -180,6 +188,7 @@ export const resolveProductCardConfigurationProfileKey = (
   const landscapeRatio = height > 0 ? width / height : 0
   const role = String(context.role || '').toLowerCase()
 
+  if (width > 0 && height > 0 && width / height < 0.5) return 'tall'
   if (context.isHighlighted || role === 'showcase' || role === 'hero') return 'featured'
   if (shortSide > 0 && (shortSide <= 170 || longSide <= 220)) return 'compact'
   if (isLandscape && landscapeRatio >= 1.45) return 'wide'

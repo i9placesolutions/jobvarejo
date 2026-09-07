@@ -282,7 +282,7 @@ export interface ProductCardElementLayout {
   rotation: number;
 }
 
-export type ProductCardConfigurationProfileKey = 'compact' | 'standard' | 'wide' | 'featured';
+export type ProductCardConfigurationProfileKey = 'compact' | 'standard' | 'wide' | 'featured' | 'tall';
 
 export interface ProductCardConfigurationProfile {
   elements: Record<ProductCardElementKey, ProductCardElementLayout>;

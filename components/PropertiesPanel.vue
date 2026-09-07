@@ -997,6 +997,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <option value="compact">Compacto · cards pequenos</option>
               <option value="standard">Médio · card regular</option>
               <option value="wide">Largo · card horizontal</option>
+              <option value="tall">Vertical estreito · card alto</option>
               <option value="featured">Destaque · card maior</option>
             </select>
             <p class="mt-1 text-[10px] text-zinc-500 leading-snug">Escolha um modelo criado em Card Configurations. A escolha vale só para este card.</p>
