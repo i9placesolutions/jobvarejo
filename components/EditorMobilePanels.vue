@@ -94,6 +94,7 @@ const emit = defineEmits<{
 <template>
   <EditorMobileBottomSheet
     :title="title"
+    :fill-content="['uploads', 'resources', 'layers', 'properties', 'pages'].includes(panel || '')"
     @close="emit('close')"
   >
     <div v-if="panel === 'tools'" class="space-y-4">
@@ -166,7 +167,7 @@ const emit = defineEmits<{
         <div class="grid grid-cols-4 gap-2">
           <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="emit('command', 'add-grid-zone')">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-            <span class="text-[11px]">Grid Zone</span>
+            <span class="text-[11px]">Produtos</span>
           </button>
           <button class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 active:text-white" @click="emit('manageLabelTemplates')">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
@@ -180,7 +181,7 @@ const emit = defineEmits<{
       </div>
     </div>
 
-    <SidebarLeft v-if="panel === 'resources'" embedded start-in-resources class="min-h-[50dvh]"
+    <SidebarLeft v-if="panel === 'resources'" embedded start-in-resources class="min-h-0 flex-1"
       @insert-asset="emit('insertAsset', $event)" @insert-element="emit('insertElement', $event)"
       @generate-institutional="emit('generateInstitutional', $event)" @open-menu="emit('command', 'open-projects')" />
 
@@ -220,6 +221,7 @@ const emit = defineEmits<{
 
     <template v-if="panel === 'properties'">
       <EditorRightSidebar
+        embedded
         :collaborators="[]"
         :current-user="currentUser"
         :show-zoom-menu="showZoomMenu"

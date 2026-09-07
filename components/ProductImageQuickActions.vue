@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ChevronDown, Copy, ImagePlus, Minus, Plus, Tag, Trash2 } from 'lucide-vue-next'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ChevronDown, SlidersHorizontal, Copy, ImagePlus, Minus, Plus, Tag, Trash2 } from 'lucide-vue-next'
 
 type TemplateOption = {
   id: string
@@ -35,24 +35,35 @@ const emit = defineEmits<{
 
 const templateMenuOpen = ref(false)
 
+const root = ref<HTMLElement | null>(null)
+const toolbar = ref<HTMLElement | null>(null)
+const bounds = ref({ width: 800, height: 600, panelHeight: 190 })
+const expanded = ref(false)
+let observer: ResizeObserver | null = null
+const measure = () => {
+  if (root.value) bounds.value = { width: root.value.clientWidth, height: root.value.clientHeight, panelHeight: toolbar.value?.offsetHeight || 190 }
+}
+const closeOutside = (event: PointerEvent) => {
+  if (toolbar.value && !toolbar.value.contains(event.target as Node)) { templateMenuOpen.value = false; expanded.value = false }
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', closeOutside)
+  observer = new ResizeObserver(measure)
+  window.addEventListener('resize', measure)
+  nextTick(() => { if (root.value) observer?.observe(root.value); if (toolbar.value) observer?.observe(toolbar.value); measure() })
+})
+onBeforeUnmount(() => { document.removeEventListener('pointerdown', closeOutside); observer?.disconnect(); window.removeEventListener('resize', measure) })
+watch(() => props.visible, async () => { await nextTick(); if (root.value) observer?.observe(root.value); if (toolbar.value) observer?.observe(toolbar.value); measure() })
 const toolbarStyle = computed(() => {
-  const toolbarWidth = 340
-  const width = Math.max(0, Number(props.width) || 0)
-  const left = Number(props.left) || 0
-  const top = Number(props.top) || 0
-  const centeredLeft = left + Math.max(0, (width - toolbarWidth) / 2)
+  const width = Math.min(420, Math.max(240, bounds.value.width - 16))
+  const x = Number(props.left) + Number(props.width) / 2 - width / 2
+  const y = Number(props.top) - bounds.value.panelHeight - 10
   return {
-    // Keep the image controls visibly attached to the top edge of the image,
-    // matching the label controls and avoiding a toolbar hidden over the card.
-    top: `${Math.round(Math.max(4, top - 34))}px`,
-    left: `${Math.round(Math.max(4, centeredLeft))}px`
+    '--toolbar-left': `${Math.round(Math.max(8, Math.min(x, bounds.value.width - width - 8)))}px`,
+    '--toolbar-top': `${Math.round(Math.max(8, Math.min(y, bounds.value.height - bounds.value.panelHeight - 8)))}px`,
+    '--toolbar-width': `${width}px`
   }
 })
-
-const templateMenuStyle = computed(() => ({
-  top: `${Math.round((Number(props.top) || 0) + 34)}px`,
-  left: `${Math.round((Number(props.left) || 0) + 6)}px`
-}))
 
 const selectTemplate = (templateId: string) => {
   templateMenuOpen.value = false
@@ -65,122 +76,74 @@ watch(() => props.visible, (visible) => {
 </script>
 
 <template>
-  <div
-    v-if="visible"
-    class="pointer-events-none absolute inset-0 z-[116]"
-    @keydown.esc="templateMenuOpen = false"
-  >
-    <div
-      class="pointer-events-auto absolute inline-flex items-center gap-0.5 rounded-lg border border-white/15 bg-[#18181b]/95 p-0.5 shadow-[0_8px_24px_rgba(0,0,0,0.42)] backdrop-blur-md"
-      :style="toolbarStyle"
-      @mousedown.stop
-      @click.stop
-    >
-      <button type="button" class="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-white hover:bg-white/10"
-        title="Trocar imagem e suas cópias neste produto" @click="emit('replace')">
-        <ImagePlus class="h-3.5 w-3.5" /> Substituir imagem
-      </button>
-      <button type="button" class="flex h-7 w-7 items-center justify-center rounded-md text-rose-300 hover:bg-white/10"
-        title="Remover imagem" aria-label="Remover imagem" @click="emit('remove')"><Trash2 class="h-3.5 w-3.5" /></button>
-      <select aria-label="Preenchimento de imagens" :value="fillCount ?? 1" class="max-w-28 rounded bg-zinc-800 text-white text-[10px] p-1" @change="emit('fill', Number(($event.target as HTMLSelectElement).value), fillDirection)">
-        <option value="0">Automático</option>
-        <option value="1">Só 1 imagem</option>
-        <option value="2">2 imagens</option>
-        <option value="3">3 imagens</option>
-        <option value="4">4 imagens</option>
-      </select>
-      <select aria-label="Disposição das imagens" :value="fillDirection || 'auto'"
-        class="max-w-28 rounded bg-zinc-800 text-white text-[10px] p-1"
-        @change="emit('fill', fillCount === 1 ? 0 : (fillCount ?? 0), ($event.target as HTMLSelectElement).value)">
-        <option value="auto">Disposição auto</option>
-        <option value="horizontal">Lado a lado</option>
-        <option value="vertical">Empilhado</option>
-      </select>
-      <button
-        type="button"
-        class="flex h-6 w-6 items-center justify-center rounded-md text-white/75 transition hover:bg-violet-500/25 hover:text-white active:bg-violet-500/40"
-        title="Duplicar imagem"
-        aria-label="Duplicar imagem"
-        @click="emit('duplicate')"
-      >
-        <Copy class="h-3 w-3" />
-      </button>
-
-      <button
-        type="button"
-        class="flex h-6 w-6 items-center justify-center rounded-md text-white/75 transition hover:bg-violet-500/25 hover:text-white active:bg-violet-500/40"
-        title="Trocar etiqueta de preço"
-        aria-label="Trocar etiqueta de preço"
-        :aria-expanded="templateMenuOpen"
-        @click="templateMenuOpen = !templateMenuOpen"
-      >
-        <Tag class="h-3 w-3" />
-        <ChevronDown class="-ml-1 h-2 w-2" />
-      </button>
-
-      <button
-        type="button"
-        class="flex h-6 w-6 items-center justify-center rounded-md text-white/75 transition hover:bg-white/10 hover:text-white active:bg-white/20"
-        title="Reduzir imagem"
-        aria-label="Reduzir imagem"
-        @click="emit('resize', 'smaller')"
-      >
-        <Minus class="h-3 w-3" />
-      </button>
-
-      <button
-        type="button"
-        class="flex h-6 w-6 items-center justify-center rounded-md text-white/75 transition hover:bg-white/10 hover:text-white active:bg-white/20"
-        title="Aumentar imagem"
-        aria-label="Aumentar imagem"
-        @click="emit('resize', 'larger')"
-      >
-        <Plus class="h-3 w-3" />
-      </button>
-    </div>
-
-    <div
-      v-if="templateMenuOpen"
-      class="pointer-events-auto absolute w-64 max-w-[calc(100vw-20px)] overflow-hidden rounded-xl border border-white/15 bg-[#18181b]/98 p-1.5 shadow-2xl backdrop-blur-md"
-      :style="templateMenuStyle"
-      role="menu"
-      @mousedown.stop
-      @click.stop
-    >
-      <div class="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/45">
-        Etiqueta do card
+  <div v-if="visible" ref="root" class="image-actions-root pointer-events-none absolute inset-0 z-[116]" @keydown.esc.stop="templateMenuOpen = false; expanded = false">
+    <section ref="toolbar" class="image-actions pointer-events-auto" :style="toolbarStyle" aria-label="Imagem do produto" @pointerdown.stop @mousedown.stop @click.stop>
+      <div class="image-actions-header">
+        <button type="button" class="image-action image-action-primary" title="Trocar a imagem e suas cópias neste produto" @click="emit('replace')"><ImagePlus />Substituir imagem</button>
+        <button type="button" class="image-action image-action-settings" :aria-expanded="expanded" aria-label="Ajustar imagem" @click="expanded = !expanded"><SlidersHorizontal /><span>Ajustar</span><ChevronDown :class="{ 'rotate-180': expanded }" /></button>
+        <button type="button" class="image-action image-action-remove" aria-label="Remover imagem" title="Remover imagem" @click="emit('remove')"><Trash2 /></button>
       </div>
-
-      <button
-        v-for="template in templates"
-        :key="template.id"
-        type="button"
-        class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-white/75 transition hover:bg-white/10 hover:text-white"
-        :class="template.id === selectedTemplateId ? 'bg-violet-500/20 text-violet-100' : ''"
-        role="menuitem"
-        @click="selectTemplate(template.id)"
-      >
-        <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/10">
-          <img
-            v-if="template.previewDataUrl"
-            :src="template.previewDataUrl"
-            :alt="`Prévia da etiqueta ${template.name}`"
-            class="h-full w-full object-contain"
-          >
-          <Tag v-else class="h-3.5 w-3.5 text-white/45" />
-        </span>
-        <span class="min-w-0 flex-1 truncate">{{ template.name }}</span>
-        <span v-if="template.id === selectedTemplateId" class="text-[10px] text-violet-300">Atual</span>
-      </button>
-
-      <button
-        v-if="!templates.length"
-        type="button"
-        class="mt-1 flex w-full items-center justify-center rounded-lg border border-white/10 px-2 py-2 text-[11px] text-white/65 transition hover:bg-white/10 hover:text-white"
-        @click="emit('manage-templates')"
-      >
-        Abrir biblioteca de etiquetas
-      </button>
-    </div>
+      <div class="image-actions-details" :class="{ 'is-expanded': expanded }">
+        <div class="image-actions-fields">
+          <label>Quantidade<select aria-label="Preenchimento de imagens" :value="fillCount ?? 1" @change="emit('fill', Number(($event.target as HTMLSelectElement).value), fillDirection)">
+            <option value="0">Automática</option><option value="1">1 imagem</option><option value="2">2 imagens</option><option value="3">3 imagens</option><option value="4">4 imagens</option>
+          </select></label>
+          <label>Organização<select aria-label="Disposição das imagens" :value="fillDirection || 'auto'" @change="emit('fill', fillCount === 1 ? 0 : (fillCount ?? 0), ($event.target as HTMLSelectElement).value)">
+            <option value="auto">Automática</option><option value="horizontal">Lado a lado</option><option value="vertical">Empilhadas</option>
+          </select></label>
+        </div>
+        <div class="image-actions-tools">
+          <button type="button" class="image-action" @click="emit('duplicate')"><Copy />Duplicar</button>
+          <button type="button" class="image-action" :aria-expanded="templateMenuOpen" @click="templateMenuOpen = !templateMenuOpen"><Tag />Etiqueta</button>
+          <div class="image-actions-size" role="group" aria-label="Tamanho da imagem"><button type="button" class="image-action" aria-label="Reduzir imagem" @click="emit('resize', 'smaller')"><Minus /></button><span>Tamanho</span><button type="button" class="image-action" aria-label="Aumentar imagem" @click="emit('resize', 'larger')"><Plus /></button></div>
+        </div>
+      </div>
+      <div v-if="templateMenuOpen" class="image-template-list">
+        <p>Etiqueta de preço</p>
+        <button v-for="template in templates" :key="template.id" type="button" class="image-template-option" :aria-pressed="template.id === selectedTemplateId" @click="selectTemplate(template.id)">
+          <img v-if="template.previewDataUrl" :src="template.previewDataUrl" alt="" /><Tag v-else /><span>{{ template.name }}</span><span v-if="template.id === selectedTemplateId">Atual</span>
+        </button>
+        <button v-if="!templates.length" type="button" class="image-action" @click="emit('manage-templates')">Abrir biblioteca de etiquetas</button>
+      </div>
+    </section>
   </div>
 </template>
+
+<style scoped>
+.image-actions { position:absolute;left:var(--toolbar-left);top:var(--toolbar-top);width:var(--toolbar-width);max-width:calc(100% - 16px);padding:10px;border:1px solid #ffffff24;border-radius:16px;background:#202024f5;color:#f4f4f5;box-shadow:0 12px 32px #0006;backdrop-filter:blur(16px);font-size:12px; }
+.image-actions-header,.image-actions-tools {display:flex;align-items:center;gap:8px;}
+.image-action {display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:0 10px;border-radius:9px;white-space:nowrap;transition:background .15s;}
+.image-action:hover {background:#ffffff12;}
+.image-action:focus-visible,select:focus-visible {outline:2px solid #a78bfa;outline-offset:2px;}
+.image-action svg {width:17px;height:17px;flex-shrink:0;}
+.image-action-primary {flex:1;background:#7c3aed26;color:#ddd6fe;font-weight:600;justify-content:flex-start;}
+.image-action-primary:hover {background:#7c3aed45;}
+.image-action-remove {color:#fda4af;}
+.image-action-settings {display:none;}
+.image-actions-details {border-top:1px solid #ffffff10;margin-top:8px;padding-top:10px;}
+.image-actions-fields {display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.image-actions-fields label {min-width:0;color:#a1a1aa;font-size:11px;}
+.image-actions-fields select {display:block;width:100%;min-height:40px;margin-top:4px;padding:0 8px;background:#303036;border:1px solid #ffffff12;border-radius:8px;color:#fafafa;font-size:13px;}
+.image-actions-tools {margin-top:8px;gap:2px;justify-content:space-between;}
+.image-actions-size {display:flex;align-items:center;border-left:1px solid #ffffff15;padding-left:4px;}
+.image-actions-size span {font-size:10px;color:#a1a1aa;}
+.image-template-list {max-height:220px;overflow:auto;overscroll-behavior:contain;border-top:1px solid #ffffff15;margin-top:8px;padding-top:8px;}
+.image-template-list p {font-size:11px;color:#a1a1aa;margin:0 6px 8px;}
+.image-template-option {display:flex;align-items:center;gap:8px;width:100%;min-height:48px;padding:6px;border-radius:8px;text-align:left;}
+.image-template-option:hover,.image-template-option[aria-pressed=true] {background:#7c3aed26;}
+.image-template-option img {width:36px;height:32px;object-fit:contain;}
+.image-template-option span:first-of-type {flex:1;}
+@media(max-width:767px) {
+.image-actions {position:fixed;left:8px;right:8px;top:auto;bottom:calc(76px + env(safe-area-inset-bottom, 0px));width:auto;max-width:none;max-height:45dvh;overflow:auto;padding:8px;border-radius:16px;}
+.image-action {min-height:44px;min-width:44px;padding:0 8px;}
+.image-action-primary {min-width:0;white-space:normal;text-align:left;}
+.image-action-settings {display:inline-flex;}
+.image-action-settings svg:last-child {width:12px;}
+.image-actions-details {display:none;}
+.image-actions-details.is-expanded {display:block;}
+.image-actions-fields select {min-height:44px;font-size:16px;}
+.image-actions-tools {flex-wrap:wrap;}
+.image-actions-size {margin-left:auto;}
+}
+@media(prefers-reduced-motion:reduce) {.image-action {transition:none;}}
+</style>

@@ -1,3 +1,4 @@
+import { getAssetLibraryCategory, categoryFromAssetKey } from '~/utils/assetLibraryCategories'
 import { getPublicUrl, getS3Client } from "../utils/s3";
 import { getCachedS3Objects } from "../utils/s3-object-cache";
 import { requireAuthenticatedUser } from "../utils/auth";
@@ -297,6 +298,8 @@ export default defineEventHandler(async (event) => {
     const bucketName = String(config.wasabiBucket || "");
     const endpoint = String(config.wasabiEndpoint || "").toLowerCase();
     const query = getQuery(event);
+    const libraryCategory = getAssetLibraryCategory(query.category)
+    if (query.category && !libraryCategory) throw createError({ statusCode: 400, statusMessage: 'Categoria inválida' })
     const source = typeof query.source === "string" ? query.source.trim().toLowerCase() : "";
     const uploadsOnlyMode = source === "uploads";
     const disableAiExpand =
@@ -384,9 +387,9 @@ export default defineEventHandler(async (event) => {
                 const listedObjects = await getCachedS3Objects({
                     s3,
                     bucket: bucketName,
-                    prefixes: ["imagens/", "uploads/"],
+                    prefixes: libraryCategory ? [libraryCategory.prefix, "imagens/", "uploads/"] : ["imagens/", "uploads/"],
                     ttlMs: 90_000,
-                    maxKeysPerPrefix: uploadsOnlyMode ? 12_000 : (hasVariants ? 10_000 : 1_500),
+                    maxKeysPerPrefix: (uploadsOnlyMode || libraryCategory) ? 12_000 : (hasVariants ? 10_000 : 1_500),
                     excludeKeyPrefixes: ["imagens/bg-removed-"],
                     forceRefresh: forceFresh
                 });
@@ -456,8 +459,25 @@ export default defineEventHandler(async (event) => {
             cacheItems.push(item);
         }
 
+        const knownCategories = new Map<string, string>()
+        if (libraryCategory) {
+            const keys = s3Items.map(item => item.key).filter(Boolean)
+            if (keys.length) {
+                const folders = await pgQuery<{ asset_key: string; name: string }>(
+                    'select af.asset_key, f.name from asset_folders af join folders f on f.id = af.folder_id where af.user_id = $1 and af.asset_key = any($2::text[])', [user.id, keys]
+                ).catch(() => ({ rows: [] }))
+                for (const row of folders.rows) {
+                    const category = categoryFromAssetKey(`${row.name}/asset.png`)
+                    if (category) knownCategories.set(row.asset_key, category)
+                }
+                if (libraryCategory.id === 'produtos') {
+                    const products = await pgQuery<{ s3_key: string }>('select distinct s3_key from product_image_cache where s3_key = any($1::text[])', [keys]).catch(() => ({ rows: [] }))
+                    for (const row of products.rows) if (!knownCategories.has(row.s3_key)) knownCategories.set(row.s3_key, 'produtos')
+                }
+            }
+        }
         const dedupMap = new Map<string, AssetItem>();
-        const allItems = [...cacheItems, ...s3Items];
+        const allItems = [...cacheItems, ...s3Items].filter(item => !libraryCategory || (categoryFromAssetKey(item.key || '') || knownCategories.get(item.key || '')) === libraryCategory.id);
         for (const item of allItems) {
             const dedupKey = String(item.key || item.url || item.id);
             const existing = dedupMap.get(dedupKey);

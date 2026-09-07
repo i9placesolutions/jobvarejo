@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ChevronDown, Copy, Maximize2, Plus } from 'lucide-vue-next'
 import { FLYER_TEMPLATE_FORMATS, type FlyerTemplateFormatId } from '~/utils/flyerTemplateApi'
 
+const mobileOptionsOpen = ref(false)
 const props = defineProps<{
   currentPageId?: string
   pageNumber: number
@@ -70,6 +71,7 @@ watch(() => props.currentPageId, closeMenus)
 <template>
   <div
     class="quick-mode-page-toolbar"
+    :data-mobile-expanded="mobileOptionsOpen"
     role="toolbar"
     aria-label="Controles da página aberta"
     @click.stop
@@ -82,6 +84,7 @@ watch(() => props.currentPageId, closeMenus)
       <small>{{ props.formatLabel || 'Formato livre' }} · {{ dimensionsLabel }}</small>
     </div>
 
+    <button type="button" class="quick-page-options" :aria-expanded="mobileOptionsOpen" @click="mobileOptionsOpen = !mobileOptionsOpen">Opções <ChevronDown :size="14" /></button>
     <div class="quick-mode-page-toolbar__actions">
       <button
         type="button"
@@ -360,5 +363,16 @@ watch(() => props.currentPageId, closeMenus)
  .quick-mode-page-toolbar button { min-height:44px; }
  .quick-mode-page-toolbar__menu strong { font-size:12px; }
  .quick-mode-page-toolbar__menu small { font-size:10px; }
+}
+</style>
+
+<style scoped>
+.quick-page-options {display:none;}
+@media(max-width:767px) {
+ .quick-mode-page-toolbar {background:#18181b;border-color:#ffffff14;border-radius:12px;box-shadow:none;}
+ .quick-mode-page-toolbar__identity {flex:1;}
+ .quick-mode-page-toolbar__eyebrow {font-size:9px;}
+ .quick-page-options {display:flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;color:#c4b5fd;font-size:12px;}
+ .quick-mode-page-toolbar[data-mobile-expanded=false] .quick-mode-page-toolbar__actions {display:none;}
 }
 </style>

@@ -697,6 +697,25 @@ const aiStudio = useAiImageStudio()
 const aiStudioOpen = aiStudio.open
 const aiStudioOptions = aiStudio.options
 const aiStudioUploads = ref<Array<{ id: string; name: string; url: string }>>([])
+const showSealLibrary = ref(false)
+const sealLibraryTargetId = ref('')
+const quickDecorativeImage = computed(() => {
+    const obj = selectedObjectRef.value
+    if (!isQuickMode.value || String(obj?.type || '').toLowerCase() !== 'image') return null
+    if (obj.parentZoneId || obj.group?.parentZoneId || obj.group?._productData) return null
+    return obj
+})
+const openSealLibrary = () => {
+    if (!quickDecorativeImage.value?._customId) return
+    sealLibraryTargetId.value = quickDecorativeImage.value._customId
+    showSealLibrary.value = true
+}
+const replaceQuickSeal = async (asset: any) => {
+    if (!asset?.url || !sealLibraryTargetId.value) return
+    const ok = await replaceImageByCustomId(sealLibraryTargetId.value, asset.url, { fit: 'contain' })
+    if (ok) { showSealLibrary.value = false; refreshCanvasObjects({ immediate: true }); updateSelection() }
+    else notifyEditorInfo('Não foi possível trocar o selo. Tente outra imagem.')
+}
 const productImagePickerAssets = ref<Array<{ id: string; name: string; url: string; key?: string }>>([])
 const showProductImageUploadPicker = ref(false)
 const productImagePickerMode = ref<'replace' | 'add'>('replace')
@@ -6732,6 +6751,7 @@ const applyQuickCardColors = async (settings: { mode: 'auto' | 'manual'; color?:
     } finally { isProcessing.value = false }
 }
 
+const quickMobileSection = ref('preview')
 const quickModeColorTargets = computed(() => {
     void selectedObjectRef.value
     if (!isQuickMode.value) return []
@@ -22755,7 +22775,7 @@ const addImageToProductCardByUrl = async (
 const replaceImageByCustomId = async (
     targetId: string,
     newUrl: string,
-    opts: { save?: boolean; setActive?: boolean } = {}
+    opts: { save?: boolean; setActive?: boolean; fit?: 'contain' } = {}
 ): Promise<boolean> => {
     if (!canvas.value || !fabric || !targetId || !newUrl) return false;
     const shouldSave = opts.save !== false;
@@ -22804,8 +22824,8 @@ const replaceImageByCustomId = async (
         newImg.set({
             left: target.left,
             top: target.top,
-            scaleX: newScaleX,
-            scaleY: newScaleY,
+            scaleX: opts.fit ? Math.min(newScaleX, newScaleY) : newScaleX,
+            scaleY: opts.fit ? Math.min(newScaleX, newScaleY) : newScaleY,
             angle: target.angle || 0,
             originX: target.originX || 'center',
             originY: target.originY || 'center',
@@ -22817,6 +22837,10 @@ const replaceImageByCustomId = async (
             clipPath: (target as any).clipPath,
             filters: (target as any).filters
         });
+        if (opts.fit) {
+            for (const prop of CANVAS_CUSTOM_PROPS) if (target[prop] !== undefined) newImg[prop] = target[prop]
+            newImg.setPositionByOrigin(target.getRelativeCenterPoint(), 'center', 'center')
+        }
         (newImg as any).src = newUrl;
 
         if (found.parent) {
@@ -39542,6 +39566,12 @@ const handleAutoOfferLayout = async () => {
         @created="handleAiStudioCreated"
       />
 
+      <div v-if="showSealLibrary" class="fixed inset-0 z-[510] flex items-center justify-center bg-black/70 p-3" @click.self="showSealLibrary = false" @keydown.esc="showSealLibrary = false">
+        <section role="dialog" aria-modal="true" aria-label="Trocar selo 3D" class="flex h-[85dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-zinc-900">
+          <header class="flex items-center justify-between border-b border-white/10 p-4 text-white"><div><h2 class="font-semibold">Trocar selo 3D</h2><p class="text-xs text-zinc-400">Mantém a posição e encaixa o novo selo no espaço atual.</p></div><button type="button" class="min-h-11 min-w-11 text-xl" aria-label="Fechar biblioteca de selos" @click="showSealLibrary = false">×</button></header>
+          <AssetsPanel class="min-h-0 flex-1" initial-library-category="selos" @insert-asset="replaceQuickSeal" />
+        </section>
+      </div>
       <div
         v-if="showProductImageUploadPicker"
         class="fixed inset-0 z-[500] bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4"
@@ -39687,6 +39717,8 @@ const handleAutoOfferLayout = async () => {
           <QuickModeControls
             v-if="isQuickMode"
             :key="String(project.id || '')"
+            @mobile-section="quickMobileSection = $event"
+            @export="exportQuickDesign"
             :pages="project.pages"
             :current-page-id="currentPageId"
             :template-models="quickModeTemplateModels"
@@ -39744,6 +39776,7 @@ const handleAutoOfferLayout = async () => {
               />
 
               <QuickModeCanvasControls
+                :mobile-open="quickMobileSection === 'tools'"
                 v-if="isQuickMode && project.pages?.length"
                 :current-zoom="currentZoom"
                 :native-text-count="quickModeNativeTextObjects.length"
@@ -39895,6 +39928,7 @@ const handleAutoOfferLayout = async () => {
                       @manage-templates="openGlobalLabelTemplates"
                     />
 
+                   <button v-if="quickDecorativeImage && !showSealLibrary" type="button" class="absolute bottom-24 left-1/2 z-[120] flex min-h-11 -translate-x-1/2 items-center gap-2 rounded-xl border border-violet-400/40 bg-zinc-900 px-4 text-sm text-violet-100 shadow-xl" @pointerdown.stop @click.stop="openSealLibrary"><ImagePlus class="h-4 w-4" />Trocar selo / elemento</button>
                    <ProductImageQuickActions
                      v-if="selectedProductImageQuickActions"
                      :visible="showProductImageQuickActions"
@@ -40519,4 +40553,10 @@ main {
  .custom-scrollbar::-webkit-scrollbar-corner {
      background: #1e1e1e;
  }
+</style>
+
+<style scoped>
+@media(max-width:767px) {
+ .quick-mode-stage {padding-bottom:calc(70px + env(safe-area-inset-bottom,0px)) !important;}
+}
 </style>

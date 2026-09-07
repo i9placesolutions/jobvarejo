@@ -29,6 +29,7 @@ const QUICK_COLOR_SWATCHES = [
 ]
 
 const props = defineProps<{
+  mobileOpen?: boolean
   currentZoom: number
   nativeTextCount: number
   nativeColorCount: number
@@ -197,6 +198,7 @@ const onZoomInput = (event: Event) => {
   <div
     ref="controlsRoot"
     class="quick-mode-canvas-controls"
+    :data-mobile-open="!!props.mobileOpen"
     role="toolbar"
     aria-label="Controles da pré-visualização"
     @click.stop
@@ -902,5 +904,15 @@ const onZoomInput = (event: Event) => {
  .quick-mode-canvas-controls__tool-button { width:auto; padding:0 8px; gap:4px; }
  .quick-mode-canvas-controls__tool-button span { display:inline; font-size:12px; }
  .quick-export-button { padding:0 12px; }
+}
+</style>
+
+<style scoped>
+@media(max-width:767px) {
+ .quick-mode-canvas-controls[data-mobile-open=false] {display:none !important;}
+ .quick-mode-canvas-controls[data-mobile-open=true] {position:fixed !important;left:8px !important;right:8px;bottom:calc(76px + env(safe-area-inset-bottom,0px)) !important;width:auto;max-width:none;margin:0 !important;z-index:600;box-shadow:0 -8px 32px #0005;padding:12px;border-radius:18px;}
+ .quick-export-button {display:none;}
+ .quick-mode-canvas-controls__tool-group {width:100%;justify-content:space-around;}
+ .quick-mode-canvas-controls__tool-button {min-height:48px;}
 }
 </style>

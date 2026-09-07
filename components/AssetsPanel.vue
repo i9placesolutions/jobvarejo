@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ASSET_LIBRARY_CATEGORIES } from '~/utils/assetLibraryCategories'
 import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
 
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
@@ -17,6 +18,7 @@ import { toWasabiProxyUrl } from '~/utils/storageProxy'
 // Props
 const props = defineProps<{
     searchQuery?: string
+    initialLibraryCategory?: string
 }>()
 
 const emit = defineEmits<{
@@ -31,6 +33,8 @@ const categories = [
 ]
 
 const activeCategory = ref('uploads')
+const libraryCategory = ref(props.initialLibraryCategory || '')
+watch(libraryCategory, () => { uploadsCursor.value = null; void fetchAssets() })
 const currentFolderId = ref<string | null>(null)
 const isLoadingAssets = ref(false)
 
@@ -45,6 +49,7 @@ interface Folder {
 const { folders: dbFolders, loadFolders, createFolder, updateFolder, deleteFolder, moveFolder } = useFolder()
 const { getApiAuthHeaders } = useApiAuth()
 const aiStudio = useAiImageStudio()
+const { isAdmin: libraryAdmin } = useAuth()
 
 // Mapeamento asset_key -> folder_id para persistência de "mover para pasta"
 const assetFolderMap = ref<Map<string, string | null>>(new Map())
@@ -297,6 +302,7 @@ const fetchUploadsPage = async (opts?: { reset?: boolean; fresh?: boolean }) => 
     if (uploadsLoadingMore.value) return
     if (!reset && !uploadsHasMore.value) return
 
+    const requestedCategory = libraryCategory.value
     uploadsLoadingMore.value = true
     if (reset) isLoadingAssets.value = true
 
@@ -308,6 +314,7 @@ const fetchUploadsPage = async (opts?: { reset?: boolean; fresh?: boolean }) => 
             source: 'uploads',
             ai: 0
         }
+        if (libraryCategory.value) query.category = libraryCategory.value
         if (isSearchMode) query.q = searchQuery
         if (!reset && uploadsCursor.value) query.cursor = uploadsCursor.value
         if (fresh) query.fresh = 1
@@ -328,6 +335,7 @@ const fetchUploadsPage = async (opts?: { reset?: boolean; fresh?: boolean }) => 
             if (currentSearchQuery !== searchQuery) return
         }
 
+        if (requestedCategory !== libraryCategory.value) return
         const normalizedItems = responseItems.map(normalizeUploadAsset)
         assets.value.uploads = reset
             ? normalizedItems
@@ -351,6 +359,7 @@ const fetchUploadsPage = async (opts?: { reset?: boolean; fresh?: boolean }) => 
     } finally {
         uploadsLoadingMore.value = false
         if (reset) isLoadingAssets.value = false
+        if (requestedCategory !== libraryCategory.value) void fetchAssets()
     }
 }
 
@@ -559,6 +568,7 @@ const contextMenuItems = computed(() => {
         ]
     } else {
          return [
+            ...(libraryAdmin.value ? ASSET_LIBRARY_CATEGORIES.map(category => ({ label: `Classificar em ${category.label}`, action: `classify:${category.id}`, icon: Folder })) : []),
             { label: 'Remover fundo (criar cópia)', action: 'remove-bg', icon: Edit },
             { label: 'Mover', action: 'move', icon: Move },
             { label: 'Renomear', action: 'rename', icon: Edit },
@@ -650,6 +660,15 @@ const handleAction = async (action: string) => {
     }
 
     if (!item) return
+    if (action.startsWith('classify:')) {
+        try {
+            await fetchUntyped('/api/assets/classify', { method: 'POST', headers: await getApiAuthHeaders(), body: { key: normalizeMappedAssetKey(item.key || item.id), category: action.slice(9) } })
+            libraryCategory.value = action.slice(9)
+            activeCategory.value = 'uploads'
+            await fetchAssets({ fresh: true })
+        } catch (error: any) { uploadError.value = error?.data?.statusMessage || 'Não foi possível classificar o arquivo.' }
+        return
+    }
     if (action === 'remove-bg') {
         if (removingBackground.value) return
         removingBackground.value = true
@@ -997,6 +1016,7 @@ const handleFileUpload = async (event: Event) => {
 
             if (endpoint === '/api/upload') {
                 const results = await uploadFiles(files, {
+                    category: libraryCategory.value || undefined,
                     removeBackground: removeBackgroundOnUpload.value,
                     continueOnError: true,
                     onProgress: ({ done, total, ok }) => {
@@ -1072,6 +1092,9 @@ const handleFileUpload = async (event: Event) => {
             </button>
         </div>
 
+        <div v-if="activeCategory === 'uploads'" class="grid grid-cols-2 gap-2 border-b border-white/10 p-3">
+          <button v-for="category in [{ id: '', label: 'Todos os arquivos' }, ...ASSET_LIBRARY_CATEGORIES]" :key="category.id" type="button" class="min-h-11 rounded-lg border px-2 py-2 text-left text-xs font-medium" :class="libraryCategory === category.id ? 'border-violet-400 bg-violet-500/20 text-violet-100' : 'border-white/10 text-zinc-300 hover:bg-white/5'" @click="libraryCategory = category.id">{{ category.label }}</button>
+        </div>
         <div v-if="activeCategory === 'uploads' || activeCategory === 'brand' || (activeCategory === 'folders' && currentFolderId)" class="px-3 py-2.5 border-b border-white/5 bg-[#1e1e21]/40 backdrop-blur-sm shadow-sm">
             <input type="file" ref="fileInput" class="hidden" accept="image/*" multiple @change="handleFileUpload" />
             <div class="flex items-center gap-2">

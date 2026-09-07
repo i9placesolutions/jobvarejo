@@ -22,6 +22,7 @@ defineExpose({
 })
 
 defineProps<{
+  embedded?: boolean
   collaborators: any[]
   currentUser: any
   showZoomMenu: boolean
@@ -90,11 +91,11 @@ const emit = defineEmits<{
   <aside
     :class="[
       'border-l border-white/5 h-full bg-[#18181b] text-white flex flex-col z-10 overflow-hidden shadow-[inset_1px_0_0_rgba(255,255,255,0.02)] transition-transform duration-200',
-      isTablet ? 'absolute right-0 inset-y-0 w-[320px] z-50 shadow-2xl' : 'w-[360px] shrink-0',
-      isTablet && !rightExpanded ? 'translate-x-full' : 'translate-x-0'
+      embedded ? 'w-full min-w-0 min-h-0 flex-1' : isTablet ? 'absolute right-0 inset-y-0 w-[320px] z-50 shadow-2xl' : 'w-[360px] shrink-0',
+      !embedded && isTablet && !rightExpanded ? 'translate-x-full' : 'translate-x-0'
     ]"
   >
-    <div class="h-14 px-4 flex items-center justify-end border-b border-white/5 shrink-0 min-w-0 bg-[#18181b] z-20">
+    <div v-if="!embedded" class="h-14 px-4 flex items-center justify-end border-b border-white/5 shrink-0 min-w-0 bg-[#18181b] z-20">
       <EditorTopControls
         :collaborators="collaborators"
         :current-user="currentUser"

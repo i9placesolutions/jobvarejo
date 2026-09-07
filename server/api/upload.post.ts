@@ -1,3 +1,4 @@
+import { getAssetLibraryCategory } from '~/utils/assetLibraryCategories'
 import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "crypto";
 import { requireAuthenticatedUser } from "../utils/auth";
@@ -85,6 +86,9 @@ export default defineEventHandler(async (event) => {
      throw createError({ statusCode: 400, statusMessage: "Filename missing" });
   }
 
+  const categoryValue = files.find(part => part.name === 'category')?.data.toString('utf8')
+  const category = getAssetLibraryCategory(categoryValue)
+  if (categoryValue && !category) throw createError({ statusCode: 400, statusMessage: 'Categoria inválida' })
   const originalFilename = String(file.filename || "upload").trim() || "upload";
   const originalMime = String(file.type || "").trim().toLowerCase();
   const removeBackgroundPart = files.find((part: any) => part?.name === 'removeBackground');
@@ -154,7 +158,7 @@ export default defineEventHandler(async (event) => {
 
   // Dedup por conteúdo: reupload do mesmo arquivo não deve inflar bucket.
   const hash = createHash("sha256").update(bodyBuffer).digest("hex").slice(0, 16);
-  const key = `imagens/${hash}-${safeBase}.${ext || "bin"}`;
+  const key = `${category?.prefix || "imagens/"}${hash}-${safeBase}.${ext || "bin"}`;
 
   const getAbortSignal = (timeoutMs: number): AbortSignal | undefined => {
     const timeoutFactory = (AbortSignal as any)?.timeout

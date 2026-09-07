@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { useEditorVisualViewport } from '~/composables/useEditorVisualViewport'
 import { computed, ref, watch } from 'vue'
-import { Layers, Trash2 } from 'lucide-vue-next'
+import { Layers, Trash2, Image as CanvasIcon, ShoppingBasket, SlidersHorizontal, Download } from 'lucide-vue-next'
 import QuickCardColors from './QuickCardColors.vue'
 import OfferValidityPrompt from './OfferValidityPrompt.vue'
 import {
@@ -121,6 +122,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (event: 'mobile-section', value: string): void
+  (event: 'export'): void
   (event: 'card-colors', payload: { mode: 'auto' | 'manual'; color?: string; allPages: boolean }): void
   (event: 'select-zone', zoneId: string): void
   (event: 'select-zone-structure', payload: { zoneId: string; variantId: string }): void
@@ -139,7 +142,10 @@ const emit = defineEmits<{
   (event: 'use-template-model', modelId: string): void
 }>()
 
-const mobileSection = ref<'products' | 'pages' | 'preview'>('preview')
+const { height: mobileViewportHeight, bottomInset: mobileKeyboardInset } = useEditorVisualViewport()
+const mobileStructureExpanded = ref(false)
+const mobileSection = ref<'products' | 'pages' | 'preview' | 'tools'>('preview')
+watch(mobileSection, value => emit('mobile-section', value))
 const activeTab = ref<'search' | 'mine'>('search')
 const listText = ref('')
 const autoFillImages = ref(false)
@@ -592,11 +598,13 @@ const useTemplateModel = (modelId: string) => {
     @confirm="applyValidityPrompt"
   />
 
-  <div class="quick-mode-controls-layout" :data-mobile-section="mobileSection">
+  <div class="quick-mode-controls-layout" :data-mobile-section="mobileSection" :style="{ '--mobile-keyboard-inset': `${mobileKeyboardInset}px`, '--mobile-visible-height': mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh' }">
     <nav class="quick-mobile-sections" aria-label="Edição rápida">
-      <button type="button" :aria-pressed="mobileSection === 'preview'" @click="mobileSection = 'preview'">Ver encarte</button>
-      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection = 'products'">Produtos</button>
-      <button type="button" :aria-pressed="mobileSection === 'pages'" @click="mobileSection = 'pages'">Páginas</button>
+      <button type="button" :aria-pressed="mobileSection === 'preview'" @click="mobileSection = 'preview'"><CanvasIcon :size="20" /><span>Encarte</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection = mobileSection === 'products' ? 'preview' : 'products'"><ShoppingBasket :size="20" /><span>Produtos</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'pages'" @click="mobileSection = mobileSection === 'pages' ? 'preview' : 'pages'"><Layers :size="20" /><span>Páginas</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'tools'" @click="mobileSection = mobileSection === 'tools' ? 'preview' : 'tools'"><SlidersHorizontal :size="20" /><span>Ajustes</span></button>
+      <button type="button" :disabled="props.busy" @click="emit('export')"><Download :size="20" /><span>Exportar</span></button>
     </nav>
     <aside class="quick-mode-sidebar" aria-label="Produtos da edição rápida">
     <div class="quick-mode-sidebar__content">
@@ -623,6 +631,8 @@ const useTemplateModel = (modelId: string) => {
       </div>
 
       <section v-if="selectedZone" class="quick-mode-structure-card" aria-label="Estrutura da zona">
+        <button type="button" class="quick-mobile-structure-toggle" :aria-expanded="mobileStructureExpanded" @click="mobileStructureExpanded = !mobileStructureExpanded"><span>Grade · {{ selectedZoneStructureDimensions }}</span><span>{{ mobileStructureExpanded ? 'Recolher' : 'Configurar' }}</span></button>
+        <div class="quick-structure-details" :class="{ 'is-expanded': mobileStructureExpanded }">
         <div class="quick-mode-structure-card__header">
           <span class="quick-mode-structure-card__icon" aria-hidden="true"><Layers :size="15" /></span>
           <div class="quick-mode-structure-card__title">
@@ -667,6 +677,7 @@ const useTemplateModel = (modelId: string) => {
           class="mt-3 min-h-10 w-full rounded-lg border border-blue-400/30 bg-blue-500/10 px-3 text-xs font-semibold text-blue-200 disabled:opacity-50"
           @click="emit('select-zone-structure', { zoneId: selectedZone.id, variantId: selectedZoneStructureVariant.id })"
         >Aplicar grade configurada</button>
+        </div>
       </section>
 
       <div class="quick-mode-tabs" role="tablist" aria-label="Produtos">
@@ -3692,5 +3703,33 @@ const useTemplateModel = (modelId: string) => {
 <style scoped>
 @media(max-width:767px) {
  .quick-mode-controls-layout { bottom:calc(116px + env(safe-area-inset-bottom, 0px)); }
+}
+</style>
+
+<style scoped>
+.quick-mobile-structure-toggle { display:none; }
+@media(max-width:767px) {
+ .quick-mode-controls-layout:not([data-mobile-section=preview]) { position:fixed;top:auto;bottom:calc(8px + var(--mobile-keyboard-inset, 0px) + env(safe-area-inset-bottom, 0px));height:calc(var(--mobile-visible-height, 100dvh) - 64px - env(safe-area-inset-bottom, 0px));max-height:none;z-index:500;border-color:#ffffff20; }
+ .quick-mode-sidebar__topbar {padding-bottom:10px;}
+ .quick-mode-structure-card {padding:8px 12px;margin-bottom:12px;}
+ .quick-mobile-structure-toggle {display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:left;font-size:13px;color:#e4e4e7;}
+ .quick-mobile-structure-toggle span:last-child {color:#c4b5fd;font-size:12px;}
+ .quick-structure-details {display:none;}
+ .quick-structure-details.is-expanded {display:block;padding-top:8px;}
+ .quick-mode-sidebar__content {min-height:0;overscroll-behavior:contain;}
+ .quick-mode-sidebar__footer {flex-shrink:0;padding:10px 12px;}
+ .quick-mode-sidebar__footer-action {min-height:48px;font-size:14px;}
+}
+</style>
+
+<style scoped>
+@media(max-width:767px) {
+ .quick-mobile-sections {position:fixed;left:0;right:0;bottom:var(--mobile-keyboard-inset,0px);z-index:700;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:6px 8px calc(8px + env(safe-area-inset-bottom,0px));border-top:1px solid #ffffff14;border-bottom:0;background:#18181b;}
+ .quick-mobile-sections button {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:50px;font-size:10px;font-weight:500;border-radius:12px;touch-action:manipulation;}
+ .quick-mobile-sections button:last-child {color:#c4b5fd;}
+ .quick-mode-controls-layout[data-mobile-section=preview],.quick-mode-controls-layout[data-mobile-section=tools] {position:fixed;top:auto;bottom:0;height:0;border:0;background:transparent;box-shadow:none;}
+ .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-pages-rail {display:none;}
+ .quick-mode-controls-layout[data-mobile-section=products],.quick-mode-controls-layout[data-mobile-section=pages] {bottom:calc(76px + var(--mobile-keyboard-inset,0px) + env(safe-area-inset-bottom,0px));height:calc(var(--mobile-visible-height,100dvh) - 132px - env(safe-area-inset-bottom,0px));}
+ .quick-mode-sidebar__backmark {display:none;}
 }
 </style>

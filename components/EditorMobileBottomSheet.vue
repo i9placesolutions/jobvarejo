@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEditorVisualViewport } from '~/composables/useEditorVisualViewport'
 /**
  * Bottom sheet genérico para editor mobile.
  * 3 alturas: peek (40vh), half (60vh), full (90vh).
@@ -7,12 +8,14 @@
 
 const props = defineProps<{
   title?: string
+  fillContent?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
 }>()
 
+const { height: viewportHeight, bottomInset: keyboardInset } = useEditorVisualViewport()
 type SheetLevel = 'peek' | 'half' | 'full'
 const level = ref<SheetLevel>('half')
 const sheetEl = ref<HTMLElement | null>(null)
@@ -29,11 +32,10 @@ onMounted(() => { previousFocus = document.activeElement as HTMLElement; sheetEl
 onBeforeUnmount(() => { previousFocus?.focus?.() })
 
 const heights: Record<SheetLevel, number> = { peek: 42, half: 64, full: 92 }
-const sheetHeight = computed(() => `${heights[level.value]}dvh`)
+const sheetHeight = computed(() => viewportHeight.value ? `${viewportHeight.value * heights[level.value] / 100}px` : `${heights[level.value]}dvh`)
 
 // Drag state
 let startY = 0
-let startHeight = 0
 const isDragging = ref(false)
 const dragOffset = ref(0)
 
@@ -41,7 +43,6 @@ const onDragStart = (e: TouchEvent) => {
   e.preventDefault()
   isDragging.value = true
   startY = e.touches[0]?.clientY ?? 0
-  startHeight = heights[level.value]
   dragOffset.value = 0
 }
 
@@ -49,15 +50,13 @@ const onDragMove = (e: TouchEvent) => {
   if (!isDragging.value) return
   e.preventDefault()
   const deltaY = (e.touches[0]?.clientY ?? 0) - startY
-  const deltaPct = (deltaY / Math.max(1, window.innerHeight)) * 100
+  const deltaPct = (deltaY / Math.max(1, viewportHeight.value || window.innerHeight)) * 100
   dragOffset.value = deltaPct
 }
 
 const onDragEnd = () => {
   if (!isDragging.value) return
   isDragging.value = false
-
-  const finalPct = heights[level.value] - dragOffset.value
 
   if (dragOffset.value > 15) {
     // Swiped down
@@ -76,7 +75,8 @@ const onDragEnd = () => {
 const currentHeight = computed(() => {
   if (isDragging.value) {
     const h = heights[level.value] - dragOffset.value
-    return `${Math.max(18, Math.min(94, h))}dvh`
+    const percent = Math.max(18, Math.min(94, h))
+    return viewportHeight.value ? `${viewportHeight.value * percent / 100}px` : `${percent}dvh`
   }
   return sheetHeight.value
 })
@@ -97,7 +97,7 @@ const currentHeight = computed(() => {
       <div
         ref="sheetEl" role="dialog" aria-modal="true" :aria-label="props.title || 'Opções do editor'" tabindex="-1" @keydown="handleKey"
         class="editor-mobile-sheet fixed bottom-0 left-0 right-0 z-[9999] flex flex-col bg-[#18181b] rounded-t-[28px] overflow-hidden border-t border-white/10 shadow-2xl shadow-black/40"
-        :style="{ height: currentHeight, maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px))', transition: isDragging ? 'none' : 'height 0.28s cubic-bezier(0.32,0.72,0,1)' }"
+        :style="{ height: currentHeight, bottom: `${keyboardInset}px`, maxHeight: viewportHeight ? `${viewportHeight - 12}px` : 'calc(100dvh - env(safe-area-inset-top, 0px))', transition: isDragging ? 'none' : 'height 0.28s cubic-bezier(0.32,0.72,0,1)' }"
       >
         <!-- Drag handle -->
         <div
@@ -105,16 +105,17 @@ const currentHeight = computed(() => {
           @touchstart="onDragStart"
           @touchmove="onDragMove"
           @touchend="onDragEnd"
+          @touchcancel="isDragging = false; dragOffset = 0"
         >
           <div class="w-10 h-1 rounded-full bg-white/20" />
         </div>
 
         <!-- Header -->
         <div v-if="props.title" class="flex-shrink-0 px-4 pb-3 flex items-center justify-between">
-          <h3 class="text-base font-semibold text-white">{{ props.title }}</h3>
+          <h3 class="min-w-0 flex-1 truncate text-base font-semibold text-white">{{ props.title }}</h3>
           <button type="button" class="px-3 min-h-11 text-xs text-violet-200" @click="level = level === 'full' ? 'half' : 'full'">{{ level === 'full' ? 'Recolher' : 'Expandir' }}</button>
           <button aria-label="Fechar painel" type="button"
-            class="touch-target flex items-center justify-center text-white/40 hover:text-white/70"
+            class="touch-target min-w-11 min-h-11 flex items-center justify-center text-white/40 hover:text-white/70"
             @click="emit('close')"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -122,7 +123,7 @@ const currentHeight = computed(() => {
         </div>
 
         <!-- Content slot -->
-        <div class="flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+        <div :class="props.fillContent ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'" class="min-h-0 flex-1 overscroll-contain px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
           <slot />
         </div>
       </div>
