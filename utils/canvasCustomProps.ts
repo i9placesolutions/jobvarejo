@@ -13,6 +13,7 @@
 
 export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     // Identity / selection
+    '_cardHighlighted',
     'id',
     '_customId',
     'name',
@@ -27,6 +28,7 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     'quickValidityStartDate',
     'quickValidityEndDate',
     'quickValidityMode',
+    'quickValidityDateFormat',
     'quickValidityWhileStocks',
     'quickOfferScope',
     'dynamicFieldResizeMode',

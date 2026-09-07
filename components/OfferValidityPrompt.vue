@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import {
+  formatOfferDate, normalizeOfferDateFormat, type OfferDateFormat,
   formatOfferValidityPeriod,
   inferOfferValidityMode,
   normalizeOfferValidityMode,
@@ -8,6 +9,7 @@ import {
 } from '~/utils/offerValidity'
 
 const props = defineProps<{
+  dateFormat?: OfferDateFormat
   startDate?: string
   endDate?: string
   mode?: OfferValidityMode | string
@@ -15,9 +17,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (event: 'confirm', payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean }): void
+  (event: 'confirm', payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean; dateFormat: OfferDateFormat; show: boolean }): void
 }>()
 
+const dateFormat = ref<OfferDateFormat>(normalizeOfferDateFormat(props.dateFormat))
 const startDate = ref(String(props.startDate || ''))
 const endDate = ref(String(props.endDate || ''))
 const mode = ref<OfferValidityMode>(normalizeOfferValidityMode(
@@ -26,12 +29,8 @@ const mode = ref<OfferValidityMode>(normalizeOfferValidityMode(
 const whileStocks = ref(props.whileStocks !== false)
 const errorMessage = ref('')
 
-const formatDateForPreview = (value: string): string => {
-  const parts = String(value || '').split('-')
-  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : String(value || '')
-}
-
 const validityPreview = computed(() => {
+  if (dateFormat.value === 'hidden') return 'Nenhuma validade será exibida no encarte.'
   const start = String(startDate.value || '').trim()
   const end = String(endDate.value || '').trim()
   if (mode.value === 'single_day' && !start && !end) {
@@ -41,13 +40,14 @@ const validityPreview = computed(() => {
     return 'Escolha as duas datas para ver o texto final.'
   }
   return formatOfferValidityPeriod(
-    formatDateForPreview(start),
-    formatDateForPreview(end),
+    formatOfferDate(start, dateFormat.value),
+    formatOfferDate(end, dateFormat.value),
     mode.value,
     true
   )
 })
 
+watch(() => props.dateFormat, value => { dateFormat.value = normalizeOfferDateFormat(value) })
 watch(() => props.startDate, value => { startDate.value = String(value || '') })
 watch(() => props.endDate, value => { endDate.value = String(value || '') })
 watch(() => props.mode, value => {
@@ -77,6 +77,10 @@ const selectMode = (value: unknown) => {
 const confirm = () => {
   errorMessage.value = ''
   whileStocks.value = true
+  if (dateFormat.value === 'hidden') {
+    emit('confirm', { startDate: startDate.value, endDate: endDate.value, mode: mode.value, whileStocks: false, dateFormat: 'hidden', show: false })
+    return
+  }
   if (mode.value === 'single_day') {
     const date = startDate.value || endDate.value
     if (!date) {
@@ -102,7 +106,7 @@ const confirm = () => {
     startDate: startDate.value,
     endDate: endDate.value,
     mode: mode.value,
-    whileStocks: whileStocks.value
+    whileStocks: whileStocks.value, dateFormat: dateFormat.value, show: true
   })
 }
 </script>
@@ -123,6 +127,15 @@ const confirm = () => {
         Defina a validade antes de começar a editar.
       </p>
 
+      <label class="mb-4 grid gap-2 text-sm">
+        <span>Como exibir a validade</span>
+        <select v-model="dateFormat" aria-label="Formato da validade" class="min-h-11 rounded-lg border border-white/20 bg-zinc-900 p-3 text-white">
+          <option value="numeric">07/09/2026 — numérica</option>
+          <option value="long">07 de setembro de 2026 — por extenso</option>
+          <option value="hidden">Não mostrar validade no encarte</option>
+        </select>
+      </label>
+      <div v-if="dateFormat !== 'hidden'">
       <div class="offer-validity-prompt__options" role="radiogroup" aria-label="Tipo de validade">
         <button
           type="button"
@@ -190,6 +203,7 @@ const confirm = () => {
         </span>
       </div>
 
+      </div>
       <div class="offer-validity-prompt__preview" aria-live="polite">
         <span class="offer-validity-prompt__preview-label">Assim vai aparecer no encarte</span>
         <strong>{{ validityPreview }}</strong>

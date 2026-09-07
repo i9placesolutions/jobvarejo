@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
 import { confirmInSystem } from '~/utils/systemMessages'
 import { harmonizeProductCardTypography } from '~/utils/productCardResponsiveTypography'
 import { isProductNameText, collectProductNameTexts } from '~/utils/productNameTypographyScope'
@@ -4063,7 +4064,8 @@ import {
 } from '~/utils/businessProfile'
 import {
     formatOfferValidityScope,
-    formatOfferValidityPeriod,
+    formatOfferDate, normalizeOfferDateFormat, getOfferValidityVisibilityTarget, type OfferDateFormat,
+  formatOfferValidityPeriod,
     inferOfferValidityMode,
     normalizeOfferValidityScope,
     normalizeOfferValidityMode,
@@ -6676,6 +6678,60 @@ const applyQuickFontSize = async (value: number) => {
     debouncedSaveCurrentState()
 }
 
+const quickCardColorSettings = computed(() => {
+    void canvasObjects.value
+    const zone = findProductZoneById(quickModeTargetZoneId.value)
+    const styles = zone ? getZoneGlobalStyles(zone) : {}
+    return { mode: styles.cardColorMode || 'auto', color: styles.cardColorMode === 'manual' ? (styles.cardColor || '#ffffff') : (styles.highlightCardColor || '#ffffff') }
+})
+const applyQuickCardColors = async (settings: { mode: 'auto' | 'manual'; color?: string; allPages: boolean }) => {
+    if (!canvas.value || isProcessing.value) return
+    const current = project.pages[project.activePageIndex]
+    if (!current) return
+    isProcessing.value = true
+    try {
+        const color = settings.color || findFlyerAccent(canvas.value.getObjects()) || '#ffffff'
+        const pending: Array<{ index: number; data: any }> = []
+        // Load before changing anything: a failed page read must not produce a partial batch.
+        if (settings.allPages) {
+            for (let index = 0; index < project.pages.length; index++) {
+                const page = project.pages[index]!
+                if (page.id === current.id || page.width !== current.width || page.height !== current.height) continue
+                const loaded = await ensurePageCanvasDataLoaded(page.id)
+                if (!loaded?.canvasData) throw new Error('Não foi possível carregar todas as páginas. Tente novamente.')
+                const data = JSON.parse(JSON.stringify(loaded.canvasData))
+                const cards = flattenCardColorObjects(data.objects || []).filter(node => node.parentZoneId && node._productData)
+                if (cards.length === 1) pending.push({ index, data })
+            }
+        }
+        const apply = (roots: any[], onlyZone?: string) => {
+            const objects = flattenCardColorObjects(roots)
+            for (const zone of objects.filter(node => node.isProductZone && (!onlyZone || node._customId === onlyZone))) {
+                const cards = objects.filter(node => node.parentZoneId === zone._customId && node._productData).sort((a, b) => (a._zoneOrder || 0) - (b._zoneOrder || 0))
+                zone._zoneGlobalStyles = { ...zone._zoneGlobalStyles, cardColorMode: settings.mode, highlightCardColor: color, cardColor: settings.mode === 'manual' ? color : '#ffffff', isProdBgTransparent: false }
+                if (zone._zoneStateSnapshot) zone._zoneStateSnapshot.globalStyles = { ...zone._zoneStateSnapshot.globalStyles, ...zone._zoneGlobalStyles }
+                const highlight = getZoneHighlightPredicate(zone, cards)
+                cards.forEach((card, index) => {
+                    card._cardHighlighted = highlight.isHighlighted(card, index)
+                    const bg = (card.getObjects?.() || card.objects || []).find((obj: any) => obj.name === 'offerBackground')
+                    if (!bg) return
+                    const fill = resolveProductCardColor(zone._zoneGlobalStyles, card._cardHighlighted, card._cardStyleOverrides)
+                    if (bg.set) bg.set('fill', fill); else bg.fill = fill
+                    card.dirty = true
+                })
+            }
+        }
+        apply(canvas.value.getObjects(), quickModeTargetZoneId.value || undefined)
+        for (const { index, data } of pending) { apply(data.objects || []); updatePageData(index, data) }
+        refreshCanvasObjects({ immediate: true })
+        safeRequestRenderAll()
+        await saveCurrentState({ reason: 'quick-card-colors', source: 'user', skipCoalesce: true, skipIfUnchanged: false })
+        notifyEditorInfo(`Cores aplicadas${pending.length ? ` em ${pending.length + 1} páginas` : ''}. Cores individuais escolhidas manualmente foram mantidas.`)
+    } catch (error) {
+        notifyEditorInfo(error instanceof Error ? error.message : 'Não foi possível aplicar as cores.')
+    } finally { isProcessing.value = false }
+}
+
 const quickModeColorTargets = computed(() => {
     void selectedObjectRef.value
     if (!isQuickMode.value) return []
@@ -7270,6 +7326,7 @@ const quickModeAutoParseProductText = ref(false)
 const quickBusinessProfile = ref<Record<string, any>>({})
 const quickValidityStartDate = ref('')
 const quickValidityEndDate = ref('')
+const quickValidityDateFormat = ref<OfferDateFormat>('numeric')
 const quickValidityMode = ref<OfferValidityMode>('while_stocks')
 const quickValidityWhileStocks = ref(true)
 const quickShowValidity = ref(true)
@@ -24084,14 +24141,22 @@ const importOneProductPerPage = async (products: any[], opts?: ProductImportOpti
         refreshCanvasObjects({ immediate: true })
         safeRequestRenderAll()
     }
-    for (let index = 0; index < snapshots.length; index++) {
+    // A página escolhida recebe o primeiro produto; só os demais precisam de cópias.
+    isHistoryProcessing.value = true
+    try { await loadFromJsonSafe(snapshots[0]) } finally { isHistoryProcessing.value = false }
+    refreshCanvasObjects({ immediate: true })
+    safeRequestRenderAll()
+    await saveCurrentState({ reason: 'one-product-per-page-first', source: 'user', skipCoalesce: true, skipIfUnchanged: false })
+    const sourceIndex = project.pages.findIndex((page: any) => page.id === sourcePage.id)
+    for (let index = 1; index < snapshots.length; index++) {
         await createPageFromTemplateSource({ ...sourcePage, canvasData: snapshots[index], canvasDataPath: undefined, thumbnailUrl: undefined }, {
             activate: false,
+            insertAfterIndex: sourceIndex + index - 1,
             name: String(products[index]?.name || products[index]?.productName || `Produto ${index + 1}`)
         })
     }
     await flushPersistenceNow('one-product-per-page', { force: true })
-    notifyEditorInfo(`${snapshots.length} páginas criadas, com um produto em cada. Abra Páginas para ver os encartes.`)
+    notifyEditorInfo(`${snapshots.length} produtos distribuídos: o primeiro na página atual e os demais nas cópias.`)
 }
 
 // Confirm import from review modal
@@ -24693,6 +24758,10 @@ const simulateSmartGrid = async (
     }
     const countForLayout = targetZone ? (existingCount + count) : count;
     if (targetZone && opts.autoLayout !== false) {
+        const colorStyles = getZoneGlobalStyles(targetZone)
+        if (!colorStyles.cardColorMode && !getZoneStyleOverrides(targetZone).cardColor && !colorStyles.isProdBgTransparent && (!colorStyles.cardColor || /^#(?:fff|ffffff)$/i.test(colorStyles.cardColor))) {
+            targetZone._zoneGlobalStyles = { ...colorStyles, cardColorMode: 'auto', highlightCardColor: findFlyerAccent(canvas.value?.getObjects() || []) || '#ffffff' }
+        }
         await Promise.all([productZoneStructuresState.load(), productCardConfigurationState.load()])
         applyCurrentStructureRecipe(targetZone, countForLayout)
         if (productCardConfigurationState.isLoaded.value) {
@@ -26146,8 +26215,9 @@ const formatQuickValidity = (
     mode: unknown = quickValidityMode.value,
     whileStocks: boolean = quickValidityWhileStocks.value
 ): string => {
-    const start = formatQuickDate(startDate)
-    const end = formatQuickDate(endDate)
+    if (quickValidityDateFormat.value === 'hidden') return ''
+    const start = formatOfferDate(startDate, quickValidityDateFormat.value)
+    const end = formatOfferDate(endDate, quickValidityDateFormat.value)
     const dates = formatOfferValidityPeriod(start, end, mode, whileStocks)
     const location = formatOfferValidityScope(scope)
     return [dates, location].filter(Boolean).join(' · ')
@@ -26276,6 +26346,7 @@ const hydrateQuickModeDataFromCanvas = () => {
         quickValidityMode.value = 'while_stocks'
         quickValidityWhileStocks.value = true
         quickShowValidity.value = true
+        quickValidityDateFormat.value = 'numeric'
         quickOfferScope.value = normalizeOfferValidityScope(null)
         quickModeDataVersion.value += 1
         return
@@ -26286,6 +26357,7 @@ const hydrateQuickModeDataFromCanvas = () => {
         validity.quickValidityMode || inferOfferValidityMode(quickValidityStartDate.value, quickValidityEndDate.value)
     )
     quickValidityWhileStocks.value = validity.quickValidityWhileStocks !== false
+    quickValidityDateFormat.value = normalizeOfferDateFormat(validity.quickValidityDateFormat)
     quickShowValidity.value = validity.quickFieldEnabled !== false
     quickOfferScope.value = normalizeOfferValidityScope(validity.quickOfferScope)
     quickModeDataVersion.value += 1
@@ -26461,6 +26533,7 @@ const handleQuickModeBusinessFieldToggle = (payload: { field?: string; enabled?:
 }
 
 const handleQuickModeValidityUpdate = (payload: {
+    dateFormat?: OfferDateFormat
     startDate?: string
     endDate?: string
     mode?: OfferValidityMode | string
@@ -26468,13 +26541,14 @@ const handleQuickModeValidityUpdate = (payload: {
     show?: boolean
     scope?: Partial<OfferValidityScope>
 }) => {
+    quickValidityDateFormat.value = normalizeOfferDateFormat(payload.dateFormat)
     quickValidityStartDate.value = String(payload?.startDate || '').trim()
     quickValidityEndDate.value = String(payload?.endDate || '').trim()
     quickValidityMode.value = normalizeOfferValidityMode(
         payload?.mode || inferOfferValidityMode(quickValidityStartDate.value, quickValidityEndDate.value)
     )
     quickValidityWhileStocks.value = payload?.whileStocks !== false
-    quickShowValidity.value = payload?.show !== false
+    quickShowValidity.value = payload?.show !== false && quickValidityDateFormat.value !== 'hidden'
     quickOfferScope.value = normalizeOfferValidityScope(payload?.scope ?? quickOfferScope.value)
     if (isQuickMode.value) {
         project.templateConfig = {
@@ -26485,6 +26559,7 @@ const handleQuickModeValidityUpdate = (payload: {
                 mode: quickValidityMode.value,
                 whileStocks: quickValidityWhileStocks.value,
                 show: quickShowValidity.value,
+                dateFormat: quickValidityDateFormat.value,
                 scope: { ...quickOfferScope.value }
             }
         }
@@ -26518,11 +26593,17 @@ const handleQuickModeValidityUpdate = (payload: {
             quickValidityStartDate: quickValidityStartDate.value,
             quickValidityEndDate: quickValidityEndDate.value,
             quickValidityMode: quickValidityMode.value,
+            quickValidityDateFormat: quickValidityDateFormat.value,
             quickValidityWhileStocks: quickValidityWhileStocks.value,
             quickOfferScope: { ...quickOfferScope.value },
             visible: quickShowValidity.value && !!nextText
         })
         setQuickDynamicTextValue(object, nextText)
+        const validityContainer = getOfferValidityVisibilityTarget(object)
+        if (validityContainer !== object) {
+            validityContainer.set({ visible: quickShowValidity.value && !!nextText })
+            validityContainer.dirty = true
+        }
         object.dirty = true
         object.setCoords?.()
         changed = true
@@ -26535,6 +26616,8 @@ const handleQuickModeValidityUpdate = (payload: {
 }
 
 const handleAdvancedValidityPromptConfirm = (payload: {
+    dateFormat?: OfferDateFormat
+    show?: boolean
     startDate: string
     endDate: string
     mode: OfferValidityMode
@@ -26545,7 +26628,8 @@ const handleAdvancedValidityPromptConfirm = (payload: {
         endDate: payload.endDate,
         mode: payload.mode,
         whileStocks: payload.whileStocks,
-        show: true,
+        show: payload.show !== false,
+        dateFormat: payload.dateFormat,
         scope: quickOfferScope.value
     })
     advancedValidityPromptOpen.value = false
@@ -29030,8 +29114,8 @@ const applyGlobalStylePropToCardFast = (card: any, prop: string, styles: GlobalS
     const cardH = Number(card?._cardHeight ?? card?.height ?? card?.getScaledHeight?.() ?? cardBounds?.height ?? 0) || 0;
     let changed = false;
 
-    if ((p === 'cardColor' || p === 'isProdBgTransparent') && bg && String(bg?.type || '').toLowerCase() === 'rect') {
-        bg.set('fill', styles.isProdBgTransparent ? 'transparent' : (styles.cardColor || '#ffffff'));
+    if ((['cardColor', 'cardColorMode', 'highlightCardColor', 'isProdBgTransparent'].includes(p)) && bg && String(bg?.type || '').toLowerCase() === 'rect') {
+        bg.set('fill', resolveProductCardColor(styles, card._cardHighlighted === true, getCardStyleOverrides(card)));
         changed = true;
     } else if (p === 'cardBorderRadius' && bg && String(bg?.type || '').toLowerCase() === 'rect') {
         const r = Number.isFinite(Number(styles.cardBorderRadius)) ? Number(styles.cardBorderRadius) : 0;
@@ -29967,7 +30051,8 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     const baseStylesForState = zone
         ? getZoneGlobalStyles(zone)
         : normalizeGlobalStyles(productZoneState.globalStyles.value);
-    const nextStylesForState = normalizeGlobalStyles({ ...baseStylesForState, [prop]: value });
+    const colorPatch = prop === 'cardColor' ? { cardColorMode: 'manual' as const } : prop === 'cardColorMode' && value === 'auto' ? { highlightCardColor: findFlyerAccent(canvas.value.getObjects()) || '#ffffff', isProdBgTransparent: false } : {}
+    const nextStylesForState = normalizeGlobalStyles({ ...baseStylesForState, ...colorPatch, [prop]: value });
     productZoneState.updateGlobalStyles(nextStylesForState);
 
     // Persist styles on the zone so they survive undo/redo and reload.
@@ -29980,7 +30065,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
         effectiveTargets.forEach((z: any) => {
             const prev = getZoneGlobalStyles(z);
             previousZoneStylesByTarget.set(z, prev);
-            (z as any)._zoneGlobalStyles = normalizeGlobalStyles({ ...prev, [prop]: value });
+            (z as any)._zoneGlobalStyles = normalizeGlobalStyles({ ...prev, ...colorPatch, [prop]: value });
             // "Ultima edicao vence": edicao explicita pelo painel marca override,
             // que sobrevive a (re)aplicacao de template / swap / refresh.
             markZoneStyleOverride(z, prop);
@@ -30016,6 +30101,11 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
             let totalFastApplied = 0;
             effectiveTargets.forEach((z: any) => {
                 const zStyles = getZoneGlobalStyles(z);
+                if (['cardColorMode', 'highlightCardColor'].includes(prop)) {
+                    const colorCards = getZoneChildren(z) || []
+                    const colorHighlight = getZoneHighlightPredicate(z, colorCards)
+                    colorCards.forEach((card: any, index: number) => { card._cardHighlighted = colorHighlight.isHighlighted(card, index) })
+                }
                 // Nao sobrescrever cards com override proprio desta prop ("editar so
                 // este card" vence a zona). Demais cards recebem o estilo da zona.
                 const zoneCards = getZoneChildren(z) || [];
@@ -37614,6 +37704,7 @@ const recalculateZoneLayout = (zone: any, cachedChildren?: any[], opts: Recalcul
     // Helper: resize & position a single card in its slot. Each card can have
     // its own aspect ratio without changing the neighboring cards.
     const placeCard = (card: any, x: number, y: number, w: number, h: number, order: number) => {
+        card._cardHighlighted = hl.isHighlighted(card, order);
         const fitted = fitCardToConfiguredAspect(x, y, w, h, order);
         const slotW = Math.max(2, fitted.width);
         const slotH = Math.max(2, fitted.height);
@@ -39585,6 +39676,7 @@ const handleAutoOfferLayout = async () => {
 
           <OfferValidityPrompt
             v-if="!isQuickMode && project.isTemplate !== true && advancedValidityPromptOpen"
+            :date-format="quickValidityDateFormat"
             :start-date="quickValidityStartDate"
             :end-date="quickValidityEndDate"
             :mode="quickValidityMode"
@@ -39599,6 +39691,9 @@ const handleAutoOfferLayout = async () => {
             :current-page-id="currentPageId"
             :template-models="quickModeTemplateModels"
             :current-model-id="quickModeCurrentModelId"
+            :card-color-mode="quickCardColorSettings.mode"
+            :card-color="quickCardColorSettings.color"
+            @card-colors="applyQuickCardColors"
             :zones="quickModeZones"
             :selected-zone-id="quickModeTargetZoneId"
             :products="quickModeProducts"
@@ -39606,6 +39701,7 @@ const handleAutoOfferLayout = async () => {
             :busy="isParsingProducts || isProcessing"
             :business-profile="quickBusinessProfile"
             :business-field-visibility="quickModeBusinessFieldVisibility"
+            :validity-date-format="quickValidityDateFormat"
             :validity-start-date="quickValidityStartDate"
             :validity-end-date="quickValidityEndDate"
             :validity-mode="quickValidityMode"

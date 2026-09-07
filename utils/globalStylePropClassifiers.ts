@@ -43,6 +43,8 @@ export const isDebouncedGlobalStyleProp = (prop: any): boolean =>
  * Props NAO listadas aqui forcam reflow completo do template.
  */
 export const LIGHTWEIGHT_GLOBAL_STYLE_PROPS = new Set<string>([
+    'cardColorMode',
+    'highlightCardColor',
     'cardColor',
     'isProdBgTransparent',
     'cardBorderColor',

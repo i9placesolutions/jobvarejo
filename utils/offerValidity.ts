@@ -117,7 +117,7 @@ export const formatOfferValidity = (
           ? `Oferta válida somente em ${start || end}${whileStocks ? ' e enquanto durarem os estoques' : ''}`
           : '')
       : start && end
-        ? `Ofertas válidas de ${start} a ${end}${whileStocks ? ' e enquanto durarem os estoques' : ''}`
+        ? `Ofertas válidas de ${formatOfferDateInterval(start, end)}${whileStocks ? ' e enquanto durarem os estoques' : ''}`
         : start
           ? `Ofertas válidas a partir de ${start}${whileStocks ? ' e enquanto durarem os estoques' : ''}`
           : end
@@ -133,3 +133,50 @@ export const formatOfferValidityPeriod = (
   mode: unknown = DEFAULT_OFFER_VALIDITY_MODE,
   whileStocks = false
 ): string => formatOfferValidity(startDate, endDate, DEFAULT_OFFER_VALIDITY_SCOPE, mode, whileStocks)
+
+export type OfferDateFormat = 'numeric' | 'long' | 'hidden'
+export const normalizeOfferDateFormat = (value: unknown): OfferDateFormat => value === 'long' || value === 'hidden' ? value : 'numeric'
+export const formatOfferDate = (value: unknown, format: OfferDateFormat = 'numeric'): string => {
+  if (format === 'hidden') return ''
+  const raw = String(value || '').trim()
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!iso && !br) return raw
+  const [year, month, day] = iso ? [iso[1], iso[2], iso[3]] : [br![3], br![2], br![1]]
+  if (format === 'numeric') return `${day}/${month}/${year}`
+  const months = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+  const name = months[Number(month) - 1]
+  return name ? `${day} de ${name} de ${year}` : raw
+}
+
+/** Inclui o fundo/ícone quando pertencem ao mesmo grupo exclusivo da validade. */
+export const getOfferValidityVisibilityTarget = (text: any): any => {
+  let target = text
+  let parent = text?.group
+  while (parent && !parent.isFrame && !parent.isProductZone && typeof parent.getObjects === 'function') {
+    const leaves: any[] = []
+    const walk = (object: any) => typeof object.getObjects === 'function' ? object.getObjects().forEach(walk) : leaves.push(object)
+    parent.getObjects().forEach(walk)
+    const texts = leaves.filter(object => String(object.type || '').toLowerCase().includes('text'))
+    if (!texts.length || texts.some(object => object !== text && object.quickDataField !== 'validity' && object.businessProfileField !== 'validity')) break
+    target = parent
+    parent = parent.group
+  }
+  return target
+}
+
+/** Compacta datas por extenso já formatadas, mantendo intervalos numéricos legados. */
+export const formatOfferDateInterval = (start: string, end: string): string => {
+  const pattern = /^(\d{2}) de ([a-zç]+) de (\d{4})$/i
+  const first = start.match(pattern)
+  const last = end.match(pattern)
+  if (!first || !last) return `${start} a ${end}`
+  const [, startDay, startMonth, startYear] = first
+  const [, endDay, endMonth, endYear] = last
+  if (startYear !== endYear) return `${start} a ${end}`
+  if (startMonth === endMonth) return `${startDay} a ${endDay} de ${endMonth} de ${endYear}`
+  const months = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+  const month = months.indexOf(startMonth!.toLowerCase()) + 1
+  if (!month) return `${start} a ${end}`
+  return `${startDay}/${String(month).padStart(2, '0')} a ${endDay} de ${endMonth}`
+}

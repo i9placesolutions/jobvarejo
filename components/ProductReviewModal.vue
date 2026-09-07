@@ -4082,9 +4082,10 @@ const getAssetDisplayName = (asset: any): string => {
 
         </div>
         <template v-if="isQrofertasPresentation" #footer>
-            <label class="mb-3 flex items-start gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 text-sm text-white">
+          <div class="flex w-full min-w-0 flex-col gap-3">
+            <label class="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 text-sm text-white">
                 <input v-model="oneProductPerPage" type="checkbox" class="mt-1 accent-violet-500" :disabled="isSubmittingImport" />
-                <span>Um produto por página<small class="mt-1 block text-zinc-400">{{ products.length }} produtos criam {{ products.length }} novas páginas no formato atual. Mantém a página original.</small></span>
+                <span class="min-w-0"><strong class="block font-semibold">Um produto por página</strong><small class="mt-1 block leading-relaxed text-zinc-400">Usa esta página para o primeiro produto e cria {{ Math.max(0, products.length - 1) }} cópias para os demais, no mesmo formato.</small></span>
             </label>
             <button
                 type="button"
@@ -4097,6 +4098,7 @@ const getAssetDisplayName = (asset: any): string => {
                 <Check v-else class="h-4 w-4" />
                 {{ isSubmittingImport ? 'Adicionando...' : 'Adicionar no encarte' }}
             </button>
+          </div>
         </template>
     </Dialog>
 

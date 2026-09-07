@@ -301,6 +301,8 @@ export interface ProductCardConfiguration {
 export interface GlobalStyles {
   // Card defaults
   cardColor?: string;
+  cardColorMode?: 'auto' | 'manual';
+  highlightCardColor?: string;
   cardBorderRadius?: number;
   cardBorderColor?: string;
   cardBorderWidth?: number;

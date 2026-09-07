@@ -1,3 +1,4 @@
+import { resolveProductCardColor } from './productCardColors'
 import type { GlobalStyles } from '~/types/product-zone'
 
 import {
@@ -35,6 +36,7 @@ export const createResizeSmartObject = (deps: ResizeSmartObjectDeps) => {
     if (Object.keys(__cardStyleOv).length && styles && typeof styles === 'object') {
       styles = { ...styles, ...__cardStyleOv } as Partial<GlobalStyles>
     }
+    if (styles) styles = { ...styles, cardColor: resolveProductCardColor(styles, group._cardHighlighted === true, __cardStyleOv) }
     // FIX: Permanently disable Fabric v7 LayoutManager on product card groups.
     // Card layout is fully managed by resizeSmartObject — Fabric's auto-layout
     // only causes corruption by recalculating bounds from children at stale positions.

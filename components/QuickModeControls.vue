@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Layers, Trash2 } from 'lucide-vue-next'
+import QuickCardColors from './QuickCardColors.vue'
 import OfferValidityPrompt from './OfferValidityPrompt.vue'
 import {
   formatBusinessAddressValues,
@@ -9,6 +10,7 @@ import {
   type BusinessProfile
 } from '~/utils/businessProfile'
 import {
+  formatOfferDate, formatOfferDateInterval, normalizeOfferDateFormat, type OfferDateFormat,
   formatOfferValidityPeriod,
   formatOfferValidityScope,
   inferOfferValidityMode,
@@ -95,6 +97,8 @@ const BUSINESS_FIELDS: Array<{ id: BusinessFieldId; label: string }> = [
 ]
 
 const props = defineProps<{
+  cardColorMode?: 'auto' | 'manual'
+  cardColor?: string
   zones: QuickModeZone[]
   selectedZoneId: string
   products?: QuickModeProduct[]
@@ -102,6 +106,7 @@ const props = defineProps<{
   busy?: boolean
   businessProfile?: Partial<BusinessProfile> & Record<string, any>
   businessFieldVisibility?: Record<string, boolean>
+  validityDateFormat?: OfferDateFormat
   validityStartDate?: string
   validityEndDate?: string
   validityMode?: OfferValidityMode | string
@@ -116,6 +121,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (event: 'card-colors', payload: { mode: 'auto' | 'manual'; color?: string; allPages: boolean }): void
   (event: 'select-zone', zoneId: string): void
   (event: 'select-zone-structure', payload: { zoneId: string; variantId: string }): void
   (event: 'select-product', productId: string): void
@@ -126,7 +132,7 @@ const emit = defineEmits<{
   (event: 'change-all-labels', templateId: string): void
   (event: 'import', payload: { mode: QuickModeImportMode; text: string; autoFillImages: boolean; oneProductPerPage: boolean }): void
   (event: 'toggle-business-field', payload: { field: BusinessFieldId; enabled: boolean }): void
-  (event: 'update-validity', payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean; show: boolean; scope: OfferValidityScope }): void
+  (event: 'update-validity', payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean; show: boolean; dateFormat: OfferDateFormat; scope: OfferValidityScope }): void
   (event: 'open-business-profile'): void
   (event: 'select-page', pageId: string): void
   (event: 'request-delete-page', pageId: string): void
@@ -140,6 +146,8 @@ const autoFillImages = ref(false)
 const oneProductPerPage = ref(false)
 // Os dados da loja não devem competir com a revisão dos produtos.
 const dataPanelOpen = ref(false)
+const validityDateFormat = ref<OfferDateFormat>(normalizeOfferDateFormat(props.validityDateFormat))
+watch(() => props.validityDateFormat, value => { validityDateFormat.value = normalizeOfferDateFormat(value) })
 const validityStartDate = ref(String(props.validityStartDate || ''))
 const validityEndDate = ref(String(props.validityEndDate || ''))
 const validityMode = ref<OfferValidityMode>(normalizeOfferValidityMode(
@@ -334,14 +342,15 @@ const formatDateForSummary = (value: string): string => {
 }
 
 const validitySummary = computed(() => {
-  const start = formatDateForSummary(validityStartDate.value)
-  const end = formatDateForSummary(validityEndDate.value)
+  if (!showValidity.value || validityDateFormat.value === 'hidden') return 'Validade oculta no encarte'
+  const start = formatOfferDate(validityStartDate.value, validityDateFormat.value)
+  const end = formatOfferDate(validityEndDate.value, validityDateFormat.value)
   const dates = validityMode.value === 'while_stocks'
     ? 'Até acabar o estoque'
     : validityMode.value === 'single_day'
       ? (start || end ? `Somente em ${start || end}` : 'Escolha o dia')
       : start && end
-        ? `${start} até ${end}`
+        ? formatOfferDateInterval(start, end)
         : start
           ? `A partir de ${start}`
           : end
@@ -463,11 +472,20 @@ const updateValidity = () => {
     mode: validityMode.value,
     whileStocks: validityWhileStocks.value,
     show: showValidity.value,
+    dateFormat: validityDateFormat.value,
     scope: { ...offerScope },
   })
 }
 
-const applyValidityPrompt = (payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean }) => {
+const applyValidityPrompt = (payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean; dateFormat: OfferDateFormat; show: boolean }) => {
+  validityDateFormat.value = payload.dateFormat
+  if (!payload.show) {
+    showValidity.value = false
+    updateValidity()
+    validityPromptResolved = true
+    validityPromptOpen.value = false
+    return
+  }
   validityStartDate.value = payload.startDate
   validityEndDate.value = payload.endDate
   validityMode.value = payload.mode
@@ -566,6 +584,7 @@ const useTemplateModel = (modelId: string) => {
 <template>
   <OfferValidityPrompt
     v-if="validityPromptOpen"
+    :date-format="validityDateFormat"
     :start-date="validityStartDate"
     :end-date="validityEndDate"
     :mode="validityMode"
@@ -688,8 +707,9 @@ const useTemplateModel = (modelId: string) => {
 
           <label class="flex items-start gap-3 rounded-lg border border-white/15 p-3 mb-3 text-white">
             <input v-model="oneProductPerPage" type="checkbox" :disabled="props.busy" class="mt-1 accent-violet-500" />
-            <span><strong class="block text-sm">Um produto por página</strong><small class="block text-zinc-400">Cria uma página para cada produto, no formato atual. Mantém a página original.</small></span>
+            <span><strong class="block text-sm">Um produto por página</strong><small class="block text-zinc-400">Coloca o primeiro produto nesta página e cria cópias para os demais, no mesmo formato.</small></span>
           </label>
+          <QuickCardColors :mode="props.cardColorMode || 'auto'" :color="props.cardColor || '#ffffff'" :busy="props.busy" @apply="emit('card-colors', $event)" />
           <label class="quick-fill-option">
             <span><strong>Preencher imagens</strong><small>Duplica e organiza as imagens no espaço de cada produto.</small></span>
             <input v-model="autoFillImages" type="checkbox" role="switch" :disabled="props.busy" aria-label="Preencher imagens automaticamente" />

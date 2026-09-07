@@ -1006,31 +1006,35 @@ onBeforeUnmount(() => {
 
         <div v-show="expandedSections.cardStyle" class="section-panel">
           <div class="field-stack">
+            <label class="flex items-start gap-2 text-sm">
+              <input type="checkbox" :checked="globalStyles?.cardColorMode === 'auto'" @change="updateGlobal('cardColorMode', ($event.target as HTMLInputElement).checked ? 'auto' : 'manual')" />
+              <span>Usar paleta do encarte nos destaques<small class="block text-xs text-zinc-400">Os demais cards ficam brancos. Cores individuais são mantidas.</small></span>
+            </label>
             <div class="color-field">
               <div class="color-field__copy">
-                <label class="field-label">Cor de fundo</label>
+                <label class="field-label">{{ globalStyles?.cardColorMode === 'auto' ? 'Cor dos destaques' : 'Cor de fundo' }}</label>
                 <p class="field-hint">Cor de fundo dos cards.</p>
               </div>
               <div class="color-field__controls">
                 <ColorPicker
                   :show="showCardColorPicker"
-                  :model-value="globalStyles?.cardColor ?? '#ffffff'"
+                  :model-value="(globalStyles?.cardColorMode === 'auto' ? globalStyles?.highlightCardColor : globalStyles?.cardColor) ?? '#ffffff'"
                   :trigger-element="cardColorPickerRef"
                   @update:show="showCardColorPicker = $event"
-                  @update:model-value="(val) => updateGlobal('cardColor', val)"
+                  @update:model-value="(val) => updateGlobal(globalStyles?.cardColorMode === 'auto' ? 'highlightCardColor' : 'cardColor', val)"
                 />
                 <button
                   ref="cardColorPickerRef"
                   type="button"
                   class="color-trigger"
-                  :style="{ backgroundColor: globalStyles?.cardColor ?? '#ffffff' }"
+                  :style="{ backgroundColor: (globalStyles?.cardColorMode === 'auto' ? globalStyles?.highlightCardColor : globalStyles?.cardColor) ?? '#ffffff' }"
                   @click="showCardColorPicker = true"
                 />
                 <input
                   type="text"
                   class="hex-input"
-                  :value="(globalStyles?.cardColor ?? '#ffffff').replace('#', '').toUpperCase()"
-                  @blur="updateGlobal('cardColor', sanitizeHexColor(($event.target as HTMLInputElement).value, globalStyles?.cardColor ?? '#ffffff'))"
+                  :value="((globalStyles?.cardColorMode === 'auto' ? globalStyles?.highlightCardColor : globalStyles?.cardColor) ?? '#ffffff').replace('#', '').toUpperCase()"
+                  @blur="updateGlobal(globalStyles?.cardColorMode === 'auto' ? 'highlightCardColor' : 'cardColor', sanitizeHexColor(($event.target as HTMLInputElement).value, (globalStyles?.cardColorMode === 'auto' ? globalStyles?.highlightCardColor : globalStyles?.cardColor) ?? '#ffffff'))"
                 />
               </div>
             </div>
