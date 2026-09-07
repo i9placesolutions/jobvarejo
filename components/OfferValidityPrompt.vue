@@ -61,6 +61,7 @@ watch(() => props.whileStocks, value => {
 
 const selectMode = (value: unknown) => {
   mode.value = normalizeOfferValidityMode(value)
+  if (dateFormat.value === 'hidden') dateFormat.value = 'numeric'
   // As três opções comerciais deste fluxo sempre limitam a oferta pelo estoque.
   whileStocks.value = true
   errorMessage.value = ''
@@ -135,13 +136,12 @@ const confirm = () => {
           <option value="hidden">Não mostrar validade no encarte</option>
         </select>
       </label>
-      <div v-if="dateFormat !== 'hidden'">
-      <div class="offer-validity-prompt__options" role="radiogroup" aria-label="Tipo de validade">
+      <div class="offer-validity-prompt__options" role="radiogroup" aria-label="Tipo de validade e exibição">
         <button
           type="button"
           role="radio"
-          :aria-checked="mode === 'single_day'"
-          :class="['offer-validity-prompt__option', mode === 'single_day' ? 'offer-validity-prompt__option--active' : '']"
+          :aria-checked="dateFormat !== 'hidden' && mode === 'single_day'"
+          :class="['offer-validity-prompt__option', dateFormat !== 'hidden' && mode === 'single_day' ? 'offer-validity-prompt__option--active' : '']"
           @click="selectMode('single_day')"
         >
           <span class="offer-validity-prompt__option-radio" aria-hidden="true"></span>
@@ -153,8 +153,8 @@ const confirm = () => {
         <button
           type="button"
           role="radio"
-          :aria-checked="mode === 'date_range'"
-          :class="['offer-validity-prompt__option', mode === 'date_range' ? 'offer-validity-prompt__option--active' : '']"
+          :aria-checked="dateFormat !== 'hidden' && mode === 'date_range'"
+          :class="['offer-validity-prompt__option', dateFormat !== 'hidden' && mode === 'date_range' ? 'offer-validity-prompt__option--active' : '']"
           @click="selectMode('date_range')"
         >
           <span class="offer-validity-prompt__option-radio" aria-hidden="true"></span>
@@ -166,8 +166,8 @@ const confirm = () => {
         <button
           type="button"
           role="radio"
-          :aria-checked="mode === 'while_stocks'"
-          :class="['offer-validity-prompt__option', mode === 'while_stocks' ? 'offer-validity-prompt__option--active' : '']"
+          :aria-checked="dateFormat !== 'hidden' && mode === 'while_stocks'"
+          :class="['offer-validity-prompt__option', dateFormat !== 'hidden' && mode === 'while_stocks' ? 'offer-validity-prompt__option--active' : '']"
           @click="selectMode('while_stocks')"
         >
           <span class="offer-validity-prompt__option-radio" aria-hidden="true"></span>
@@ -176,34 +176,48 @@ const confirm = () => {
             <small>Até acabar o estoque</small>
           </span>
         </button>
+        <button
+          type="button"
+          role="radio"
+          :aria-checked="dateFormat === 'hidden'"
+          :class="['offer-validity-prompt__option', dateFormat === 'hidden' ? 'offer-validity-prompt__option--active' : '']"
+          @click="dateFormat = 'hidden'; errorMessage = ''"
+        >
+          <span class="offer-validity-prompt__option-radio" aria-hidden="true"></span>
+          <span class="offer-validity-prompt__option-copy">
+            <strong>Não mostrar validade no encarte</strong>
+            <small>Oculta a validade no encarte</small>
+          </span>
+        </button>
       </div>
-      <p class="offer-validity-prompt__stock-note">Todas as opções incluem “enquanto durarem os estoques”.</p>
+      <div v-if="dateFormat !== 'hidden'">
+        <p class="offer-validity-prompt__stock-note">Todas as opções incluem “enquanto durarem os estoques”.</p>
 
-      <div v-if="mode === 'single_day'" class="offer-validity-prompt__dates">
-        <label>
-          <span>Data da oferta</span>
-          <input v-model="startDate" type="date" aria-label="Dia da oferta" />
-        </label>
-      </div>
-      <div v-else-if="mode === 'date_range'" class="offer-validity-prompt__dates offer-validity-prompt__dates--range">
-        <label>
-          <span>Começa em</span>
-          <input v-model="startDate" type="date" aria-label="Início da validade" />
-        </label>
-        <label>
-          <span>Termina em</span>
-          <input v-model="endDate" type="date" :min="startDate || undefined" aria-label="Final da validade" />
-        </label>
-      </div>
-      <div v-else class="offer-validity-prompt__stocks">
-        <span class="offer-validity-prompt__stocks-icon" aria-hidden="true">✓</span>
-        <span>
-          <strong>Sem datas no encarte</strong>
-          <small>A oferta ficará válida até o estoque acabar.</small>
-        </span>
+        <div v-if="mode === 'single_day'" class="offer-validity-prompt__dates">
+          <label>
+            <span>Data da oferta</span>
+            <input v-model="startDate" type="date" aria-label="Dia da oferta" />
+          </label>
+        </div>
+        <div v-else-if="mode === 'date_range'" class="offer-validity-prompt__dates offer-validity-prompt__dates--range">
+          <label>
+            <span>Começa em</span>
+            <input v-model="startDate" type="date" aria-label="Início da validade" />
+          </label>
+          <label>
+            <span>Termina em</span>
+            <input v-model="endDate" type="date" :min="startDate || undefined" aria-label="Final da validade" />
+          </label>
+        </div>
+        <div v-else class="offer-validity-prompt__stocks">
+          <span class="offer-validity-prompt__stocks-icon" aria-hidden="true">✓</span>
+          <span>
+            <strong>Sem datas no encarte</strong>
+            <small>A oferta ficará válida até o estoque acabar.</small>
+          </span>
+        </div>
       </div>
 
-      </div>
       <div class="offer-validity-prompt__preview" aria-live="polite">
         <span class="offer-validity-prompt__preview-label">Assim vai aparecer no encarte</span>
         <strong>{{ validityPreview }}</strong>
@@ -291,7 +305,7 @@ const confirm = () => {
 
 .offer-validity-prompt__options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -496,6 +510,9 @@ const confirm = () => {
 }
 
 @media (max-width: 520px) {
+  .offer-validity-prompt__options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .offer-validity-prompt__body {
     padding: 18px 18px 0;
   }
