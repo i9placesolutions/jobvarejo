@@ -55,8 +55,9 @@ ENV NODE_ENV=production \
 ENV PRODUCT_IMAGE_PYTHON=/opt/image-worker/bin/python \
     U2NET_HOME=/opt/image-models \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright \
-    OMP_NUM_THREADS=2 \
-    OPENBLAS_NUM_THREADS=2
+    BIREFNET_MODEL=birefnet-general-lite \
+    OMP_NUM_THREADS=6 \
+    OPENBLAS_NUM_THREADS=6
 RUN apt-get update && apt-get install -y --no-install-recommends curl python3 python3-venv && rm -rf /var/lib/apt/lists/*
 COPY workers/requirements.txt /tmp/image-worker-requirements.txt
 # Camadas independentes: falhar no modelo não refaz Python e Chromium.
@@ -67,12 +68,12 @@ RUN /opt/image-worker/bin/python -m playwright install-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 RUN /opt/image-worker/bin/python -m playwright install --only-shell chromium
 COPY workers/download_model.py /tmp/download_model.py
-ARG BIREFNET_MODEL_URL=https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-epoch_244.onnx
+ARG BIREFNET_MODEL_URL=https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx
 RUN --mount=type=cache,target=/root/.cache/birefnet \
     mkdir -p /opt/image-models \
-    && /opt/image-worker/bin/python /tmp/download_model.py "$BIREFNET_MODEL_URL" /root/.cache/birefnet/birefnet-general.onnx \
-    && cp /root/.cache/birefnet/birefnet-general.onnx /opt/image-models/ \
-    && /opt/image-worker/bin/python -c "from rembg import new_session; new_session('birefnet-general', providers=['CPUExecutionProvider'])"
+    && /opt/image-worker/bin/python /tmp/download_model.py "$BIREFNET_MODEL_URL" /root/.cache/birefnet/birefnet-general-lite.onnx \
+    && cp /root/.cache/birefnet/birefnet-general-lite.onnx /opt/image-models/ \
+    && /opt/image-worker/bin/python -c "from rembg import new_session; new_session('birefnet-general-lite', providers=['CPUExecutionProvider'])"
 
 
 WORKDIR /app

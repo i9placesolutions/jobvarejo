@@ -20,7 +20,10 @@ with sync_playwright() as p:
     assert page.title() == 'worker-ready'
     browser.close()
 
-session = new_session('birefnet-general', providers=['CPUExecutionProvider'])
+model = os.environ.get('BIREFNET_MODEL', 'birefnet-general-lite')
+if model not in {'birefnet-general', 'birefnet-general-lite'}:
+    raise ValueError(f'Modelo BiRefNet não suportado: {model}')
+session = new_session(model, providers=['CPUExecutionProvider'])
 # Uma inferência real confirma que o ONNX carrega e executa no CPU do servidor.
 source = Image.open('.output/public/coins/LEITE PO INTEGRAL ITALAC 400G.png').convert('RGBA')
 source.thumbnail((512, 512))
