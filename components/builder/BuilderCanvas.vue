@@ -103,7 +103,7 @@ defineExpose({ canvasRef })
         v-if="backgroundImage && !hasThemeComposition"
         :src="backgroundImage"
         class="absolute inset-0 w-full h-full object-cover pointer-events-none"
-        :style="{ opacity: inkEconomyOpacity }"
+        :style="{ backgroundColor: '#000000', opacity: inkEconomyOpacity }"
         alt=""
       />
 

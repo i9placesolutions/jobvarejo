@@ -4,6 +4,7 @@ import {
   ensureBuilderThemeComposition,
   hasBuilderThemeComposition,
   normalizeBuilderThemeComposition,
+  shouldRevealBackgroundThroughProductZone,
 } from '~/utils/builderThemeComposition'
 
 describe('builderThemeComposition', () => {
@@ -13,6 +14,7 @@ describe('builderThemeComposition', () => {
     expect(composition.elements.some(element => element.kind === 'product_zone')).toBe(true)
     expect(composition.elements.some(element => element.field === 'logo')).toBe(true)
     expect(composition.elements.some(element => element.field === 'whatsapp')).toBe(true)
+    expect(composition.elements.find(element => element.kind === 'product_zone')?.style?.backgroundColor).toBe('transparent')
   })
 
   it('normaliza posição e tamanho para não extrapolar o canvas', () => {
@@ -28,5 +30,26 @@ describe('builderThemeComposition', () => {
     expect(hasBuilderThemeComposition(createDefaultBuilderThemeComposition())).toBe(true)
     expect(hasBuilderThemeComposition({ elements: [{ kind: 'product_zone', visible: false }] })).toBe(false)
     expect(ensureBuilderThemeComposition({}).elements.some(element => element.kind === 'product_zone')).toBe(true)
+  })
+
+  it('preserva uma arte de fundo sob a zona de produtos padrão legada', () => {
+    const legacyZone = {
+      kind: 'product_zone' as const,
+      style: {
+        backgroundColor: '#ffffff',
+        borderColor: '#e5e7eb',
+        borderWidth: 1,
+        borderRadius: 8,
+        opacity: 0.98,
+        padding: 0.8,
+      },
+    }
+
+    expect(shouldRevealBackgroundThroughProductZone(legacyZone, true)).toBe(true)
+    expect(shouldRevealBackgroundThroughProductZone(legacyZone, false)).toBe(false)
+    expect(shouldRevealBackgroundThroughProductZone({
+      ...legacyZone,
+      style: { ...legacyZone.style, backgroundColor: '#111827' },
+    }, true)).toBe(false)
   })
 })

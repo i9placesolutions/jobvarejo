@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { BuilderThemeBusinessField, BuilderThemeElement } from '~/types/builder'
-import { normalizeBuilderThemeComposition } from '~/utils/builderThemeComposition'
+import {
+  normalizeBuilderThemeComposition,
+  shouldRevealBackgroundThroughProductZone,
+} from '~/utils/builderThemeComposition'
 import { paymentBrandSvg } from '~/utils/paymentBrandSvg'
 import { isBusinessPaymentCardId } from '~/utils/paymentCards'
 
@@ -29,6 +32,7 @@ const logoUrl = computed(() => resolveAssetUrl(
 const backgroundImageUrl = computed(() => resolveAssetUrl(
   (theme.value as any)?.background_image || composition.value.background.image,
 ))
+const hasBackgroundImage = computed(() => !!backgroundImageUrl.value)
 
 const fieldToggleMap: Partial<Record<BuilderThemeBusinessField, string>> = {
   company_name: 'show_company_name',
@@ -135,6 +139,7 @@ const shouldRenderElement = (element: BuilderThemeElement): boolean => {
 
 const elementStyle = (element: BuilderThemeElement) => {
   const style = element.style || {}
+  const revealBackground = shouldRevealBackgroundThroughProductZone(element, hasBackgroundImage.value)
   return {
     position: 'absolute' as const,
     left: `${element.x}%`,
@@ -143,17 +148,17 @@ const elementStyle = (element: BuilderThemeElement) => {
     height: `${element.height}%`,
     zIndex: element.zIndex ?? 1,
     transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
-    backgroundColor: style.backgroundColor,
+    backgroundColor: revealBackground ? 'transparent' : style.backgroundColor,
     color: style.color || (theme.value as any)?.css_config?.textColor || '#111827',
-    border: style.borderWidth ? `${style.borderWidth}px solid ${style.borderColor || 'transparent'}` : undefined,
+    border: revealBackground ? undefined : (style.borderWidth ? `${style.borderWidth}px solid ${style.borderColor || 'transparent'}` : undefined),
     borderRadius: `${style.borderRadius ?? 0}px`,
     fontSize: `${style.fontSize ?? 2}cqw`,
     fontWeight: style.fontWeight || 600,
     fontFamily: style.fontFamily || undefined,
     textAlign: style.textAlign || 'left',
-    opacity: style.opacity ?? 1,
+    opacity: revealBackground ? 1 : (style.opacity ?? 1),
     padding: `${style.padding ?? 0.5}cqw`,
-    boxShadow: style.boxShadow,
+    boxShadow: revealBackground ? undefined : style.boxShadow,
     overflow: 'hidden',
     lineHeight: 1.15,
     wordBreak: 'break-word' as const,
@@ -179,13 +184,21 @@ const rootStyle = computed(() => ({
       class="pointer-events-none absolute inset-0 h-full w-full"
       :style="{
         objectFit: composition.background.fit === 'stretch' ? 'fill' : composition.background.fit || 'cover',
+        // PNGs de fundo podem representar o preto como alpha; este plano
+        // mantém a arte visível também para arquivos gravados antes do upload
+        // passar a consolidar transparência.
+        backgroundColor: '#000000',
         opacity: (composition.background.opacity ?? 1) * inkEconomyOpacity,
       }"
     />
 
     <template v-for="element in visibleElements" :key="element.id">
       <div v-if="shouldRenderElement(element)" :style="elementStyle(element)">
-        <BuilderFlyerProductGrid v-if="element.kind === 'product_zone'" class="h-full w-full" />
+        <BuilderFlyerProductGrid
+          v-if="element.kind === 'product_zone'"
+          class="h-full w-full"
+          :transparent-background="hasBackgroundImage"
+        />
 
         <span v-else-if="element.kind === 'shape'" class="sr-only">Elemento decorativo</span>
 

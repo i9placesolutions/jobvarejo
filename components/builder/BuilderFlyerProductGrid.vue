@@ -3,6 +3,13 @@ import { Plus } from 'lucide-vue-next'
 import { QRO_CARD_TEMPLATES, getQroCardTemplateById } from '~/utils/qro-card-templates'
 import { builderThemeSupportsModel } from '~/utils/builderThemeFormats'
 
+const props = withDefaults(defineProps<{
+  /** A composição já controla a superfície da zona; não cubra a arte do tema. */
+  transparentBackground?: boolean
+}>(), {
+  transparentBackground: false,
+})
+
 const {
   flyer,
   model,
@@ -146,6 +153,9 @@ const {
 
 const gap = computed(() => fontConfig.value.card_gap ?? theme.value?.body_config?.gap ?? 8)
 const padding = computed(() => fontConfig.value.card_padding ?? theme.value?.body_config?.padding ?? 12)
+const bodyBackgroundColor = computed(() => (
+  props.transparentBackground ? 'transparent' : 'var(--builder-body-bg, transparent)'
+))
 
 // Standard grid style (no highlight areas)
 const standardGridStyle = computed(() => ({
@@ -156,7 +166,7 @@ const standardGridStyle = computed(() => ({
   padding: `${padding.value}px`,
   height: '100%',
   width: '100%',
-  backgroundColor: 'var(--builder-body-bg, transparent)',
+  backgroundColor: bodyBackgroundColor.value,
 }))
 
 // Use highlight layout if available, otherwise standard
@@ -166,7 +176,7 @@ const gridStyle = computed(() => {
       ...highlightGridStyle.value,
       gap: `${gap.value}px`,
       padding: `${padding.value}px`,
-      backgroundColor: 'var(--builder-body-bg, transparent)',
+      backgroundColor: bodyBackgroundColor.value,
     }
   }
   return standardGridStyle.value
@@ -241,7 +251,7 @@ const handleOpenEditor = () => {
   <div
     v-if="!hasProducts"
     class="w-full h-full flex flex-col items-center justify-center cursor-pointer group"
-    :style="{ padding: `${padding}px`, backgroundColor: 'var(--builder-body-bg, transparent)' }"
+    :style="{ padding: `${padding}px`, backgroundColor: bodyBackgroundColor }"
     @click="handleOpenEditor"
   >
     <div

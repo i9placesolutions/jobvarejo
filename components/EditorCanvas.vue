@@ -91,14 +91,9 @@ import {
     isExportableSelectionObject
 } from '~/utils/exportSelectionHelpers'
 import {
-    normalizeClipboardPoint,
     CLIPBOARD_CLONE_PROPS,
-    CLIPBOARD_SERIALIZE_PROPS,
-    CROSS_TAB_CLIPBOARD_STORAGE_KEY,
-    CROSS_TAB_CLIPBOARD_MAX_AGE_MS,
-    CROSS_TAB_CLIPBOARD_MAX_BYTES,
-    serializeRuntimeClipboardForCrossTab as serializeRuntimeClipboardForCrossTabHelper,
-    parseCrossTabClipboardPayload
+    LEGACY_CROSS_TAB_CLIPBOARD_STORAGE_KEY,
+    resolveEditorPasteSource
 } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
@@ -1602,7 +1597,7 @@ const canvasContextMenuItems = computed(() => ([
     ...(selectedObjectRef.value && resolveSelectedProductCardContext(canvas.value?.getActiveObject?.()).card
         ? [{ label: 'Substituir imagem', action: 'replace-product-image-upload', icon: ImagePlus }] : []),
     { label: 'Copiar (Ctrl/Cmd+C)', action: 'copy', icon: Copy },
-    { label: 'Colar (Ctrl/Cmd+V)', action: 'paste', icon: Copy },
+    { label: 'Colar cópia do editor', action: 'paste-editor-copy', icon: Copy },
     { label: 'Duplicar (Ctrl+D)', action: 'duplicate', icon: Copy },
     { divider: true },
     { label: 'Trazer para frente', action: 'arrange-bring-to-front', icon: ChevronsUp },
@@ -1618,7 +1613,7 @@ const canvasContextMenuItems = computed(() => ([
 
 const handleCanvasContextMenuSelect = (action: string) => {
     if (action === 'replace-product-image-upload') void handleAction(action);
-    if (action === 'copy' || action === 'paste') void handleAction(action);
+    if (action === 'copy' || action === 'paste-editor-copy') void handleAction(action);
     if (action === 'duplicate') void handleAction('duplicate');
     if (action === 'arrange-bring-to-front') arrangeActiveObjects('bring-to-front');
     if (action === 'arrange-bring-forward') arrangeActiveObjects('bring-forward');
@@ -1631,7 +1626,7 @@ const handleCanvasContextMenuSelect = (action: string) => {
 
 const layersContextMenuItems = computed(() => ([
     { label: 'Copiar (Ctrl/Cmd+C)', action: 'copy', icon: Copy },
-    { label: 'Colar (Ctrl/Cmd+V)', action: 'paste', icon: Copy },
+    { label: 'Colar cópia do editor', action: 'paste-editor-copy', icon: Copy },
     { label: 'Duplicar (Ctrl+D)', action: 'duplicate', icon: Copy },
     { divider: true },
     { label: 'Mascarar', action: 'mask-selection', icon: Frame },
@@ -1641,7 +1636,7 @@ const layersContextMenuItems = computed(() => ([
 ]));
 
 const handleLayersContextMenuSelect = (action: string) => {
-    if (action === 'copy' || action === 'paste') void handleAction(action);
+    if (action === 'copy' || action === 'paste-editor-copy') void handleAction(action);
     if (action === 'duplicate') void handleAction('duplicate');
     if (action === 'mask-selection') void handleAction('toggle-mask');
     if (action === 'group-selection') groupSelection();
@@ -4370,10 +4365,10 @@ const openMobilePanel = (panel: unknown) => {
 
 // ── Mobile template helpers (avoids Volar TS errors in large file) ──
 const triggerCopyShortcut = () => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true }))
+    void runEditorClipboardCommand('copy')
 }
-const triggerPasteShortcut = () => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true }))
+const triggerEditorClipboardPaste = () => {
+    void runEditorClipboardCommand('paste')
 }
 const currentPageId = computed(() => project.pages?.[project.activePageIndex]?.id || '')
 const quickModeTemplateModels = computed(() => {
@@ -13676,85 +13671,16 @@ const duplicateActiveObjectWithContext = async (
     return cloned ? [cloned] : [];
 };
 
-// Local (in-app) clipboard for Fabric objects. We keep it on `window` so it survives
-// page switches inside the editor and allows copying from one page and pasting into another.
-// CLIPBOARD_CLONE_PROPS, CLIPBOARD_SERIALIZE_PROPS,
-// CROSS_TAB_CLIPBOARD_STORAGE_KEY, CROSS_TAB_CLIPBOARD_MAX_AGE_MS,
-// CROSS_TAB_CLIPBOARD_MAX_BYTES extraidos para utils/clipboardHelpers.ts.
-
-// normalizeClipboardPoint extraido para utils/clipboardHelpers.ts.
-
-// serializeRuntimeClipboardForCrossTab extraido para utils/clipboardHelpers.ts.
-const serializeRuntimeClipboardForCrossTab = (runtimeClipboard: any): string | null =>
-    serializeRuntimeClipboardForCrossTabHelper(runtimeClipboard, CLIPBOARD_SERIALIZE_PROPS)
-
-const persistRuntimeClipboardForCrossTab = (runtimeClipboard: any) => {
-    if (!process.client) return;
+// O clipboard Fabric existe somente em memória e é usado por comandos explícitos
+// do editor. Ctrl/Cmd+V nunca lê esse estado: ele deve sempre receber o conteúdo
+// atual do clipboard do sistema pelo evento nativo `paste`.
+const clearLegacyPersistedEditorClipboard = () => {
+    if (!import.meta.client) return;
     try {
-        const raw = serializeRuntimeClipboardForCrossTab(runtimeClipboard);
-        if (!raw) return;
-        window.localStorage.setItem(CROSS_TAB_CLIPBOARD_STORAGE_KEY, raw);
-    } catch (err) {
-        console.warn('[clipboard] Falha ao persistir clipboard cross-tab', err);
-    }
-};
-
-// parseCrossTabClipboardPayload extraido para utils/clipboardHelpers.ts.
-// Wrapper local le do localStorage e remove entrada expirada como side-effect.
-const readCrossTabClipboardPayload = (): any | null => {
-    if (!process.client) return null;
-    let raw = '';
-    try {
-        raw = String(window.localStorage.getItem(CROSS_TAB_CLIPBOARD_STORAGE_KEY) || '');
+        window.localStorage.removeItem(LEGACY_CROSS_TAB_CLIPBOARD_STORAGE_KEY);
     } catch {
-        return null;
+        // localStorage pode estar indisponível em contextos privados/restritos.
     }
-    const payload = parseCrossTabClipboardPayload(raw);
-    if (!payload && raw) {
-        // Possivel que tenha expirado — remove se foi recusado
-        try {
-            const parsed = JSON.parse(raw);
-            if (parsed?.format === 'jobvarejo-fabric-items-v2') {
-                window.localStorage.removeItem(CROSS_TAB_CLIPBOARD_STORAGE_KEY);
-            }
-        } catch { /* ignore */ }
-    }
-    return payload;
-};
-
-const enlivenClipboardItemsFromJson = async (objectsJson: any[]): Promise<any[]> => {
-    if (!Array.isArray(objectsJson) || objectsJson.length === 0) return [];
-    if (!fabric?.util?.enlivenObjects) return [];
-    const fn = fabric.util.enlivenObjects;
-    try {
-        const maybe = fn(objectsJson);
-        if (maybe && typeof maybe.then === 'function') {
-            const out = await maybe;
-            return Array.isArray(out) ? out : [];
-        }
-    } catch {
-        // fallback for callback signature
-    }
-    return await new Promise<any[]>((resolve) => {
-        try {
-            fn(objectsJson, (enlivened: any[]) => resolve(Array.isArray(enlivened) ? enlivened : []));
-        } catch {
-            resolve([]);
-        }
-    });
-};
-
-const hydrateRuntimeClipboardFromCrossTabPayload = async (payload: any): Promise<any | null> => {
-    if (!payload || !Array.isArray(payload.itemsJson)) return null;
-    const enlivened = await enlivenClipboardItemsFromJson(payload.itemsJson);
-    if (!Array.isArray(enlivened) || !enlivened.length) return null;
-    return {
-        kind: 'fabric-items-v2',
-        items: enlivened,
-        selectionCenter: normalizeClipboardPoint(payload.selectionCenter),
-        sourcePageId: String(payload.sourcePageId || '').trim(),
-        copiedAt: Number(payload.copiedAt || Date.now()) || Date.now()
-    };
 };
 
 // getObjectAbsoluteCenter + computeCentersBoundingCenter extraidos para utils/fabricMeasure.ts.
@@ -14115,7 +14041,10 @@ const deleteActiveSelectionFromCanvas = (confirmed = false): boolean => {
     return true;
 };
 
-const handleKeyDown = async (e: KeyboardEvent) => {
+const handleKeyDown = async (
+    e: KeyboardEvent,
+    options: { explicitEditorPaste?: boolean } = {}
+) => {
     if (!canvas.value) return;
 
     // If editing a Fabric IText, let Fabric/browser handle undo/redo (text-level), not canvas-history.
@@ -14398,8 +14327,7 @@ const handleKeyDown = async (e: KeyboardEvent) => {
                         copiedAt: Date.now()
                     };
                     (window as any)._clipboard = runtimeClipboard;
-                    persistRuntimeClipboardForCrossTab(runtimeClipboard);
-                    notifyEditorInfo('Elemento copiado. Abra a página de destino e use Colar ou Ctrl/Cmd+V.');
+                    notifyEditorInfo('Elemento copiado. Abra a página de destino e use “Colar cópia do editor”.');
                 }
             } catch (err) {
                 console.warn('[clipboard] Falha ao copiar (clone)', err);
@@ -14408,30 +14336,11 @@ const handleKeyDown = async (e: KeyboardEvent) => {
     }
 
     if (isCtrl && String(e.key || '').toLowerCase() === 'v') {
-        let clipAny = (window as any)._clipboard;
-        const localCopiedAt = Number((clipAny as any)?.copiedAt || 0);
-        const crossTabPayload = readCrossTabClipboardPayload();
-        const crossCopiedAt = Number((crossTabPayload as any)?.copiedAt || 0);
-        const shouldHydrateFromCrossTab = !!crossTabPayload && (
-            !clipAny ||
-            (Number.isFinite(crossCopiedAt) && crossCopiedAt > localCopiedAt)
-        );
+        // Ctrl/Cmd+V vem sempre do clipboard atual do sistema. Só menus e botões
+        // explícitos podem solicitar o clone em memória do próprio editor.
+        if (resolveEditorPasteSource(options.explicitEditorPaste) !== 'editor') return;
 
-        if (shouldHydrateFromCrossTab) {
-            e.preventDefault();
-            try {
-                const hydrated = await hydrateRuntimeClipboardFromCrossTabPayload(crossTabPayload);
-                if (hydrated) {
-                    clipAny = hydrated;
-                    (window as any)._clipboard = hydrated;
-                } else if (!clipAny) {
-                    return;
-                }
-            } catch (err) {
-                console.warn('[clipboard] Falha ao hidratar clipboard cross-tab', err);
-                if (!clipAny) return;
-            }
-        }
+        const clipAny = (window as any)._clipboard;
         if (clipAny) {
             e.preventDefault();
 
@@ -14833,6 +14742,16 @@ const handleKeyDown = async (e: KeyboardEvent) => {
         return;
     }
 }
+
+const runEditorClipboardCommand = async (action: 'copy' | 'paste') => {
+    await handleKeyDown(
+        new KeyboardEvent('keydown', {
+            key: action === 'copy' ? 'c' : 'v',
+            ctrlKey: true
+        }),
+        { explicitEditorPaste: action === 'paste' }
+    );
+};
 
 const setupZoomPan = () => {
     if (!canvas.value) return;
@@ -20721,8 +20640,8 @@ const handleAction = async (action: string) => {
     if (!canvas.value) return;
     const active = canvas.value.getActiveObject();
 
-    if (action === 'copy' || action === 'paste') {
-        await handleKeyDown(new KeyboardEvent('keydown', { key: action === 'copy' ? 'c' : 'v', ctrlKey: true }));
+    if (action === 'copy' || action === 'paste-editor-copy') {
+        await runEditorClipboardCommand(action === 'copy' ? 'copy' : 'paste');
         return;
     }
 
@@ -23009,8 +22928,15 @@ const applyProductImageFromUploadPicker = async (asset: { id?: string; name?: st
     await controller.applyProductImageFromUploadPicker(getProductImageActionsContext(), asset);
 };
 
+const isEditableClipboardTarget = (target: EventTarget | null): boolean => {
+    const element = target as HTMLElement | null;
+    return !!(element?.isContentEditable || element?.closest?.('input, textarea, [contenteditable="true"]'));
+};
+
 const handlePaste = async (e: ClipboardEvent) => {
     if (!e.clipboardData || !canvas.value) return;
+    if (isEditableClipboardTarget(e.target)) return;
+    if ((canvas.value.getActiveObject?.() as any)?.isEditing) return;
     const hasImage = Array.from(e.clipboardData.items || []).some((item) => item?.type?.includes('image'));
     if (!hasImage) return;
     const controller = await loadProductImageActionsController();
@@ -23058,6 +22984,7 @@ const handleGlobalLabelTemplatesUpdated = (event: Event) => {
 }
 
 onMounted(() => {
+    clearLegacyPersistedEditorClipboard();
     window.addEventListener('paste', handlePaste);
     window.addEventListener('product-zone-structures:updated', handleGlobalProductZoneStructuresUpdated);
     window.addEventListener('product-card-configuration:updated', handleGlobalProductCardConfigurationUpdated);
@@ -40092,8 +40019,8 @@ const handleAutoOfferLayout = async () => {
                   <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Copiar" @click="triggerCopyShortcut">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                   </button>
-                  <!-- Paste -->
-                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Colar" @click="triggerPasteShortcut">
+                  <!-- Paste editor copy -->
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Colar cópia do editor" @click="triggerEditorClipboardPaste">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H9a1 1 0 0 0-1 1v2c0 .6.4 1 1 1h6c.6 0 1-.4 1-1V3c0-.6-.4-1-1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2M16 4h2a2 2 0 0 1 2 2v2"/><path d="M12 12h4"/><path d="M12 16h4"/></svg>
                   </button>
                   <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>

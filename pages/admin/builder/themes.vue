@@ -132,17 +132,76 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
   return `/api/storage/p?key=${encodeURIComponent(v)}`
 }
 
+/**
+ * Uma arte de fundo precisa preencher o canvas. Alguns PNGs vindos de
+ * editores visuais guardam "preto" como transparência (inclusive em toda a
+ * área inferior), que então deixa o branco do encarte aparecer. Antes do
+ * upload, compomos somente fundos transparentes sobre preto para preservar
+ * exatamente o que o criador viu na prévia escura.
+ */
+const flattenTransparentThemeBackground = async (file: File): Promise<File> => {
+  if (!file.type.startsWith('image/') || typeof createImageBitmap !== 'function') return file
+
+  let bitmap: ImageBitmap | null = null
+  try {
+    bitmap = await createImageBitmap(file)
+    if (!bitmap.width || !bitmap.height) return file
+
+    const sampleScale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height))
+    const sampleCanvas = document.createElement('canvas')
+    sampleCanvas.width = Math.max(1, Math.round(bitmap.width * sampleScale))
+    sampleCanvas.height = Math.max(1, Math.round(bitmap.height * sampleScale))
+    const sampleContext = sampleCanvas.getContext('2d', { willReadFrequently: true })
+    if (!sampleContext) return file
+    sampleContext.drawImage(bitmap, 0, 0, sampleCanvas.width, sampleCanvas.height)
+
+    const samplePixels = sampleContext.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height).data
+    let hasTransparency = false
+    for (let index = 3; index < samplePixels.length; index += 4) {
+      if (samplePixels[index]! < 250) {
+        hasTransparency = true
+        break
+      }
+    }
+    if (!hasTransparency) return file
+
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const context = canvas.getContext('2d')
+    if (!context) return file
+    context.fillStyle = '#000000'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(bitmap, 0, 0)
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) return file
+
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'background'
+    return new File([blob], `${baseName}-opaque.png`, { type: 'image/png' })
+  } catch {
+    // O upload original continua disponível para formatos que o browser não
+    // consiga decodificar no canvas.
+    return file
+  } finally {
+    try { bitmap?.close() } catch { /* ignore */ }
+  }
+}
+
 const uploadImage = async (file: File, field: 'thumbnail' | 'background_image' | 'header_bg') => {
   uploadingField.value = field
   error.value = null
   try {
+    const uploadFile = field === 'background_image'
+      ? await flattenTransparentThemeBackground(file)
+      : file
     const slug = form.value.slug || generateSlug(form.value.name) || 'untitled'
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const ext = uploadFile.name.split('.').pop()?.toLowerCase() || 'jpg'
     const ts = Date.now()
     const key = `builder/themes/${slug}/${field}_${ts}.${ext}`
-    const contentType = file.type || 'image/jpeg'
+    const contentType = uploadFile.type || 'image/jpeg'
 
-    const buffer = await file.arrayBuffer()
+    const buffer = await uploadFile.arrayBuffer()
 
     const res = await $fetch<{ key: string }>('/api/admin/builder/storage/upload', {
       method: 'POST',

@@ -12,6 +12,7 @@ import {
   createBuilderThemeElementId,
   createDefaultBuilderThemeComposition,
   normalizeBuilderThemeComposition,
+  shouldRevealBackgroundThroughProductZone,
 } from '~/utils/builderThemeComposition'
 
 const props = defineProps<{
@@ -51,6 +52,7 @@ const resolveAssetUrl = (value: string | null | undefined): string => {
 }
 
 const backgroundImageUrl = computed(() => resolveAssetUrl(props.backgroundImage || composition.value.background.image))
+const hasBackgroundImage = computed(() => !!backgroundImageUrl.value)
 const safeBackgroundColor = computed(() => props.backgroundColor || composition.value.background.color || '#ffffff')
 const safeColor = (value: string | undefined, fallback = '#111827'): string => {
   return /^#[0-9a-f]{3,8}$/i.test(String(value || '')) ? String(value) : fallback
@@ -58,7 +60,9 @@ const safeColor = (value: string | undefined, fallback = '#111827'): string => {
 
 const canvasStyle = computed(() => ({
   aspectRatio: `${props.previewFormat.width} / ${props.previewFormat.height}`,
-  backgroundColor: safeBackgroundColor.value,
+  // O preview precisa compor PNGs transparentes como o canvas final: preto
+  // evita que uma área destinada a ser escura vire branca apenas no Builder.
+  backgroundColor: backgroundImageUrl.value ? '#000000' : safeBackgroundColor.value,
   backgroundImage: backgroundImageUrl.value ? `url("${backgroundImageUrl.value.replaceAll('"', '%22')}")` : undefined,
   backgroundSize: composition.value.background.fit === 'stretch' ? '100% 100%' : (composition.value.background.fit || 'cover'),
   backgroundPosition: 'center',
@@ -67,6 +71,7 @@ const canvasStyle = computed(() => ({
 
 const elementStyle = (element: BuilderThemeElement) => {
   const style = element.style || {}
+  const revealBackground = shouldRevealBackgroundThroughProductZone(element, hasBackgroundImage.value)
   return {
     left: `${element.x}%`,
     top: `${element.y}%`,
@@ -74,17 +79,17 @@ const elementStyle = (element: BuilderThemeElement) => {
     height: `${element.height}%`,
     zIndex: element.zIndex ?? 1,
     transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
-    backgroundColor: style.backgroundColor,
+    backgroundColor: revealBackground ? 'transparent' : style.backgroundColor,
     color: style.color,
-    border: style.borderWidth ? `${style.borderWidth}px solid ${style.borderColor || 'rgba(148, 163, 184, .7)'}` : undefined,
+    border: revealBackground ? undefined : (style.borderWidth ? `${style.borderWidth}px solid ${style.borderColor || 'rgba(148, 163, 184, .7)'}` : undefined),
     borderRadius: `${style.borderRadius ?? 0}px`,
     fontSize: `${style.fontSize ?? 2}cqw`,
     fontWeight: style.fontWeight || 600,
     fontFamily: style.fontFamily || undefined,
     textAlign: style.textAlign || 'left',
-    opacity: style.opacity ?? 1,
+    opacity: revealBackground ? 1 : (style.opacity ?? 1),
     padding: `${style.padding ?? 0.5}cqw`,
-    boxShadow: style.boxShadow,
+    boxShadow: revealBackground ? undefined : style.boxShadow,
   }
 }
 
@@ -184,11 +189,11 @@ const addProductZone = () => {
     zIndex: 2,
     visible: true,
     style: {
-      backgroundColor: '#ffffff',
+      backgroundColor: 'transparent',
       borderColor: '#cbd5e1',
       borderWidth: 1,
       borderRadius: 8,
-      opacity: 0.98,
+      opacity: 1,
       padding: 0.8,
     },
   }

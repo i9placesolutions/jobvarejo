@@ -38,6 +38,43 @@ const DEFAULT_BACKGROUND = '#ffffff'
 const DEFAULT_PRIMARY = '#111827'
 const DEFAULT_ACCENT = '#f59e0b'
 
+const normalizeColorToken = (value: unknown): string => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/\s+/g, '')
+
+/**
+ * Temas criados antes do fundo editável usavam uma placa branca padrão na
+ * zona de produtos. Quando uma arte ocupa a página toda, essa placa escondia
+ * justamente a parte central/inferior da imagem. Reconhecemos somente esse
+ * preset legado, mantendo intacta uma zona que tenha sido estilizada pelo
+ * administrador.
+ */
+export const shouldRevealBackgroundThroughProductZone = (
+  element: Pick<BuilderThemeElement, 'kind' | 'style'>,
+  hasBackgroundImage: boolean,
+): boolean => {
+  if (!hasBackgroundImage || element.kind !== 'product_zone') return false
+
+  const style = element.style || {}
+  const background = normalizeColorToken(style.backgroundColor)
+  const border = normalizeColorToken(style.borderColor)
+  const opacity = Number(style.opacity ?? 1)
+  const borderWidth = Number(style.borderWidth ?? 0)
+  const borderRadius = Number(style.borderRadius ?? 0)
+
+  const isLegacyWhiteSurface = background === '#fff' || background === '#ffffff'
+  const isLegacyBorder = !border || border === '#e5e7eb' || border === '#cbd5e1'
+  const isLegacyOpacity = Number.isFinite(opacity) && opacity >= 0.96 && opacity <= 1
+
+  return isLegacyWhiteSurface &&
+    isLegacyBorder &&
+    Number.isFinite(borderWidth) && borderWidth <= 1 &&
+    Number.isFinite(borderRadius) && borderRadius <= 8 &&
+    isLegacyOpacity &&
+    !style.boxShadow
+}
+
 const makeId = (prefix: string): string => {
   try {
     if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -101,8 +138,10 @@ export const createDefaultBuilderThemeComposition = (): BuilderThemeComposition 
     createElement('product_zone', {
       x: 4, y: 21, width: 92, height: 67, zIndex: 2,
       style: {
-        backgroundColor: '#ffffff', borderColor: '#e5e7eb', borderWidth: 1,
-        borderRadius: 8, padding: 0.8, opacity: 0.98,
+        // A zona continua podendo receber uma placa colorida pelo editor,
+        // mas nasce transparente para não esconder uma arte de fundo.
+        backgroundColor: 'transparent', borderColor: '#e5e7eb', borderWidth: 1,
+        borderRadius: 8, padding: 0.8, opacity: 1,
       },
     }),
     createElement('shape', {
