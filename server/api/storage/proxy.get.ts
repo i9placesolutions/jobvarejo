@@ -302,9 +302,11 @@ export default defineEventHandler(async (event) => {
     const contentType = resolvedContentType
 
     const isJson = (ext || '').toLowerCase() === 'json'
+    // Uploads com hash do conteúdo ganham uma URL nova quando a imagem muda.
+    const isContentAddressedImage = /^imagens\/(?:biblioteca\/[a-z]+\/)?[a-f0-9]{16}-[^/]+\.(?:png|jpe?g|webp|avif)$/i.test(key)
     const cacheControl = isJson
       ? 'no-store'
-      : (version ? 'public, max-age=31536000, immutable' : 'public, max-age=60, must-revalidate')
+      : ((version || isContentAddressedImage) ? 'public, max-age=31536000, immutable' : 'public, max-age=60, must-revalidate')
 
     // Configurar headers de resposta
     setResponseHeaders(event, {

@@ -8,7 +8,7 @@ Para validar somente a consulta: `$PRODUCT_IMAGE_PYTHON workers/chromium_image_s
 
 Para processar lote: `$PRODUCT_IMAGE_PYTHON workers/product_image_worker.py --input produtos.json --output manifesto.json --persist-db`.
 
-No servidor, instale Python, as dependências de `requirements.txt`, Chromium e suas bibliotecas do sistema antes de habilitar o endpoint. `CHROMIUM_EXECUTABLE_PATH` permite usar um Chromium instalado pelo sistema. O Docker atual do aplicativo não inclui esse runtime; a instalação local não representa deploy.
+No servidor, instale Python, as dependências de `requirements.txt`, Chromium e suas bibliotecas do sistema antes de habilitar o endpoint. `CHROMIUM_EXECUTABLE_PATH` permite usar um Chromium instalado pelo sistema. O Docker inclui o runtime Python, Chromium, os scripts e os pesos BiRefNet pré-carregados. O build falha se a instalação do modelo falhar, evitando baixar os pesos na primeira solicitação.
 
 ## Catálogos de mercados
 
