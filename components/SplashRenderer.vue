@@ -9,6 +9,7 @@
 import { computed } from 'vue';
 import type { Splash } from '~/types/product-zone';
 import { splitPrice } from '~/utils/product-zone-helpers';
+import { DEFAULT_EDITOR_FONT_FAMILY } from '~/utils/font-catalog';
 
 // Props
 const props = withDefaults(defineProps<{
@@ -130,7 +131,7 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
         x="30" y="55"
         :fill="textColor"
         :style="{ 
-          fontFamily: splash.fontFamily ?? 'Arial',
+          fontFamily: splash.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
           fontSize: '18px',
           fontWeight: 'bold',
           textShadow,
@@ -146,7 +147,7 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
         :fill="textColor"
         text-anchor="end"
         :style="{ 
-          fontFamily: splash.fontFamily ?? 'Arial',
+          fontFamily: splash.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
           fontSize: `${integerFontSize}px`,
           fontWeight: splash.fontWeight ?? 700,
           textShadow,
@@ -161,7 +162,7 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
         :x="85 + decimalGap" y="55"
         :fill="textColor"
         :style="{ 
-          fontFamily: splash.fontFamily ?? 'Arial',
+          fontFamily: splash.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
           fontSize: `${decimalFontSize}px`,
           fontWeight: splash.fontWeight ?? 700,
           textShadow,
@@ -178,7 +179,7 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
         :fill="textColor"
         text-anchor="middle"
         :style="{ 
-          fontFamily: splash.fontFamily ?? 'Arial',
+          fontFamily: splash.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
           fontSize: '16px',
           fontWeight: 600
         }"
@@ -207,7 +208,7 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
             :style="{ 
               fontSize: `${splash.fontSize ?? 48}px`,
               fontWeight: splash.fontWeight ?? 700,
-              fontFamily: splash.fontFamily ?? 'Arial',
+              fontFamily: splash.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
               lineHeight: 1,
               textShadow,
               WebkitTextStroke: textStroke
@@ -219,7 +220,7 @@ const unitDisplay = computed(() => props.unit ?? props.splash.unit ?? '');
             :style="{ 
               fontSize: `${(splash.fontSize ?? 48) * 0.5}px`,
               fontWeight: splash.fontWeight ?? 700,
-              fontFamily: splash.fontFamily ?? 'Arial',
+              fontFamily: splash.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
               textShadow
             }"
           >

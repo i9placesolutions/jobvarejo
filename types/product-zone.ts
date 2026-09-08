@@ -3,6 +3,8 @@
  * Ported from legacy system - Full feature parity
  */
 
+import { DEFAULT_EDITOR_FONT_FAMILY } from '~/utils/font-catalog';
+
 // === PRODUCT IMAGE ===
 export interface ProductImage {
   id: string;
@@ -1202,7 +1204,7 @@ export const DEFAULT_GLOBAL_STYLES: GlobalStyles = {
   cardBorderWidth: 0,
   isProdBgTransparent: false,
   accentColor: '#dc2626',
-  prodNameFont: 'Inter',
+  prodNameFont: DEFAULT_EDITOR_FONT_FAMILY,
   prodNameColor: '#000000',
   prodNameSize: 24,
   prodNameScale: 1,
@@ -1222,7 +1224,7 @@ export const DEFAULT_GLOBAL_STYLES: GlobalStyles = {
   splashStrokeWidth: undefined,
   splashRoundness: 1,
   splashTextScale: 1,
-  priceFont: 'Arial',
+  priceFont: DEFAULT_EDITOR_FONT_FAMILY,
   priceFontSize: 60,
   priceFontWeight: undefined,
   priceFontStyle: 'normal',
@@ -1245,7 +1247,7 @@ export const DEFAULT_SPLASH: Partial<Splash> = {
   textEffect: 'shadow',
   effectColor: 'rgba(0,0,0,0.3)',
   effectThickness: 2,
-  fontFamily: 'Arial',
+  fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
   fontSize: 60,
   fontWeight: 700,
   currencyPosition: 'left',

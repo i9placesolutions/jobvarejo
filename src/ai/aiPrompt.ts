@@ -30,7 +30,7 @@ export const buildAiCanvasPrompt = (payload: AiGeneratePayload): string => {
     `   {"type":"Rect","name":"Frame 1","isFrame":true,"layerName":"FRAMER","left":0,"top":0,"width":${width},"height":${height},"fill":"#ffffff","selectable":false,"evented":false}`,
     '2) Os demais objetos devem ser compativeis com Fabric (Textbox, Rect, Circle, Line, Path, etc.).',
     '3) Nao usar imagens externas (http/https). Para area de imagem use placeholder em Rect + Textbox.',
-    '4) Em textos, usar uma tipografia visualmente proxima da referencia. Se nao for possivel inferir, usar "Inter".',
+    '4) Em textos, usar uma tipografia visualmente proxima da referencia. Se nao for possivel inferir, usar "Barlow".',
     '5) Evitar propriedades desnecessarias e objetos vazios.',
     ...(hasReferenceImage
       ? [

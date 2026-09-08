@@ -12,6 +12,7 @@ import {
 import { collectObjectsDeep } from './fabricObjectClassifiers'
 import { collectDirectProductCardImages } from './productImageComposition'
 import { clamp } from './mathHelpers'
+import { DEFAULT_EDITOR_FONT_FAMILY } from './font-catalog'
 
 const trimmedProductElements = new WeakMap<object, object>()
 
@@ -100,7 +101,7 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
     })
     const badgeText = new fabric.Text(text, {
       fontSize: Math.max(9, badgeHeight * 0.48),
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#ffffff',
       originX: 'center',

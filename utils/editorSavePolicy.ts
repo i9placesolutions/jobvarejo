@@ -48,6 +48,15 @@ export const canAllowEmptyOverwrite = (opts: SaveStatePolicyInput): boolean => {
 }
 
 export const shouldSkipAutoSave = (source: SaveSource, reason: string): boolean => {
+  // These repairs are initiated by the system, but they deliberately replace
+  // a broken/placeholder image reference with a verified source. They must
+  // reach Wasabi/DB; otherwise the next reload recreates the same failure.
+  const isDurableSystemRecovery = source === 'system' && (
+    reason === 'asset-url-normalization' ||
+    reason === 'recover-missing-product-images'
+  )
+  if (isDurableSystemRecovery) return false
+
   return source === 'system'
     || reason === 'initial-history-capture'
     || reason === 'post-load-cleanup'

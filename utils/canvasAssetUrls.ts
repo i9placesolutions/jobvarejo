@@ -3,10 +3,12 @@ import { useRuntimeConfig } from '#imports'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 export const CANVAS_ASSET_URLS_NORMALIZED_KEY = '__assetUrlsNormalized' as const
-// Bump when a persisted canvas needs another normalization pass. Version 2
-// also rewrites loopback absolute URLs (often saved by a local preview on a
-// different port) to same-origin paths before Fabric starts loading images.
-const CANVAS_ASSET_URLS_NORMALIZED_VERSION = 2
+// Bump when a persisted canvas needs another normalization pass. Version 3
+// keeps normalizing every image even after the marker was written: an editor
+// session can add or paste a new image after a page has already been migrated.
+// The marker is therefore migration metadata, never a reason to skip a later
+// image URL repair.
+const CANVAS_ASSET_URLS_NORMALIZED_VERSION = 3
 
 type NormalizeCanvasAssetUrlsOptions = {
   clone?: boolean
@@ -14,11 +16,12 @@ type NormalizeCanvasAssetUrlsOptions = {
   placeholderDataUrl?: string | null
 }
 
-type NormalizeCanvasAssetUrlsResult = {
+export type NormalizeCanvasAssetUrlsResult = {
   data: any
   blobCount: number
   contaboCount: number
   wasabiCount: number
+  loopbackCount: number
 }
 
 const cloneCanvasData = (canvasData: any): any => {
@@ -143,6 +146,11 @@ const toSameOriginAssetPath = (value: string): string | null => {
   }
 }
 
+const normalizeLoopbackAssetUrl = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null
+  return toSameOriginAssetPath(value)
+}
+
 const markCanvasAssetUrlsNormalized = (canvasData: any): void => {
   if (!canvasData || typeof canvasData !== 'object') return
   canvasData[CANVAS_ASSET_URLS_NORMALIZED_KEY] = CANVAS_ASSET_URLS_NORMALIZED_VERSION
@@ -154,45 +162,42 @@ export const normalizeCanvasAssetUrls = (
 ): NormalizeCanvasAssetUrlsResult => {
   const normalized = opts.clone === false ? canvasData : cloneCanvasData(canvasData)
   if (!normalized || typeof normalized !== 'object') {
-    return { data: normalized, blobCount: 0, contaboCount: 0, wasabiCount: 0 }
-  }
-
-  normalizePortableAssetUrls(normalized)
-
-  // A canvas saved from `localhost:3003` must remain usable when opened from
-  // `localhost:3004` (or production). Rewrite these stale absolute app URLs
-  // before checking the normalization marker; older payloads may already carry
-  // version 1 and would otherwise skip this repair forever.
-  walkCanvasObjects(normalized, (node) => {
-    const objType = String(node?.type || '').toLowerCase()
-    if (objType !== 'image' || typeof node?.src !== 'string') return
-    const relativePath = toSameOriginAssetPath(node.src)
-    if (relativePath && relativePath !== node.src) {
-      if (!node.__originalSrc) node.__originalSrc = node.src
-      node.src = relativePath
-    }
-  })
-
-  if (isCanvasAssetUrlsNormalized(normalized)) {
-    return { data: normalized, blobCount: 0, contaboCount: 0, wasabiCount: 0 }
+    return { data: normalized, blobCount: 0, contaboCount: 0, wasabiCount: 0, loopbackCount: 0 }
   }
 
   let blobCount = 0
   let contaboCount = 0
   let wasabiCount = 0
+  let loopbackCount = 0
   const placeholderDataUrl = String(opts.placeholderDataUrl || '').trim() || null
 
   walkCanvasObjects(normalized, (node) => {
     const objType = String(node?.type || '').toLowerCase()
-    if (objType === 'image' && !node.crossOrigin) {
-      node.crossOrigin = 'anonymous'
-    }
-
-    if (typeof node?.src !== 'string' || !node.src.trim()) return
     // FIX: only process image objects — previously any object with a `src`
     // property (e.g. Pattern, custom objects) would get __originalSrc metadata
     // polluting non-image objects and potentially confusing serialization.
     if (objType !== 'image') return
+
+    if (!node.crossOrigin) {
+      node.crossOrigin = 'anonymous'
+    }
+
+    // A canvas can have been saved from a previous local preview port. Keep
+    // both fields portable: recovery code reads `__originalSrc` first, so only
+    // fixing `src` would reintroduce the dead loopback URL during a later
+    // recovery or image replacement.
+    const relativeSrc = normalizeLoopbackAssetUrl(node.src)
+    if (relativeSrc && relativeSrc !== node.src) {
+      node.src = relativeSrc
+      loopbackCount++
+    }
+    const relativeOriginalSrc = normalizeLoopbackAssetUrl(node.__originalSrc)
+    if (relativeOriginalSrc && relativeOriginalSrc !== node.__originalSrc) {
+      node.__originalSrc = relativeOriginalSrc
+      loopbackCount++
+    }
+
+    if (typeof node?.src !== 'string' || !node.src.trim()) return
     const src = String(node.src || '')
 
     if (!node.__originalSrc) {
@@ -221,9 +226,15 @@ export const normalizeCanvasAssetUrls = (
     }
   })
 
+  // Keep the broader portability pass for non-image metadata as well. It runs
+  // after the image-specific pass so migration stats still reflect every
+  // repaired image source and can trigger one safe persistence of the page.
+  normalizePortableAssetUrls(normalized)
+
   markCanvasAssetUrlsNormalized(normalized)
 
   if (!opts.silent) {
+    if (loopbackCount > 0) console.log(`🔄 Convertido ${loopbackCount} URL(s) locais antigas para o domínio atual`)
     if (blobCount > 0) console.warn(`⚠️ Substituindo ${blobCount} imagem(ns) blob por placeholder (URL temporária)`)
     if (contaboCount > 0) console.log(`🔄 Convertido ${contaboCount} URL(s) da Contabo para proxy local`)
     if (wasabiCount > 0) console.log(`🔄 Convertido ${wasabiCount} URL(s) do Wasabi para proxy local`)
@@ -233,6 +244,7 @@ export const normalizeCanvasAssetUrls = (
     data: normalized,
     blobCount,
     contaboCount,
-    wasabiCount
+    wasabiCount,
+    loopbackCount
   }
 }

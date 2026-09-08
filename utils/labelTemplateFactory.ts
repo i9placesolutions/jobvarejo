@@ -6,6 +6,7 @@
  */
 
 import { createRichPriceTextDefinition } from './priceRichText'
+import { DEFAULT_EDITOR_FONT_FAMILY } from './font-catalog'
 
 export type LabelTemplateFactoryOptions = {
   imageSrc?: string | null
@@ -125,14 +126,14 @@ export const createEditableLabelTemplateGroup = (
     text: '22,99',
     fontSize: Math.max(38, 76 * textScale),
     integerStyle: {
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontSize: Math.max(38, 76 * textScale),
       fontWeight: '900',
       fill: textColor,
       shadow: textShadow
     },
     decimalStyle: {
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontSize: Math.max(22, 42 * textScale),
       fontWeight: '800',
       fill: textColor,
@@ -143,7 +144,7 @@ export const createEditableLabelTemplateGroup = (
   objects.push(
     makeText({
       text: 'R$',
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontSize: Math.max(16, 27 * textScale),
       fontWeight: '800',
       fill: textColor,
@@ -159,7 +160,7 @@ export const createEditableLabelTemplateGroup = (
     },
     makeText({
       text: 'UN',
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontSize: Math.max(12, 17 * textScale),
       fontWeight: '700',
       fill: textColor,

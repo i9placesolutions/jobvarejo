@@ -4,6 +4,7 @@ import type { LabelTemplate } from '~/types/label-template'
 import ColorPicker from './ui/ColorPicker.vue'
 import {
   AVAILABLE_FONT_FAMILIES,
+  DEFAULT_EDITOR_FONT_FAMILY,
   getFontWeightOptionsForFamily,
   normalizeFontWeightForFamily
 } from '~/utils/font-catalog'
@@ -2764,7 +2765,7 @@ const layoutAtacarejoCanonicalForEditor = (priceGroup: any, previewW = 340, prev
   const setTextSizing = (txt: any, defaultScale: number, baseH: number, color?: string) => {
     if (!txt || !String(txt.type || '').includes('text')) return
     txt.set({
-      fontFamily: txt.fontFamily || 'Inter',
+      fontFamily: txt.fontFamily || DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: color ?? txt.fill,
       fontSize: Math.max(8, baseH * defaultScale),
@@ -3908,7 +3909,7 @@ const addText = () => {
     originX: 'center',
     originY: 'center',
     fontSize: Math.max(10, Number(baseText?.fontSize || 28)),
-    fontFamily: String(baseText?.fontFamily || 'Inter'),
+    fontFamily: String(baseText?.fontFamily || DEFAULT_EDITOR_FONT_FAMILY),
     fontWeight: baseText?.fontWeight || '700',
     fill: extractColorStringFromFill(baseText?.fill) || getDefaultAddTextFill(),
     textAlign: String(baseText?.textAlign || 'center'),

@@ -1,3 +1,7 @@
+// Fonte-base usada quando um novo texto/cartão/etiqueta não escolhe uma
+// tipografia própria. Textos já persistidos preservam sua família explícita.
+export const DEFAULT_EDITOR_FONT_FAMILY = 'Barlow'
+
 // Central place for font options used across the editor (canvas + panels).
 // Web fonts are loaded via WebFontLoader (Google Fonts) on the client.
 
@@ -54,13 +58,13 @@ export const GOOGLE_WEBFONT_FAMILIES: string[] = [
 
 // This list is used in dropdowns/autocomplete. Include a few system fallbacks too.
 export const AVAILABLE_FONT_FAMILIES: string[] = [
+  DEFAULT_EDITOR_FONT_FAMILY,
   'Arial',
   'Georgia',
   'Times New Roman',
   'Courier New',
 
   // Web fonts (must exist in GOOGLE_WEBFONT_FAMILIES above)
-  'Barlow',
   'Inter',
   'Roboto',
   'Montserrat',

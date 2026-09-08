@@ -44,6 +44,20 @@ export const getTextSelectionRange = (
   return { start, end, length: end - start }
 }
 
+/**
+ * Retorna a faixa integral do texto para ler o estilo que de fato esta sendo
+ * renderizado. Um IText pode ter fontSize/fill no objeto e um valor diferente
+ * salvo em `styles` por caractere, mesmo sem estar em modo de edicao.
+ */
+export const getWholeTextRange = (
+  obj: any
+): { start: number; end: number; length: number } | null => {
+  if (!isTextStyleObject(obj)) return null
+  const textLength = String(obj?.text ?? '').length
+  if (textLength <= 0) return null
+  return { start: 0, end: textLength, length: textLength }
+}
+
 export const getTextSelectionSnapshotMeta = (obj: any): Record<string, any> => {
   if (!isTextStyleObject(obj)) {
     return {
@@ -57,7 +71,10 @@ export const getTextSelectionSnapshotMeta = (obj: any): Record<string, any> => {
     }
   }
 
-  const range = getTextSelectionRange(obj)
+  const selectionRange = getTextSelectionRange(obj)
+  // Fora da edicao interna, o painel ainda precisa refletir o estilo efetivo
+  // de todo o texto, e nao apenas o valor-base do objeto Fabric.
+  const range = selectionRange || getWholeTextRange(obj)
   const resolveFill = (input: any, fallback: string): string => {
     if (typeof input === 'string' && input.trim().length > 0) return input.trim()
     if (input && typeof input === 'object') {
@@ -76,9 +93,9 @@ export const getTextSelectionSnapshotMeta = (obj: any): Record<string, any> => {
   const defaultFontSize = Number.isFinite(baseFontSize) && baseFontSize > 0 ? baseFontSize : 20
 
   const meta = {
-    __textSelectionActive: !!range,
-    __textSelectionStart: range?.start ?? null,
-    __textSelectionEnd: range?.end ?? null,
+    __textSelectionActive: !!selectionRange,
+    __textSelectionStart: selectionRange?.start ?? null,
+    __textSelectionEnd: selectionRange?.end ?? null,
     __textFillValue: baseFill,
     __textFillMixed: false,
     __textFontSizeValue: defaultFontSize,

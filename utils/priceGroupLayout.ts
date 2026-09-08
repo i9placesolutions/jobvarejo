@@ -1,4 +1,5 @@
 import { detectImageTrimBounds } from './fabricImageHelpers'
+import { DEFAULT_EDITOR_FONT_FAMILY } from './font-catalog'
 
 type PriceGroupLayoutDeps = {
     getFabric: () => any
@@ -181,7 +182,7 @@ export const createPriceGroupLayout = (deps: PriceGroupLayoutDeps) => {
         const setTextSizing = (text: any, defaultScale: number, baseH: number, color?: string) => {
             if (!text || !String(text.type || '').includes('text')) return
             text.set({
-                fontFamily: 'Inter',
+                fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
                 fontWeight: '900',
                 fill: color ?? text.fill,
                 fontSize: Math.max(8, baseH * defaultScale),

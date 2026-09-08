@@ -1,5 +1,6 @@
 import { splitPriceParts, normalizeUnitForLabel } from './priceTagText'
 import { applyRichPriceTextValue, migratePriceGroupToRichText } from './priceRichText'
+import { DEFAULT_EDITOR_FONT_FAMILY } from './font-catalog'
 import {
   FARDO_SPECIAL_PRICE_PALETTE,
   resolveFardoSpecialPricePalette
@@ -57,7 +58,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const currencyText = new fabric.Text('R$', {
       fontSize: circleSize * 0.32,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: 'bold',
       fill: '#000000',
       originX: 'center',
@@ -69,7 +70,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     const parts = splitPriceParts(priceStr)
     const priceInteger = new fabric.IText(parts.integer, {
       fontSize: pillH * 0.72,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#ffffff',
       originX: 'left',
@@ -82,7 +83,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const priceDecimal = new fabric.IText(`,${parts.dec}`, {
       fontSize: pillH * 0.42,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#ffffff',
       originX: 'left',
@@ -96,7 +97,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     const unit = normalizeUnitForLabel(unitText)
     const priceUnit = new fabric.IText(unit, {
       fontSize: pillH * 0.26,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '800',
       fill: '#ffffff',
       originX: 'right',
@@ -160,7 +161,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const currencyText = new fabric.Text('R$', {
       fontSize: circleSize * 0.30,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: yellow,
       originX: 'center',
@@ -172,7 +173,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     const parts = splitPriceParts(priceStr)
     const priceInteger = new fabric.IText(parts.integer, {
       fontSize: pillH * 0.86,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: yellow,
       originX: 'left',
@@ -185,7 +186,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const priceDecimal = new fabric.IText(`,${parts.dec}`, {
       fontSize: pillH * 0.55,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: yellow,
       originX: 'left',
@@ -198,7 +199,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const priceUnit = new fabric.IText('', {
       fontSize: pillH * 0.26,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '800',
       fill: yellow,
       originX: 'right',
@@ -271,7 +272,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const offerHeaderText = new fabric.Text('OFERTA!', {
       fontSize: Math.max(18, headerH * 0.62),
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#FDE047',
       originX: 'center',
@@ -287,7 +288,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     const priceAreaCenterY = 18
     const currencyText = new fabric.Text('R$', {
       fontSize: 32,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#B91C1C',
       originX: 'left',
@@ -298,7 +299,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const priceInteger = new fabric.IText(parts.integer, {
       fontSize: 86,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#B91C1C',
       originX: 'left',
@@ -311,7 +312,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const priceDecimal = new fabric.IText(`,${parts.dec}`, {
       fontSize: 46,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#B91C1C',
       originX: 'left',
@@ -325,7 +326,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     const unit = normalizeUnitForLabel(unitText)
     const priceUnit = new fabric.IText(unit || '', {
       fontSize: 20,
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '800',
       fill: '#B91C1C',
       originX: 'left',
@@ -619,7 +620,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     const headerText = new fabric.Textbox('FRALDINHA', {
       width: headerW * (hasHeaderUnit ? 0.76 : 0.86),
       fontSize: Math.max(18, headerH * 0.58),
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       textAlign: 'center',
       fill: '#ffd94c',
@@ -632,7 +633,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const headerUnitText = new fabric.Text(headerUnit || 'KG', {
       fontSize: Math.max(16, headerH * 0.5),
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#ffffff',
       originX: 'center',
@@ -646,7 +647,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     const priceBaselineY = labelH * 0.2
     const currencyText = new fabric.Text('R$', {
       fontSize: Math.max(22, labelH * 0.21),
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#ffffff',
       originX: 'center',
@@ -658,7 +659,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     const integerX = -labelW * 0.02
     const priceInteger = new fabric.IText(parts.integer, {
       fontSize: Math.max(64, labelH * 0.82),
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#ffffff',
       originX: 'center',
@@ -671,7 +672,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const priceDecimal = new fabric.IText(`,${parts.dec}`, {
       fontSize: Math.max(30, labelH * 0.46),
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill: '#ffffff',
       originX: 'left',
@@ -684,7 +685,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     })
     const priceUnit = new fabric.IText(headerUnit || '', {
       fontSize: Math.max(12, labelH * 0.16),
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '800',
       fill: '#ffe07a',
       originX: 'left',
@@ -746,7 +747,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     const wholesaleBg = new fabric.Rect({ width: 300, height: 60, rx: 10, ry: 10, fill: '#FDE047', originX: 'center', originY: 'center', left: 0, top: 0, name: 'atac_wholesale_bg' })
     const makeText = (text: string, fill: string, name: string, scale: number, options: Record<string, any> = {}) => new fabric.IText(text, {
       fontSize: options.fontSize ?? (name.includes('decimal') ? 24 : name.includes('pack') ? 12 : 14),
-      fontFamily: 'Inter',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: '900',
       fill,
       originX: options.originX || 'left',
@@ -796,7 +797,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
       const makeRichPriceText = (text: string, fill: string, name: string) => {
         const rich = new fabric.IText(text || '0,00', {
           fontSize: 40,
-          fontFamily: 'Inter',
+          fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
           fontWeight: '900',
           fill,
           originX: 'left',
@@ -806,8 +807,8 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
           name,
           __fontScale: 0.60,
           __priceRichText: true,
-          __priceRichIntegerStyle: { fontSize: 40, fontFamily: 'Inter', fontWeight: '900', fill },
-          __priceRichDecimalStyle: { fontSize: 24, fontFamily: 'Inter', fontWeight: '900', fill },
+          __priceRichIntegerStyle: { fontSize: 40, fontFamily: DEFAULT_EDITOR_FONT_FAMILY, fontWeight: '900', fill },
+          __priceRichDecimalStyle: { fontSize: 24, fontFamily: DEFAULT_EDITOR_FONT_FAMILY, fontWeight: '900', fill },
           __priceRichIntegerScale: 1,
           __priceRichDecimalScale: 0.60
         })

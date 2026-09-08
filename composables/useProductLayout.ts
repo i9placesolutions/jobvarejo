@@ -17,6 +17,7 @@ import {
 import { toWasabiProxyUrl } from '~/utils/storageProxy';
 import { autoTrimFabricImage } from '~/utils/fabricImageHelpers';
 import { DEFAULT_PRODUCT_ZONE, DEFAULT_GLOBAL_STYLES } from '~/types/product-zone';
+import { DEFAULT_EDITOR_FONT_FAMILY } from '~/utils/font-catalog';
 
 declare var fabric: any;
 
@@ -99,7 +100,7 @@ export const useProductLayout = () => {
     const nameText = new fabric.Textbox(prod.name?.toUpperCase() ?? 'PRODUTO', {
       width: cardWidth - (padding * 2),
       fontSize: styles.prodNameSize ?? 24,
-      fontFamily: styles.prodNameFont ?? 'Arial',
+      fontFamily: styles.prodNameFont ?? DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: styles.prodNameWeight ?? 'bold',
       textAlign: styles.prodNameAlign ?? 'center',
       fill: prod.nameColor ?? styles.prodNameColor ?? '#000000',
@@ -119,7 +120,7 @@ export const useProductLayout = () => {
     // -------------------------------------------------------------------------
     const limitText = new fabric.Text(prod.limitText || '', {
       fontSize: styles.limitSize ?? 14,
-      fontFamily: styles.limitFont ?? 'Arial',
+      fontFamily: styles.limitFont ?? DEFAULT_EDITOR_FONT_FAMILY,
       fill: prod.limitColor ?? styles.limitColor ?? '#ef4444',
       fontWeight: 'bold',
       top: -cardHeight/2 + padding + (nameText.height || 30) + 5,
@@ -217,7 +218,7 @@ export const useProductLayout = () => {
 
         const regularText = new fabric.Text(regularPriceText, {
           fontSize: 11,
-          fontFamily: styles.priceFont ?? 'Arial',
+          fontFamily: styles.priceFont ?? DEFAULT_EDITOR_FONT_FAMILY,
           fill: '#ffffff',
           fontWeight: 'normal',
           originX: 'center',
@@ -243,7 +244,7 @@ export const useProductLayout = () => {
         // Currency Symbol
         const priceCurrency = new fabric.Text(styles.currencySymbol ?? 'R$', {
           fontSize: 18,
-          fontFamily: styles.priceFont ?? 'Arial',
+          fontFamily: styles.priceFont ?? DEFAULT_EDITOR_FONT_FAMILY,
           fill: splashTextColor,
           originX: 'right',
           originY: 'bottom',
@@ -255,7 +256,7 @@ export const useProductLayout = () => {
         // Main Price (Integer)
         const priceMain = new fabric.Text(priceData.integer, {
           fontSize: priceSize,
-          fontFamily: styles.priceFont ?? 'Arial',
+          fontFamily: styles.priceFont ?? DEFAULT_EDITOR_FONT_FAMILY,
           fill: splashTextColor,
           fontWeight: 'bold',
           originX: 'right',
@@ -268,7 +269,7 @@ export const useProductLayout = () => {
         // Decimal Part
         const priceDec = new fabric.Text(`,${priceData.decimal}`, {
           fontSize: priceSize * 0.5,
-          fontFamily: styles.priceFont ?? 'Arial',
+          fontFamily: styles.priceFont ?? DEFAULT_EDITOR_FONT_FAMILY,
           fill: splashTextColor,
           fontWeight: 'bold',
           originX: 'left',
@@ -283,7 +284,7 @@ export const useProductLayout = () => {
         const priceUnitText = prod.unit ?? prod.priceUnit ?? 'un';
         const priceUnit = new fabric.Text(priceUnitText, {
           fontSize: 14,
-          fontFamily: styles.priceFont ?? 'Arial',
+          fontFamily: styles.priceFont ?? DEFAULT_EDITOR_FONT_FAMILY,
           fill: splashTextColor,
           fontWeight: 'normal',
           originX: 'right',
@@ -313,7 +314,7 @@ export const useProductLayout = () => {
     if (hasCondition && conditionText) {
       const conditionObj = new fabric.Text(conditionText.toUpperCase(), {
         fontSize: 10,
-        fontFamily: styles.priceFont ?? 'Arial',
+        fontFamily: styles.priceFont ?? DEFAULT_EDITOR_FONT_FAMILY,
         fill: '#ffffff',
         fontWeight: 'normal',
         originX: 'center',
@@ -546,7 +547,7 @@ export const useProductLayout = () => {
     // Title
     const title = new fabric.Text("Zona de Produtos", {
       fontSize: 24,
-      fontFamily: 'Inter, sans-serif',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: 700,
       fill: '#ffffff',
       textAlign: 'center',
@@ -558,7 +559,7 @@ export const useProductLayout = () => {
     // Subtitle
     const subtitle = new fabric.Text("Arraste para mover", {
       fontSize: 14,
-      fontFamily: 'Inter, sans-serif',
+      fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: 400,
       fill: '#a1a1aa',
       textAlign: 'center',

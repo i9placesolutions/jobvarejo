@@ -154,11 +154,39 @@ type ApplySelectionTextStyleOptions = {
   value: any
   getTextSelectionRange: (obj: any) => { start: number; end: number; length: number } | null
   safeAddWithUpdate: (obj: any) => void
+  /**
+   * Quando o objeto tem estilos inline legados, uma edicao feita com apenas o
+   * objeto selecionado deve atualizar o texto inteiro. Sem isso, o `styles`
+   * por caractere continua vencendo a propriedade-base e a mudanca nao aparece.
+   */
+  applyWholeTextWhenNoSelection?: boolean
+}
+
+const getWholeTextRange = (obj: any): { start: number; end: number; length: number } | null => {
+  const textLength = String(obj?.text ?? '').length
+  if (textLength <= 0) return null
+  return { start: 0, end: textLength, length: textLength }
+}
+
+const hasInlineTextStyles = (obj: any): boolean => {
+  const styles = obj?.styles
+  if (!styles || typeof styles !== 'object') return false
+
+  return Object.keys(styles).some((lineIndex) => {
+    const lineStyles = styles[lineIndex]
+    if (!lineStyles || typeof lineStyles !== 'object') return false
+    return Object.keys(lineStyles).some((charIndex) => {
+      const charStyles = lineStyles[charIndex]
+      return !!charStyles && typeof charStyles === 'object' && Object.keys(charStyles).length > 0
+    })
+  })
 }
 
 export const applySelectionTextStyle = (opts: ApplySelectionTextStyleOptions): boolean => {
   const obj = opts.obj
-  const range = opts.getTextSelectionRange(obj)
+  const selectionRange = opts.getTextSelectionRange(obj)
+  const applyingWholeText = !selectionRange && !!opts.applyWholeTextWhenNoSelection && hasInlineTextStyles(obj)
+  const range = selectionRange || (applyingWholeText ? getWholeTextRange(obj) : null)
   if (!range || typeof obj?.setSelectionStyles !== 'function') return false
 
   const patch: Record<string, any> = {}
@@ -182,6 +210,13 @@ export const applySelectionTextStyle = (opts: ApplySelectionTextStyleOptions): b
   if (!Object.keys(patch).length) return false
 
   try {
+    // Mantenha a propriedade-base alinhada quando a alteracao foi feita no
+    // objeto inteiro. Assim, novos caracteres e a proxima serializacao nao
+    // voltam para o valor antigo depois que os estilos inline forem removidos.
+    if (applyingWholeText) {
+      if (typeof obj?.set === 'function') obj.set(patch)
+      else Object.assign(obj, patch)
+    }
     obj.setSelectionStyles(patch, range.start, range.end)
   } catch {
     return false

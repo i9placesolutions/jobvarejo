@@ -3,6 +3,7 @@ import { layoutPrice } from './priceTagLayout'
 import { PRICE_INTEGER_DECIMAL_GAP_PX } from './priceTagText'
 import { isRichPriceTextObject, positionRichPriceUnit, setRichPriceBaseFontSize, setRichPriceSegmentStyle } from './priceRichText'
 import { detectImageTrimBounds } from './fabricImageHelpers'
+import { DEFAULT_EDITOR_FONT_FAMILY } from './font-catalog'
 
 type LayoutCustomPriceGroupDeps = {
     fabric: any
@@ -187,7 +188,7 @@ export const layoutCustomPriceGroup = (
 
         const scaledStrokeWidth = (obj.strokeWidth || 0) * scale
         obj.set({
-            fontFamily: originalFontFamily || 'Inter',
+            fontFamily: originalFontFamily || DEFAULT_EDITOR_FONT_FAMILY,
             fontSize: originalFontSize * scale * textScaleMult,
             scaleX: 1,
             scaleY: 1,
@@ -197,11 +198,11 @@ export const layoutCustomPriceGroup = (
         if (isRichPriceTextObject(obj)) {
             setRichPriceBaseFontSize(obj, originalFontSize * scale * textScaleMult)
             setRichPriceSegmentStyle(obj, 'integer', {
-                fontFamily: originalFontFamily || 'Inter',
+                fontFamily: originalFontFamily || DEFAULT_EDITOR_FONT_FAMILY,
                 strokeWidth: scaledStrokeWidth
             })
             setRichPriceSegmentStyle(obj, 'decimal', {
-                fontFamily: originalFontFamily || 'Inter',
+                fontFamily: originalFontFamily || DEFAULT_EDITOR_FONT_FAMILY,
                 strokeWidth: scaledStrokeWidth
             })
         }

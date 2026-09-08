@@ -164,6 +164,12 @@ export default defineNuxtConfig({
             if (id.includes('vite/preload-helper')) return 'app-preload-helper'
 
             // Editor local code splitting (non-node_modules)
+            if (id.includes('/utils/editorCanvasActionsController.ts')) return 'editor-actions'
+            if (id.includes('/utils/editorHistoryController.ts')) return 'editor-history'
+            if (id.includes('/utils/editorProductGridController.ts')) return 'editor-product-grid'
+            if (id.includes('/utils/editorQuickModeSeedController.ts')) return 'editor-quick-mode-seed'
+            if (id.includes('/utils/editorReactivityController.ts')) return 'editor-reactivity'
+            if (id.includes('/utils/editorViewportController.ts')) return 'editor-viewport'
             if (id.includes('/components/EditorCanvas.vue')) return 'editor-canvas'
             if (
               id.includes('/types/product-zone.ts') ||

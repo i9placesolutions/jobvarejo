@@ -37,6 +37,12 @@ export type EditorMissingProductImageRecoveryContext = {
 }
 
 let isRecoveringMissingProductImages = false
+// A large page may recover in several batches. Do not serialize the first
+// batch while later cards still carry a placeholder; wait until the page has
+// no pending candidates, then persist the complete recovery atomically.
+const recoveredPagesAwaitingPersistence = new Set<string>()
+
+const getRecoveryPageKey = (pageId: string): string => pageId || '__active-page__'
 
 const getConfiguredStorageBucket = (): string => {
     try {
@@ -147,6 +153,7 @@ export const recoverMissingProductCardImages = async (
     opts: { expectedPageId?: string | null } = {}
 ): Promise<{ recoveredCount: number; pendingCount: number }> => {
     const expectedPageId = String(opts.expectedPageId || ctx.getActiveProjectPageId()).trim()
+    const recoveryPageKey = getRecoveryPageKey(expectedPageId)
     const isExpectedPageStillActive = () => !expectedPageId || ctx.getActiveProjectPageId() === expectedPageId
     if (!ctx.canvas || ctx.isCanvasDestroyed.value || isRecoveringMissingProductImages || !isExpectedPageStillActive()) {
         return { recoveredCount: 0, pendingCount: 0 }
@@ -211,6 +218,15 @@ export const recoverMissingProductCardImages = async (
         }
 
         if (!candidates.length) {
+            if (recoveredPagesAwaitingPersistence.has(recoveryPageKey) && isExpectedPageStillActive()) {
+                const didSave = await ctx.saveCurrentState({
+                    reason: 'recover-missing-product-images',
+                    source: 'system',
+                    markUnsaved: true,
+                    skipIfUnchanged: true
+                })
+                if (didSave === true) recoveredPagesAwaitingPersistence.delete(recoveryPageKey)
+            }
             return { recoveredCount: 0, pendingCount: 0 }
         }
 
@@ -296,14 +312,21 @@ export const recoverMissingProductCardImages = async (
             }
         }
 
+        if (recoveredCount > 0) {
+            recoveredPagesAwaitingPersistence.add(recoveryPageKey)
+        }
         if (recoveredCount > 0 && ctx.canvas && isExpectedPageStillActive()) {
             ctx.refreshCanvasObjects()
             ctx.safeRequestRenderAll()
-            await ctx.saveCurrentState({
+        }
+        if (pendingCount === 0 && recoveredPagesAwaitingPersistence.has(recoveryPageKey) && isExpectedPageStillActive()) {
+            const didSave = await ctx.saveCurrentState({
                 reason: 'recover-missing-product-images',
                 source: 'system',
+                markUnsaved: true,
                 skipIfUnchanged: true
             })
+            if (didSave === true) recoveredPagesAwaitingPersistence.delete(recoveryPageKey)
         }
         return { recoveredCount, pendingCount }
     } finally {

@@ -1,4 +1,5 @@
 import { splitPriceParts } from './priceTagText'
+import { DEFAULT_EDITOR_FONT_FAMILY } from './font-catalog'
 
 export type RichPriceSegment = 'integer' | 'decimal'
 export type RichPriceAxis = 'x' | 'y'
@@ -47,7 +48,7 @@ const cloneStyle = <T>(value: T): T => {
   }
 }
 
-const resolveFontFamily = (value: unknown, fallback = 'Inter'): string =>
+const resolveFontFamily = (value: unknown, fallback = DEFAULT_EDITOR_FONT_FAMILY): string =>
   typeof value === 'string' && value.trim() ? value : fallback
 
 const resolveFontStyle = (value: unknown, fallback = 'normal'): string =>
@@ -386,7 +387,7 @@ export const createRichPriceTextDefinition = (options: {
     text,
     styles: buildRichPriceStyles(text, integerStyle, decimalStyle),
     fontSize,
-    fontFamily: String(integerStyle.fontFamily || 'Inter'),
+    fontFamily: String(integerStyle.fontFamily || DEFAULT_EDITOR_FONT_FAMILY),
     fontWeight: integerStyle.fontWeight || '900',
     fill: integerStyle.fill || '#ffffff',
     originX: 'left',

@@ -33,7 +33,7 @@ import type { LabelTemplate } from '~/types/label-template'
 type ZoneUpdateTargetMeta = {
   targetId?: string | null
 }
-import { AVAILABLE_FONT_FAMILIES } from '~/utils/font-catalog'
+import { AVAILABLE_FONT_FAMILIES, DEFAULT_EDITOR_FONT_FAMILY } from '~/utils/font-catalog'
 import {
   QUICK_LOGO_BACKDROP_OPTIONS,
   normalizeQuickLogoBackdropMode
@@ -610,14 +610,8 @@ const isLogoObject = computed(() => {
 
 const logoBackdropMode = computed(() => normalizeQuickLogoBackdropMode(getVal('quickLogoBackdropMode')))
 
-const textSelectionActive = computed(() => {
-  if (!isText.value) return false
-  return !!(props.selectedObject as any)?.__textSelectionActive
-})
-
 const textFillMixed = computed(() => {
-  if (!textSelectionActive.value) return false
-  return !!(props.selectedObject as any)?.__textFillMixed
+  return !!isText.value && !!(props.selectedObject as any)?.__textFillMixed
 })
 
 const resolveFillColorForControl = (value: any, fallback = '#000000') => {
@@ -638,7 +632,7 @@ const resolveFillColorForControl = (value: any, fallback = '#000000') => {
 
 const textFillValue = computed(() => {
   const selectionVal = (props.selectedObject as any)?.__textFillValue
-  if (textSelectionActive.value) {
+  if (isText.value) {
     const fromSelection = resolveFillColorForControl(selectionVal, '')
     if (fromSelection) return fromSelection
   }
@@ -654,13 +648,12 @@ const fillHexInputValue = computed(() => {
 const fillHexInputPlaceholder = computed(() => textFillMixed.value ? 'MISTO' : '1E1E1E')
 
 const textFontSizeMixed = computed(() => {
-  if (!textSelectionActive.value) return false
-  return !!(props.selectedObject as any)?.__textFontSizeMixed
+  return !!isText.value && !!(props.selectedObject as any)?.__textFontSizeMixed
 })
 
 const textFontSizeValue = computed(() => {
   const selectionVal = Number((props.selectedObject as any)?.__textFontSizeValue)
-  if (textSelectionActive.value && Number.isFinite(selectionVal) && selectionVal > 0) {
+  if (isText.value && Number.isFinite(selectionVal) && selectionVal > 0) {
     return selectionVal
   }
   const base = Number(getVal('fontSize', 20))
@@ -1432,7 +1425,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
               <span class="text-[11px] font-semibold tracking-wide text-zinc-300">Texto</span>
           </div>
           
-          <select :value="getVal('fontFamily', 'Arial')" @change="e => $emit('update-property', 'fontFamily', (e.target as any).value)" class="pp-number-input text-left! h-8 cursor-pointer pl-2 appearance-none">
+          <select :value="getVal('fontFamily', DEFAULT_EDITOR_FONT_FAMILY)" @change="e => $emit('update-property', 'fontFamily', (e.target as any).value)" class="pp-number-input text-left! h-8 cursor-pointer pl-2 appearance-none">
               <option v-for="font in AVAILABLE_FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
           </select>
 

@@ -5,6 +5,7 @@
 
 import type { Product, ProductImage, Splash, ProductZone, ProductZonePreviewFormat, GlobalStyles } from '~/types/product-zone';
 import { DEFAULT_PRODUCT_ZONE, DEFAULT_GLOBAL_STYLES, DEFAULT_SPLASH } from '~/types/product-zone';
+import { DEFAULT_EDITOR_FONT_FAMILY } from '~/utils/font-catalog';
 import { resolveProductImageRef } from '~/utils/productImageRef';
 import {
   DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT,
@@ -736,7 +737,7 @@ export const createDefaultSplash = (productId: string | number, price?: number |
     textEffect: 'shadow',
     effectColor: 'rgba(0,0,0,0.3)',
     effectThickness: 2,
-    fontFamily: 'Arial',
+    fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
     fontWeight: 700,
     visible: true
   } as Splash;

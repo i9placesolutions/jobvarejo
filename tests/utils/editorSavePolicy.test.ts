@@ -90,8 +90,13 @@ describe('canAllowEmptyOverwrite — quem pode salvar canvas vazio', () => {
 })
 
 describe('shouldSkipAutoSave — autosave nao roda em razoes barulhentas', () => {
-  it('source system sempre pula', () => {
+  it('source system pula quando nao e uma recuperacao duravel', () => {
     expect(shouldSkipAutoSave('system', 'qualquer')).toBe(true)
+  })
+
+  it('persiste reparos seguros de URLs e imagens recuperadas', () => {
+    expect(shouldSkipAutoSave('system', 'asset-url-normalization')).toBe(false)
+    expect(shouldSkipAutoSave('system', 'recover-missing-product-images')).toBe(false)
   })
 
   it('razoes especificas sao puladas mesmo com source user', () => {
