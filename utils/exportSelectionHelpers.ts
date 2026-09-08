@@ -8,6 +8,7 @@
  */
 
 import { isLikelyProductZone } from './fabricObjectClassifiers'
+import { isQuickLogoPlaceholder } from './quickLogoSlot'
 
 /**
  * Detecta objetos que NUNCA devem participar do export individual:
@@ -18,6 +19,7 @@ import { isLikelyProductZone } from './fabricObjectClassifiers'
 export const isBlockedObjectForScopedExport = (obj: any): boolean => {
     if (!obj) return true
     if ((obj as any).excludeFromExport) return true
+    if (isQuickLogoPlaceholder(obj)) return true
     if ((obj as any).isFrame) return true
     if (isLikelyProductZone(obj)) return true
     return false

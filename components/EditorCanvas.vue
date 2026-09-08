@@ -92,6 +92,7 @@ import {
 } from '~/utils/exportSelectionHelpers'
 import {
     CLIPBOARD_CLONE_PROPS,
+    isEditorClipboardPasteShortcut,
     LEGACY_CROSS_TAB_CLIPBOARD_STORAGE_KEY,
     resolveEditorPasteSource
 } from '~/utils/clipboardHelpers'
@@ -101,9 +102,9 @@ import { mapLimit } from '~/utils/asyncHelpers'
 import { scheduleIdleWork } from '~/utils/idleSchedule'
 import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS, DUPLICATE_OFFSET } from '~/utils/canvasCustomProps'
 import {
-    resolveTemplateCompositionFrameBinding,
-    shouldPreserveTemplateFrameClip
+    resolveTemplateCompositionFrameBinding
 } from '~/utils/templateFrameClipping'
+import { resolveFrameParentAfterDrop } from '~/utils/frameDropBinding'
 import { normalizeQuickLogoBackdropMode } from '~/utils/quickLogoBackdrop'
 import {
     GUIDE_COLOR,
@@ -374,7 +375,6 @@ import {
     isObjectCenterInsideFrame,
     isObjectVisuallyInsideFrame,
     isObjectIntersectingFrame,
-    isObjectMostlyInsideFrame,
     getFrameSpawnPosition,
     FRAME_SPAWN_GAP,
     getFrameDisplayNameForExport,
@@ -606,6 +606,16 @@ import {
 
 const isDrawing = ref(false)
 const isNodeEditing = ref(false)
+type EditorClipboardSummary = {
+    itemCount: number
+    sourcePageId: string
+    copiedAt: number
+}
+const editorClipboardSummary = ref<EditorClipboardSummary | null>(null)
+const editorClipboardSummaryText = computed(() => {
+    const count = Number(editorClipboardSummary.value?.itemCount || 0)
+    return `${count} ${count === 1 ? 'elemento pronto' : 'elementos prontos'}`
+})
 // Flag to suppress handleUpdateGlobalStyles during page load / composable sync.
 // When true, style updates from child components (ProductZoneSettings) are ignored
 // because they are just echoing back the values we synced from the zone during rehydrate.
@@ -1600,8 +1610,8 @@ const layersContextMenu = ref({
 const canvasContextMenuItems = computed(() => ([
     ...(selectedObjectRef.value && resolveSelectedProductCardContext(canvas.value?.getActiveObject?.()).card
         ? [{ label: 'Substituir imagem', action: 'replace-product-image-upload', icon: ImagePlus }] : []),
-    { label: 'Copiar (Ctrl/Cmd+C)', action: 'copy', icon: Copy },
-    { label: 'Colar cópia do editor', action: 'paste-editor-copy', icon: Copy },
+    { label: 'Copiar para outra página (Ctrl/Cmd+C)', action: 'copy', icon: Copy },
+    { label: 'Colar nesta página (Ctrl/Cmd+Shift+V)', action: 'paste-editor-copy', icon: Copy },
     { label: 'Duplicar (Ctrl+D)', action: 'duplicate', icon: Copy },
     { divider: true },
     { label: 'Trazer para frente', action: 'arrange-bring-to-front', icon: ChevronsUp },
@@ -1629,8 +1639,8 @@ const handleCanvasContextMenuSelect = (action: string) => {
 };
 
 const layersContextMenuItems = computed(() => ([
-    { label: 'Copiar (Ctrl/Cmd+C)', action: 'copy', icon: Copy },
-    { label: 'Colar cópia do editor', action: 'paste-editor-copy', icon: Copy },
+    { label: 'Copiar para outra página (Ctrl/Cmd+C)', action: 'copy', icon: Copy },
+    { label: 'Colar nesta página (Ctrl/Cmd+Shift+V)', action: 'paste-editor-copy', icon: Copy },
     { label: 'Duplicar (Ctrl+D)', action: 'duplicate', icon: Copy },
     { divider: true },
     { label: 'Mascarar', action: 'mask-selection', icon: Frame },
@@ -2256,29 +2266,23 @@ const maybeReparentToFrameOnDrop = (obj: any) => {
 
     const currentParentFrameId = String((obj as any).parentFrameId || '').trim();
     const currentFrame = currentParentFrameId ? getFrameById(currentParentFrameId) : null;
-    // A template composition is a closed artboard: decorative pieces stay
-    // editable, but must remain clipped even when their geometry crosses the
-    // Frame edge. Regular Frames retain the old detach-on-drop behavior.
-    if (currentFrame && (
-        shouldPreserveTemplateFrameClip(currentFrame) ||
-        isObjectMostlyInsideFrame(obj, currentFrame)
-    )) {
+    const frameUnderObject = findFrameUnderObject(obj);
+    // O vínculo com um Frame é uma relação de contêiner, não uma heurística de
+    // posição. Depois que um elemento entra no Frame, mantemos o parentFrameId
+    // mesmo se ele for arrastado totalmente para fora: o clipPath do Frame é
+    // justamente o que deve ocultar essa parte excedente. Se ele for solto
+    // dentro de outro Frame, o vínculo muda para o novo contêiner.
+    const nextParentFrameId = resolveFrameParentAfterDrop(
+        currentParentFrameId,
+        Boolean(currentFrame),
+        frameUnderObject?._customId
+    );
+    if (String(nextParentFrameId || '') === currentParentFrameId) {
         return;
     }
 
-    const frame = findFrameUnderObject(obj);
-    // If dropped outside of any frame, clear parenting so clipPath is removed.
-    if (!frame || !frame._customId) {
-        if ((obj as any).parentFrameId) {
-            (obj as any).parentFrameId = undefined;
-            invalidateFrameRuntimeCache();
-        }
-        return;
-    }
-    if ((obj as any).parentFrameId !== frame._customId) {
-        (obj as any).parentFrameId = frame._customId;
-        invalidateFrameRuntimeCache();
-    }
+    (obj as any).parentFrameId = nextParentFrameId;
+    invalidateFrameRuntimeCache();
 };
 
 const getFrameDescendants = (frame: any) => {
@@ -2288,8 +2292,7 @@ const getFrameDescendants = (frame: any) => {
 };
 
 // isObjectCenterInsideFrame / isObjectVisuallyInsideFrame /
-// isObjectIntersectingFrame / isObjectMostlyInsideFrame extraidos
-// para utils/frameGeometry.ts.
+// isObjectIntersectingFrame extraidos para utils/frameGeometry.ts.
 
 const collectFrameVisibilityTargets = (rootFrame: any) => {
     if (!canvas.value || !rootFrame) return [rootFrame].filter(Boolean);
@@ -13732,8 +13735,9 @@ const duplicateActiveObjectWithContext = async (
 };
 
 // O clipboard Fabric existe somente em memória e é usado por comandos explícitos
-// do editor. Ctrl/Cmd+V nunca lê esse estado: ele deve sempre receber o conteúdo
-// atual do clipboard do sistema pelo evento nativo `paste`.
+// do editor. Ctrl/Cmd+V sempre recebe o conteúdo atual do clipboard do sistema
+// pelo evento nativo `paste`; Ctrl/Cmd+Shift+V é o atalho explícito da cópia
+// interna, útil ao mudar de página.
 const clearLegacyPersistedEditorClipboard = () => {
     if (!import.meta.client) return;
     try {
@@ -13741,6 +13745,22 @@ const clearLegacyPersistedEditorClipboard = () => {
     } catch {
         // localStorage pode estar indisponível em contextos privados/restritos.
     }
+};
+
+const syncEditorClipboardSummary = () => {
+    if (!import.meta.client) return;
+
+    const clipboard = (window as any)._clipboard;
+    if (clipboard?.kind !== 'fabric-items-v2' || !Array.isArray(clipboard.items) || clipboard.items.length === 0) {
+        editorClipboardSummary.value = null;
+        return;
+    }
+
+    editorClipboardSummary.value = {
+        itemCount: clipboard.items.length,
+        sourcePageId: String(clipboard.sourcePageId || ''),
+        copiedAt: Number(clipboard.copiedAt || 0)
+    };
 };
 
 // getObjectAbsoluteCenter + computeCentersBoundingCenter extraidos para utils/fabricMeasure.ts.
@@ -14379,15 +14399,24 @@ const handleKeyDown = async (
 
                 if (items.length > 0) {
                     const selectionCenter = computeCentersBoundingCenter(centers);
+                    const copiedAt = Date.now();
                     const runtimeClipboard = {
                         kind: 'fabric-items-v2',
                         items,
                         selectionCenter,
                         sourcePageId: getActiveProjectPageId(),
-                        copiedAt: Date.now()
+                        copiedAt
                     };
                     (window as any)._clipboard = runtimeClipboard;
-                    notifyEditorInfo('Elemento copiado. Abra a página de destino e use “Colar cópia do editor”.');
+                    editorClipboardSummary.value = {
+                        itemCount: items.length,
+                        sourcePageId: runtimeClipboard.sourcePageId,
+                        copiedAt
+                    };
+                    notifyEditorInfo(
+                        `${items.length === 1 ? 'Elemento copiado' : `${items.length} elementos copiados`}. ` +
+                        'Abra a página de destino e clique em “Colar nesta página” ou use Ctrl/Cmd+Shift+V.'
+                    );
                 }
             } catch (err) {
                 console.warn('[clipboard] Falha ao copiar (clone)', err);
@@ -14396,11 +14425,18 @@ const handleKeyDown = async (
     }
 
     if (isCtrl && String(e.key || '').toLowerCase() === 'v') {
-        // Ctrl/Cmd+V vem sempre do clipboard atual do sistema. Só menus e botões
-        // explícitos podem solicitar o clone em memória do próprio editor.
-        if (resolveEditorPasteSource(options.explicitEditorPaste) !== 'editor') return;
+        // Ctrl/Cmd+V vem sempre do clipboard atual do sistema. Menus, botões e
+        // Ctrl/Cmd+Shift+V solicitam explicitamente o clone em memória do editor.
+        const explicitEditorPaste = options.explicitEditorPaste || isEditorClipboardPasteShortcut(e);
+        if (resolveEditorPasteSource(explicitEditorPaste) !== 'editor') return;
 
         const clipAny = (window as any)._clipboard;
+        if (!clipAny) {
+            e.preventDefault();
+            notifyEditorInfo('Copie um ou mais elementos antes de colar nesta página.');
+            return;
+        }
+
         if (clipAny) {
             e.preventDefault();
 
@@ -14417,14 +14453,20 @@ const handleKeyDown = async (
 
                     const viewCenter = getCenterOfView();
                     const selectionCenter = clipData.selectionCenter || { x: viewCenter.x, y: viewCenter.y };
+                    const sourcePageId = String(clipData.sourcePageId || '');
+                    const isCrossPagePaste = Boolean(sourcePageId) && sourcePageId !== getActiveProjectPageId();
+                    const pasteCenter = isCrossPagePaste ? selectionCenter : viewCenter;
+                    const pasteOffset = isCrossPagePaste ? 0 : 20;
                     const pasted: any[] = [];
                     const idMap = new Map<string, string>();
                     const existingIds = new Set<string>((canvas.value.getObjects?.() || [])
                         .map((o: any) => String(o?._customId || '').trim())
                         .filter(Boolean));
 
-                    // Special-case: single copied inner image -> paste back into product card if it exists.
-                    if (items.length === 1) {
+                    // Dentro da mesma página, uma imagem deep-selected pode voltar ao cartão.
+                    // Entre páginas ela deve virar um novo objeto independente, sem alterar um
+                    // cartão que por acaso use o mesmo id no destino.
+                    if (items.length === 1 && !isCrossPagePaste) {
                         const clipItem = items[0];
                         const cloned: any = await (clipItem as any).clone(CLIPBOARD_CLONE_PROPS);
 
@@ -14548,8 +14590,8 @@ const handleKeyDown = async (
                         const dy = (Number.isFinite(cy) ? cy : Number(cloned.top || 0)) - Number(selectionCenter.y || 0);
 
                         cloned.set({
-                            left: Number(viewCenter.x || 0) + dx + 20,
-                            top: Number(viewCenter.y || 0) + dy + 20,
+                            left: Number(pasteCenter.x || 0) + dx + pasteOffset,
+                            top: Number(pasteCenter.y || 0) + dy + pasteOffset,
                             originX: 'center',
                             originY: 'center',
                             evented: true,
@@ -14807,7 +14849,8 @@ const runEditorClipboardCommand = async (action: 'copy' | 'paste') => {
     await handleKeyDown(
         new KeyboardEvent('keydown', {
             key: action === 'copy' ? 'c' : 'v',
-            ctrlKey: true
+            ctrlKey: true,
+            shiftKey: action === 'paste'
         }),
         { explicitEditorPaste: action === 'paste' }
     );
@@ -18107,6 +18150,16 @@ const setupReactivity = () => {
 
             // Fabric renders after object:moving — no explicit requestRenderAll needed
             return;
+        }
+
+        // Para um filho de Frame, o clipPath é relativo ao próprio objeto.
+        // Recalcule enquanto ele se move para que a borda do recorte permaneça
+        // fixa no Frame, sem revelar conteúdo durante o arraste.
+        if (target && !target.isFrame && (target as any).parentFrameId) {
+            const parentFrame = getFrameById(String((target as any).parentFrameId || ''));
+            if (parentFrame?.clipContent) {
+                syncObjectFrameClip(target);
+            }
         }
 
         // Optimized Zone Move
@@ -22614,10 +22667,26 @@ const addStoreDynamicField = async (data: Record<string, any>) => {
         canvas.value.add(slot);
         syncObjectFrameClip(slot);
         await syncQuickLogoBinding(profile);
-        canvas.value.setActiveObject(slot);
+        // A ligação pode trocar o Rect pela Image, mas preserva o _customId.
+        // Reencontre o objeto vivo antes de selecioná-lo.
+        const persistedLogo = canvas.value.getObjects().find((object: any) => (
+            object === slot ||
+            String(object?._customId || '').trim() === String(slot?._customId || '').trim()
+        ));
+        if (persistedLogo) canvas.value.setActiveObject(persistedLogo);
         refreshCanvasObjects();
         safeRequestRenderAll();
-        saveCurrentState();
+        // A inserção da logo é estrutural: persiste localmente e confirma o
+        // flush remoto antes de encerrar a operação, em vez de depender do
+        // debounce comum de object:added.
+        await Promise.resolve(saveCurrentState({
+            allowEmptyOverwrite: true,
+            reason: 'store-dynamic-field:logo',
+            source: 'user',
+            skipCoalesce: true,
+            skipIfUnchanged: false
+        }));
+        await flushPersistenceNow('store-dynamic-field:logo', { force: true });
         return;
     }
 
@@ -23049,6 +23118,7 @@ const handleGlobalLabelTemplatesUpdated = (event: Event) => {
 
 onMounted(() => {
     clearLegacyPersistedEditorClipboard();
+    syncEditorClipboardSummary();
     window.addEventListener('paste', handlePaste);
     window.addEventListener('product-zone-structures:updated', handleGlobalProductZoneStructuresUpdated);
     window.addEventListener('product-card-configuration:updated', handleGlobalProductCardConfigurationUpdated);
@@ -25846,8 +25916,9 @@ const styleEmptyLogoPlaceholder = (slot: any) => {
     const designer = !isQuickMode.value
     slot.set({
         // A reserva precisa continuar legivel sobre fotos enquanto o usuario
-        // ainda nao cadastrou a logo. O preenchimento fica apenas no placeholder
-        // do editor (excludeFromExport), entao nao invade a arte final.
+        // ainda nao cadastrou a logo. Nao use `excludeFromExport` aqui: no
+        // Fabric essa flag remove o objeto do JSON salvo. A pipeline de output
+        // a oculta somente enquanto renderiza PNG/PDF/SVG.
         fill: designer ? 'rgba(255, 255, 255, 0.88)' : 'rgba(0,0,0,0)',
         stroke: designer ? '#6d28d9' : 'transparent',
         strokeWidth: designer ? 2 : 0,
@@ -25859,7 +25930,7 @@ const styleEmptyLogoPlaceholder = (slot: any) => {
         evented: true,
         visible: designer,
         opacity: 1,
-        excludeFromExport: true,
+        excludeFromExport: false,
         objectCaching: false,
         layerName: slot.layerName || 'Logo da loja'
     })
@@ -26008,7 +26079,7 @@ const createQuickLogoSlot = (sourceObject: any = null): any | null => {
         parentFrameId: metrics.parentFrameId || undefined,
         name: String(sourceObject?.name || 'quick-logo-slot'),
         layerName: 'Logo da loja',
-        excludeFromExport: true
+        excludeFromExport: false
     })
     slot._customId = String(sourceObject?._customId || makeId())
     styleEmptyLogoPlaceholder(slot)
@@ -39980,11 +40051,6 @@ const rehydrateCanvasZones = (
         }
 
         const frameIds = new Set<string>(frames.map((f: any) => f._customId).filter(Boolean));
-        const framesById = new Map<string, any>(
-            frames
-                .filter((f: any) => !!f?._customId)
-                .map((f: any) => [String(f._customId), f])
-        );
         objs.forEach((o: any) => {
             if (o?.parentFrameId && !frameIds.has(o.parentFrameId)) {
                 o.parentFrameId = undefined;
@@ -39995,35 +40061,9 @@ const rehydrateCanvasZones = (
             }
         });
 
-        // CRITICAL: Clear parentFrameId for objects that are NOT inside their supposed parent frame
-        // This prevents clipping issues when objects are moved outside frames
-        objs.forEach((o: any) => {
-            if (!o?.parentFrameId || o?.isFrame) return;
-            const frame = framesById.get(String(o.parentFrameId || ''));
-            if (!frame) {
-                o.parentFrameId = undefined;
-                if (o._frameClipOwner) {
-                    o.clipPath = null;
-                    delete o._frameClipOwner;
-                }
-                return;
-            }
-
-            // Model templates are closed artboards: preserve their clip even
-            // when an editable decorative element intentionally crosses a
-            // Frame edge. Regular Frames still detach objects dropped outside.
-            if (!shouldPreserveTemplateFrameClip(frame) && !isObjectMostlyInsideFrame(o, frame)) {
-                console.log(`🔓 Removendo parentFrameId de objeto fora da maior parte do frame:`, {
-                    object: o.name || o._customId,
-                    frame: frame.name || frame._customId
-                });
-                o.parentFrameId = undefined;
-                if (o._frameClipOwner) {
-                    o.clipPath = null;
-                    delete o._frameClipOwner;
-                }
-            }
-        });
+        // Um parentFrameId válido permanece mesmo que o objeto esteja fora da
+        // geometria atual do Frame. Isso conserva o recorte após salvar e
+        // recarregar, em vez de revelar elementos que ultrapassam a borda.
 
         // Re-apply clipPaths using shared frame clip rects (prevents stale deserialized clip rects).
         objs.forEach((o: any) => {
@@ -40971,6 +41011,29 @@ const handleAutoOfferLayout = async () => {
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
 
+                  <!-- A cópia do editor permanece disponível ao trocar de página, mesmo sem seleção. -->
+                  <div
+                    v-if="editorClipboardSummary && !showDesignLoaderOverlay"
+                    class="absolute top-3 right-3 z-[205] max-w-[calc(100%-1.5rem)] pointer-events-auto"
+                    role="status"
+                  >
+                    <div class="flex items-center gap-2 rounded-xl border border-violet-300/25 bg-zinc-950/85 px-2.5 py-2 shadow-xl backdrop-blur-sm">
+                      <Copy class="h-3.5 w-3.5 shrink-0 text-violet-200" />
+                      <span class="hidden sm:inline whitespace-nowrap text-[11px] font-medium text-white/75">
+                        {{ editorClipboardSummaryText }}
+                      </span>
+                      <button
+                        type="button"
+                        class="rounded-lg border border-violet-300/25 bg-violet-500/25 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-violet-500/40 focus:outline-none focus:ring-2 focus:ring-violet-300/70"
+                        title="Colar nesta página (Ctrl/Cmd+Shift+V)"
+                        aria-label="Colar cópia do editor nesta página"
+                        @click="triggerEditorClipboardPaste"
+                      >
+                        Colar nesta página
+                      </button>
+                    </div>
+                  </div>
+
                   <CanvasRulers
                     v-if="!isQuickMode"
                     :visible="viewShowRulers"
@@ -41252,11 +41315,11 @@ const handleAutoOfferLayout = async () => {
                   </button>
                   <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
                   <!-- Copy -->
-                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Copiar" @click="triggerCopyShortcut">
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Copiar para outra página" @click="triggerCopyShortcut">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                   </button>
                   <!-- Paste editor copy -->
-                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Colar cópia do editor" @click="triggerEditorClipboardPaste">
+                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Colar nesta página (Ctrl/Cmd+Shift+V)" @click="triggerEditorClipboardPaste">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H9a1 1 0 0 0-1 1v2c0 .6.4 1 1 1h6c.6 0 1-.4 1-1V3c0-.6-.4-1-1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2M16 4h2a2 2 0 0 1 2 2v2"/><path d="M12 12h4"/><path d="M12 16h4"/></svg>
                   </button>
                   <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>

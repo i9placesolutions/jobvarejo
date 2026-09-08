@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   LEGACY_CROSS_TAB_CLIPBOARD_STORAGE_KEY,
   CLIPBOARD_CLONE_PROPS,
+  isEditorClipboardPasteShortcut,
   resolveEditorPasteSource
 } from '~/utils/clipboardHelpers'
 import { CANVAS_CUSTOM_PROPS } from '~/utils/canvasCustomProps'
@@ -47,5 +48,18 @@ describe('resolveEditorPasteSource', () => {
 
   it('usa o clipboard Fabric apenas para uma ação explícita do editor', () => {
     expect(resolveEditorPasteSource(true)).toBe('editor')
+  })
+})
+
+describe('isEditorClipboardPasteShortcut', () => {
+  it('reconhece Ctrl/Cmd+Shift+V como colagem explícita do editor', () => {
+    expect(isEditorClipboardPasteShortcut({ key: 'v', ctrlKey: true, shiftKey: true })).toBe(true)
+    expect(isEditorClipboardPasteShortcut({ key: 'V', metaKey: true, shiftKey: true })).toBe(true)
+  })
+
+  it('mantém Ctrl/Cmd+V normal para o clipboard do sistema', () => {
+    expect(isEditorClipboardPasteShortcut({ key: 'v', ctrlKey: true })).toBe(false)
+    expect(isEditorClipboardPasteShortcut({ key: 'v', metaKey: true })).toBe(false)
+    expect(isEditorClipboardPasteShortcut({ key: 'v', ctrlKey: true, shiftKey: false })).toBe(false)
   })
 })

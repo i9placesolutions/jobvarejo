@@ -41,6 +41,13 @@ export const CLIPBOARD_CLONE_PROPS: ReadonlyArray<string> = Array.from(new Set([
 
 export type EditorPasteSource = 'system' | 'editor'
 
+export type ClipboardShortcutInput = {
+    key?: string
+    ctrlKey?: boolean
+    metaKey?: boolean
+    shiftKey?: boolean
+}
+
 /**
  * Ctrl/Cmd+V é sempre uma colagem do sistema. O clone Fabric só pode ser
  * usado quando uma ação explícita da interface pede para colar uma cópia do
@@ -48,3 +55,13 @@ export type EditorPasteSource = 'system' | 'editor'
  */
 export const resolveEditorPasteSource = (explicitEditorPaste = false): EditorPasteSource =>
     explicitEditorPaste ? 'editor' : 'system'
+
+/**
+ * Atalho explícito para colar a cópia em memória do Fabric. Mantemos
+ * Ctrl/Cmd+V livre para o clipboard nativo atual (texto/imagem), inclusive
+ * quando houver uma cópia interna anterior disponível.
+ */
+export const isEditorClipboardPasteShortcut = (event: ClipboardShortcutInput): boolean =>
+    Boolean(event?.shiftKey) &&
+    Boolean(event?.ctrlKey || event?.metaKey) &&
+    String(event?.key || '').toLowerCase() === 'v'

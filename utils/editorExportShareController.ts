@@ -2,6 +2,7 @@ import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
 import { waitForFabricImagesDecoded } from './fabricImageHelpers'
 import { collectObjectsDeep } from './fabricObjectClassifiers'
 import { isValidClipPath } from '~/utils/canvasValidation'
+import { isQuickLogoPlaceholder } from './quickLogoSlot'
 import {
     downloadFile,
     downloadBlob,
@@ -255,6 +256,9 @@ export const withProductZonesHiddenForOutput = async <T>(
     // Ocultar somente guias; grupos de zona podem conter os produtos.
     const zones = allObjects.filter((o: any) => {
         if (legacyZoneOutlines.has(o)) return true
+        // A reserva da logo deve ser salva no canvas. Esconda-a só durante a
+        // renderização de saída para que ela nunca vaze para PNG/PDF/SVG.
+        if (isQuickLogoPlaceholder(o)) return true
         const name = String(o.name || '')
         if (['zoneRect', 'zone-border', 'product-zone-outline'].includes(name)) return true
         if (o.excludeFromExport === true && !ctx.isLikelyProductZone(o)) return true

@@ -27,6 +27,7 @@ import {
 } from './controlObjectClassifiers'
 import { isUserGuideObject } from './userGuideHelpers'
 import { isFrameLikeObject } from './frameGeometry'
+import { isQuickLogoPlaceholder } from './quickLogoSlot'
 import {
     captureDynamicBusinessTextBaseline,
     fitDynamicBusinessTextObject,
@@ -348,7 +349,11 @@ export const ensurePersistentContentFlags = (obj: any): void => {
         !!obj.parentZoneId ||
         name === 'gridZone' ||
         name === 'productZoneContainer' ||
-        name.startsWith('product-card')
+        name.startsWith('product-card') ||
+        // A reserva da logo é conteúdo persistente do template. O output a
+        // oculta temporariamente, mas o Fabric precisa recebê-la com a flag
+        // desligada para incluí-la em canvas.toJSON().
+        isQuickLogoPlaceholder(obj)
     if (isPersistentContent && obj.excludeFromExport) {
         obj.excludeFromExport = false
     }

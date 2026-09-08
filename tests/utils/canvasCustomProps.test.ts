@@ -22,6 +22,17 @@ describe('CANVAS_CUSTOM_PROPS', () => {
     expect(CANVAS_CUSTOM_PROPS).toContain('excludeFromExport')
   })
 
+  it('contem o contrato persistido da logo dinamica', () => {
+    expect(CANVAS_CUSTOM_PROPS).toContain('businessProfileField')
+    expect(CANVAS_CUSTOM_PROPS).toContain('quickFieldEnabled')
+    expect(CANVAS_CUSTOM_PROPS).toContain('quickLogoSource')
+    expect(CANVAS_CUSTOM_PROPS).toContain('quickLogoSlot')
+    expect(CANVAS_CUSTOM_PROPS).toContain('quickLogoMaxWidth')
+    expect(CANVAS_CUSTOM_PROPS).toContain('quickLogoMaxHeight')
+    expect(CANVAS_CUSTOM_PROPS).toContain('quickLogoCenterX')
+    expect(CANVAS_CUSTOM_PROPS).toContain('quickLogoCenterY')
+  })
+
   it('contem props de frame', () => {
     expect(CANVAS_CUSTOM_PROPS).toContain('isFrame')
     expect(CANVAS_CUSTOM_PROPS).toContain('clipContent')

@@ -26,6 +26,22 @@ describe('isBlockedObjectForScopedExport', () => {
     })).toBe(true)
   })
 
+  it('bloqueia a reserva da logo dinamica, mas nao a imagem da logo', () => {
+    expect(isBlockedObjectForScopedExport({
+      type: 'rect',
+      businessProfileField: 'logo',
+      quickLogoSlot: true,
+      excludeFromExport: false
+    })).toBe(true)
+
+    expect(isBlockedObjectForScopedExport({
+      type: 'image',
+      businessProfileField: 'logo',
+      quickLogoSlot: true,
+      excludeFromExport: false
+    })).toBe(false)
+  })
+
   it('rejeita objeto comum (text/image/rect/etc)', () => {
     expect(isBlockedObjectForScopedExport({ type: 'text' })).toBe(false)
     expect(isBlockedObjectForScopedExport({ type: 'image' })).toBe(false)

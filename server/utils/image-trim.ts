@@ -10,7 +10,12 @@ export const trimRasterImageBuffer = async (input: Buffer): Promise<Buffer> => {
 
     try {
       const trimmed = await sharp(rotated)
-        .trim({ threshold: 16 })
+        // Nunca inferir o fundo pela cor do canto. O comportamento padrao do
+        // Sharp usa esse pixel como referencia e, por exemplo, remove uma
+        // moldura/preenchimento preto totalmente opaco. Remover somente a
+        // margem realmente transparente; quem quiser remover fundo usa o
+        // fluxo explicito `removeBackground` no upload.
+        .trim({ background: '#00000000', threshold: 16 })
         .toBuffer({ resolveWithObject: true })
       const nextWidth = Number(trimmed.info.width || 0)
       const nextHeight = Number(trimmed.info.height || 0)

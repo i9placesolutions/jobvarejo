@@ -695,6 +695,20 @@ describe('ensurePersistentContentFlags', () => {
     ensurePersistentContentFlags(b)
     expect(b.excludeFromExport).toBe(false)
   })
+
+  it('REGRESSAO: reserva da logo dinamica permanece serializavel', () => {
+    const slot: any = {
+      type: 'rect',
+      businessProfileField: 'logo',
+      quickLogoSlot: true,
+      excludeFromExport: true
+    }
+
+    ensurePersistentContentFlags(slot)
+
+    expect(slot.excludeFromExport).toBe(false)
+    expect(typeof slot._customId).toBe('string')
+  })
 })
 
 describe('isObjectMaskCandidate', () => {
