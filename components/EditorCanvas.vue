@@ -4110,7 +4110,12 @@ import {
     MES_DO_CONSUMIDOR_COLORS,
     getMesDoConsumidorAssetUrl,
     getMesDoConsumidorLayout,
-    isFlyerTemplatePresetId
+    isFlyerTemplatePresetId,
+    getReferenceFlyerAssetUrl,
+    getReferenceFlyerLayout,
+    isReferenceFlyerPresetId,
+    REFERENCE_FLYER_ASSETS,
+    type ReferenceFlyerPresetId
 } from '~/utils/mesDoConsumidorPreset'
 import {
     formatBusinessAddressValues,
@@ -27278,6 +27283,570 @@ const materializeMesDoConsumidorTemplatePage = async (
     return true
 }
 
+/**
+ * Materializa os três modelos de referência enviados pelo usuário sem
+ * achatar a arte em uma imagem. Fundo, faixas, chips, títulos e cartões são
+ * objetos Fabric independentes; somente a textura/ornamento visual é raster
+ * e vem de uma chave reutilizável da biblioteca de uploads.
+ */
+const materializeReferenceFlyerTemplatePage = async (
+    seed: QuickEditorSeed,
+    theme: Record<string, any>,
+    plan: {
+        modelId: string
+        modelName: string
+        formatId: string
+        formatLabel: string
+        modelIndex: number
+        formatIndex: number
+    }
+): Promise<boolean> => {
+    const presetId = seed.templatePresetId
+    if (!isReferenceFlyerPresetId(presetId) || !canvas.value || !activePage.value || !fabric) return false
+
+    const width = Math.max(320, Math.round(Number(activePage.value.width || seed.width || 1080)))
+    const height = Math.max(320, Math.round(Number(activePage.value.height || seed.height || 1350)))
+    const layout = getReferenceFlyerLayout(presetId, plan.formatId)
+    const asset = REFERENCE_FLYER_ASSETS[presetId]
+    const seedId = String(seed.id || '')
+    const isTv = plan.formatId === 'tv'
+    const isStory = plan.formatId === 'stories'
+
+    const existingObjects = canvas.value.getObjects()
+    let frame = existingObjects
+        .filter((object: any) => {
+            if (!object?.isFrame || object?.templateCompositionManaged || object?.quickSeedId) return false
+            const frameObjectId = String(object?._customId || '').trim()
+            if (!frameObjectId) return false
+            return !existingObjects.some((candidate: any) => (
+                candidate !== object && String(candidate?.parentFrameId || '').trim() === frameObjectId
+            ))
+        })
+        .slice(-1)[0] as any
+    if (!frame) {
+        addFrame({ width, height })
+        frame = [...canvas.value.getObjects()].filter((object: any) => object?.isFrame).slice(-1)[0] as any
+    }
+    if (!frame) return false
+
+    frame.set({ width, height, scaleX: 1, scaleY: 1 })
+    frame.setCoords?.()
+    const frameId = String(frame._customId || makeId())
+    frame._customId = frameId
+    frame.set({
+        name: `${presetId}-background-${plan.formatId}`,
+        layerName: 'Cor do fundo — altere aqui',
+        fill: layout.background,
+        stroke: 'transparent',
+        backgroundColor: layout.background,
+        isQuickGenerated: true,
+        quickSeedId: seedId,
+        templateCompositionManaged: true,
+        templateModelId: plan.modelId,
+        templateModelName: plan.modelName,
+        templateFormatId: plan.formatId,
+        templateFormatLabel: plan.formatLabel,
+        templateThemeId: String(theme.id || presetId),
+        templateThemeName: String(theme.name || plan.modelName)
+    })
+
+    const frameBounds = getFrameBounds(frame) || {
+        left: Number(frame.left || 0) - width / 2,
+        top: Number(frame.top || 0) - height / 2,
+        width,
+        height
+    }
+    const frameLeft = frameBounds.left
+    const frameTop = frameBounds.top
+    const centerX = frameLeft + width / 2
+
+    const applyPresetMetadata = (object: any, name: string, layerName: string) => {
+        object._customId = String(object?._customId || makeId())
+        object.set({
+            name,
+            layerName,
+            selectable: true,
+            evented: true,
+            hasControls: true,
+            hasBorders: true,
+            lockMovementX: false,
+            lockMovementY: false,
+            lockScalingX: false,
+            lockScalingY: false,
+            lockRotation: false,
+            lockScalingFlip: true,
+            objectCaching: false,
+            excludeFromExport: false,
+            isQuickGenerated: true,
+            quickSeedId: seedId,
+            templateCompositionManaged: true,
+            parentFrameId: frameId
+        })
+        canvas.value?.add(object)
+        syncObjectFrameClip(object)
+        object.setCoords?.()
+        return object
+    }
+
+    const addNativeRect = (
+        name: string,
+        layerName: string,
+        box: { left: number; top: number; width: number; height: number; radius?: number },
+        fill: string,
+        opacity = 1,
+        angle = 0
+    ) => {
+        const radius = Math.max(0, Number(box.radius || 0))
+        return applyPresetMetadata(new fabric.Rect({
+            left: box.left,
+            top: box.top,
+            width: Math.max(1, box.width),
+            height: Math.max(1, box.height),
+            originX: 'left',
+            originY: 'top',
+            rx: radius,
+            ry: radius,
+            fill,
+            opacity,
+            angle,
+            stroke: 'transparent',
+            strokeWidth: 0,
+            strokeUniform: true
+        }), name, layerName)
+    }
+
+    const addCircle = (name: string, layerName: string, x: number, y: number, radius: number, fill: string, opacity = 1) =>
+        applyPresetMetadata(new fabric.Circle({
+            left: x,
+            top: y,
+            radius: Math.max(2, radius),
+            originX: 'center',
+            originY: 'center',
+            fill,
+            opacity,
+            stroke: 'transparent',
+            strokeWidth: 0
+        }), name, layerName)
+
+    const addImageAsset = async (opts: {
+        name: string
+        layerName: string
+        key: string
+        centerX: number
+        centerY: number
+        targetWidth: number
+        opacity?: number
+        angle?: number
+    }): Promise<any | null> => {
+        try {
+            const source = getReferenceFlyerAssetUrl(opts.key)
+            const image = await fabric.Image.fromURL(source, { crossOrigin: 'anonymous' })
+            const naturalWidth = Math.max(1, Number(image.width || 1))
+            const scale = Math.max(1, opts.targetWidth) / naturalWidth
+            image.set({
+                left: opts.centerX,
+                top: opts.centerY,
+                originX: 'center',
+                originY: 'center',
+                scaleX: scale,
+                scaleY: scale,
+                opacity: Number.isFinite(Number(opts.opacity)) ? Number(opts.opacity) : 1,
+                angle: Number(opts.angle || 0),
+                crossOrigin: 'anonymous'
+            })
+            ;(image as any).__originalSrc = source
+            return applyPresetMetadata(image, opts.name, opts.layerName)
+        } catch (error) {
+            console.warn(`[flyer-template] Não foi possível carregar ${opts.layerName}:`, error)
+            return null
+        }
+    }
+
+    const getFieldSample = (field: string): string => (
+        STORE_DYNAMIC_FIELDS.find(item => item.field === field)?.sample || 'Dado da loja'
+    )
+    const addText = (opts: {
+        name: string
+        layerName: string
+        text: string
+        left: number
+        top: number
+        width: number
+        fontSize: number
+        fill: string
+        fontWeight?: number | string
+        field?: string
+        dataField?: 'validity'
+        textAlign?: 'left' | 'center' | 'right'
+        originX?: 'left' | 'center' | 'right'
+        angle?: number
+        shadow?: any
+        validity?: boolean
+    }) => {
+        const object = new fabric.Textbox(opts.text, {
+            left: opts.left,
+            top: opts.top,
+            width: Math.max(32, opts.width),
+            originX: opts.originX || 'center',
+            originY: 'center',
+            fontFamily: 'Barlow, Inter, Arial, sans-serif',
+            fontSize: Math.max(10, opts.fontSize),
+            fontWeight: opts.fontWeight || 700,
+            fill: opts.fill,
+            shadow: opts.shadow,
+            textAlign: opts.textAlign || 'center',
+            lineHeight: 1.02,
+            angle: Number(opts.angle || 0),
+            editable: true,
+            selectable: true,
+            evented: true,
+            hasControls: true,
+            hasBorders: true,
+            lockScalingX: false,
+            lockScalingY: false,
+            objectCaching: false,
+            businessProfileField: opts.field || undefined,
+            quickDataField: opts.dataField || undefined,
+            quickFieldEnabled: true,
+            ...(opts.validity ? {
+                quickValidityStartDate: String(seed.startDate || ''),
+                quickValidityEndDate: String(seed.endDate || ''),
+                quickValidityMode: seed.validityMode || 'while_stocks',
+                quickValidityWhileStocks: seed.validityWhileStocks !== false,
+                quickValidityDateFormat: 'numeric',
+                quickOfferScope: seed.offerScope || {}
+            } : {}),
+            ...getDynamicBusinessTextOptions(opts.field || opts.dataField || '')
+        })
+        applyPresetMetadata(object, opts.name, opts.layerName)
+        configureDynamicBusinessTextObject(object, fabric)
+        fitDynamicBusinessTextObject(object)
+        object.setCoords?.()
+        return object
+    }
+
+    // Base shapes: all colors remain directly editable in the object panel.
+    addNativeRect(`${presetId}-top-strip`, 'Forma nativa — faixa superior', {
+        left: frameLeft,
+        top: frameTop,
+        width,
+        height: Math.max(8, height * (isStory ? 0.025 : 0.038))
+    }, layout.accent)
+    addNativeRect(`${presetId}-header-shadow`, 'Forma nativa — sombra do cabeçalho', {
+        left: frameLeft + width * (isTv ? 0.04 : 0.035) + width * 0.012,
+        top: frameTop + height * (isTv ? 0.08 : 0.055) + height * 0.012,
+        width: width * (isTv ? 0.43 : 0.93),
+        height: height * (isTv ? 0.43 : (isStory ? 0.29 : 0.31)),
+        radius: Math.min(width, height) * 0.025
+    }, layout.backgroundDark, 0.62)
+    addNativeRect(`${presetId}-header-panel`, 'Forma nativa — painel do cabeçalho', {
+        left: frameLeft + width * (isTv ? 0.04 : 0.035),
+        top: frameTop + height * (isTv ? 0.08 : 0.055),
+        width: width * (isTv ? 0.43 : 0.93),
+        height: height * (isTv ? 0.43 : (isStory ? 0.29 : 0.31)),
+        radius: Math.min(width, height) * 0.025
+    }, layout.backgroundDark)
+
+    // Diagonais e pontos são formas soltas, nunca fazem parte do fundo.
+    addNativeRect(`${presetId}-diagonal-accent`, 'Forma nativa — faixa diagonal', {
+        left: frameLeft + width * 0.49,
+        top: frameTop + height * 0.045,
+        width: width * 0.58,
+        height: Math.max(20, height * 0.045),
+        radius: Math.min(width, height) * 0.018
+    }, layout.accent, 0.94, isTv ? -7 : -10)
+    addCircle(`${presetId}-decor-circle-1`, 'Forma nativa — círculo decorativo 1', frameLeft + width * 0.07, frameTop + height * 0.44, width * 0.06, layout.accent, 0.85)
+    addCircle(`${presetId}-decor-circle-2`, 'Forma nativa — círculo decorativo 2', frameLeft + width * 0.94, frameTop + height * 0.49, width * 0.045, layout.panel, 0.25)
+
+    const titleX = frameLeft + width * (isTv ? 0.26 : 0.30)
+    const titleY = frameTop + height * (isTv ? 0.19 : 0.15)
+    const titleWidth = width * (isTv ? 0.31 : 0.50)
+    const titleFont = Math.max(22, Math.min(isTv ? 76 : 82, width * (isStory ? 0.075 : 0.065)))
+    const eyebrow = presetId === 'terca-quarta-verde'
+        ? 'TERÇA & QUARTA'
+        : presetId === 'segunda-da-limpeza'
+            ? 'SEGUNDA DA LIMPEZA'
+            : 'SEMANA DE'
+    const headline = presetId === 'terca-quarta-verde' ? 'VERDE' : presetId === 'segunda-da-limpeza' ? 'LIMPEZA' : 'OFERTAS'
+    addText({
+        name: `${presetId}-eyebrow`,
+        layerName: 'Texto editável — chamada principal',
+        text: eyebrow,
+        left: titleX,
+        top: titleY,
+        width: titleWidth,
+        fontSize: Math.max(14, titleFont * 0.34),
+        fill: layout.accent,
+        fontWeight: 900,
+        angle: isTv ? -2 : -1
+    })
+    addText({
+        name: `${presetId}-headline`,
+        layerName: 'Texto editável — título 3D',
+        text: headline,
+        left: titleX,
+        top: titleY + titleFont * 0.66,
+        width: titleWidth,
+        fontSize: titleFont,
+        fill: layout.text,
+        fontWeight: 900,
+        angle: isTv ? -2 : -1,
+        shadow: typeof fabric.Shadow === 'function'
+            ? new fabric.Shadow({ color: layout.backgroundDark, blur: 2, offsetX: 0, offsetY: Math.max(4, titleFont * 0.075) })
+            : undefined
+    })
+    addText({
+        name: `${presetId}-slogan`,
+        layerName: 'Texto editável — slogan',
+        text: presetId === 'segunda-da-limpeza' ? 'CASA LIMPA, VIDA MAIS LEVE!' : 'OFERTAS FRESCAS PARA SUA CASA',
+        left: titleX,
+        top: titleY + titleFont * 1.27,
+        width: titleWidth,
+        fontSize: Math.max(12, titleFont * 0.24),
+        fill: layout.muted,
+        fontWeight: 800
+    })
+
+    const logoLeft = frameLeft + width * (isTv ? 0.49 : 0.58)
+    const logoTop = frameTop + height * (isTv ? 0.1 : 0.075)
+    const logoWidth = width * (isTv ? 0.46 : 0.36)
+    const logoHeight = height * (isTv ? 0.30 : 0.18)
+    addNativeRect(`${presetId}-logo-panel`, 'Forma nativa — painel da marca', {
+        left: logoLeft,
+        top: logoTop,
+        width: logoWidth,
+        height: logoHeight,
+        radius: Math.min(width, height) * 0.02
+    }, layout.panel)
+    addText({
+        name: `${presetId}-company-name`,
+        layerName: 'Dado dinâmico — nome da loja',
+        field: 'companyName',
+        text: getFieldSample('companyName'),
+        left: logoLeft + logoWidth / 2,
+        top: logoTop + logoHeight * 0.40,
+        width: logoWidth * 0.88,
+        fontSize: Math.max(13, Math.min(30, width * 0.026)),
+        fill: layout.panelText,
+        fontWeight: 900
+    })
+    addText({
+        name: `${presetId}-slogan-dynamic`,
+        layerName: 'Dado dinâmico — slogan da loja',
+        field: 'slogan',
+        text: getFieldSample('slogan'),
+        left: logoLeft + logoWidth / 2,
+        top: logoTop + logoHeight * 0.72,
+        width: logoWidth * 0.9,
+        fontSize: Math.max(10, Math.min(17, width * 0.015)),
+        fill: layout.panelText,
+        fontWeight: 600
+    })
+    addText({
+        name: `${presetId}-phone-header`,
+        layerName: 'Dado dinâmico — telefone',
+        field: 'phone',
+        text: getFieldSample('phone'),
+        left: logoLeft + logoWidth / 2,
+        top: logoTop + logoHeight * 0.91,
+        width: logoWidth * 0.9,
+        fontSize: Math.max(10, Math.min(17, width * 0.015)),
+        fill: layout.panelText,
+        fontWeight: 800
+    })
+
+    // O elemento raster é um ornamento independente; o fundo não está dentro dele.
+    await addImageAsset({
+        name: `${presetId}-hero-asset`,
+        layerName: asset.hero.layerName,
+        key: asset.hero.key,
+        centerX: frameLeft + layout.hero.x * width,
+        centerY: frameTop + layout.hero.y * height,
+        targetWidth: Math.max(110, layout.hero.width * width),
+        opacity: layout.hero.opacity,
+        angle: layout.hero.angle
+    })
+    if (presetId === 'segunda-da-limpeza') {
+        const cleaner = REFERENCE_FLYER_ASSETS['segunda-da-limpeza'].person
+        await addImageAsset({
+            name: `${presetId}-cleaner-asset`,
+            layerName: cleaner.layerName,
+            key: cleaner.key,
+            centerX: frameLeft + width * 0.87,
+            centerY: frameTop + height * 0.235,
+            targetWidth: Math.max(150, width * 0.32),
+            opacity: 1,
+            angle: 0
+        })
+    }
+
+    const validityWidth = Math.max(180, width * (isTv ? 0.40 : 0.76))
+    const validityHeight = Math.max(30, height * (isStory ? 0.045 : 0.052))
+    const validityCenterX = frameLeft + width * (isTv ? 0.27 : 0.50)
+    const validityCenterY = frameTop + height * (isTv ? 0.49 : 0.385)
+    addNativeRect(`${presetId}-validity-base`, 'Forma nativa — base da validade', {
+        left: validityCenterX - validityWidth / 2,
+        top: validityCenterY - validityHeight / 2,
+        width: validityWidth,
+        height: validityHeight,
+        radius: validityHeight * 0.5
+    }, layout.accent)
+    addText({
+        name: `${presetId}-validity`,
+        layerName: 'Dado dinâmico — validade das ofertas',
+        dataField: 'validity',
+        validity: true,
+        text: getFieldSample('validity'),
+        left: validityCenterX,
+        top: validityCenterY,
+        width: validityWidth * 0.92,
+        fontSize: Math.max(11, Math.min(20, width * 0.017)),
+        fill: layout.panelText,
+        fontWeight: 900
+    })
+
+    // A zona nasce vazia: os produtos entram depois na edição rápida.
+    canvas.value.setActiveObject(frame)
+    await addGridZone()
+    const zone = [...canvas.value.getObjects()]
+        .filter((object: any) => isLikelyProductZone(object) && String(object?.parentFrameId || '').trim() === frameId)
+        .slice(-1)[0] as any
+    if (!zone) return false
+    const zoneWidth = Math.max(120, layout.productZone.width * width)
+    const zoneHeight = Math.max(140, layout.productZone.height * height)
+    zone._customId = String(zone._customId || makeCanvasObjectId())
+    zone.parentFrameId = frameId
+    zone.isQuickGenerated = true
+    zone.quickSeedId = seedId
+    zone.templateCompositionManaged = true
+    zone.templateModelId = plan.modelId
+    zone.templateModelName = plan.modelName
+    zone.templateFormatId = plan.formatId
+    zone.templateFormatLabel = plan.formatLabel
+    zone.templateThemeId = String(theme.id || presetId)
+    zone.templateThemeName = String(theme.name || plan.modelName)
+    zone._zoneWidth = zoneWidth
+    zone._zoneHeight = zoneHeight
+    zone._zoneGlobalStyles = normalizeGlobalStyles({
+        ...(zone._zoneGlobalStyles || {}),
+        cardColor: layout.panel,
+        cardBorderColor: layout.accent,
+        cardBorderWidth: presetId === 'semana-de-ofertas' ? 0 : 2,
+        prodNameColor: layout.panelText,
+        accentColor: layout.accent,
+        splashColor: layout.backgroundDark,
+        splashFill: layout.backgroundDark,
+        splashTextColor: layout.text,
+        priceTextColor: layout.text
+    })
+    zone.set({
+        left: frameLeft + layout.productZone.x * width,
+        top: frameTop + layout.productZone.y * height,
+        width: zoneWidth,
+        height: zoneHeight,
+        scaleX: 1,
+        scaleY: 1
+    })
+    const zoneRect = getZoneRect(zone)
+    if (zoneRect) {
+        zoneRect.set({
+            left: 0,
+            top: 0,
+            width: zoneWidth,
+            height: zoneHeight,
+            rx: Math.min(zoneWidth, zoneHeight) * layout.productZone.radius,
+            ry: Math.min(zoneWidth, zoneHeight) * layout.productZone.radius,
+            fill: presetId === 'semana-de-ofertas' ? layout.backgroundDark : layout.panel,
+            stroke: presetId === 'semana-de-ofertas' ? layout.accent : layout.accent,
+            strokeWidth: presetId === 'semana-de-ofertas' ? 3 : 2,
+            strokeDashArray: [12, 8],
+            scaleX: 1,
+            scaleY: 1
+        })
+        zoneRect.setCoords?.()
+    }
+    ensureZoneSanity(zone)
+    zone.setCoords?.()
+    setActiveProductZone(zone, { syncImportTarget: true })
+
+    const footerHeight = Math.max(76, height * (isStory ? 0.095 : isTv ? 0.16 : 0.12))
+    const footerTop = frameTop + height - footerHeight
+    addNativeRect(`${presetId}-footer`, 'Forma nativa — rodapé editável', {
+        left: frameLeft,
+        top: footerTop,
+        width,
+        height: footerHeight,
+        radius: 0
+    }, layout.footer)
+    const footerFont = Math.max(11, Math.min(25, width * (isTv ? 0.017 : 0.022)))
+    addText({
+        name: `${presetId}-footer-company`,
+        layerName: 'Dado dinâmico — nome da loja no rodapé',
+        field: 'companyName',
+        text: getFieldSample('companyName'),
+        left: frameLeft + width * 0.08,
+        top: footerTop + footerHeight * 0.30,
+        width: width * 0.28,
+        fontSize: footerFont,
+        fill: layout.text,
+        fontWeight: 900,
+        textAlign: 'left',
+        originX: 'left'
+    })
+    addText({
+        name: `${presetId}-footer-address`,
+        layerName: 'Dado dinâmico — endereço',
+        field: 'address',
+        text: getFieldSample('address'),
+        left: frameLeft + width * 0.08,
+        top: footerTop + footerHeight * 0.69,
+        width: width * 0.48,
+        fontSize: Math.max(10, footerFont * 0.66),
+        fill: layout.text,
+        fontWeight: 600,
+        textAlign: 'left',
+        originX: 'left'
+    })
+    addText({
+        name: `${presetId}-footer-whatsapp`,
+        layerName: 'Dado dinâmico — WhatsApp',
+        field: 'whatsapp',
+        text: getFieldSample('whatsapp'),
+        left: frameLeft + width * 0.74,
+        top: footerTop + footerHeight * 0.32,
+        width: width * 0.40,
+        fontSize: footerFont,
+        fill: layout.accent,
+        fontWeight: 900
+    })
+    addText({
+        name: `${presetId}-footer-instagram`,
+        layerName: 'Dado dinâmico — Instagram',
+        field: 'instagram',
+        text: getFieldSample('instagram'),
+        left: frameLeft + width * 0.74,
+        top: footerTop + footerHeight * 0.70,
+        width: width * 0.40,
+        fontSize: Math.max(10, footerFont * 0.66),
+        fill: layout.text,
+        fontWeight: 600
+    })
+
+    ensureFramesBelowContents()
+    refreshCanvasObjects({ immediate: true })
+    zoomToFit({ persist: true })
+    safeRequestRenderAll()
+    await Promise.resolve(saveCurrentState({
+        allowEmptyOverwrite: true,
+        reason: `${presetId}-${plan.modelId}-${plan.formatId}`,
+        source: 'system',
+        skipCoalesce: true,
+        skipIfUnchanged: false
+    }))
+    await flushPersistenceNow(`${presetId}-all-formats`, { force: true })
+    return true
+}
+
 const materializeTemplateSeedPage = async (
     seed: QuickEditorSeed,
     theme: Record<string, any>,
@@ -27294,6 +27863,9 @@ const materializeTemplateSeedPage = async (
 
     if (seed.templatePresetId === 'mes-do-consumidor-3d') {
         return await materializeMesDoConsumidorTemplatePage(seed, theme, plan)
+    }
+    if (isReferenceFlyerPresetId(seed.templatePresetId)) {
+        return await materializeReferenceFlyerTemplatePage(seed, theme, plan)
     }
 
     const width = Math.max(320, Math.round(Number(activePage.value.width || seed.width || 1080)))
@@ -27415,7 +27987,10 @@ const materializeMesDoConsumidorAllTemplatePages = async (
     seed: QuickEditorSeed,
     theme: Record<string, any>
 ): Promise<boolean> => {
-    if (!isFlyerTemplatePresetId(seed.templatePresetId) || seed.templatePresetId !== 'mes-do-consumidor-3d') return false
+    if (
+        !isFlyerTemplatePresetId(seed.templatePresetId) ||
+        (seed.templatePresetId !== 'mes-do-consumidor-3d' && !isReferenceFlyerPresetId(seed.templatePresetId))
+    ) return false
     if (!canvas.value || !activePage.value) return false
 
     const originalPageId = String(activePage.value?.id || '').trim()
@@ -27595,7 +28170,7 @@ const processQuickEditorSeed = async (): Promise<void> => {
                 const page = activePage.value as any
                 if (!page) return
 
-                if (seed.templatePresetId === 'mes-do-consumidor-3d') {
+                if (seed.templatePresetId === 'mes-do-consumidor-3d' || isReferenceFlyerPresetId(seed.templatePresetId)) {
                     const completed = await materializeMesDoConsumidorAllTemplatePages(seed, theme)
                     if (!completed) return
                     quickSeedAppliedForProjectId = projectId

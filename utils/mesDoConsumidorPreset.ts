@@ -12,6 +12,21 @@ export const FLYER_TEMPLATE_PRESETS = [
     id: 'mes-do-consumidor-3d',
     name: 'Mês do Consumidor 3D',
     description: 'Fundo por cor editável, formas nativas, selo e elementos soltos.'
+  },
+  {
+    id: 'terca-quarta-verde',
+    name: 'Terça & Quarta Verde',
+    description: 'Composição hortifruti verde, formas editáveis e folhagem 3D separada.'
+  },
+  {
+    id: 'segunda-da-limpeza',
+    name: 'Segunda da Limpeza',
+    description: 'Composição azul de limpeza, bolhas 3D separadas e zona de ofertas vazia.'
+  },
+  {
+    id: 'semana-de-ofertas',
+    name: 'Semana de Ofertas',
+    description: 'Composição vermelha, preta e amarela com selo percentual 3D separado.'
   }
 ] as const
 
@@ -52,6 +67,134 @@ export const MES_DO_CONSUMIDOR_ASSETS = {
 /** Usa o proxy local para preservar a mesma origem e funcionar no editor/export. */
 export const getMesDoConsumidorAssetUrl = (key: string): string =>
   `/api/storage/p?key=${encodeURIComponent(key)}`
+
+export type ReferenceFlyerPresetId = Exclude<FlyerTemplatePresetId, 'mes-do-consumidor-3d'>
+
+export const isReferenceFlyerPresetId = (value: unknown): value is ReferenceFlyerPresetId =>
+  value === 'terca-quarta-verde' || value === 'segunda-da-limpeza' || value === 'semana-de-ofertas'
+
+export const REFERENCE_FLYER_ASSETS = {
+  'terca-quarta-verde': {
+    hero: {
+      key: 'imagens/biblioteca/elementos/encarte-hortifruti-folhagem-3d.png',
+      category: 'elementos' as const,
+      layerName: 'Elemento 3D — folhagem hortifruti'
+    }
+  },
+  'segunda-da-limpeza': {
+    hero: {
+      key: 'imagens/biblioteca/elementos/encarte-limpeza-bolhas-brilho.png',
+      category: 'elementos' as const,
+      layerName: 'Elemento 3D — bolhas e brilhos de limpeza'
+    },
+    person: {
+      key: 'imagens/biblioteca/pessoas/encarte-profissional-limpeza.png',
+      category: 'pessoas' as const,
+      layerName: 'Pessoa recortada — profissional de limpeza'
+    }
+  },
+  'semana-de-ofertas': {
+    hero: {
+      key: 'imagens/biblioteca/selos/encarte-ofertas-etiqueta-percentual-3d.png',
+      category: 'selos' as const,
+      layerName: 'Selo 3D — etiqueta percentual'
+    }
+  }
+} as const
+
+export const getReferenceFlyerAssetUrl = (key: string): string =>
+  `/api/storage/p?key=${encodeURIComponent(key)}`
+
+export type ReferenceFlyerLayout = {
+  background: string
+  backgroundDark: string
+  accent: string
+  accentDark: string
+  panel: string
+  panelText: string
+  text: string
+  muted: string
+  footer: string
+  productZone: { x: number; y: number; width: number; height: number; radius: number }
+  hero: { x: number; y: number; width: number; opacity: number; angle: number }
+}
+
+const REFERENCE_FLYER_LAYOUTS: Record<ReferenceFlyerPresetId, ReferenceFlyerLayout> = {
+  'terca-quarta-verde': {
+    background: '#6d936f',
+    backgroundDark: '#164f26',
+    accent: '#d9e91d',
+    accentDark: '#79920f',
+    panel: '#f7f8ee',
+    panelText: '#164f26',
+    text: '#f7f8ee',
+    muted: '#d9e91d',
+    footer: '#1b5c29',
+    productZone: { x: 0.5, y: 0.45, width: 0.92, height: 0.40, radius: 0.028 },
+    hero: { x: 0.77, y: 0.22, width: 0.38, opacity: 0.82, angle: -5 }
+  },
+  'segunda-da-limpeza': {
+    background: '#1373c9',
+    backgroundDark: '#073b8f',
+    accent: '#ffe100',
+    accentDark: '#e8a900',
+    panel: '#f8fcff',
+    panelText: '#073b8f',
+    text: '#f8fcff',
+    muted: '#dff3ff',
+    footer: '#08429b',
+    productZone: { x: 0.5, y: 0.45, width: 0.9, height: 0.40, radius: 0.035 },
+    hero: { x: 0.73, y: 0.24, width: 0.48, opacity: 0.54, angle: 0 }
+  },
+  'semana-de-ofertas': {
+    background: '#170b0b',
+    backgroundDark: '#080505',
+    accent: '#ffe000',
+    accentDark: '#d79f00',
+    panel: '#fff000',
+    panelText: '#140b0b',
+    text: '#ffffff',
+    muted: '#ffe000',
+    footer: '#8e150e',
+    productZone: { x: 0.5, y: 0.45, width: 0.9, height: 0.40, radius: 0.012 },
+    hero: { x: 0.84, y: 0.22, width: 0.25, opacity: 0.94, angle: 13 }
+  }
+}
+
+/**
+ * A mesma linguagem visual recebe um enquadramento próprio em cada formato.
+ * O conteúdo continua em percentuais para que a zona de produtos não vire
+ * uma imagem achatada ao alternar entre feed, story, A4 ou banner.
+ */
+export const getReferenceFlyerLayout = (
+  presetId: ReferenceFlyerPresetId,
+  formatId: string
+): ReferenceFlyerLayout => {
+  const base = REFERENCE_FLYER_LAYOUTS[presetId]
+  const format = String(formatId || '').trim()
+  if (format === 'stories') {
+    return {
+      ...base,
+      productZone: { ...base.productZone, y: 0.43, height: 0.43 },
+      hero: { ...base.hero, y: 0.21, width: Math.min(0.5, base.hero.width + 0.05) }
+    }
+  }
+  if (format === 'tv') {
+    return {
+      ...base,
+      productZone: { x: 0.63, y: 0.37, width: 0.66, height: 0.43, radius: base.productZone.radius },
+      hero: { ...base.hero, x: 0.22, y: 0.3, width: base.hero.width * 0.82 }
+    }
+  }
+  if (format === 'square') {
+    return {
+      ...base,
+      productZone: { ...base.productZone, y: 0.47, height: 0.36 },
+      hero: { ...base.hero, y: 0.23 }
+    }
+  }
+  return base
+}
 
 type RelativeBox = {
   x: number
