@@ -100,6 +100,10 @@ import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
 import { scheduleIdleWork } from '~/utils/idleSchedule'
 import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS, DUPLICATE_OFFSET } from '~/utils/canvasCustomProps'
+import {
+    resolveTemplateCompositionFrameBinding,
+    shouldPreserveTemplateFrameClip
+} from '~/utils/templateFrameClipping'
 import { normalizeQuickLogoBackdropMode } from '~/utils/quickLogoBackdrop'
 import {
     GUIDE_COLOR,
@@ -1973,6 +1977,33 @@ const findFrameUnderObject = (obj: any) => {
     return findFrameUnderObjectInList(obj, getAllFrames());
 };
 
+/**
+ * Alguns modelos antigos foram salvos depois que um elemento decorativo
+ * ultrapassou a prancheta. O editor removia o parentFrameId nesse caso, e o
+ * Fabric deixava de aplicar o recorte. Reata somente conteúdo gerenciado pela
+ * composição ao Frame que tem o mesmo seed; elementos e cards do usuário não
+ * entram nessa recuperação.
+ */
+const restoreTemplateCompositionFrameBindings = (objects: any[] = []): number => {
+    const canvasObjects = objects.length ? objects : (canvas.value?.getObjects?.() || []);
+    const frames = canvasObjects.filter((object: any) => !!object?.isFrame);
+    let restored = 0;
+
+    canvasObjects.forEach((object: any) => {
+        const frameId = resolveTemplateCompositionFrameBinding(object, frames);
+        if (!frameId) return;
+
+        object.parentFrameId = frameId;
+        delete object._frameClipOwner;
+        object.set?.('dirty', true);
+        object.setCoords?.();
+        restored += 1;
+    });
+
+    if (restored > 0) invalidateFrameRuntimeCache();
+    return restored;
+};
+
 const syncObjectFrameClip = (obj: any) => {
     if (!canvas.value || !obj) return;
     if ((obj as any).excludeFromExport) return;
@@ -2225,10 +2256,13 @@ const maybeReparentToFrameOnDrop = (obj: any) => {
 
     const currentParentFrameId = String((obj as any).parentFrameId || '').trim();
     const currentFrame = currentParentFrameId ? getFrameById(currentParentFrameId) : null;
-    // Keep frame binding only while the object is still mostly inside the frame.
-    // The old "any overlap" rule left large/dragged rectangles clipped by a stale
-    // parentFrameId, making complete objects look visually cut.
-    if (currentFrame && isObjectMostlyInsideFrame(obj, currentFrame)) {
+    // A template composition is a closed artboard: decorative pieces stay
+    // editable, but must remain clipped even when their geometry crosses the
+    // Frame edge. Regular Frames retain the old detach-on-drop behavior.
+    if (currentFrame && (
+        shouldPreserveTemplateFrameClip(currentFrame) ||
+        isObjectMostlyInsideFrame(obj, currentFrame)
+    )) {
         return;
     }
 
@@ -4071,6 +4105,13 @@ import {
     getFlyerTemplateFormat,
     type FlyerTemplateFormatId
 } from '~/utils/flyerTemplateApi'
+import {
+    MES_DO_CONSUMIDOR_ASSETS,
+    MES_DO_CONSUMIDOR_COLORS,
+    getMesDoConsumidorAssetUrl,
+    getMesDoConsumidorLayout,
+    isFlyerTemplatePresetId
+} from '~/utils/mesDoConsumidorPreset'
 import {
     formatBusinessAddressValues,
     formatBusinessContactValues,
@@ -8315,7 +8356,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             _suppressGlobalStyleUpdates = true;
 
             // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
-            rehydrateCanvasZones({
+            const repairedTemplateFrameClip = rehydrateCanvasZones({
                 legacyImageRepairMode: legacyProductCardImageRepairMode,
                 // Reload must preserve the exact card/label geometry already saved in canvas JSON.
                 // Reapplying zone styles here can relayout price groups and resurrect broken labels.
@@ -8323,6 +8364,17 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 applyGlobalLibraries: false,
                 relayout: false
             });
+
+            if (repairedTemplateFrameClip && !degradedNewPage) {
+                // The repair changes persisted parentFrameId metadata, so keep it
+                // after this load instead of relying on a later user edit.
+                scheduleIdleStatePersistence({
+                    reason: 'template-frame-clip-repair',
+                    source: 'system',
+                    markUnsaved: true,
+                    skipIfUnchanged: false
+                }, deferHeavyPostLoad ? 3000 : 450);
+            }
 
             // Clear suppression after multiple ticks to allow Vue's reactive system to settle.
             // A single rAF + nextTick is not always enough: deep watchers triggered by
@@ -10075,7 +10127,7 @@ onMounted(async () => {
 
                        // CRITICAL: Rehydrate zones AND frames to restore isFrame flags and normalize names
                       _suppressGlobalStyleUpdates = true;
-                      rehydrateCanvasZones({
+                      const repairedTemplateFrameClip = rehydrateCanvasZones({
                           legacyImageRepairMode: legacyProductCardImageRepairMode,
                           // Same safeguard for the legacy loader path: trust persisted canvas visuals on reload.
                           applyZoneStyles: false,
@@ -10191,12 +10243,15 @@ onMounted(async () => {
                           }
                       });
 
-                      if (framesFixed > 0 && !degradedPage) {
+                      if ((framesFixed > 0 || repairedTemplateFrameClip) && !degradedPage) {
                           // Re-save immediately to persist the fixes
+                          const repairReason = repairedTemplateFrameClip
+                              ? 'template-frame-clip-repair'
+                              : 'frame-fix-post-load';
                           if (!deferHeavyPostLoad) {
-	                              saveCurrentState({ reason: 'frame-fix-post-load', source: 'system', skipIfUnchanged: true });
+	                              saveCurrentState({ reason: repairReason, source: 'system', skipIfUnchanged: !repairedTemplateFrameClip });
 	                          } else {
-	                              scheduleIdleStatePersistence({ reason: 'frame-fix-post-load', source: 'system', skipIfUnchanged: true }, 3000);
+	                              scheduleIdleStatePersistence({ reason: repairReason, source: 'system', skipIfUnchanged: !repairedTemplateFrameClip }, 3000);
 	                          }
                       }
 
@@ -22294,7 +22349,7 @@ const loadCanvasData = async (data: any) => {
 
     // CRITICAL: Suppress global style updates during rehydrate (same as main load paths).
     _suppressGlobalStyleUpdates = true;
-    rehydrateCanvasZones({
+    const repairedTemplateFrameClip = rehydrateCanvasZones({
         applyZoneStyles: false,
                           applyGlobalLibraries: false,
                           relayout: false
@@ -22318,7 +22373,11 @@ const loadCanvasData = async (data: any) => {
     isHistoryProcessing.value = false;
     historyStack.value = [];
     historyIndex.value = -1;
-    saveCurrentState({ reason: 'legacy-import-load', source: 'system', skipIfUnchanged: true });
+    saveCurrentState({
+        reason: repairedTemplateFrameClip ? 'template-frame-clip-repair' : 'legacy-import-load',
+        source: 'system',
+        skipIfUnchanged: !repairedTemplateFrameClip
+    });
 }
 
 const getEditorAiGenerationContext = () => ({
@@ -26727,6 +26786,498 @@ const ensureQuickPageThumbnail = async (page: any): Promise<void> => {
     }
 }
 
+/**
+ * Materializa o modelo de referência sem transformar arte em uma imagem única.
+ *
+ * A cor pertence ao frame, amarelos/chapas são Rects nativos e os únicos
+ * rasters são assets transparentes que também existem na biblioteca Uploads.
+ */
+const materializeMesDoConsumidorTemplatePage = async (
+    seed: QuickEditorSeed,
+    theme: Record<string, any>,
+    plan: {
+        modelId: string
+        modelName: string
+        formatId: string
+        formatLabel: string
+        modelIndex: number
+        formatIndex: number
+    }
+): Promise<boolean> => {
+    if (!canvas.value || !activePage.value || !fabric) return false
+
+    const width = Math.max(320, Math.round(Number(activePage.value.width || seed.width || 1080)))
+    const height = Math.max(320, Math.round(Number(activePage.value.height || seed.height || 1350)))
+    const layout = getMesDoConsumidorLayout(plan.formatId)
+    const seedId = String(seed.id || '')
+
+    // Um modelo novo já nasce com um Frame branco vazio. Reaproveitamos esse
+    // container em vez de criar outro ao lado: cada página do preset fica com
+    // uma única prancheta exportável e não sobra uma área branca no canvas.
+    const existingObjects = canvas.value.getObjects()
+    let frame = existingObjects
+        .filter((object: any) => {
+            if (!object?.isFrame || object?.templateCompositionManaged || object?.quickSeedId) return false
+            const frameObjectId = String(object?._customId || '').trim()
+            if (!frameObjectId) return false
+            return !existingObjects.some((candidate: any) => (
+                candidate !== object && String(candidate?.parentFrameId || '').trim() === frameObjectId
+            ))
+        })
+        .slice(-1)[0] as any
+    if (!frame) {
+        addFrame({ width, height })
+        frame = [...canvas.value.getObjects()]
+            .filter((object: any) => object?.isFrame)
+            .slice(-1)[0] as any
+    }
+    if (!frame) return false
+
+    frame.set({ width, height, scaleX: 1, scaleY: 1 })
+    frame.setCoords?.()
+    canvas.value.setActiveObject(frame)
+
+    const frameId = String(frame._customId || makeId())
+    frame._customId = frameId
+    frame.set({
+        name: `mes-do-consumidor-background-${plan.formatId}`,
+        layerName: 'Cor do fundo — altere aqui',
+        // O fundo é a cor do próprio Frame: não existe bitmap vermelho no
+        // modelo, então o cliente pode trocar a paleta normalmente.
+        fill: MES_DO_CONSUMIDOR_COLORS.background,
+        stroke: 'transparent',
+        backgroundColor: MES_DO_CONSUMIDOR_COLORS.background,
+        isQuickGenerated: true,
+        quickSeedId: seedId,
+        templateCompositionManaged: true,
+        templateModelId: plan.modelId,
+        templateModelName: plan.modelName,
+        templateFormatId: plan.formatId,
+        templateFormatLabel: plan.formatLabel,
+        templateThemeId: String(theme.id || 'market-red'),
+        templateThemeName: String(theme.name || 'Oferta vermelha')
+    })
+
+    const frameBounds = getFrameBounds(frame) || {
+        left: Number(frame.left || 0) - width / 2,
+        top: Number(frame.top || 0) - height / 2,
+        width,
+        height
+    }
+    const frameLeft = frameBounds.left
+    const frameTop = frameBounds.top
+    const centerX = frameLeft + width / 2
+
+    const applyPresetMetadata = (object: any, name: string, layerName: string) => {
+        object._customId = String(object?._customId || makeId())
+        object.set({
+            name,
+            layerName,
+            selectable: true,
+            evented: true,
+            hasControls: true,
+            hasBorders: true,
+            lockMovementX: false,
+            lockMovementY: false,
+            lockScalingX: false,
+            lockScalingY: false,
+            lockRotation: false,
+            lockScalingFlip: true,
+            objectCaching: false,
+            excludeFromExport: false,
+            isQuickGenerated: true,
+            quickSeedId: seedId,
+            templateCompositionManaged: true,
+            parentFrameId: frameId
+        })
+        canvas.value?.add(object)
+        syncObjectFrameClip(object)
+        object.setCoords?.()
+        return object
+    }
+
+    const addNativeRect = (
+        name: string,
+        layerName: string,
+        box: { left: number; top: number; width: number; height: number; radius?: number },
+        fill: string,
+        opacity = 1
+    ) => {
+        const radius = Math.max(0, Number(box.radius || 0))
+        const object = new fabric.Rect({
+            left: box.left,
+            top: box.top,
+            width: Math.max(1, box.width),
+            height: Math.max(1, box.height),
+            originX: 'left',
+            originY: 'top',
+            rx: radius,
+            ry: radius,
+            fill,
+            opacity,
+            stroke: 'transparent',
+            strokeWidth: 0,
+            strokeUniform: true
+        })
+        return applyPresetMetadata(object, name, layerName)
+    }
+
+    const addImageAsset = async (opts: {
+        name: string
+        layerName: string
+        key: string
+        centerX: number
+        centerY: number
+        targetWidth: number
+        targetHeight?: number
+        opacity?: number
+        angle?: number
+        cover?: boolean
+    }): Promise<any | null> => {
+        const source = getMesDoConsumidorAssetUrl(opts.key)
+        try {
+            const image = await fabric.Image.fromURL(source, { crossOrigin: 'anonymous' })
+            const naturalWidth = Math.max(1, Number(image.width || 1))
+            const naturalHeight = Math.max(1, Number(image.height || 1))
+            const scale = opts.cover && opts.targetHeight
+                ? Math.max(opts.targetWidth / naturalWidth, opts.targetHeight / naturalHeight)
+                : opts.targetWidth / naturalWidth
+            image.set({
+                left: opts.centerX,
+                top: opts.centerY,
+                originX: 'center',
+                originY: 'center',
+                scaleX: scale,
+                scaleY: scale,
+                opacity: Number.isFinite(Number(opts.opacity)) ? Number(opts.opacity) : 1,
+                angle: Number(opts.angle || 0),
+                crossOrigin: 'anonymous'
+            })
+            ;(image as any).__originalSrc = source
+            return applyPresetMetadata(image, opts.name, opts.layerName)
+        } catch (error) {
+            console.warn(`[flyer-template] Não foi possível carregar ${opts.layerName}:`, error)
+            return null
+        }
+    }
+
+    const getFieldSample = (field: string): string => (
+        STORE_DYNAMIC_FIELDS.find(item => item.field === field)?.sample || 'Dado da loja'
+    )
+    const addDynamicText = (opts: {
+        name: string
+        layerName: string
+        field?: string
+        dataField?: 'validity'
+        text: string
+        left: number
+        top: number
+        width: number
+        fontSize: number
+        fontWeight?: number | string
+        fill: string
+        textAlign?: 'left' | 'center' | 'right'
+        originX?: 'left' | 'center' | 'right'
+        originY?: 'top' | 'center' | 'bottom'
+        validity?: boolean
+    }) => {
+        const object = new fabric.Textbox(opts.text, {
+            left: opts.left,
+            top: opts.top,
+            width: Math.max(32, opts.width),
+            originX: opts.originX || 'center',
+            originY: opts.originY || 'center',
+            fontFamily: 'Barlow, Inter, Arial, sans-serif',
+            fontSize: Math.max(10, opts.fontSize),
+            fontWeight: opts.fontWeight || 600,
+            fill: opts.fill,
+            textAlign: opts.textAlign || 'center',
+            lineHeight: 1.02,
+            editable: true,
+            selectable: true,
+            evented: true,
+            hasControls: true,
+            hasBorders: true,
+            lockScalingX: false,
+            lockScalingY: false,
+            objectCaching: false,
+            businessProfileField: opts.field || undefined,
+            quickDataField: opts.dataField || undefined,
+            quickFieldEnabled: true,
+            ...(opts.validity ? {
+                quickValidityStartDate: String(seed.startDate || ''),
+                quickValidityEndDate: String(seed.endDate || ''),
+                quickValidityMode: seed.validityMode || 'while_stocks',
+                quickValidityWhileStocks: seed.validityWhileStocks !== false,
+                quickValidityDateFormat: 'numeric',
+                quickOfferScope: seed.offerScope || {}
+            } : {}),
+            ...getDynamicBusinessTextOptions(opts.field || opts.dataField || '')
+        })
+        applyPresetMetadata(object, opts.name, opts.layerName)
+        configureDynamicBusinessTextObject(object, fabric)
+        fitDynamicBusinessTextObject(object)
+        object.setCoords?.()
+        return object
+    }
+
+    const header = layout.header
+    const footer = layout.footer
+    const headerLeft = frameLeft + header.x * width
+    const headerTop = frameTop + header.y * height
+    const headerWidth = header.width * width
+    const headerHeight = header.height * height
+    const footerLeft = frameLeft + footer.x * width
+    const footerTop = frameTop + footer.y * height
+    const footerWidth = footer.width * width
+    const footerHeight = footer.height * height
+    const headerRadius = Math.min(headerWidth, headerHeight) * header.radius
+    const footerRadius = Math.min(footerWidth, footerHeight) * footer.radius
+
+    // Todos os amarelos são formas independentes no canvas, incluindo suas
+    // sombras. Alterar, mover ou apagar uma forma não altera as demais.
+    addNativeRect('mes-do-consumidor-faixa-superior', 'Forma nativa — faixa amarela superior', {
+        left: frameLeft,
+        top: frameTop,
+        width,
+        height: Math.max(8, height * layout.topBandHeight)
+    }, MES_DO_CONSUMIDOR_COLORS.yellow)
+    addNativeRect('mes-do-consumidor-cabecalho-sombra', 'Forma nativa — sombra do cabeçalho', {
+        left: headerLeft + Math.max(6, width * 0.012),
+        top: headerTop + Math.max(6, height * 0.012),
+        width: headerWidth,
+        height: headerHeight,
+        radius: headerRadius
+    }, MES_DO_CONSUMIDOR_COLORS.yellowShadow, 0.72)
+    addNativeRect('mes-do-consumidor-cabecalho-amarelo', 'Forma nativa — cabeçalho amarelo', {
+        left: headerLeft,
+        top: headerTop,
+        width: headerWidth,
+        height: headerHeight,
+        radius: headerRadius
+    }, MES_DO_CONSUMIDOR_COLORS.yellow)
+    addNativeRect('mes-do-consumidor-rodape-sombra', 'Forma nativa — sombra do rodapé', {
+        left: footerLeft + Math.max(5, width * 0.01),
+        top: footerTop + Math.max(5, height * 0.01),
+        width: footerWidth,
+        height: footerHeight,
+        radius: footerRadius
+    }, MES_DO_CONSUMIDOR_COLORS.yellowShadow, 0.72)
+    addNativeRect('mes-do-consumidor-rodape-amarelo', 'Forma nativa — rodapé amarelo', {
+        left: footerLeft,
+        top: footerTop,
+        width: footerWidth,
+        height: footerHeight,
+        radius: footerRadius
+    }, MES_DO_CONSUMIDOR_COLORS.yellow)
+
+    // Efeito transparente opcional. Ele não carrega cor de fundo e pode ser
+    // removido/alterado sem mudar a base vermelha nativa.
+    await addImageAsset({
+        name: 'mes-do-consumidor-efeito-brilho',
+        layerName: MES_DO_CONSUMIDOR_ASSETS.gloss.layerName,
+        key: MES_DO_CONSUMIDOR_ASSETS.gloss.key,
+        centerX,
+        centerY: frameTop + height / 2,
+        targetWidth: width,
+        targetHeight: height,
+        opacity: layout.glossOpacity,
+        cover: true
+    })
+
+    const validity = layout.validity
+    const validityWidth = Math.max(150, validity.width * width)
+    const validityHeight = Math.max(28, validity.height * height)
+    const validityCenterX = frameLeft + validity.x * width
+    const validityCenterY = frameTop + validity.y * height
+    addNativeRect('mes-do-consumidor-validade-base', 'Forma nativa — base da validade', {
+        left: validityCenterX - validityWidth / 2,
+        top: validityCenterY - validityHeight / 2,
+        width: validityWidth,
+        height: validityHeight,
+        radius: Math.min(validityWidth, validityHeight) * validity.radius
+    }, MES_DO_CONSUMIDOR_COLORS.redChip)
+
+    // A zona é a única área livre: ela não recebe produto/card de exemplo e
+    // seu guia é ocultado no export pelo pipeline padrão.
+    canvas.value.setActiveObject(frame)
+    await addGridZone()
+    const zone = [...canvas.value.getObjects()]
+        .filter((object: any) => isLikelyProductZone(object) && String(object?.parentFrameId || '').trim() === frameId)
+        .slice(-1)[0] as any
+    if (!zone) return false
+    const zoneWidth = Math.max(120, layout.productZone.width * width)
+    const zoneHeight = Math.max(140, layout.productZone.height * height)
+    zone._customId = String(zone._customId || makeCanvasObjectId())
+    zone.parentFrameId = frameId
+    zone.isQuickGenerated = true
+    zone.quickSeedId = seedId
+    zone.templateCompositionManaged = true
+    zone.templateModelId = plan.modelId
+    zone.templateModelName = plan.modelName
+    zone.templateFormatId = plan.formatId
+    zone.templateFormatLabel = plan.formatLabel
+    zone.templateThemeId = String(theme.id || 'market-red')
+    zone.templateThemeName = String(theme.name || 'Oferta vermelha')
+    zone._zoneWidth = zoneWidth
+    zone._zoneHeight = zoneHeight
+    zone._zoneGlobalStyles = normalizeGlobalStyles({
+        ...(zone._zoneGlobalStyles || {}),
+        cardColor: '#ffffff',
+        cardBorderColor: MES_DO_CONSUMIDOR_COLORS.redChip,
+        cardBorderWidth: 0,
+        prodNameColor: MES_DO_CONSUMIDOR_COLORS.backgroundDark,
+        accentColor: MES_DO_CONSUMIDOR_COLORS.redChip,
+        splashColor: MES_DO_CONSUMIDOR_COLORS.redChip,
+        splashFill: MES_DO_CONSUMIDOR_COLORS.redChip,
+        splashTextColor: MES_DO_CONSUMIDOR_COLORS.white,
+        priceTextColor: MES_DO_CONSUMIDOR_COLORS.white
+    })
+    zone.set({
+        left: frameLeft + layout.productZone.x * width,
+        top: frameTop + layout.productZone.y * height,
+        width: zoneWidth,
+        height: zoneHeight,
+        scaleX: 1,
+        scaleY: 1
+    })
+    const zoneRect = getZoneRect(zone)
+    if (zoneRect) {
+        zoneRect.set({
+            left: 0,
+            top: 0,
+            width: zoneWidth,
+            height: zoneHeight,
+            rx: Math.min(zoneWidth, zoneHeight) * layout.productZone.radius,
+            ry: Math.min(zoneWidth, zoneHeight) * layout.productZone.radius,
+            scaleX: 1,
+            scaleY: 1
+        })
+        zoneRect.setCoords?.()
+    }
+    ensureZoneSanity(zone)
+    zone.setCoords?.()
+    setActiveProductZone(zone, { syncImportTarget: true })
+
+    await addImageAsset({
+        name: 'mes-do-consumidor-selo-3d',
+        layerName: MES_DO_CONSUMIDOR_ASSETS.seal.layerName,
+        key: MES_DO_CONSUMIDOR_ASSETS.seal.key,
+        centerX: frameLeft + layout.seal.x * width,
+        centerY: frameTop + layout.seal.y * height,
+        targetWidth: Math.max(150, layout.seal.width * width),
+        angle: layout.seal.angle
+    })
+    for (const [index, coin] of layout.coins.entries()) {
+        await addImageAsset({
+            name: `mes-do-consumidor-moeda-${index + 1}`,
+            layerName: `${MES_DO_CONSUMIDOR_ASSETS.discountCoin.layerName} ${index + 1}`,
+            key: MES_DO_CONSUMIDOR_ASSETS.discountCoin.key,
+            centerX: frameLeft + coin.x * width,
+            centerY: frameTop + coin.y * height,
+            targetWidth: Math.max(56, coin.width * width),
+            angle: coin.angle
+        })
+    }
+
+    addDynamicText({
+        name: 'mes-do-consumidor-validade',
+        layerName: 'Dado dinâmico — validade das ofertas',
+        dataField: 'validity',
+        text: getFieldSample('validity'),
+        left: validityCenterX,
+        top: validityCenterY,
+        width: validityWidth * 0.88,
+        fontSize: Math.max(11, Math.min(22, width * 0.016)),
+        fontWeight: 700,
+        fill: MES_DO_CONSUMIDOR_COLORS.white,
+        validity: true
+    })
+
+    const compactFooter = plan.formatId === 'stories'
+    const footerNameSize = Math.max(12, Math.min(compactFooter ? 23 : 30, width * (compactFooter ? 0.022 : 0.027)))
+    const footerTextSize = Math.max(10, Math.min(compactFooter ? 16 : 20, width * (compactFooter ? 0.014 : 0.017)))
+    const footerLeftInset = frameLeft + width * 0.09
+    const footerInfoCenter = footerLeftInset + width * 0.19
+    const footerMainY = footerTop + footerHeight * 0.34
+    const footerSecondaryY = footerTop + footerHeight * 0.66
+    const contactWidth = Math.max(150, width * (plan.formatId === 'tv' ? 0.28 : 0.34))
+    const contactHeight = Math.max(30, footerHeight * 0.43)
+    const contactCenterX = frameLeft + width * (plan.formatId === 'tv' ? 0.76 : 0.73)
+    const contactCenterY = footerTop + footerHeight * 0.5
+    addNativeRect('mes-do-consumidor-whatsapp-base', 'Forma nativa — base do WhatsApp', {
+        left: contactCenterX - contactWidth / 2,
+        top: contactCenterY - contactHeight / 2,
+        width: contactWidth,
+        height: contactHeight,
+        radius: contactHeight * 0.5
+    }, MES_DO_CONSUMIDOR_COLORS.redChip)
+    addDynamicText({
+        name: 'mes-do-consumidor-nome-da-loja',
+        layerName: 'Dado dinâmico — nome da loja',
+        field: 'companyName',
+        text: getFieldSample('companyName'),
+        left: footerLeftInset,
+        top: footerMainY,
+        width: width * 0.36,
+        fontSize: footerNameSize,
+        fontWeight: 800,
+        fill: MES_DO_CONSUMIDOR_COLORS.footerText,
+        textAlign: 'left',
+        originX: 'left'
+    })
+    addDynamicText({
+        name: 'mes-do-consumidor-site',
+        layerName: 'Dado dinâmico — site',
+        field: 'website',
+        text: getFieldSample('website'),
+        left: footerInfoCenter,
+        top: footerSecondaryY,
+        width: width * 0.38,
+        fontSize: footerTextSize,
+        fontWeight: 600,
+        fill: MES_DO_CONSUMIDOR_COLORS.footerText
+    })
+    addDynamicText({
+        name: 'mes-do-consumidor-instagram',
+        layerName: 'Dado dinâmico — Instagram',
+        field: 'instagram',
+        text: getFieldSample('instagram'),
+        left: footerInfoCenter,
+        top: footerMainY,
+        width: width * 0.38,
+        fontSize: footerTextSize,
+        fontWeight: 700,
+        fill: MES_DO_CONSUMIDOR_COLORS.footerText
+    })
+    addDynamicText({
+        name: 'mes-do-consumidor-whatsapp',
+        layerName: 'Dado dinâmico — WhatsApp',
+        field: 'whatsapp',
+        text: getFieldSample('whatsapp'),
+        left: contactCenterX,
+        top: contactCenterY,
+        width: contactWidth * 0.86,
+        fontSize: Math.max(11, Math.min(23, width * 0.02)),
+        fontWeight: 800,
+        fill: MES_DO_CONSUMIDOR_COLORS.white
+    })
+
+    ensureFramesBelowContents()
+    refreshCanvasObjects({ immediate: true })
+    zoomToFit({ persist: true })
+    safeRequestRenderAll()
+    await Promise.resolve(saveCurrentState({
+        allowEmptyOverwrite: true,
+        reason: `mes-do-consumidor-${plan.modelId}-${plan.formatId}`,
+        source: 'system',
+        skipCoalesce: true,
+        skipIfUnchanged: false
+    }))
+    await flushPersistenceNow('mes-do-consumidor-all-formats', { force: true })
+    return true
+}
+
 const materializeTemplateSeedPage = async (
     seed: QuickEditorSeed,
     theme: Record<string, any>,
@@ -26740,6 +27291,10 @@ const materializeTemplateSeedPage = async (
     }
 ): Promise<boolean> => {
     if (!canvas.value || !activePage.value) return false
+
+    if (seed.templatePresetId === 'mes-do-consumidor-3d') {
+        return await materializeMesDoConsumidorTemplatePage(seed, theme, plan)
+    }
 
     const width = Math.max(320, Math.round(Number(activePage.value.width || seed.width || 1080)))
     const height = Math.max(320, Math.round(Number(activePage.value.height || seed.height || 1350)))
@@ -26851,6 +27406,94 @@ const materializeTemplateSeedPage = async (
     return true
 }
 
+/**
+ * O preset possui composição própria para cada formato. Ao criá-lo, gravamos
+ * todas as páginas agora (em vez de deixar quatro telas vazias esperando uma
+ * futura duplicação), mas voltamos para a página que o usuário abriu.
+ */
+const materializeMesDoConsumidorAllTemplatePages = async (
+    seed: QuickEditorSeed,
+    theme: Record<string, any>
+): Promise<boolean> => {
+    if (!isFlyerTemplatePresetId(seed.templatePresetId) || seed.templatePresetId !== 'mes-do-consumidor-3d') return false
+    if (!canvas.value || !activePage.value) return false
+
+    const originalPageId = String(activePage.value?.id || '').trim()
+    const requestedFormats = new Set(
+        (Array.isArray(seed.formatIds) && seed.formatIds.length ? seed.formatIds : [seed.formatId || 'feed'])
+            .map(id => String(id || '').trim())
+    )
+    const configuredModels = Array.isArray(seed.models) && seed.models.length
+        ? seed.models.map((model, index) => ({
+            id: String(model?.id || `model-${index + 1}`).trim() || `model-${index + 1}`,
+            name: String(model?.name || '').trim() || `Modelo ${index + 1}`
+        }))
+        : [{ id: 'model-1', name: 'Modelo 1' }]
+    const modelIndexById = new Map(configuredModels.map((model, index) => [model.id, index] as const))
+    const formatIndexById = new Map(
+        (Array.isArray(seed.formatIds) && seed.formatIds.length ? seed.formatIds : [seed.formatId || 'feed'])
+            .map((id, index) => [String(id || '').trim(), index] as const)
+    )
+    const pages = (project.pages || []).filter((page: any) => {
+        const format = getQuickPageFormat(page)
+        return requestedFormats.has(format.id)
+    })
+    if (!pages.length) return false
+
+    const switchToTemplatePage = async (page: any): Promise<boolean> => {
+        const pageId = String(page?.id || '').trim()
+        if (!pageId) return false
+        if (String(activePage.value?.id || '').trim() === pageId) return true
+        const index = project.pages.findIndex((candidate: any) => String(candidate?.id || '').trim() === pageId)
+        if (index < 0) return false
+        await flushPersistenceNow('mes-do-consumidor-page-switch', { force: true })
+        switchPage(index)
+        return await waitForTemplatePageReady(pageId)
+    }
+
+    for (const page of pages) {
+        if (!await switchToTemplatePage(page)) return false
+        const format = getQuickPageFormat(page)
+        const modelId = String(page?.templateModelId || configuredModels[0]?.id || 'model-1').trim() || 'model-1'
+        const model = configuredModels.find(item => item.id === modelId) || configuredModels[0] || { id: modelId, name: 'Modelo 1' }
+        page.templateModelId = model.id
+        page.templateModelName = String(page?.templateModelName || model.name).trim() || model.name
+        page.templateFormatId = format.id
+        page.templateFormatLabel = format.label
+        page.templateThemeId = String(page?.templateThemeId || theme.id || 'market-red')
+        page.templateThemeName = String(page?.templateThemeName || theme.name || 'Oferta vermelha')
+        page.name = `${page.templateModelName} · ${format.label}`
+
+        const currentObjects = canvas.value?.getObjects?.() || []
+        const alreadyMaterialized = currentObjects.some((object: any) => (
+            object?.isQuickGenerated === true && String(object?.quickSeedId || '') === String(seed.id || '')
+        ))
+        if (!alreadyMaterialized) {
+            const didMaterialize = await materializeTemplateSeedPage(seed, theme, {
+                modelId: model.id,
+                modelName: page.templateModelName,
+                formatId: format.id,
+                formatLabel: format.label,
+                modelIndex: modelIndexById.get(model.id) ?? 0,
+                formatIndex: formatIndexById.get(format.id) ?? 0
+            })
+            if (!didMaterialize) return false
+        }
+        await ensureQuickPageThumbnail(activePage.value)
+    }
+
+    if (originalPageId && String(activePage.value?.id || '').trim() !== originalPageId) {
+        const originalIndex = project.pages.findIndex((page: any) => String(page?.id || '').trim() === originalPageId)
+        if (originalIndex >= 0) {
+            await flushPersistenceNow('mes-do-consumidor-return-page', { force: true })
+            switchPage(originalIndex)
+            if (!await waitForTemplatePageReady(originalPageId)) return false
+        }
+    }
+    await flushPersistenceNow('mes-do-consumidor-all-formats-ready', { force: true })
+    return true
+}
+
 const processQuickEditorSeed = async (): Promise<void> => {
     if (quickSeedProcessing) return quickSeedProcessing
 
@@ -26951,6 +27594,14 @@ const processQuickEditorSeed = async (): Promise<void> => {
                 const firstModel = modelDefinitions[0] || { id: 'model-1', name: 'Modelo 1' }
                 const page = activePage.value as any
                 if (!page) return
+
+                if (seed.templatePresetId === 'mes-do-consumidor-3d') {
+                    const completed = await materializeMesDoConsumidorAllTemplatePages(seed, theme)
+                    if (!completed) return
+                    quickSeedAppliedForProjectId = projectId
+                    clearQuickSeedStorage(projectId)
+                    return
+                }
 
                 // A seed creates the editable base composition only. The other
                 // models and formats live in template_config and become real
@@ -38531,8 +39182,8 @@ const rehydrateCanvasZones = (
         recoverZoneSnapshots?: boolean;
         legacyImageRepairMode?: 'auto' | 'force' | 'skip';
     } = {}
-) => {
-    if (!canvas.value) return;
+): boolean => {
+    if (!canvas.value) return false;
     invalidateZoneRuntimeIndex();
     const relayout = opts.relayout !== false;
     const applyZoneStyles = opts.applyZoneStyles !== false;
@@ -38541,6 +39192,7 @@ const rehydrateCanvasZones = (
     const legacyImageRepairMode = opts.legacyImageRepairMode || 'auto';
 
     const prevHistory = isHistoryProcessing.value;
+    let repairedTemplateFrameBindings = 0;
     isHistoryProcessing.value = true;
     try {
         let objs = canvas.value.getObjects();
@@ -38745,6 +39397,13 @@ const rehydrateCanvasZones = (
             getOrCreateFrameClipRect(f);
         });
 
+        repairedTemplateFrameBindings = restoreTemplateCompositionFrameBindings(objs);
+        if (repairedTemplateFrameBindings > 0) {
+            console.info(
+                `[frame-clip] Restaurado o vínculo de ${repairedTemplateFrameBindings} elemento(s) de modelo ao Frame.`
+            );
+        }
+
         const frameIds = new Set<string>(frames.map((f: any) => f._customId).filter(Boolean));
         const framesById = new Map<string, any>(
             frames
@@ -38775,10 +39434,10 @@ const rehydrateCanvasZones = (
                 return;
             }
 
-            // Keep frame binding only while the object is mostly inside the frame.
-            // This also repairs old saves where a large rectangle kept a stale
-            // frame clip after being dragged/resized outside the frame.
-            if (!isObjectMostlyInsideFrame(o, frame)) {
+            // Model templates are closed artboards: preserve their clip even
+            // when an editable decorative element intentionally crosses a
+            // Frame edge. Regular Frames still detach objects dropped outside.
+            if (!shouldPreserveTemplateFrameClip(frame) && !isObjectMostlyInsideFrame(o, frame)) {
                 console.log(`🔓 Removendo parentFrameId de objeto fora da maior parte do frame:`, {
                     object: o.name || o._customId,
                     frame: frame.name || frame._customId
@@ -39377,6 +40036,8 @@ const rehydrateCanvasZones = (
     } finally {
         isHistoryProcessing.value = prevHistory;
     }
+
+    return repairedTemplateFrameBindings > 0;
 }
 
 const handleRecalculateLayout = () => {

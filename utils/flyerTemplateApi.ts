@@ -1,4 +1,5 @@
 import { getQuickEditorSeedKey, QUICK_EDITOR_SEED_VERSION, type QuickEditorSeed } from '~/utils/quick-editor-seed'
+import { isFlyerTemplatePresetId, type FlyerTemplatePresetId } from '~/utils/mesDoConsumidorPreset'
 
 export const FLYER_TEMPLATE_FORMATS = [
   { id: 'feed', label: 'Feed 4:5', hint: 'Instagram e Facebook', width: 1080, height: 1350 },
@@ -50,6 +51,8 @@ export type FlyerTemplateConfig = {
   defaultFormatId: FlyerTemplateFormatId
   /** ID do modelo de origem quando esta configuração está numa cópia de uso. */
   sourceTemplateId?: string
+  /** Receita nativa usada no primeiro materialize do modelo. */
+  templatePresetId?: FlyerTemplatePresetId
   /** Composições salvas por modelo/formato; não são páginas da instância. */
   pageBlueprints?: FlyerTemplatePageBlueprint[]
 }
@@ -245,6 +248,9 @@ const normalizeTemplateConfig = (value: any, pages: any[] = []): FlyerTemplateCo
     ...(String(value?.sourceTemplateId || '').trim()
       ? { sourceTemplateId: String(value.sourceTemplateId).trim() }
       : {}),
+    ...(isFlyerTemplatePresetId(value?.templatePresetId)
+      ? { templatePresetId: value.templatePresetId }
+      : {}),
     pageBlueprints: Array.isArray(value?.pageBlueprints)
       ? buildFlyerTemplatePageBlueprints(value.pageBlueprints)
       : undefined
@@ -289,6 +295,7 @@ export const createFlyerTemplate = async (opts: {
   name: string
   formatIds?: FlyerTemplateFormatId[]
   modelNames?: string[]
+  templatePresetId?: FlyerTemplatePresetId
   width?: number
   height?: number
 }): Promise<string> => {
@@ -316,7 +323,10 @@ export const createFlyerTemplate = async (opts: {
     formatIds,
     models,
     defaultModelId: firstModel.id,
-    defaultFormatId: firstFormat.id
+    defaultFormatId: firstFormat.id,
+    ...(isFlyerTemplatePresetId(opts.templatePresetId)
+      ? { templatePresetId: opts.templatePresetId }
+      : {})
   }
   const response = await $fetch<any>('/api/projects', {
     method: 'POST',
@@ -349,7 +359,10 @@ export const createFlyerTemplate = async (opts: {
     width: Math.max(320, Math.round(firstFormat.width)),
     height: Math.max(320, Math.round(firstFormat.height)),
     formatIds,
-    models
+    models,
+    templatePresetId: isFlyerTemplatePresetId(opts.templatePresetId)
+      ? opts.templatePresetId
+      : undefined
   })
   return projectId
 }
@@ -360,6 +373,7 @@ export const writeFlyerTemplateStarterSeed = (projectId: string, opts: {
   height: number
   formatIds?: FlyerTemplateFormatId[]
   models?: FlyerTemplateModelDraft[]
+  templatePresetId?: FlyerTemplatePresetId
   businessProfile?: Record<string, any>
 }) => {
   if (typeof window === 'undefined') return
@@ -383,6 +397,9 @@ export const writeFlyerTemplateStarterSeed = (projectId: string, opts: {
           name: String(model?.name || '').trim() || `Modelo ${index + 1}`
         }))
       : [{ id: createModelId(0), name: 'Modelo 1' }],
+    ...(isFlyerTemplatePresetId(opts.templatePresetId)
+      ? { templatePresetId: opts.templatePresetId }
+      : {}),
     width: opts.width,
     height: opts.height,
     theme: {

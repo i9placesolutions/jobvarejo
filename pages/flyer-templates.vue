@@ -24,6 +24,10 @@ import {
   type FlyerTemplateFormatId,
   type FlyerTemplateSummary
 } from '~/utils/flyerTemplateApi'
+import {
+  FLYER_TEMPLATE_PRESETS,
+  type FlyerTemplatePresetId
+} from '~/utils/mesDoConsumidorPreset'
 
 definePageMeta({
   layout: false,
@@ -39,6 +43,7 @@ const loadError = ref('')
 const searchQuery = ref('')
 const showCreateDialog = ref(false)
 const createName = ref('Ofertas da semana')
+const createPresetId = ref<FlyerTemplatePresetId | null>(null)
 const createAllFormats = ref(true)
 const createFormatIds = ref<FlyerTemplateFormatId[]>(FLYER_TEMPLATE_FORMATS.map(format => format.id))
 const isCreating = ref(false)
@@ -127,9 +132,23 @@ const loadTemplates = async () => {
 
 const openCreateDialog = () => {
   createName.value = 'Ofertas da semana'
+  createPresetId.value = null
   createAllFormats.value = true
   createFormatIds.value = FLYER_TEMPLATE_FORMATS.map(format => format.id)
   showCreateDialog.value = true
+}
+
+const selectCreatePreset = (presetId: FlyerTemplatePresetId | null) => {
+  createPresetId.value = presetId
+  if (!presetId) return
+  const preset = FLYER_TEMPLATE_PRESETS.find(item => item.id === presetId)
+  if (preset && createName.value.trim() === 'Ofertas da semana') {
+    createName.value = preset.name
+  }
+  // O preset foi criado para as cinco composições, não para ser esticado a
+  // partir de uma página única.
+  createAllFormats.value = true
+  createFormatIds.value = FLYER_TEMPLATE_FORMATS.map(format => format.id)
 }
 
 const toggleCreateFormat = (formatId: FlyerTemplateFormatId) => {
@@ -159,7 +178,8 @@ const createTemplate = async () => {
       headers,
       name: createName.value,
       formatIds: selectedFormats.value.map(format => format.id),
-      modelNames: [sentenceName(createName.value) || 'Ofertas da semana']
+      modelNames: [sentenceName(createName.value) || 'Ofertas da semana'],
+      templatePresetId: createPresetId.value || undefined
     })
     showCreateDialog.value = false
     await navigateTo(`/editor/${projectId}`)
@@ -373,6 +393,34 @@ onUnmounted(() => {
             <span class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Nome do modelo</span>
             <input v-model="createName" type="text" maxlength="120" autofocus placeholder="Ex.: Oferta vermelha, Semana, Atacarejo..." class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" @keyup.enter="createTemplate" />
           </label>
+
+          <div>
+            <span class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Composição inicial</span>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                class="rounded-2xl border p-3 text-left transition"
+                :class="!createPresetId ? 'border-indigo-500 bg-indigo-50 ring-4 ring-indigo-500/10' : 'border-slate-200 bg-white hover:border-indigo-200'"
+                :aria-pressed="!createPresetId"
+                @click="selectCreatePreset(null)"
+              >
+                <span class="block text-sm font-semibold text-slate-800">Em branco</span>
+                <span class="mt-0.5 block text-[11px] leading-5 text-slate-500">Crie a estrutura vazia para desenhar do zero.</span>
+              </button>
+              <button
+                v-for="preset in FLYER_TEMPLATE_PRESETS"
+                :key="preset.id"
+                type="button"
+                class="rounded-2xl border p-3 text-left transition"
+                :class="createPresetId === preset.id ? 'border-indigo-500 bg-indigo-50 ring-4 ring-indigo-500/10' : 'border-slate-200 bg-white hover:border-indigo-200'"
+                :aria-pressed="createPresetId === preset.id"
+                @click="selectCreatePreset(preset.id)"
+              >
+                <span class="flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Sparkles class="h-3.5 w-3.5 text-amber-500" /> {{ preset.name }}</span>
+                <span class="mt-0.5 block text-[11px] leading-5 text-slate-500">{{ preset.description }}</span>
+              </button>
+            </div>
+          </div>
 
           <div>
             <div class="mb-2 flex items-center justify-between gap-3">

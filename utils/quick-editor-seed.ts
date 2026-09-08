@@ -1,4 +1,5 @@
 import type { OfferValidityMode, OfferValidityScope } from './offerValidity'
+import type { FlyerTemplatePresetId } from './mesDoConsumidorPreset'
 
 export const QUICK_EDITOR_SEED_VERSION = 1
 export const QUICK_EDITOR_SEED_PREFIX = 'jobvarejo:quick-seed:'
@@ -36,6 +37,8 @@ export type QuickEditorSeed = {
   formatIds?: string[]
   /** Variações de layout que compartilham o mesmo tema. */
   models?: QuickEditorModel[]
+  /** Receita visual nativa usada para materializar um modelo de encarte. */
+  templatePresetId?: FlyerTemplatePresetId
   width: number
   height: number
   theme: QuickEditorTheme
