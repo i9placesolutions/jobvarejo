@@ -17,9 +17,19 @@ export default defineEventHandler(async (event) => {
       [user.id]
     )
     if (row) {
+      const source = row.business_profile && typeof row.business_profile === 'object'
+        ? row.business_profile as Record<string, unknown>
+        : {}
+      const hasStoredPaymentMethods = ['paymentMethods', 'payment_methods']
+        .some(key => Object.prototype.hasOwnProperty.call(source, key))
+      const paymentMethodsConfigured = source.__paymentMethodsConfigured === true
+        || (source.__paymentMethodsConfigured === undefined && hasStoredPaymentMethods)
       return {
         ...row,
-        business_profile: normalizeBusinessProfile(row.business_profile)
+        business_profile: {
+          ...normalizeBusinessProfile(row.business_profile),
+          __paymentMethodsConfigured: paymentMethodsConfigured
+        }
       }
     }
 
@@ -35,7 +45,10 @@ export default defineEventHandler(async (event) => {
       name: fallbackName,
       avatar_url: metadata.avatar_url || metadata.picture || null,
       role: 'user',
-      business_profile: normalizeBusinessProfile(null)
+      business_profile: {
+        ...normalizeBusinessProfile(null),
+        __paymentMethodsConfigured: false
+      }
     }
   } catch (error: any) {
     throw createError({ statusCode: 500, statusMessage: error?.message || 'Failed to load profile' })

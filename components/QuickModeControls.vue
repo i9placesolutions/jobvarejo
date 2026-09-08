@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { useEditorVisualViewport } from '~/composables/useEditorVisualViewport'
-import { computed, ref, watch } from 'vue'
-import { Layers, Trash2, Image as CanvasIcon, ShoppingBasket, SlidersHorizontal, Download } from 'lucide-vue-next'
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
+import {
+  ArrowRight,
+  CheckCircle2,
+  ClipboardPaste,
+  Layers,
+  Trash2,
+  Image as CanvasIcon,
+  ShoppingBasket,
+  SlidersHorizontal,
+  Download,
+} from 'lucide-vue-next'
 import QuickCardColors from './QuickCardColors.vue'
 import OfferValidityPrompt from './OfferValidityPrompt.vue'
 import {
@@ -23,6 +33,10 @@ import {
 import { FLYER_TEMPLATE_FORMATS } from '~/utils/flyerTemplateApi'
 import type { ProductZoneStructure, ProductZoneStructureVariant } from '~/types/product-zone'
 import { getProductZoneStructureFormatLabel } from '~/utils/product-zone-structure'
+
+// O onboarding só é necessário quando o tema realmente pede um dado ausente.
+// Carregá-lo sob demanda deixa a primeira abertura do editor mais leve no 4G.
+const QuickModeBusinessSetupDialog = defineAsyncComponent(() => import('./QuickModeBusinessSetupDialog.vue'))
 
 type QuickModeZone = {
   id: string
@@ -107,6 +121,9 @@ const props = defineProps<{
   busy?: boolean
   businessProfile?: Partial<BusinessProfile> & Record<string, any>
   businessFieldVisibility?: Record<string, boolean>
+  requiredBusinessFields?: string[]
+  businessSetupSaving?: boolean
+  businessSetupError?: string
   validityDateFormat?: OfferDateFormat
   validityStartDate?: string
   validityEndDate?: string
@@ -135,6 +152,7 @@ const emit = defineEmits<{
   (event: 'change-all-labels', templateId: string): void
   (event: 'import', payload: { mode: QuickModeImportMode; text: string; autoFillImages: boolean; oneProductPerPage: boolean }): void
   (event: 'toggle-business-field', payload: { field: BusinessFieldId; enabled: boolean }): void
+  (event: 'save-business-setup', payload: { businessProfile: Record<string, any>; hiddenFields: string[]; logoFile?: File | null }): void
   (event: 'update-validity', payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean; show: boolean; dateFormat: OfferDateFormat; scope: OfferValidityScope }): void
   (event: 'open-business-profile'): void
   (event: 'select-page', pageId: string): void
@@ -148,7 +166,8 @@ const mobileSection = ref<'products' | 'pages' | 'preview' | 'tools'>('preview')
 watch(mobileSection, value => emit('mobile-section', value))
 const activeTab = ref<'search' | 'mine'>('search')
 const listText = ref('')
-const autoFillImages = ref(false)
+const productListInput = ref<HTMLTextAreaElement | null>(null)
+const autoFillImages = ref(true)
 const oneProductPerPage = ref(false)
 // Os dados da loja não devem competir com a revisão dos produtos.
 const dataPanelOpen = ref(false)
@@ -164,8 +183,9 @@ const showValidity = ref(props.showValidity !== false)
 const offerScope = reactive<OfferValidityScope>(normalizeOfferValidityScope(props.offerScope))
 // A validade precisa ser escolhida novamente em cada entrada do encarte.
 const validityPromptOpen = ref(props.validityPromptReady !== false)
-let validityPromptResolved = false
+const validityPromptResolved = ref(false)
 const validityPromptError = ref('')
+const businessSetupOpen = ref(false)
 const pendingDeleteProductId = ref('')
 const clearProductsConfirmOpen = ref(false)
 const bulkLabelMenuOpen = ref(false)
@@ -334,13 +354,76 @@ const businessFieldValue = (field: BusinessFieldId): string => {
   return String(rawValue || '').trim()
 }
 
-const businessFieldRows = computed(() => BUSINESS_FIELDS.map(field => ({
-  ...field,
-  value: businessFieldValue(field.id),
-  enabled: props.businessFieldVisibility?.[field.id] !== false,
-})))
+const BUSINESS_FIELD_ALIASES: Record<string, BusinessFieldId> = {
+  logo: 'logo',
+  companyname: 'companyName',
+  company_name: 'companyName',
+  name: 'companyName',
+  slogan: 'slogan',
+  phone: 'phone',
+  whatsapp: 'whatsapp',
+  address: 'address',
+  hours: 'hours',
+  instagram: 'instagram',
+  facebook: 'facebook',
+  website: 'website',
+  paymentmethods: 'paymentMethods',
+  payment_methods: 'paymentMethods',
+  payments: 'paymentMethods',
+  paymentnotes: 'paymentNotes',
+  payment_notes: 'paymentNotes',
+}
+
+const templateBusinessFieldIds = computed<BusinessFieldId[]>(() => {
+  const seen = new Set<BusinessFieldId>()
+  return (Array.isArray(props.requiredBusinessFields) ? props.requiredBusinessFields : [])
+    .map(field => BUSINESS_FIELD_ALIASES[String(field || '').trim().replace(/\s+/g, '').toLowerCase()])
+    .filter((field): field is BusinessFieldId => !!field)
+    .filter(field => {
+      if (seen.has(field)) return false
+      seen.add(field)
+      return true
+    })
+})
+
+const businessFieldRows = computed(() => {
+  const fieldsInTemplate = templateBusinessFieldIds.value
+  return BUSINESS_FIELDS
+    .filter(field => fieldsInTemplate.length === 0 || fieldsInTemplate.includes(field.id))
+    .map(field => ({
+      ...field,
+      value: businessFieldValue(field.id),
+      enabled: props.businessFieldVisibility?.[field.id] !== false,
+    }))
+})
 
 const visibleBusinessFieldCount = computed(() => businessFieldRows.value.filter(field => field.enabled).length)
+
+const requiredBusinessSetupFields = computed<BusinessFieldId[]>(() => {
+  const requested = new Set(templateBusinessFieldIds.value)
+  if (requested.size === 0) return []
+
+  return BUSINESS_FIELDS
+    .map(field => field.id)
+    .filter(field => requested.has(field))
+    .filter(field => props.businessFieldVisibility?.[field] !== false)
+    .filter(field => {
+      if (field === 'companyName' && props.businessProfile?.__companyNameFromAccountFallback === true) return true
+      if (field === 'paymentMethods' && props.businessProfile?.__paymentMethodsConfigured === false) return true
+      return !businessFieldValue(field)
+    })
+})
+
+const shouldOpenBusinessSetup = computed(() => (
+  props.validityPromptReady === true &&
+  validityPromptResolved.value &&
+  requiredBusinessSetupFields.value.length > 0
+))
+
+watch(shouldOpenBusinessSetup, shouldOpen => {
+  if (shouldOpen) businessSetupOpen.value = true
+  else if (requiredBusinessSetupFields.value.length === 0) businessSetupOpen.value = false
+}, { immediate: true })
 
 const formatDateForSummary = (value: string): string => {
   const parts = String(value || '').split('-')
@@ -397,7 +480,7 @@ watch(() => props.validityWhileStocks, value => {
   validityWhileStocks.value = value !== false
 })
 watch(() => props.validityPromptReady, ready => {
-  if (ready && !validityPromptResolved) validityPromptOpen.value = true
+  if (ready && !validityPromptResolved.value) validityPromptOpen.value = true
 })
 watch(() => props.showValidity, value => { showValidity.value = value !== false })
 watch(() => props.offerScope, value => {
@@ -421,6 +504,7 @@ const handleZoneStructureChange = (event: Event) => {
 }
 
 const submitList = (mode: QuickModeImportMode = 'replace') => {
+  if (!listText.value.trim() || props.busy) return
   emit('import', {
     mode,
     text: listText.value.trim(),
@@ -428,6 +512,48 @@ const submitList = (mode: QuickModeImportMode = 'replace') => {
     oneProductPerPage: oneProductPerPage.value
   })
 }
+
+const openMobileProductList = () => {
+  mobileSection.value = 'products'
+  activeTab.value = productCount.value > 0 ? 'mine' : 'search'
+}
+
+const startMobileProductList = () => {
+  mobileSection.value = 'products'
+  activeTab.value = 'search'
+  void nextTick(() => productListInput.value?.focus({ preventScroll: true }))
+}
+
+const openMobileTools = () => {
+  mobileSection.value = 'tools'
+  dataPanelOpen.value = true
+}
+
+const handlePrimaryProductAction = () => {
+  if (!hasListText.value) {
+    if (productCount.value > 0) openMobileProductList()
+    else startMobileProductList()
+    return
+  }
+  submitList(productCount.value > 0 ? 'append' : 'replace')
+}
+
+const mobilePrimaryAction = computed(() => {
+  if (productCount.value > 0) {
+    return {
+      eyebrow: 'PRÓXIMO PASSO',
+      title: 'Confira os produtos do encarte',
+      description: `${productCount.value} ${productCount.value === 1 ? 'produto adicionado' : 'produtos adicionados'} para você revisar.`,
+      action: 'Ver produtos',
+    }
+  }
+  return {
+    eyebrow: 'COMECE POR AQUI',
+    title: 'Cole a lista de produtos',
+    description: 'Nós organizamos os produtos e preparamos as imagens para conferência.',
+    action: 'Adicionar lista',
+  }
+})
 
 const useExample = () => {
   listText.value = 'Picanha kg R$ 49,90'
@@ -488,7 +614,7 @@ const applyValidityPrompt = (payload: { startDate: string; endDate: string; mode
   if (!payload.show) {
     showValidity.value = false
     updateValidity()
-    validityPromptResolved = true
+    validityPromptResolved.value = true
     validityPromptOpen.value = false
     return
   }
@@ -526,7 +652,7 @@ const confirmValidityPrompt = () => {
   validityPromptError.value = ''
   showValidity.value = true
   updateValidity()
-  validityPromptResolved = true
+  validityPromptResolved.value = true
   validityPromptOpen.value = false
 }
 
@@ -598,25 +724,51 @@ const useTemplateModel = (modelId: string) => {
     @confirm="applyValidityPrompt"
   />
 
+  <QuickModeBusinessSetupDialog
+    v-if="businessSetupOpen"
+    :open="businessSetupOpen"
+    :fields="requiredBusinessSetupFields"
+    :business-profile="props.businessProfile"
+    :busy="props.busy || props.businessSetupSaving"
+    :error-message="props.businessSetupError"
+    @complete="emit('save-business-setup', $event)"
+  />
+
+  <section
+    :class="['quick-mobile-action-dock', { 'is-hidden': mobileSection !== 'preview' }]"
+    aria-label="Próximo passo da edição rápida"
+  >
+    <div class="quick-mobile-action-dock__copy">
+      <span>{{ mobilePrimaryAction.eyebrow }}</span>
+      <strong>{{ mobilePrimaryAction.title }}</strong>
+      <small>{{ mobilePrimaryAction.description }}</small>
+    </div>
+    <button type="button" :disabled="props.busy" @click="handlePrimaryProductAction">
+      <ClipboardPaste :size="18" />
+      <span>{{ mobilePrimaryAction.action }}</span>
+      <ArrowRight :size="17" aria-hidden="true" />
+    </button>
+  </section>
+
   <div class="quick-mode-controls-layout" :data-mobile-section="mobileSection" :style="{ '--mobile-keyboard-inset': `${mobileKeyboardInset}px`, '--mobile-visible-height': mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh' }">
     <nav class="quick-mobile-sections" aria-label="Edição rápida">
       <button type="button" :aria-pressed="mobileSection === 'preview'" @click="mobileSection = 'preview'"><CanvasIcon :size="20" /><span>Encarte</span></button>
-      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection = mobileSection === 'products' ? 'preview' : 'products'"><ShoppingBasket :size="20" /><span>Produtos</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection === 'products' ? mobileSection = 'preview' : openMobileProductList()"><ShoppingBasket :size="20" /><span>Lista</span></button>
       <button type="button" :aria-pressed="mobileSection === 'pages'" @click="mobileSection = mobileSection === 'pages' ? 'preview' : 'pages'"><Layers :size="20" /><span>Páginas</span></button>
-      <button type="button" :aria-pressed="mobileSection === 'tools'" @click="mobileSection = mobileSection === 'tools' ? 'preview' : 'tools'"><SlidersHorizontal :size="20" /><span>Ajustes</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'tools'" @click="mobileSection === 'tools' ? mobileSection = 'preview' : openMobileTools()"><SlidersHorizontal :size="20" /><span>Ajustes</span></button>
       <button type="button" :disabled="props.busy" @click="emit('export')"><Download :size="20" /><span>Exportar</span></button>
     </nav>
-    <aside class="quick-mode-sidebar" aria-label="Produtos da edição rápida">
+    <aside class="quick-mode-sidebar" :aria-label="mobileSection === 'tools' ? 'Ajustes da edição rápida' : 'Produtos da edição rápida'">
     <div class="quick-mode-sidebar__content">
       <div class="quick-mode-sidebar__topbar">
         <div class="quick-mode-sidebar__title-wrap">
           <span class="quick-mode-sidebar__backmark" aria-hidden="true">+</span>
           <div>
             <p class="quick-mode-sidebar__eyebrow">Edição rápida</p>
-            <h2>Produtos</h2>
+            <h2>{{ mobileSection === 'tools' ? 'Ajustes' : 'Produtos' }}</h2>
           </div>
         </div>
-        <span class="quick-mode-sidebar__count">
+        <span v-if="mobileSection !== 'tools'" class="quick-mode-sidebar__count">
           {{ productCount }} {{ productCount === 1 ? 'produto' : 'produtos' }}
         </span>
       </div>
@@ -688,7 +840,7 @@ const useTemplateModel = (modelId: string) => {
           :class="['quick-mode-tab', activeTab === 'search' ? 'quick-mode-tab--active' : '']"
           @click="activeTab = 'search'"
         >
-          Pesquisar Produtos
+          Adicionar lista
         </button>
         <button
           type="button"
@@ -697,32 +849,51 @@ const useTemplateModel = (modelId: string) => {
           :class="['quick-mode-tab', activeTab === 'mine' ? 'quick-mode-tab--active' : '']"
           @click="activeTab = 'mine'"
         >
-          Meus Produtos
+          Produtos no encarte
         </button>
       </div>
 
-      <section class="quick-mode-search-card" role="tabpanel">
+      <section v-if="activeTab === 'search'" class="quick-mode-search-card" role="tabpanel">
         <form @submit.prevent="submitList('replace')">
-          <h3>Digite ou cole uma lista de produtos</h3>
+          <div class="quick-mobile-flow" aria-label="Etapas para adicionar produtos">
+            <span class="quick-mobile-flow__step is-active"><b>1</b>Lista</span>
+            <span class="quick-mobile-flow__line" aria-hidden="true"></span>
+            <span class="quick-mobile-flow__step"><b>2</b>Conferir</span>
+            <span class="quick-mobile-flow__line" aria-hidden="true"></span>
+            <span class="quick-mobile-flow__step"><b>3</b>Adicionar</span>
+          </div>
+          <h3>1. Cole sua lista de produtos</h3>
+          <p class="quick-mobile-import-copy">Na próxima tela você confere preço, nome e imagem de cada produto antes de colocar no encarte.</p>
           <p class="quick-mode-example">
             Exemplo:
             <button type="button" @click="useExample">Picanha kg</button>
           </p>
 
           <textarea
+            ref="productListInput"
             v-model="listText"
             :disabled="props.busy"
             aria-label="Cole ou escreva uma lista de produtos"
             placeholder="Cole / Escreva a lista aqui. Ex: Picanha kg R$ 49,90"
           ></textarea>
 
-          <label class="flex items-start gap-3 rounded-lg border border-white/15 p-3 mb-3 text-white">
-            <input v-model="oneProductPerPage" type="checkbox" :disabled="props.busy" class="mt-1 accent-violet-500" />
-            <span><strong class="block text-sm">Um produto por página</strong><small class="block text-zinc-400">Coloca o primeiro produto nesta página e cria cópias para os demais, no mesmo formato.</small></span>
-          </label>
-          <QuickCardColors :mode="props.cardColorMode || 'auto'" :color="props.cardColor || '#ffffff'" :busy="props.busy" @apply="emit('card-colors', $event)" />
+          <details class="quick-mobile-advanced-options">
+            <summary>
+              <span>Mais opções</span>
+              <small>Layout e cor dos cards</small>
+            </summary>
+            <div class="quick-mobile-advanced-options__body">
+              <label class="quick-product-advanced-option flex items-start gap-3 rounded-lg border border-white/15 p-3 mb-3 text-white">
+                <input v-model="oneProductPerPage" type="checkbox" :disabled="props.busy" class="mt-1 accent-violet-500" />
+                <span><strong class="block text-sm">Um produto por página</strong><small class="block text-zinc-400">Coloca o primeiro produto nesta página e cria cópias para os demais, no mesmo formato.</small></span>
+              </label>
+              <div class="quick-product-advanced-option">
+                <QuickCardColors :mode="props.cardColorMode || 'auto'" :color="props.cardColor || '#ffffff'" :busy="props.busy" @apply="emit('card-colors', $event)" />
+              </div>
+            </div>
+          </details>
           <label class="quick-fill-option">
-            <span><strong>Preencher imagens</strong><small>Duplica e organiza as imagens no espaço de cada produto.</small></span>
+            <span><strong>Organizar imagens automaticamente</strong><small>Ao aprovar as imagens na próxima etapa, elas já ficam encaixadas em cada produto.</small></span>
             <input v-model="autoFillImages" type="checkbox" role="switch" :disabled="props.busy" aria-label="Preencher imagens automaticamente" />
           </label>
 
@@ -730,12 +901,11 @@ const useTemplateModel = (modelId: string) => {
             type="submit"
             :class="[
               'quick-mode-search-button',
-              activeTab === 'mine' ? 'quick-mode-search-button--outline' : '',
             ]"
-            :disabled="props.busy"
+            :disabled="props.busy || !hasListText"
           >
             <span v-if="props.busy" class="quick-mode-spinner" aria-hidden="true"></span>
-            {{ props.busy ? 'Analisando...' : 'Buscar Produtos' }}
+            {{ props.busy ? 'Analisando...' : 'Continuar para conferir produtos' }}
           </button>
         </form>
 
@@ -761,7 +931,7 @@ const useTemplateModel = (modelId: string) => {
           </div>
         </div>
         <p class="quick-mode-search-hint">
-          Você poderá revisar nomes, preços e imagens antes de aplicar.
+          Você verá cada produto antes de ele entrar no encarte.
         </p>
       </section>
 
@@ -1030,11 +1200,12 @@ const useTemplateModel = (modelId: string) => {
         type="button"
         class="quick-mode-sidebar__footer-action"
         :disabled="props.busy"
-        aria-label="Adicionar produtos no encarte"
-        @click="submitList('append')"
+        :aria-label="hasListText ? 'Continuar para conferir produtos' : productCount > 0 ? 'Conferir produtos do encarte' : 'Adicionar uma lista de produtos'"
+        @click="handlePrimaryProductAction"
       >
-        <span class="quick-mode-sidebar__footer-action-mark" aria-hidden="true">+</span>
-        Adicionar produtos no encarte
+        <ClipboardPaste v-if="!hasListText && productCount === 0" :size="18" aria-hidden="true" />
+        <CheckCircle2 v-else :size="18" aria-hidden="true" />
+        {{ hasListText ? 'Continuar para conferir' : productCount > 0 ? 'Conferir produtos do encarte' : 'Colar lista de produtos' }}
       </button>
     </footer>
     </aside>
@@ -3523,6 +3694,67 @@ const useTemplateModel = (modelId: string) => {
   line-height: 1;
 }
 
+.quick-mobile-action-dock,
+.quick-mobile-flow {
+  display: none;
+}
+
+.quick-mobile-import-copy {
+  margin: 7px 0 12px;
+  color: rgba(244, 245, 247, 0.62);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.quick-mobile-advanced-options {
+  margin: 12px 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.quick-mobile-advanced-options summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+  color: rgba(244, 245, 247, 0.88);
+  list-style: none;
+  padding: 0 13px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.quick-mobile-advanced-options summary::-webkit-details-marker {
+  display: none;
+}
+
+.quick-mobile-advanced-options summary::after {
+  content: '+';
+  order: 3;
+  color: #a9c7ff;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.quick-mobile-advanced-options[open] summary::after {
+  content: '−';
+}
+
+.quick-mobile-advanced-options summary small {
+  margin-left: auto;
+  color: rgba(244, 245, 247, 0.46);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.quick-mobile-advanced-options__body {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px;
+}
+
 @keyframes quick-mode-spin {
   to { transform: rotate(360deg); }
 }
@@ -3727,9 +3959,71 @@ const useTemplateModel = (modelId: string) => {
  .quick-mobile-sections {position:fixed;left:0;right:0;bottom:var(--mobile-keyboard-inset,0px);z-index:700;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:6px 8px calc(8px + env(safe-area-inset-bottom,0px));border-top:1px solid #ffffff14;border-bottom:0;background:#18181b;}
  .quick-mobile-sections button {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:50px;font-size:10px;font-weight:500;border-radius:12px;touch-action:manipulation;}
  .quick-mobile-sections button:last-child {color:#c4b5fd;}
- .quick-mode-controls-layout[data-mobile-section=preview],.quick-mode-controls-layout[data-mobile-section=tools] {position:fixed;top:auto;bottom:0;height:0;border:0;background:transparent;box-shadow:none;}
- .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-pages-rail {display:none;}
- .quick-mode-controls-layout[data-mobile-section=products],.quick-mode-controls-layout[data-mobile-section=pages] {bottom:calc(76px + var(--mobile-keyboard-inset,0px) + env(safe-area-inset-bottom,0px));height:calc(var(--mobile-visible-height,100dvh) - 132px - env(safe-area-inset-bottom,0px));}
+ .quick-mode-controls-layout[data-mobile-section=preview] {position:fixed;top:auto;bottom:0;height:0;border:0;background:transparent;box-shadow:none;}
+ .quick-mode-controls-layout[data-mobile-section=products],.quick-mode-controls-layout[data-mobile-section=pages],.quick-mode-controls-layout[data-mobile-section=tools] {bottom:calc(76px + var(--mobile-keyboard-inset,0px) + env(safe-area-inset-bottom,0px));height:calc(var(--mobile-visible-height,100dvh) - 132px - env(safe-area-inset-bottom,0px));}
+ .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-pages-rail {display:none;}
+ .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__zone-picker,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-structure-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-tabs,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-search-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-library-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__footer {display:none;}
  .quick-mode-sidebar__backmark {display:none;}
+}
+</style>
+
+<style scoped>
+@media (max-width:767px) {
+ .quick-mobile-action-dock {position:fixed;right:12px;bottom:calc(76px + env(safe-area-inset-bottom,0px));left:12px;z-index:650;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;border:1px solid rgba(147,197,253,.38);border-radius:20px;background:linear-gradient(135deg,rgba(19,39,79,.98),rgba(67,38,102,.98));box-shadow:0 14px 38px rgba(0,0,0,.42);padding:12px;transition:opacity .16s ease,transform .16s ease;}
+ .quick-mobile-action-dock.is-hidden {pointer-events:none;opacity:0;transform:translateY(16px);}
+ .quick-mobile-action-dock__copy {display:grid;gap:3px;min-width:0;}
+ .quick-mobile-action-dock__copy > span {color:#bfdbfe;font-size:9px;font-weight:800;letter-spacing:.12em;line-height:1.1;text-transform:uppercase;}
+ .quick-mobile-action-dock__copy strong {overflow:hidden;color:#fff;font-size:14px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap;}
+ .quick-mobile-action-dock__copy small {display:-webkit-box;overflow:hidden;color:#cbd5e1;font-size:10px;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2;}
+ .quick-mobile-action-dock button {display:flex;align-items:center;justify-content:center;gap:6px;min-height:48px;border:1px solid rgba(255,255,255,.18);border-radius:14px;background:#fff;color:#172554;padding:0 12px;font-size:12px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.18);touch-action:manipulation;}
+ .quick-mobile-action-dock button:active:not(:disabled) {transform:translateY(1px);}
+ .quick-mobile-action-dock button:disabled {opacity:.58;}
+
+ .quick-mobile-flow {display:flex;align-items:center;justify-content:space-between;gap:7px;margin:0 0 16px;color:rgba(244,245,247,.52);font-size:10px;font-weight:750;}
+ .quick-mobile-flow__step {display:flex;align-items:center;gap:5px;white-space:nowrap;}
+ .quick-mobile-flow__step b {display:grid;width:20px;height:20px;place-items:center;border:1px solid rgba(255,255,255,.18);border-radius:999px;color:rgba(244,245,247,.68);font-size:10px;}
+ .quick-mobile-flow__step.is-active {color:#dbeafe;}
+ .quick-mobile-flow__step.is-active b {border-color:#60a5fa;background:#2563eb;color:#fff;box-shadow:0 0 0 3px rgba(59,130,246,.14);}
+ .quick-mobile-flow__line {height:1px;min-width:10px;flex:1;background:rgba(255,255,255,.14);}
+
+ .quick-mode-controls-layout[data-mobile-section=products],.quick-mode-controls-layout[data-mobile-section=tools] {border-radius:22px 22px 16px 16px;background:linear-gradient(165deg,#232b3d 0%,#1d1d23 56%,#18181b 100%);box-shadow:0 -12px 38px rgba(0,0,0,.36);}
+ .quick-mode-sidebar {border-radius:inherit;}
+ .quick-mode-sidebar__content {padding:18px 14px;}
+ .quick-mode-sidebar__topbar {align-items:center;min-height:34px;margin-bottom:15px;padding:0 2px;}
+ .quick-mode-sidebar h2 {font-size:20px;letter-spacing:-.02em;}
+ .quick-mode-sidebar__count {margin-top:0;border:1px solid rgba(147,197,253,.2);border-radius:999px;background:rgba(59,130,246,.1);color:#bfdbfe;padding:5px 8px;font-size:10px;font-weight:750;}
+ .quick-mode-tabs {min-height:48px;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:rgba(8,14,27,.46);padding:4px;}
+ .quick-mode-tab {min-height:38px!important;border:0!important;border-radius:10px!important;color:rgba(226,232,240,.64);font-size:12px;}
+ .quick-mode-tab--active {background:rgba(96,165,250,.17);box-shadow:inset 0 0 0 1px rgba(147,197,253,.22);color:#eff6ff;}
+ .quick-mode-search-card,.quick-mode-library-card {border:1px solid rgba(255,255,255,.1);border-radius:16px;background:rgba(8,12,21,.34);padding:15px;}
+ .quick-mode-search-card h3 {font-size:18px;letter-spacing:-.02em;}
+ .quick-mobile-import-copy {margin-top:8px;color:#b9c7db;font-size:12px;}
+ .quick-mode-example {margin-bottom:10px;font-size:11px;}
+ .quick-mode-search-card textarea {min-height:144px;border-color:rgba(147,197,253,.28);border-radius:14px;background:rgba(2,6,23,.6);padding:14px;font-size:16px;line-height:1.45;}
+ .quick-mode-search-button {min-height:52px;margin-top:14px;border-radius:14px;background:linear-gradient(135deg,#2563eb,#6d28d9);font-size:14px;box-shadow:0 10px 22px rgba(37,99,235,.24);}
+ .quick-mode-search-button:hover:not(:disabled) {background:linear-gradient(135deg,#3b82f6,#7c3aed);}
+ .quick-mode-search-button:disabled {cursor:not-allowed;opacity:.45;}
+ .quick-fill-option {margin:12px 0;border-color:rgba(147,197,253,.16);border-radius:14px;background:rgba(255,255,255,.045);padding:13px;}
+ .quick-fill-option strong {font-size:13px;}
+ .quick-fill-option small {font-size:11px;}
+ .quick-mobile-advanced-options {border-color:rgba(147,197,253,.14);background:rgba(255,255,255,.025);}
+ .quick-mobile-advanced-options summary {min-height:47px;padding:0 13px;font-size:12px;}
+ .quick-mobile-advanced-options__body {padding:12px;}
+ .quick-product-advanced-option {border-color:rgba(147,197,253,.16)!important;border-radius:13px!important;background:rgba(255,255,255,.035);}
+ .quick-mode-sidebar__footer {border-top-color:rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(24,24,27,.15),#18181b 45%);padding:11px 14px calc(12px + env(safe-area-inset-bottom,0px));}
+ .quick-mode-sidebar__footer-action {min-height:52px!important;border-radius:14px;background:linear-gradient(135deg,#2563eb,#6d28d9);font-size:14px!important;}
+ .quick-mode-sidebar__footer-action:hover:not(:disabled) {background:linear-gradient(135deg,#3b82f6,#7c3aed);}
+
+ .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__topbar {margin-bottom:18px;}
+ .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-data-panel {margin-top:0;}
+ .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-data-panel__toggle {min-height:58px;border-radius:15px;background:rgba(59,130,246,.12);}
+ .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-data-panel__body {margin-top:10px;border-radius:15px;}
+}
+@media (max-width:390px) {
+ .quick-mobile-action-dock {right:8px;left:8px;gap:8px;padding:10px;}
+ .quick-mobile-action-dock button {padding:0 10px;font-size:11px;}
+ .quick-mobile-action-dock__copy strong {font-size:13px;}
+ .quick-mobile-flow {gap:5px;font-size:9px;}
+ .quick-mobile-flow__line {min-width:5px;}
 }
 </style>

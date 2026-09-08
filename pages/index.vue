@@ -597,22 +597,12 @@ type FolderOption = {
 const normalizeFolderId = (value: unknown): string => String(value || '').trim()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const PROJECT_NAME_MAX_LENGTH = 120
-const DUPLICATE_PROJECT_SUFFIX = ' (cópia)'
 
 const normalizeProjectName = (value: unknown, fallback = 'Untitled Project'): string => {
   const trimmed = String(value || '').trim()
   if (!trimmed) return fallback
   if (trimmed.length <= PROJECT_NAME_MAX_LENGTH) return trimmed
   return trimmed.slice(0, PROJECT_NAME_MAX_LENGTH).trimEnd() || fallback
-}
-
-const buildDuplicateProjectName = (value: unknown): string => {
-  const baseName = normalizeProjectName(value, 'Projeto')
-  const maxBaseLength = Math.max(1, PROJECT_NAME_MAX_LENGTH - DUPLICATE_PROJECT_SUFFIX.length)
-  const clippedBase = baseName.length > maxBaseLength
-    ? baseName.slice(0, maxBaseLength).trimEnd()
-    : baseName
-  return `${clippedBase || 'Projeto'}${DUPLICATE_PROJECT_SUFFIX}`
 }
 
 const normalizeFolderIdForProjectPayload = (value: unknown): string | null | undefined => {
@@ -992,8 +982,7 @@ const deleteProject = async (projectId: string) => {
 // Duplicate project
 const duplicateProject = async (projectId: string) => {
   try {
-    const userId = auth.user.value?.id
-    if (!userId) {
+    if (!auth.user.value?.id) {
       showToast('Usuário não autenticado.')
       return
     }
@@ -1002,36 +991,16 @@ const duplicateProject = async (projectId: string) => {
     if (!original) return
 
     const headers = await getApiAuthHeaders()
-    const fullProject = await $fetch<any>('/api/projects', {
-      headers,
-      query: { id: projectId }
-    })
-    const canvasData = Array.isArray(fullProject?.canvas_data)
-      ? fullProject.canvas_data
-      : (Array.isArray((original as any)?.canvas_data) ? (original as any).canvas_data : null)
-    if (!Array.isArray(canvasData) || canvasData.length === 0) {
-      throw new Error('Projeto sem dados de canvas para duplicação')
-    }
-
-    const duplicateBody: Record<string, any> = {
-      name: buildDuplicateProjectName(original.name),
-      canvas_data: canvasData,
-      last_viewed: new Date().toISOString(),
-    }
-    const duplicateFolderId = normalizeFolderIdForProjectPayload(original.folder_id)
-    if (duplicateFolderId !== undefined) {
-      duplicateBody.folder_id = duplicateFolderId
-    }
-
-    const response = await $fetch<any>('/api/projects', {
+    const response = await $fetch<any>('/api/projects/duplicate', {
       method: 'POST',
       headers,
-      body: duplicateBody
+      body: { sourceProjectId: projectId }
     })
     const data = response?.project || null
 
     if (data) {
       projects.value.unshift(data)
+      showToast('Cópia criada como um novo projeto independente.', 'success')
     }
     showProjectMenu.value = null
   } catch (error: any) {

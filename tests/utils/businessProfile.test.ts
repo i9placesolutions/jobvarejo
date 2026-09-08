@@ -5,6 +5,7 @@ import {
   formatBusinessPaymentMethods,
   normalizeBusinessProfile,
 } from '~/utils/businessProfile'
+import { mergeBusinessProfile } from '../../server/utils/business-profile'
 
 describe('businessProfile repeatable data', () => {
   it('migrates legacy WhatsApp and endereço strings without losing compatibility', () => {
@@ -44,5 +45,13 @@ describe('businessProfile repeatable data', () => {
   it('resolves the standard payment labels and the 92-card catalog IDs', () => {
     expect(formatBusinessPaymentMethods(['pix', 'amex', 'cartao-82', 'cartao-92']))
       .toBe('PIX · American Express · Visa · G Card')
+  })
+
+  it('preserva se as formas de pagamento foram confirmadas pela loja', () => {
+    const onlyInstagram = mergeBusinessProfile({}, { instagram: '@mercadocentral' }) as Record<string, unknown>
+    expect(onlyInstagram.__paymentMethodsConfigured).toBe(false)
+
+    const selectedPayments = mergeBusinessProfile(onlyInstagram, { paymentMethods: ['pix', 'visa'] }) as Record<string, unknown>
+    expect(selectedPayments.__paymentMethodsConfigured).toBe(true)
   })
 })

@@ -12,12 +12,13 @@ export const QUICK_LOGO_BACKDROP_OPTIONS: ReadonlyArray<{
 
 /**
  * Normaliza o formato persistido do fundo da logo.
- * Projetos antigos não tinham esse campo; o quadrado mantém a placa clara
- * existente até que o usuário escolha outra opção.
+ * Projetos sem esse campo usam "sem fundo", que é o padrão comercial da
+ * logo dinâmica. Fundo, borda e contorno sticker continuam escolhas
+ * explícitas do cliente no painel de propriedades.
  */
 export const normalizeQuickLogoBackdropMode = (
   value: unknown,
-  fallback: QuickLogoBackdropMode = 'square'
+  fallback: QuickLogoBackdropMode = 'none'
 ): QuickLogoBackdropMode => {
   const raw = String(value ?? '').trim().toLowerCase()
   if (raw === 'none' || raw === 'transparent' || raw === 'sem fundo' || raw === 'sem-fundo') return 'none'

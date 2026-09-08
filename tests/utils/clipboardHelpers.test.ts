@@ -3,6 +3,7 @@ import {
   LEGACY_CROSS_TAB_CLIPBOARD_STORAGE_KEY,
   CLIPBOARD_CLONE_PROPS,
   isEditorClipboardPasteShortcut,
+  resolveEditorClipboardPastePlacement,
   resolveEditorPasteSource
 } from '~/utils/clipboardHelpers'
 import { CANVAS_CUSTOM_PROPS } from '~/utils/canvasCustomProps'
@@ -61,5 +62,51 @@ describe('isEditorClipboardPasteShortcut', () => {
     expect(isEditorClipboardPasteShortcut({ key: 'v', ctrlKey: true })).toBe(false)
     expect(isEditorClipboardPasteShortcut({ key: 'v', metaKey: true })).toBe(false)
     expect(isEditorClipboardPasteShortcut({ key: 'v', ctrlKey: true, shiftKey: false })).toBe(false)
+  })
+})
+
+describe('resolveEditorClipboardPastePlacement', () => {
+  it('mantém a posição relativa original ao colar em outra página sem Frame selecionado', () => {
+    expect(resolveEditorClipboardPastePlacement({
+      sourcePageId: 'page-a',
+      destinationPageId: 'page-b',
+      selectionCenter: { x: 330, y: 420 },
+      viewCenter: { x: 100, y: 200 }
+    })).toEqual({
+      isCrossPagePaste: true,
+      usesSelectedFrame: false,
+      pasteCenter: { x: 330, y: 420 },
+      offset: 0
+    })
+  })
+
+  it('centraliza a cópia no Frame clicado quando a página de destino é outra', () => {
+    expect(resolveEditorClipboardPastePlacement({
+      sourcePageId: 'page-a',
+      destinationPageId: 'page-b',
+      selectionCenter: { x: 330, y: 420 },
+      viewCenter: { x: 100, y: 200 },
+      selectedFrameCenter: { x: 760, y: 540 }
+    })).toEqual({
+      isCrossPagePaste: true,
+      usesSelectedFrame: true,
+      pasteCenter: { x: 760, y: 540 },
+      offset: 0
+    })
+  })
+
+  it('mantém o offset de cópia normal na mesma página mesmo com um Frame selecionado', () => {
+    expect(resolveEditorClipboardPastePlacement({
+      sourcePageId: 'page-a',
+      destinationPageId: 'page-a',
+      selectionCenter: { x: 330, y: 420 },
+      viewCenter: { x: 100, y: 200 },
+      selectedFrameCenter: { x: 760, y: 540 }
+    })).toEqual({
+      isCrossPagePaste: false,
+      usesSelectedFrame: false,
+      pasteCenter: { x: 100, y: 200 },
+      offset: 20
+    })
   })
 })

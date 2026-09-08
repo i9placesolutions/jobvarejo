@@ -24,6 +24,9 @@ export const normalizeBusinessProfile = (value: unknown): BusinessProfile =>
 
 export const mergeBusinessProfile = (current: unknown, incoming: unknown): BusinessProfile => {
   const currentProfile = normalizeBusinessProfile(current)
+  const currentSource = current && typeof current === 'object'
+    ? current as Record<string, unknown>
+    : {}
   const incomingSource = incoming && typeof incoming === 'object'
     ? incoming as Record<string, unknown>
     : {}
@@ -49,5 +52,20 @@ export const mergeBusinessProfile = (current: unknown, incoming: unknown): Busin
       : []
   }
 
-  return normalizeBusinessProfile(next)
+  // `normalizeBusinessProfile` supplies useful default card brands for old
+  // screens, but the quick-editor must know whether the store owner actually
+  // chose them. Keep that distinction in the persisted profile so a theme
+  // with payment logos can ask the owner instead of silently assuming it.
+  const paymentMethodsWereProvided = ['paymentMethods', 'payment_methods']
+    .some(key => Object.prototype.hasOwnProperty.call(incomingSource, key))
+  const legacyProfileHadPaymentMethods = ['paymentMethods', 'payment_methods']
+    .some(key => Object.prototype.hasOwnProperty.call(currentSource, key))
+  const paymentMethodsConfigured = paymentMethodsWereProvided
+    || currentSource.__paymentMethodsConfigured === true
+    || (currentSource.__paymentMethodsConfigured === undefined && legacyProfileHadPaymentMethods)
+
+  return {
+    ...normalizeBusinessProfile(next),
+    __paymentMethodsConfigured: paymentMethodsConfigured
+  } as BusinessProfile
 }

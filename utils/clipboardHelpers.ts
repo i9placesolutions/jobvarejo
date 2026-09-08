@@ -65,3 +65,47 @@ export const isEditorClipboardPasteShortcut = (event: ClipboardShortcutInput): b
     Boolean(event?.shiftKey) &&
     Boolean(event?.ctrlKey || event?.metaKey) &&
     String(event?.key || '').toLowerCase() === 'v'
+
+export type ClipboardPastePoint = { x: number; y: number }
+
+const normalizePastePoint = (value: unknown, fallback: ClipboardPastePoint): ClipboardPastePoint => {
+    const candidate = value as Partial<ClipboardPastePoint> | null | undefined
+    const x = Number(candidate?.x)
+    const y = Number(candidate?.y)
+    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : fallback
+}
+
+/**
+ * A cópia interna mantém a posição original quando não há um destino
+ * explícito. Ao trocar de página, um Frame selecionado vira o destino: a
+ * seleção copiada é centralizada nele e depois vinculada ao seu clip.
+ */
+export const resolveEditorClipboardPastePlacement = (input: {
+    sourcePageId?: string | null
+    destinationPageId?: string | null
+    selectionCenter?: Partial<ClipboardPastePoint> | null
+    viewCenter?: Partial<ClipboardPastePoint> | null
+    selectedFrameCenter?: Partial<ClipboardPastePoint> | null
+}): {
+    isCrossPagePaste: boolean
+    usesSelectedFrame: boolean
+    pasteCenter: ClipboardPastePoint
+    offset: number
+} => {
+    const viewCenter = normalizePastePoint(input?.viewCenter, { x: 0, y: 0 })
+    const selectionCenter = normalizePastePoint(input?.selectionCenter, viewCenter)
+    const sourcePageId = String(input?.sourcePageId || '').trim()
+    const destinationPageId = String(input?.destinationPageId || '').trim()
+    const isCrossPagePaste = Boolean(sourcePageId) && sourcePageId !== destinationPageId
+    const selectedFrameCenter = input?.selectedFrameCenter
+        ? normalizePastePoint(input.selectedFrameCenter, selectionCenter)
+        : null
+    const usesSelectedFrame = isCrossPagePaste && !!selectedFrameCenter
+
+    return {
+        isCrossPagePaste,
+        usesSelectedFrame,
+        pasteCenter: usesSelectedFrame ? selectedFrameCenter! : (isCrossPagePaste ? selectionCenter : viewCenter),
+        offset: isCrossPagePaste ? 0 : 20
+    }
+}

@@ -485,47 +485,11 @@ export const duplicateFlyerTemplate = async (opts: {
   const templateId = String(opts.templateId || '').trim()
   if (!templateId) throw new Error('Modelo inválido.')
 
-  const fullProject = await $fetch<any>('/api/projects', {
-    headers: opts.headers,
-    query: { id: templateId }
-  })
-  const sourcePages = getStoredProjectPages(fullProject?.canvas_data)
-  const normalizedTemplateConfig = normalizeTemplateConfig(fullProject?.template_config, sourcePages)
-  const orderedSourcePages = orderFlyerTemplatePages(sourcePages, normalizedTemplateConfig)
-  const duplicatedPages = orderedSourcePages.map((page: any) => ({ ...page, id: createPageId() }))
-  const templateConfig = {
-    ...normalizedTemplateConfig,
-    // A referência deve apontar para a página correspondente da cópia, e não
-    // para o id antigo do tema original.
-    pageBlueprints: buildFlyerTemplatePageBlueprints(duplicatedPages)
-  }
-  const basePage = orderedSourcePages.find((page: any) => (
-    String(page?.templateModelId || '').trim() === templateConfig.defaultModelId &&
-    inferFormatIdFromPage(page) === templateConfig.defaultFormatId
-  )) || sourcePages[0]
-  const width = Number(basePage?.width || 1080)
-  const height = Number(basePage?.height || 1350)
-  const baseName = String(fullProject?.name || 'Modelo').trim() || 'Modelo'
-  const response = await $fetch<any>('/api/projects', {
+  const response = await $fetch<any>('/api/projects/duplicate', {
     method: 'POST',
     headers: opts.headers,
     body: {
-      name: `${baseName} (cópia)`.slice(0, 120),
-      is_template: true,
-      last_viewed: new Date().toISOString(),
-      // Duplicar um tema precisa levar todas as composições já criadas, e não
-      // somente o formato padrão. A ordem original mantém a biblioteca
-      // organizada por modelo/formato no editor avançado.
-      canvas_data: duplicatedPages.length
-        ? duplicatedPages
-        : [{
-            id: createPageId(),
-            name: 'Encarte',
-            width,
-            height,
-            type: 'RETAIL_OFFER'
-          }],
-      template_config: templateConfig
+      sourceProjectId: templateId
     }
   })
   const projectId = String(response?.project?.id || '').trim()

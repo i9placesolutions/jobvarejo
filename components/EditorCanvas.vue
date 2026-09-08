@@ -94,6 +94,7 @@ import {
     CLIPBOARD_CLONE_PROPS,
     isEditorClipboardPasteShortcut,
     LEGACY_CROSS_TAB_CLIPBOARD_STORAGE_KEY,
+    resolveEditorClipboardPastePlacement,
     resolveEditorPasteSource
 } from '~/utils/clipboardHelpers'
 import { buildPathStringFromPenData } from '~/utils/pathHelpers'
@@ -7388,6 +7389,8 @@ const quickModeInitialProductText = ref('')
 const quickModeAutoFillImages = ref(false)
 const quickModeAutoParseProductText = ref(false)
 const quickBusinessProfile = ref<Record<string, any>>({})
+const isQuickBusinessProfileSaving = ref(false)
+const quickBusinessProfileSetupError = ref('')
 const quickValidityStartDate = ref('')
 const quickValidityEndDate = ref('')
 const quickValidityDateFormat = ref<OfferDateFormat>('numeric')
@@ -13763,6 +13766,40 @@ const syncEditorClipboardSummary = () => {
     };
 };
 
+const getSelectedClipboardTargetFrame = (candidate: any): { id: string; center: { x: number; y: number } } | null => {
+    if (!candidate || (!(candidate as any).isFrame && !isFrameLikeObject(candidate))) return null;
+    const id = String((candidate as any)._customId || '').trim();
+    if (!id) return null;
+    return { id, center: getObjectAbsoluteCenter(candidate) };
+};
+
+/**
+ * Em uma colagem entre páginas, um Frame explicitamente selecionado é o
+ * contêiner de destino. Mantemos vínculos internos quando a própria cópia
+ * traz um Frame aninhado, mas todo root restante passa a pertencer ao Frame
+ * clicado para que o recorte funcione imediatamente.
+ */
+const bindPastedRootsToSelectedFrame = (pasted: any[], targetFrameId: string) => {
+    if (!targetFrameId || !Array.isArray(pasted) || pasted.length === 0) return;
+    const copiedFrameIds = new Set(
+        pasted
+            .filter((object: any) => !!object && ((object as any).isFrame || isFrameLikeObject(object)))
+            .map((object: any) => String((object as any)._customId || '').trim())
+            .filter(Boolean)
+    );
+
+    pasted.forEach((object: any) => {
+        if (!object) return;
+        const parentFrameId = String((object as any).parentFrameId || '').trim();
+        if (parentFrameId && copiedFrameIds.has(parentFrameId)) return;
+        if (typeof object.set === 'function') object.set({ parentFrameId: targetFrameId });
+        else object.parentFrameId = targetFrameId;
+        object.dirty = true;
+        object.setCoords?.();
+    });
+    invalidateFrameRuntimeCache();
+};
+
 // getObjectAbsoluteCenter + computeCentersBoundingCenter extraidos para utils/fabricMeasure.ts.
 
 // regenerateCustomIdsRecursive + remapOrClearBindingsRecursive extraidos
@@ -14415,7 +14452,7 @@ const handleKeyDown = async (
                     };
                     notifyEditorInfo(
                         `${items.length === 1 ? 'Elemento copiado' : `${items.length} elementos copiados`}. ` +
-                        'Abra a página de destino e clique em “Colar nesta página” ou use Ctrl/Cmd+Shift+V.'
+                        'Na página de destino, clique no Frame e use “Colar nesta página” ou Ctrl/Cmd+Shift+V.'
                     );
                 }
             } catch (err) {
@@ -14454,9 +14491,18 @@ const handleKeyDown = async (
                     const viewCenter = getCenterOfView();
                     const selectionCenter = clipData.selectionCenter || { x: viewCenter.x, y: viewCenter.y };
                     const sourcePageId = String(clipData.sourcePageId || '');
-                    const isCrossPagePaste = Boolean(sourcePageId) && sourcePageId !== getActiveProjectPageId();
-                    const pasteCenter = isCrossPagePaste ? selectionCenter : viewCenter;
-                    const pasteOffset = isCrossPagePaste ? 0 : 20;
+                    const selectedTargetFrame = getSelectedClipboardTargetFrame(activeBeforePaste);
+                    const pastePlacement = resolveEditorClipboardPastePlacement({
+                        sourcePageId,
+                        destinationPageId: getActiveProjectPageId(),
+                        selectionCenter,
+                        viewCenter,
+                        selectedFrameCenter: selectedTargetFrame?.center
+                    });
+                    const isCrossPagePaste = pastePlacement.isCrossPagePaste;
+                    const pasteCenter = pastePlacement.pasteCenter;
+                    const pasteOffset = pastePlacement.offset;
+                    const targetFrameId = pastePlacement.usesSelectedFrame ? selectedTargetFrame?.id || '' : '';
                     const pasted: any[] = [];
                     const idMap = new Map<string, string>();
                     const existingIds = new Set<string>((canvas.value.getObjects?.() || [])
@@ -14604,6 +14650,9 @@ const handleKeyDown = async (
 
                     // Rebind children to the newly pasted frame/zone ids (and clear dangling refs).
                     pasted.forEach((obj) => remapOrClearBindingsRecursive(obj, idMap, existingIds));
+                    if (targetFrameId) {
+                        bindPastedRootsToSelectedFrame(pasted, targetFrameId);
+                    }
 
                     // Add all objects to canvas, then run the same finalization used by duplicate.
                     pasted.forEach((obj) => {
@@ -26283,6 +26332,11 @@ const getQuickBusinessProfilePayload = (payload: any): Record<string, any> => {
     // not completed the commercial cadastro yet.
     if (!String(next.companyName || '').trim()) {
         next.companyName = String(payload?.name || currentUser.value?.name || '').trim()
+        // O nome da conta evita uma tela vazia, mas não deve ser tratado como
+        // nome comercial confirmado pelo onboarding do encarte.
+        next.__companyNameFromAccountFallback = true
+    } else {
+        delete next.__companyNameFromAccountFallback
     }
     return next
 }
@@ -26418,6 +26472,26 @@ const quickModeBusinessFieldVisibility = computed<Record<string, boolean>>(() =>
         if (override !== undefined || result[field] === undefined) result[field] = enabled
     })
     return result
+})
+
+/**
+ * O modelo é a fonte de verdade para o onboarding: só pedimos dados que
+ * realmente aparecem na página aberta. Assim um tema sem Instagram, por
+ * exemplo, nunca vira um formulário desnecessário para o lojista.
+ */
+const quickModeRequiredBusinessFields = computed<string[]>(() => {
+    void quickModeDataVersion.value
+    const fields = new Set<string>()
+    walkQuickCanvasObjects((object: any) => {
+        const field = getQuickBusinessFieldFromObject(object)
+        // Campos sem valor ficam invisíveis durante a hidratação do Fabric.
+        // Isso não significa que o modelo não os use: é exatamente o sinal de
+        // que precisamos solicitar o dado antes de deixar o cliente editar.
+        const enabled = quickBusinessFieldOverrides.value[field] ?? object?.quickFieldEnabled !== false
+        if (!field || !enabled) return
+        fields.add(field)
+    })
+    return [...fields]
 })
 
 const hydrateQuickModeDataFromCanvas = () => {
@@ -26575,7 +26649,7 @@ const persistQuickModeDataChange = async (reason: string) => {
     await flushPersistenceNow(reason, { force: true })
 }
 
-const handleQuickModeBusinessFieldToggle = (payload: { field?: string; enabled?: boolean }) => {
+const handleQuickModeBusinessFieldToggle = async (payload: { field?: string; enabled?: boolean }): Promise<void> => {
     const field = normalizeQuickBusinessField(payload?.field)
     if (!field || !canvas.value) return
     const enabled = payload?.enabled !== false
@@ -26586,14 +26660,15 @@ const handleQuickModeBusinessFieldToggle = (payload: { field?: string; enabled?:
 
     if (field === 'logo') {
         quickModeDataVersion.value += 1
-        void syncQuickLogoBinding(quickBusinessProfile.value).then(changed => {
+        try {
+            const changed = await syncQuickLogoBinding(quickBusinessProfile.value)
             if (!changed) return
             refreshCanvasObjects()
             safeRequestRenderAll()
-            void persistQuickModeDataChange('quick-data-field:logo')
-        }).catch(error => {
+            await persistQuickModeDataChange('quick-data-field:logo')
+        } catch (error) {
             console.warn('[quick-editor] Falha ao alternar a logo do encarte:', error)
-        })
+        }
         return
     }
 
@@ -26615,7 +26690,7 @@ const handleQuickModeBusinessFieldToggle = (payload: { field?: string; enabled?:
     if (!changed) return
     refreshCanvasObjects()
     safeRequestRenderAll()
-    void persistQuickModeDataChange(`quick-data-field:${field}`)
+    await persistQuickModeDataChange(`quick-data-field:${field}`)
 }
 
 const handleQuickModeValidityUpdate = (payload: {
@@ -26760,6 +26835,58 @@ const handleQuickBusinessProfileOpen = () => {
         path: '/business-profile',
         query: { returnTo }
     })
+}
+
+const handleQuickModeBusinessSetup = async (payload: {
+    businessProfile?: Record<string, any>
+    hiddenFields?: string[]
+    logoFile?: File | null
+}) => {
+    if (isQuickBusinessProfileSaving.value) return
+    isQuickBusinessProfileSaving.value = true
+    quickBusinessProfileSetupError.value = ''
+
+    try {
+        const businessProfile = {
+            ...(payload?.businessProfile && typeof payload.businessProfile === 'object'
+                ? payload.businessProfile
+                : {})
+        }
+        const headers = await getApiAuthHeaders()
+
+        if (payload?.logoFile instanceof File) {
+            const formData = new FormData()
+            formData.append('file', payload.logoFile)
+            const uploaded = await $fetch<any>('/api/brands/upload', {
+                method: 'POST',
+                headers,
+                body: formData
+            })
+            const logo = String(uploaded?.key || uploaded?.canonicalUrl || uploaded?.url || '').trim()
+            if (!logo) throw new Error('A imagem da logo não pôde ser preparada.')
+            businessProfile.logo = logo
+        }
+
+        if (Object.keys(businessProfile).length > 0) {
+            const response = await $fetch<any>('/api/profile', {
+                method: 'PUT',
+                headers,
+                body: { business_profile: businessProfile }
+            })
+            await applyQuickBusinessProfileBindings(response, { persist: isQuickMode.value })
+        }
+
+        const hiddenFields = Array.isArray(payload?.hiddenFields) ? payload.hiddenFields : []
+        for (const field of hiddenFields) {
+            await handleQuickModeBusinessFieldToggle({ field, enabled: false })
+        }
+    } catch (error: any) {
+        const message = String(error?.data?.statusMessage || error?.message || 'Não foi possível salvar os dados da loja.')
+        quickBusinessProfileSetupError.value = message
+        notifyEditorError(message)
+    } finally {
+        isQuickBusinessProfileSaving.value = false
+    }
 }
 
 const handleBusinessProfileUpdated = (event: Event) => {
@@ -40936,6 +41063,9 @@ const handleAutoOfferLayout = async () => {
             :busy="isParsingProducts || isProcessing"
             :business-profile="quickBusinessProfile"
             :business-field-visibility="quickModeBusinessFieldVisibility"
+            :required-business-fields="quickModeRequiredBusinessFields"
+            :business-setup-saving="isQuickBusinessProfileSaving"
+            :business-setup-error="quickBusinessProfileSetupError"
             :validity-date-format="quickValidityDateFormat"
             :validity-start-date="quickValidityStartDate"
             :validity-end-date="quickValidityEndDate"
@@ -40954,6 +41084,7 @@ const handleAutoOfferLayout = async () => {
             @change-all-labels="handleQuickModeBulkLabelChange"
             @import="handleQuickModeImport"
             @toggle-business-field="handleQuickModeBusinessFieldToggle"
+            @save-business-setup="handleQuickModeBusinessSetup"
             @update-validity="handleQuickModeValidityUpdate"
             @open-business-profile="handleQuickBusinessProfileOpen"
             @select-page="switchToPage"
