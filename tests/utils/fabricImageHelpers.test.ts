@@ -358,7 +358,7 @@ describe('detectImageTrimBounds', () => {
     })
   })
 
-  it('corta fundo opaco uniforme dos cantos', () => {
+  it('preserva uma imagem toda preenchida, mesmo com borda escura', () => {
     const width = 4
     const height = 4
     const data = new Uint8ClampedArray(width * height * 4)
@@ -383,11 +383,45 @@ describe('detectImageTrimBounds', () => {
       }, { alphaThreshold: 8, padding: 0, colorTolerance: 20 })
 
       expect(inspected.hasContent).toBe(true)
+      expect(inspected.bounds).toBeNull()
+    })
+  })
+
+  it('corta fundo opaco uniforme dos cantos somente no modo explicito', () => {
+    const width = 4
+    const height = 4
+    const data = new Uint8ClampedArray(width * height * 4)
+    const setPixel = (x: number, y: number, r: number, g: number, b: number, a = 255) => {
+      const i = (y * width + x) * 4
+      data[i] = r
+      data[i + 1] = g
+      data[i + 2] = b
+      data[i + 3] = a
+    }
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) setPixel(x, y, 0, 0, 0, 255)
+    }
+    setPixel(1, 1, 240, 240, 240, 255)
+    setPixel(2, 1, 240, 240, 240, 255)
+    setPixel(1, 2, 240, 240, 240, 255)
+    setPixel(2, 2, 240, 240, 240, 255)
+
+    withFakeImageData(width, height, data, () => {
+      const inspected = inspectImageTrimBounds({
+        getElement: () => ({ width, height })
+      }, {
+        alphaThreshold: 8,
+        padding: 0,
+        colorTolerance: 20,
+        trimOpaqueBackground: true
+      })
+
+      expect(inspected.hasContent).toBe(true)
       expect(inspected.bounds).toEqual({ left: 1, top: 1, width: 2, height: 2 })
     })
   })
 
-  it('corta borda preta opaca mesmo com cantos levemente diferentes', () => {
+  it('corta borda preta opaca somente no modo explicito', () => {
     const width = 6
     const height = 6
     const data = new Uint8ClampedArray(width * height * 4)
@@ -411,7 +445,12 @@ describe('detectImageTrimBounds', () => {
     withFakeImageData(width, height, data, () => {
       const inspected = inspectImageTrimBounds({
         getElement: () => ({ width, height })
-      }, { alphaThreshold: 8, padding: 0, colorTolerance: 20 })
+      }, {
+        alphaThreshold: 8,
+        padding: 0,
+        colorTolerance: 20,
+        trimOpaqueBackground: true
+      })
 
       expect(inspected.hasContent).toBe(true)
       expect(inspected.bounds).toEqual({ left: 2, top: 2, width: 2, height: 2 })

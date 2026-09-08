@@ -157,6 +157,12 @@ export type ImageTrimDetectOptions = {
     padding?: number
     maxDim?: number
     colorTolerance?: number
+    /**
+     * Remove uma borda opaca uniforme/preta/branca somente quando isso for
+     * solicitado de forma explicita. Por padrao, todo pixel opaco faz parte
+     * da imagem e precisa ser preservado.
+     */
+    trimOpaqueBackground?: boolean
 }
 
 export type InspectedImageTrimBounds = {
@@ -267,6 +273,7 @@ const inspectImageDataTrimBounds = (
     const alphaThreshold = clampNumber(Math.round(Number(opts.alphaThreshold ?? 8) || 0), 0, 254)
     const padding = Math.max(0, Math.round(Number(opts.padding ?? 0) || 0))
     const colorTolerance = clampNumber(Math.round(Number(opts.colorTolerance ?? 28) || 0), 0, 255)
+    const trimOpaqueBackground = opts.trimOpaqueBackground === true
 
     const readPixel = (x: number, y: number): number[] => {
         const i = (y * sw + x) * 4
@@ -298,8 +305,8 @@ const inspectImageDataTrimBounds = (
         if (sw > 1) tallyEdge(sw - 1, y)
     }
     const edgeRatio = (count: number) => (edgeCount > 0 ? count / edgeCount : 0)
-    const trimBlack = edgeRatio(blackEdge) >= 0.55
-    const trimWhite = !trimBlack && edgeRatio(whiteEdge) >= 0.55
+    const trimBlack = trimOpaqueBackground && edgeRatio(blackEdge) >= 0.55
+    const trimWhite = trimOpaqueBackground && !trimBlack && edgeRatio(whiteEdge) >= 0.55
     const corners = [
         readPixel(0, 0),
         readPixel(sw - 1, 0),
@@ -312,7 +319,10 @@ const inspectImageDataTrimBounds = (
         if (isLowAlpha(pixel) || isLowAlpha(reference)) return false
         return pixelChannelDelta(pixel, reference) <= colorTolerance
     }).length
-    const useUniformBackground = colorTolerance > 0 && matchingCorners >= 3 && !isLowAlpha(reference)
+    const useUniformBackground = trimOpaqueBackground
+        && colorTolerance > 0
+        && matchingCorners >= 3
+        && !isLowAlpha(reference)
 
     const isBackground = (i: number) => {
         const pixel = [data[i]!, data[i + 1]!, data[i + 2]!, data[i + 3]!]
@@ -384,8 +394,8 @@ const sampleElementImageData = (
 
 /**
  * Detecta os bounds do conteudo visivel de uma imagem Fabric.
- * Corta transparencia e, quando os cantos compartilham a mesma cor opaca,
- * tambem corta essa borda solida.
+ * Por padrao, corta apenas transparencia; pixels opacos pertencem a imagem.
+ * O recorte de uma borda opaca uniforme exige `trimOpaqueBackground: true`.
  *
  * `hasContent: false` significa que os pixels ainda nao puderam ser lidos
  * (decode pendente, canvas vazio ou CORS). Nesse caso o caller NAO deve
