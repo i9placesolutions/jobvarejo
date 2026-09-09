@@ -9,6 +9,7 @@ import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull, pgQuery } from '../utils/postgres'
 import { ensureProjectTemplateColumn } from '../utils/project-templates'
+import { normalizeFlyerTemplateConfigCategory } from '~/utils/flyerTemplateCategory'
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -60,8 +61,11 @@ export default defineEventHandler(async (event) => {
   )
   const canvasDataJson = parseAndStringifyJsonbParam(normalizedCanvasData, 'canvas_data')
   const hasTemplateConfig = Object.prototype.hasOwnProperty.call(payload, 'template_config')
-  const templateConfigJson = hasTemplateConfig && payload.template_config != null
-    ? parseAndStringifyJsonbParam(payload.template_config, 'template_config')
+  const normalizedTemplateConfig = hasTemplateConfig && payload.template_config != null
+    ? normalizeFlyerTemplateConfigCategory(payload.template_config)
+    : null
+  const templateConfigJson = normalizedTemplateConfig != null
+    ? parseAndStringifyJsonbParam(normalizedTemplateConfig, 'template_config')
     : null
 
   const projectId = String(payload.id || '').trim()
@@ -128,7 +132,7 @@ export default defineEventHandler(async (event) => {
         && existing.name === name
         && normalizeStoredStorageRef(existing.preview_url) === previewUrl
         && existingCanvasComparable === nextCanvasComparable
-        && (!hasTemplateConfig || stringifyForNoopCompare(existing.template_config) === stringifyForNoopCompare(payload.template_config))
+        && (!hasTemplateConfig || stringifyForNoopCompare(existing.template_config) === stringifyForNoopCompare(normalizedTemplateConfig))
 
       if (isNoopUpdate) {
         result = existing

@@ -3,6 +3,7 @@ const CONTENT_EDIT_PATCH_FIELDS = [
   'preview_url',
   'canvas_data',
   'template_config',
+  'template_category',
   'is_template'
 ] as const
 

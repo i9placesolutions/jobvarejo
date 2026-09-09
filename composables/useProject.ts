@@ -5,6 +5,10 @@ import {
     buildFlyerTemplatePageBlueprints,
     FLYER_TEMPLATE_FORMATS
 } from '~/utils/flyerTemplateApi'
+import {
+    isFlyerTemplatePageName,
+    renameFlyerTemplateModelInPlace
+} from '~/utils/flyerTemplateNaming'
 import { clonePageCanvasDataWithFreshIds } from '~/utils/projectCanvasDuplication'
 
 export interface Page {
@@ -1558,8 +1562,11 @@ export const useProject = () => {
         if (!page) return
         const fallbackName = `Página ${index + 1}`
         const nextName = String(name || '').trim() || fallbackName
-        if (nextName === page.name) return
-        page.name = nextName
+        const didSyncTemplateModelName = isFlyerTemplatePageName(page)
+            ? renameFlyerTemplateModelInPlace(project.pages, page, nextName, project.templateConfig)
+            : false
+        if (!didSyncTemplateModelName && nextName === page.name) return
+        if (!didSyncTemplateModelName) page.name = nextName
         markAsUnsaved()
         writeProjectDraft()
     }

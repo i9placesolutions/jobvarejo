@@ -7,6 +7,7 @@ describe('doesProjectPatchChangeContent', () => {
     expect(doesProjectPatchChangeContent({ preview_url: 'projects/a/preview.png' })).toBe(true)
     expect(doesProjectPatchChangeContent({ name: 'Ofertas de sábado' })).toBe(true)
     expect(doesProjectPatchChangeContent({ template_config: { quickValidity: {} } })).toBe(true)
+    expect(doesProjectPatchChangeContent({ template_category: 'Hortifruti' })).toBe(true)
   })
 
   it('não altera a data de edição ao apenas abrir ou organizar o encarte', () => {

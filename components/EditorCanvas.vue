@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { registerCanvasImageLoadSession } from '~/utils/canvasImageLoadSession'
 import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
 import { confirmInSystem } from '~/utils/systemMessages'
 import { harmonizeProductCardTypography } from '~/utils/productCardResponsiveTypography'
@@ -114,6 +115,7 @@ import {
 } from '~/utils/templateFrameClipping'
 import { resolveFrameParentAfterDrop } from '~/utils/frameDropBinding'
 import { normalizeQuickLogoBackdropMode } from '~/utils/quickLogoBackdrop'
+import { isQuickLogoImage, isQuickModeFixedArtwork } from '~/utils/quickModeArtwork'
 import {
     GUIDE_COLOR,
     GUIDE_STROKE_WIDTH,
@@ -580,7 +582,7 @@ const EditorPageHistoryModal = defineAsyncComponent(() => import('./EditorPageHi
 const ZoneQuickActions = defineAsyncComponent(() => import('./ZoneQuickActions.vue'))
 const ProductImageQuickActions = defineAsyncComponent(() => import('./ProductImageQuickActions.vue'))
 const ProductLabelQuickActions = defineAsyncComponent(() => import('./ProductLabelQuickActions.vue'))
-const AssetsPanel = defineAsyncComponent(() => import('./AssetsPanel.vue'))
+const QuickLogoQuickActions = defineAsyncComponent(() => import('./QuickLogoQuickActions.vue'))
 const PageNavigator = defineAsyncComponent(() => import('./PageNavigator.vue'))
 const ContextMenu = defineAsyncComponent(() => import('./ui/ContextMenu.vue'))
 const CanvasRulers = defineAsyncComponent(() => import('./ui/CanvasRulers.vue'))
@@ -714,24 +716,21 @@ const aiStudio = useAiImageStudio()
 const aiStudioOpen = aiStudio.open
 const aiStudioOptions = aiStudio.options
 const aiStudioUploads = ref<Array<{ id: string; name: string; url: string }>>([])
-const showSealLibrary = ref(false)
-const sealLibraryTargetId = ref('')
-const quickDecorativeImage = computed(() => {
-    const obj = selectedObjectRef.value
-    if (!isQuickMode.value || String(obj?.type || '').toLowerCase() !== 'image') return null
-    if (obj.parentZoneId || obj.group?.parentZoneId || obj.group?._productData) return null
-    return obj
+const selectedQuickLogo = computed(() => {
+    const object = selectedObjectRef.value
+    return isQuickMode.value && isQuickLogoImage(object) ? object : null
 })
-const openSealLibrary = () => {
-    if (!quickDecorativeImage.value?._customId) return
-    sealLibraryTargetId.value = quickDecorativeImage.value._customId
-    showSealLibrary.value = true
+const updateQuickLogoProperty = (property: string, value: any) => {
+    const active = canvas.value?.getActiveObject?.()
+    if (!isQuickMode.value || !isQuickLogoImage(active)) return
+    if (active._customId !== selectedQuickLogo.value?._customId) return
+    if (!['quickLogoBackdropMode', 'stickerOutlineEnabled', 'stickerOutlineColor', 'stickerOutlineWidth'].includes(property)) return
+    updateObjectProperty(property, value)
 }
-const replaceQuickSeal = async (asset: any) => {
-    if (!asset?.url || !sealLibraryTargetId.value) return
-    const ok = await replaceImageByCustomId(sealLibraryTargetId.value, asset.url, { fit: 'contain' })
-    if (ok) { showSealLibrary.value = false; refreshCanvasObjects({ immediate: true }); updateSelection() }
-    else notifyEditorInfo('Não foi possível trocar o selo. Tente outra imagem.')
+const closeQuickLogoActions = () => {
+    canvas.value?.discardActiveObject?.()
+    updateSelection()
+    safeRequestRenderAll()
 }
 const productImagePickerAssets = ref<Array<{ id: string; name: string; url: string; key?: string }>>([])
 const showProductImageUploadPicker = ref(false)
@@ -4131,6 +4130,7 @@ import {
 import {
     formatBusinessAddressValues,
     formatBusinessContactValues,
+    formatBrazilianBusinessPhone,
     formatBusinessPaymentMethods
 } from '~/utils/businessProfile'
 import {
@@ -4306,11 +4306,10 @@ const editorProps = defineProps<{
 const isQuickMode = computed(() => editorProps.quickMode === true)
 const isQuickModeLockedObject = (obj: any): boolean => {
     if (!isQuickMode.value || !obj) return false
-    if (isLikelyProductZone(obj)) return true
     if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
-        return (obj.getObjects() || []).some((member: any) => isLikelyProductZone(member))
+        return (obj.getObjects() || []).some((member: any) => isQuickModeLockedObject(member))
     }
-    return false
+    return isLikelyProductZone(obj) || isQuickModeFixedArtwork(obj)
 }
 const mobilePanel = ref<MobilePanel | null>(null)
 const mobileNavRef = ref<InstanceType<typeof import('./EditorMobileNav.vue').default> | null>(null)
@@ -5119,34 +5118,329 @@ const useQuickModeTemplateModel = (modelId: string) => {
     })()
 }
 
-const resizeQuickModePage = (formatId: string) => {
-    return (async () => {
-        const format = getFlyerTemplateFormat(String(formatId || ''))
-        const page = activePage.value
-        if (!page) return
-        const nextWidth = Math.max(320, Math.round(format.width))
-        const nextHeight = Math.max(320, Math.round(format.height))
-        const oldWidth = Math.max(320, Number(page.width || nextWidth))
-        const oldHeight = Math.max(320, Number(page.height || nextHeight))
-        const pageIndex = project.pages.findIndex((item: any) => String(item?.id || '') === String(page.id || ''))
-        if (pageIndex < 0) return
-        if (oldWidth === nextWidth && oldHeight === nextHeight) {
-            applyQuickPageTemplateMetadata(page, format, getQuickPageModelName(page))
-            resizePage(pageIndex, nextWidth, nextHeight)
-            await Promise.resolve(saveCurrentState({
-                allowEmptyOverwrite: true,
-                reason: 'quick-page-resize',
-                source: 'user',
-                skipCoalesce: true,
-                skipIfUnchanged: false
-            }))
-            await flushPersistenceNow('quick-page-resize', { force: true })
-            return
+const isQuickModePageResizeInFlight = ref(false)
+
+/**
+ * O redimensionamento por formato substitui a composição visual da página,
+ * mas nunca pode descartar a lista que o cliente já montou. Capturamos a
+ * fonte persistida de cada card antes de materializar o blueprint novo. O
+ * texto e a imagem visíveis vencem os campos antigos para também manter
+ * ajustes feitos diretamente no encarte.
+ */
+const collectQuickModeProductsForFormatResize = (): any[] => {
+    if (!canvas.value) return []
+
+    const zones = sortProductZonesByVisualOrder(
+        (canvas.value.getObjects?.() || []).filter((object: any) => isLikelyProductZone(object))
+    )
+
+    return zones.flatMap((zone: any) => {
+        let cards: any[] = []
+        try {
+            cards = sortCardsByZoneOrder(getZoneChildren(zone))
+        } catch {
+            cards = []
         }
 
-        await flushPersistenceNow('quick-page-resize:before', { force: true })
+        return cards.map((card: any, index: number) => {
+            const savedProduct = card?._productData && typeof card._productData === 'object'
+                ? clonePlainForZoneSnapshot(card._productData)
+                : {}
+            const visibleProduct = mapCardToZoneReviewProduct(card, zone, index)
+            const imageUrl = String(
+                visibleProduct.imageUrl ||
+                resolveProductImageRef(savedProduct) ||
+                savedProduct?.imageUrl ||
+                savedProduct?.image ||
+                ''
+            ).trim()
 
-        if (canvas.value) {
+            const product = {
+                ...savedProduct,
+                // A ordem dos cards é mantida pela ordem da coleta; este
+                // vínculo pertence à zona antiga e precisa ser regenerado na
+                // zona da composição escolhida.
+                zoneInstanceId: undefined,
+                name: visibleProduct.name,
+                price: savedProduct?.price ?? visibleProduct.price,
+                pricePack: savedProduct?.pricePack ?? visibleProduct.pricePack,
+                priceUnit: savedProduct?.priceUnit ?? visibleProduct.priceUnit,
+                priceSpecial: savedProduct?.priceSpecial ?? visibleProduct.priceSpecial,
+                priceSpecialUnit: savedProduct?.priceSpecialUnit ?? visibleProduct.priceSpecialUnit,
+                priceWholesale: savedProduct?.priceWholesale ?? visibleProduct.priceWholesale,
+                wholesaleTrigger: savedProduct?.wholesaleTrigger ?? visibleProduct.wholesaleTrigger,
+                wholesaleTriggerUnit: savedProduct?.wholesaleTriggerUnit ?? visibleProduct.wholesaleTriggerUnit,
+                packQuantity: savedProduct?.packQuantity ?? visibleProduct.packQuantity,
+                packUnit: savedProduct?.packUnit ?? visibleProduct.packUnit,
+                packageLabel: savedProduct?.packageLabel ?? visibleProduct.packageLabel,
+                specialCondition: savedProduct?.specialCondition ?? visibleProduct.specialCondition,
+                limit: savedProduct?.limit ?? visibleProduct.limit,
+                ...(imageUrl ? {
+                    imageUrl,
+                    image: String(savedProduct?.image || '').trim() || imageUrl
+                } : {})
+            }
+            delete (product as any).zoneInstanceId
+            return product
+        })
+    })
+}
+
+/**
+ * Recria os cards na(s) zona(s) da composição já carregada. A mesma rotina
+ * de importação é usada para que a grade, o tamanho dos cards e os bindings
+ * de Frame sejam calculados com a receita do formato novo, em vez de apenas
+ * esticar as coordenadas do formato anterior.
+ */
+const rebuildQuickModeProductsForSelectedFormat = async (products: any[]): Promise<boolean> => {
+    if (!canvas.value) return false
+
+    const zones = sortProductZonesByVisualOrder(
+        (canvas.value.getObjects?.() || []).filter((object: any) => isLikelyProductZone(object))
+    )
+    if (!zones.length) return false
+
+    try {
+        await productZoneStructuresState.load()
+    } catch (error) {
+        // A zona ainda tem a receita persistida do próprio modelo. A falha
+        // temporária da biblioteca global não deve impedir o redimensionamento.
+        console.warn('[quick-editor] Não foi possível atualizar a biblioteca de estruturas antes do redimensionamento:', error)
+    }
+
+    const slices = buildProductSlicesForZones(products, zones, 'replace')
+    for (let index = 0; index < zones.length; index += 1) {
+        const zone = zones[index]
+        const slice = slices[index] || []
+        if (!slice.length) {
+            clearProductZoneCards(zone)
+            syncZoneDerivedMetadata(zone)
+            continue
+        }
+
+        await simulateSmartGrid(slice, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, {
+            mode: 'replace',
+            sourceMode: 'manual',
+            autoLayout: true,
+            persist: false,
+            previewFormat: getCurrentProductZonePreviewFormat()
+        })
+        syncZoneDerivedMetadata(zone)
+    }
+
+    const firstZone = zones[0]
+    if (firstZone) setActiveProductZone(firstZone, { syncImportTarget: true })
+    refreshCanvasObjects({ immediate: true })
+    invalidateQuickModeUi()
+    refreshSelectedRef()
+    safeRequestRenderAll()
+    return true
+}
+
+/** Reaplica somente a receita do formato quando não há blueprint salvo. */
+const reflowQuickModeProductsForSelectedFormat = async (): Promise<boolean> => {
+    if (!canvas.value) return false
+
+    const zones = sortProductZonesByVisualOrder(
+        (canvas.value.getObjects?.() || []).filter((object: any) => isLikelyProductZone(object))
+    )
+    if (!zones.length) return false
+
+    try {
+        await productZoneStructuresState.load()
+    } catch (error) {
+        console.warn('[quick-editor] Não foi possível atualizar a receita antes do redimensionamento:', error)
+    }
+
+    let changed = false
+    zones.forEach((zone: any) => {
+        let cards: any[] = []
+        try {
+            cards = getZoneChildren(zone)
+        } catch {
+            cards = []
+        }
+        if (!cards.length) return
+
+        applyCurrentStructureRecipe(zone, cards.length)
+        ensureZoneSanity(zone)
+        recalculateZoneLayout(zone, cards, {
+            save: false,
+            requestRender: false,
+            trustCachedChildren: true,
+            preserveStyles: true
+        })
+        syncZoneDerivedMetadata(zone)
+        changed = true
+    })
+
+    if (changed) {
+        refreshCanvasObjects({ immediate: true })
+        invalidateQuickModeUi()
+        refreshSelectedRef()
+        safeRequestRenderAll()
+    }
+    return changed
+}
+
+const resizeQuickModePage = (formatId: string) => {
+    return (async () => {
+        if (isQuickModePageResizeInFlight.value) return
+        isQuickModePageResizeInFlight.value = true
+        try {
+            const format = getFlyerTemplateFormat(String(formatId || ''))
+            const page = activePage.value
+            if (!page) return
+            const nextWidth = Math.max(320, Math.round(format.width))
+            const nextHeight = Math.max(320, Math.round(format.height))
+            const oldWidth = Math.max(320, Number(page.width || nextWidth))
+            const oldHeight = Math.max(320, Number(page.height || nextHeight))
+            const pageIndex = project.pages.findIndex((item: any) => String(item?.id || '') === String(page.id || ''))
+            if (pageIndex < 0) return
+
+            const currentFormat = getQuickPageFormat(page)
+            const modelId = String(
+                page.templateModelId ||
+                quickModeCurrentModelId.value ||
+                quickModeTemplateModels.value[0]?.id ||
+                ''
+            ).trim()
+            const templateSource = modelId
+                ? getQuickModeTemplateSource(modelId, format.id)
+                : null
+
+            // O comportamento principal da edição rápida é trocar para a arte
+            // desenhada para o formato escolhido (Feed, Story, Post etc.), não
+            // aplicar uma escala proporcional no layout de outro formato.
+            if (templateSource && currentFormat.id !== format.id) {
+                await Promise.resolve(saveCurrentState({
+                    allowEmptyOverwrite: true,
+                    reason: 'quick-page-resize-template-snapshot',
+                    source: 'user',
+                    skipCoalesce: true,
+                    skipIfUnchanged: false
+                }))
+                await flushPersistenceNow('quick-page-resize:before', { force: true })
+
+                // Se uma referência remota ficar indisponível ou vier sem uma
+                // zona de produtos, restaure a página original em vez de
+                // deixar o cliente com a arte nova e a lista apagada.
+                const originalPageSource = {
+                    ...page,
+                    canvasData: page.canvasData ? clonePlainForZoneSnapshot(page.canvasData) : null,
+                    canvasDataPath: undefined,
+                    thumbnailUrl: undefined
+                }
+                const originalMetadata = {
+                    templateModelId: page.templateModelId,
+                    templateModelName: page.templateModelName,
+                    templateFormatId: page.templateFormatId,
+                    templateFormatLabel: page.templateFormatLabel,
+                    templateThemeId: page.templateThemeId,
+                    templateThemeName: page.templateThemeName,
+                    templateCompositionManaged: page.templateCompositionManaged,
+                    templateSourcePageId: page.templateSourcePageId
+                }
+                const products = collectQuickModeProductsForFormatResize()
+                const modelName = getQuickPageModelName(page)
+                const restoreOriginalPage = async (): Promise<boolean> => {
+                    if (!originalPageSource.canvasData) return false
+                    const restored = await replacePageFromTemplateSource(page.id, originalPageSource, {
+                        name: String(originalPageSource.name || page.name || 'Página').trim() || 'Página',
+                        metadata: originalMetadata
+                    })
+                    if (!restored) return false
+                    pageReloadToken.value += 1
+                    return waitForTemplatePageReady(restored.id)
+                }
+
+                let replacementWasApplied = false
+                try {
+                    const resizedPage = await replacePageFromTemplateSource(page.id, templateSource, {
+                        name: `${modelName} · ${format.label}`,
+                        metadata: {
+                            templateModelId: modelId || templateSource.templateModelId,
+                            templateModelName: modelName || templateSource.templateModelName,
+                            templateFormatId: format.id,
+                            templateFormatLabel: format.label,
+                            templateThemeId: page.templateThemeId || templateSource.templateThemeId || 'market-red',
+                            templateThemeName: page.templateThemeName || templateSource.templateThemeName || 'Oferta vermelha',
+                            templateCompositionManaged: true,
+                            templateSourcePageId: String(templateSource.sourcePageId || '').trim() || undefined
+                        }
+                    })
+
+                    if (!resizedPage) {
+                        console.warn('[quick-editor] Blueprint do formato não pôde ser materializado; usando redimensionamento compatível.', {
+                            modelId,
+                            formatId: format.id
+                        })
+                    } else {
+                        replacementWasApplied = true
+                        pageReloadToken.value += 1
+                        if (!await waitForTemplatePageReady(resizedPage.id)) {
+                            throw new Error('A composição do formato não terminou de carregar.')
+                        }
+
+                        if (products.length && !await rebuildQuickModeProductsForSelectedFormat(products)) {
+                            throw new Error('O modelo escolhido não possui uma zona de produtos para organizar sua lista.')
+                        }
+
+                        await Promise.resolve(saveCurrentState({
+                            allowEmptyOverwrite: true,
+                            reason: 'quick-page-resize-template-format',
+                            source: 'user',
+                            skipCoalesce: true,
+                            skipIfUnchanged: false
+                        }))
+                        await ensureQuickPageThumbnail(resizedPage)
+                        await flushPersistenceNow('quick-page-resize-template-format', { force: true })
+                        notifyEditorInfo(`Formato ${format.label} aplicado com os produtos organizados automaticamente.`)
+                        return
+                    }
+                } catch (error) {
+                    if (!replacementWasApplied) {
+                        console.warn('[quick-editor] Blueprint do formato não pôde ser lido; usando redimensionamento compatível.', {
+                            modelId,
+                            formatId: format.id,
+                            error
+                        })
+                    } else {
+                    const restored = await restoreOriginalPage()
+                    console.warn('[quick-editor] Falha ao aplicar o blueprint do formato; a página anterior foi preservada.', {
+                        modelId,
+                        formatId: format.id,
+                        restored,
+                        error
+                    })
+                    notifyEditorError(
+                        restored
+                            ? 'Não foi possível aplicar esse formato agora. Sua página e produtos anteriores foram preservados.'
+                            : 'Não foi possível aplicar esse formato agora. Recarregue a página antes de continuar.'
+                    )
+                    return
+                    }
+                }
+            }
+
+            if (oldWidth === nextWidth && oldHeight === nextHeight) {
+                applyQuickPageTemplateMetadata(page, format, getQuickPageModelName(page))
+                resizePage(pageIndex, nextWidth, nextHeight)
+                await reflowQuickModeProductsForSelectedFormat()
+                await Promise.resolve(saveCurrentState({
+                    allowEmptyOverwrite: true,
+                    reason: 'quick-page-resize',
+                    source: 'user',
+                    skipCoalesce: true,
+                    skipIfUnchanged: false
+                }))
+                await flushPersistenceNow('quick-page-resize', { force: true })
+                return
+            }
+
+            await flushPersistenceNow('quick-page-resize:before', { force: true })
+
+            if (canvas.value) {
             const objects = canvas.value.getObjects?.() || []
             const primaryFrame = getQuickModePrimaryFrame(objects)
             const primaryBounds = primaryFrame ? getFrameBounds(primaryFrame) : null
@@ -5227,6 +5521,7 @@ const resizeQuickModePage = (formatId: string) => {
 
         applyQuickPageTemplateMetadata(page, format, getQuickPageModelName(page))
         resizePage(pageIndex, nextWidth, nextHeight)
+        await reflowQuickModeProductsForSelectedFormat()
         await Promise.resolve(saveCurrentState({
             allowEmptyOverwrite: true,
             reason: 'quick-page-resize',
@@ -5235,6 +5530,10 @@ const resizeQuickModePage = (formatId: string) => {
             skipIfUnchanged: false
         }))
         await flushPersistenceNow('quick-page-resize', { force: true })
+        notifyEditorInfo(`Formato ${format.label} aplicado com os produtos reorganizados.`)
+        } finally {
+            isQuickModePageResizeInFlight.value = false
+        }
     })()
 }
 
@@ -5349,14 +5648,10 @@ type ImageLoadTracker = {
 
 let activeImageLoadTracker: ImageLoadTracker | null = null
 let imageProgressRafId: number | null = null
-let originalFabricLoadImage: any = null
-// Fabric waits for every image in `loadFromJSON` before resolving. A single
-// request that never fires onload/onerror can therefore leave the editor's
-// loading overlay visible forever. The previous fixed 12s budget incorrectly
-// classified a healthy, image-heavy flyer as broken and replaced it with
-// placeholders. Scale the budget with the actual image count, while retaining
-// a hard ceiling for a truly stuck request.
-const CANVAS_LOAD_TIMEOUT_BASE_MS = 12_000
+// Cada imagem remota tem prazo próprio de 15s e fallback isolado. O limite
+// global precisa deixar margem para o Fabric montar grupos/filtros e carregar
+// os placeholders, sem interromper a sessão antes do tratamento individual.
+const CANVAS_LOAD_TIMEOUT_BASE_MS = 20_000
 const CANVAS_LOAD_TIMEOUT_PER_IMAGE_MS = 300
 const CANVAS_LOAD_TIMEOUT_MAX_MS = 30_000
 const CANVAS_IMAGE_LOAD_TIMEOUT_NAME = 'CanvasImageLoadTimeoutError'
@@ -5424,94 +5719,6 @@ const stopImageLoadTracking = (sessionId: number) => {
     if (activeImageLoadTracker?.sessionId === sessionId) {
         // Keep last known progress for the overlay, but stop counting new loads.
         activeImageLoadTracker = null
-    }
-}
-
-const patchFabricLoadImageProgress = () => {
-    try {
-        const util = (fabric as any)?.util
-        if (!util || (util as any).__jobvarejoPatchedLoadImage) return
-        if (typeof util.loadImage !== 'function') return
-        // Fabric v7 ESM exports freeze util (non-writable/non-configurable), so patching is impossible.
-        // Detect and skip quietly to avoid noisy console warnings.
-        try {
-            const d = Object.getOwnPropertyDescriptor(util, 'loadImage')
-            if (!Object.isExtensible(util) || Object.isFrozen(util) || (d && d.writable === false && d.configurable === false)) {
-                ;(util as any).__jobvarejoPatchedLoadImage = true
-                return
-            }
-        } catch {
-            // If descriptor probing fails, proceed best-effort.
-        }
-        originalFabricLoadImage = util.loadImage
-
-        util.loadImage = function (url: any, ...rest: any[]) {
-            const tracker = activeImageLoadTracker
-            const urlStr = String(url || '').trim()
-            let shouldCount = false
-            let sessionAtCall = 0
-
-            if (tracker && urlStr) {
-                const remaining = tracker.remainingBySrc.get(urlStr) || 0
-                if (remaining > 0) {
-                    shouldCount = true
-                    sessionAtCall = tracker.sessionId
-                    tracker.remainingBySrc.set(urlStr, remaining - 1)
-                }
-            }
-
-            const countDone = (ok: boolean) => {
-                const t = activeImageLoadTracker
-                // Only count if the same session is still active.
-                if (!shouldCount || !t || t.sessionId !== sessionAtCall) return
-                if (ok) t.loaded += 1
-                else t.failed += 1
-                scheduleImageProgressFlush()
-            }
-
-            // Callback-style
-            const cbIdx = rest.findIndex((a: any) => typeof a === 'function')
-            if (cbIdx >= 0) {
-                const origCb = rest[cbIdx]
-                const wrapped = (img: any, ...cbRest: any[]) => {
-                    countDone(!!img)
-                    return origCb(img, ...cbRest)
-                }
-                const nextArgs = rest.slice()
-                nextArgs[cbIdx] = wrapped
-                try {
-                    return originalFabricLoadImage.call(this, url, ...nextArgs)
-                } catch (e) {
-                    countDone(false)
-                    throw e
-                }
-            }
-
-            // Promise-style
-            try {
-                const res = originalFabricLoadImage.call(this, url, ...rest)
-                if (res && typeof res.then === 'function') {
-                    return res
-                        .then((img: any) => {
-                            countDone(!!img)
-                            return img
-                        })
-                        .catch((err: any) => {
-                            countDone(false)
-                            throw err
-                        })
-                }
-                return res
-            } catch (e) {
-                countDone(false)
-                throw e
-            }
-        }
-
-        ;(util as any).__jobvarejoPatchedLoadImage = true
-        console.log('🩹 Fabric patch aplicado: image load progress (util.loadImage)')
-    } catch (e) {
-        // Best-effort only; never block editor boot on this telemetry patch.
     }
 }
 
@@ -5649,7 +5856,7 @@ const sanitizeCanvasJsonBeforeLoad = (json: any): { removed: number; fixedGroupT
     return stats
 }
 
-const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Promise<void> => {
+const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Promise<number> => {
     if (!canvas.value) throw new Error('Canvas indisponível para loadFromJSON')
     // Reset progress for each attempt; it reflects the current load pipeline.
     startImageLoadTracking(sessionId, json)
@@ -5657,6 +5864,23 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null
     let loadTimedOut = false
+    let failedImages = 0
+    const unregisterImageSession = abortController
+        ? registerCanvasImageLoadSession(fabric.FabricImage || fabric.Image, abortController.signal, {
+            timeoutMs: 15_000,
+            onSettled: (src, failed) => {
+                if (failed) failedImages += 1
+                const tracker = activeImageLoadTracker
+                if (!tracker || tracker.sessionId !== sessionId) return
+                const remaining = tracker.remainingBySrc.get(src) || 0
+                if (remaining <= 0) return
+                tracker.remainingBySrc.set(src, remaining - 1)
+                if (failed) tracker.failed += 1
+                else tracker.loaded += 1
+                scheduleImageProgressFlush()
+            }
+        })
+        : () => {}
     const timeoutMs = getCanvasLoadTimeoutMs(sessionId)
     try {
         sanitizeCanvasJsonBeforeLoad(json)
@@ -5685,6 +5909,7 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
             }, timeoutMs)
         })
         await Promise.race([loadPromise, timeoutPromise])
+        return failedImages
     } catch (error) {
         if (loadTimedOut) {
             // Keep a stable error name so the page-load fallback can skip
@@ -5694,8 +5919,14 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
         throw error
     } finally {
         if (timeoutHandle) clearTimeout(timeoutHandle)
-        // Ensure the UI shows the final numbers for this attempt before we clear tracker.
-        scheduleImageProgressFlush()
+        unregisterImageSession()
+        // Publica antes de limpar: o RAF pendente não pode ler o tracker apagado.
+        const tracker = activeImageLoadTracker
+        if (tracker?.sessionId === sessionId) {
+            designLoadImageProgress.value = {
+                expected: tracker.expected, loaded: tracker.loaded, failed: tracker.failed
+            }
+        }
         stopImageLoadTracking(sessionId)
     }
 }
@@ -8199,7 +8430,11 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	            try {
 	                try {
 	                    if (import.meta.dev) console.log('[activePageWatch] 🚀 Iniciando loadFromJSON...');
-	                    await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
+	                    const failedImages = await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
+                        if (failedImages > 0) {
+                            degradedNewPage = true;
+                            degradedFailedCount = failedImages;
+                        }
 	                    didLoadNewPage = true;
 
 	                    const loadedObjects = canvas.value?.getObjects?.() || [];
@@ -8322,6 +8557,11 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 			                isHistoryProcessing.value = false;
 			                return;
 			            }
+                    const isolatedImageFailures = Number(designLoadImageProgress.value?.failed || 0)
+                    if (isolatedImageFailures > 0) {
+                        degradedNewPage = true
+                        degradedFailedCount = isolatedImageFailures
+                    }
                     loadedOk = true
                     storageDegraded.value = degradedNewPage
                     storageDegradedFailedCount.value = degradedFailedCount
@@ -9354,7 +9594,7 @@ onMounted(async () => {
 	        if (fabric?.config) fabric.config.devicePixelRatio = Math.min(dpr, 1.5)
 	    } catch { /* config pode ser frozen em alguns builds */ }
         // Patch Fabric image loader once so we can report real image-load progress on tablets/slow networks.
-        patchFabricLoadImageProgress()
+
         isFabricReady.value = true
 
 		    // Ensure our custom properties are always serialized/deserialized by Fabric (even if a save path forgets to pass propsToInclude).
@@ -17553,13 +17793,7 @@ const QUICK_LOGO_BACKDROP_MAX_PADDING = 24
 const QUICK_LOGO_BACKDROP_FILL = 'rgba(255, 255, 255, 0.94)'
 const QUICK_LOGO_BACKDROP_STROKE = 'rgba(255, 255, 255, 0.98)'
 
-const isQuickLogoImageObject = (object: any): boolean => (
-    String(object?.type || '').trim().toLowerCase() === 'image' &&
-    (
-        String(object?.businessProfileField || '').trim().toLowerCase() === 'logo' ||
-        object?.quickLogoSlot === true
-    )
-)
+const isQuickLogoImageObject = isQuickLogoImage
 
 const getQuickLogoSource = (profile: Record<string, any>): string => {
     return String(
@@ -18332,9 +18566,10 @@ const setQuickDynamicTextValue = (object: any, nextText: string): boolean => {
         !isQuickMode.value ||
         (Boolean(field) && object.dynamicUserTextSource === 'quick-user')
     )
-    const rawText = shouldUseManualText
+    const rawTextSource = shouldUseManualText
         ? object.dynamicUserText
         : String(nextText ?? '')
+    const rawText = field === 'whatsapp' ? formatBrazilianBusinessPhone(rawTextSource) : rawTextSource
     const renderedText = transformDynamicBusinessText(rawText, textCase)
     const previousText = String(object.text ?? '')
     const metadataChanged = object.__rawText !== rawText
@@ -18353,6 +18588,7 @@ const setQuickDynamicTextValue = (object: any, nextText: string): boolean => {
         return metadataChanged
     }
 
+    const previousTopAnchor = object.getPointByOrigin?.('center', 'top')
     const previousWidth = Number(object.width)
     const previousHeight = Number(object.height)
     const storedHeight = Number(object.dynamicFieldHeight)
@@ -18382,7 +18618,8 @@ const setQuickDynamicTextValue = (object: any, nextText: string): boolean => {
             object.set('dynamicFieldHeight', previousHeight)
         }
     }
-    fitDynamicBusinessTextObject(object)
+    fitDynamicBusinessTextObject(object, { maxWidth: previousWidth })
+    if (previousTopAnchor) object.setPositionByOrigin?.(previousTopAnchor, 'center', 'top')
     object.setCoords?.()
     return true
 }
@@ -18488,7 +18725,7 @@ const ensureQuickValidityTextObject = (): any | null => {
     const frameTop = Number(frameBounds?.top || 0)
     const centerX = frameBounds ? frameLeft + frameWidth / 2 : getCenterOfView().x
     const top = frameBounds ? frameTop + Math.max(34, Math.round(Number(frameBounds.height || 1350) * 0.12)) : getCenterOfView().y
-    const width = Math.max(180, Math.min(520, frameWidth - 48))
+    const width = Math.max(180, frameWidth - 48)
     const text = formatQuickValidity(
         quickValidityStartDate.value,
         quickValidityEndDate.value,
@@ -18502,7 +18739,7 @@ const ensureQuickValidityTextObject = (): any | null => {
         originX: 'center',
         originY: 'top',
         fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
-        fontSize: 18,
+        fontSize: Math.max(18, Math.round(frameWidth * 0.032)),
         fontWeight: 600,
         fill: '#172033',
         textAlign: 'center',
@@ -28555,12 +28792,6 @@ const handleAutoOfferLayout = async () => {
         @created="handleAiStudioCreated"
       />
 
-      <div v-if="showSealLibrary" class="fixed inset-0 z-[510] flex items-center justify-center bg-black/70 p-3" @click.self="showSealLibrary = false" @keydown.esc="showSealLibrary = false">
-        <section role="dialog" aria-modal="true" aria-label="Trocar selo 3D" class="flex h-[85dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-zinc-900">
-          <header class="flex items-center justify-between border-b border-white/10 p-4 text-white"><div><h2 class="font-semibold">Trocar selo 3D</h2><p class="text-xs text-zinc-400">Mantém a posição e encaixa o novo selo no espaço atual.</p></div><button type="button" class="min-h-11 min-w-11 text-xl" aria-label="Fechar biblioteca de selos" @click="showSealLibrary = false">×</button></header>
-          <AssetsPanel class="min-h-0 flex-1" initial-library-category="selos" @insert-asset="replaceQuickSeal" />
-        </section>
-      </div>
       <div
         v-if="showProductImageUploadPicker"
         class="fixed inset-0 z-[500] bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4"
@@ -28762,7 +28993,7 @@ const handleAutoOfferLayout = async () => {
                 :format-label="quickModePageToolbarFormat.label"
                 :width="quickModePageToolbarDimensions.width"
                 :height="quickModePageToolbarDimensions.height"
-                :busy="isParsingProducts || isProcessing"
+                :busy="isParsingProducts || isProcessing || isQuickModePageResizeInFlight"
                 @duplicate-page="duplicateQuickModePage"
                 @add-page="addQuickModePage"
                 @resize-page="resizeQuickModePage"
@@ -28803,7 +29034,7 @@ const handleAutoOfferLayout = async () => {
 
                   <!-- A cópia do editor permanece disponível ao trocar de página, mesmo sem seleção. -->
                   <div
-                    v-if="editorClipboardSummary && !showDesignLoaderOverlay"
+                    v-if="!isQuickMode && editorClipboardSummary && !showDesignLoaderOverlay"
                     class="absolute top-3 right-3 z-[205] max-w-[calc(100%-1.5rem)] pointer-events-auto"
                     role="status"
                   >
@@ -28944,7 +29175,12 @@ const handleAutoOfferLayout = async () => {
                       @manage-templates="openGlobalLabelTemplates"
                     />
 
-                   <button v-if="quickDecorativeImage && !showSealLibrary" type="button" class="absolute bottom-24 left-1/2 z-[120] flex min-h-11 -translate-x-1/2 items-center gap-2 rounded-xl border border-violet-400/40 bg-zinc-900 px-4 text-sm text-violet-100 shadow-xl" @pointerdown.stop @click.stop="openSealLibrary"><ImagePlus class="h-4 w-4" />Trocar selo / elemento</button>
+                   <QuickLogoQuickActions
+                     v-if="selectedQuickLogo"
+                     :logo="selectedQuickLogo"
+                     @update-property="updateQuickLogoProperty"
+                     @close="closeQuickLogoActions"
+                   />
                    <ProductImageQuickActions
                      v-if="selectedProductImageQuickActions"
                      :visible="showProductImageQuickActions"

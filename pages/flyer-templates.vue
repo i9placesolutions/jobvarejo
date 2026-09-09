@@ -10,6 +10,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  Tag,
   Trash2,
   X,
   Zap
@@ -24,6 +25,15 @@ import {
   type FlyerTemplateFormatId,
   type FlyerTemplateSummary
 } from '~/utils/flyerTemplateApi'
+import {
+  getFlyerTemplateCategoryKey,
+  normalizeFlyerTemplateCategory,
+  type FlyerTemplateCategory
+} from '~/utils/flyerTemplateCategory'
+import {
+  createFlyerTemplateCategory,
+  listFlyerTemplateCategories
+} from '~/utils/flyerTemplateCategoryApi'
 import {
   FLYER_TEMPLATE_PRESETS,
   type FlyerTemplatePresetId
@@ -43,6 +53,8 @@ const loadError = ref('')
 const searchQuery = ref('')
 const showCreateDialog = ref(false)
 const createName = ref('Ofertas da semana')
+const categories = ref<FlyerTemplateCategory[]>([])
+const createCategoryId = ref('')
 const createPresetId = ref<FlyerTemplatePresetId | null>(null)
 const createAllFormats = ref(true)
 const createFormatIds = ref<FlyerTemplateFormatId[]>(FLYER_TEMPLATE_FORMATS.map(format => format.id))
@@ -52,6 +64,14 @@ const deletingTemplateId = ref('')
 const renamingId = ref('')
 const renameDraft = ref('')
 const savingName = ref(false)
+const categoryEditingId = ref('')
+const categoryDraftId = ref('')
+const savingCategory = ref(false)
+const selectedCategory = ref<string | null>(null)
+const showCategoryDialog = ref(false)
+const categoryDialogName = ref('')
+const categoryDialogTarget = ref<'create' | 'edit' | null>(null)
+const isCreatingCategory = ref(false)
 const sentenceName = (value: string) => {
   const name = value.trim().toLocaleLowerCase('pt-BR')
   return name.charAt(0).toLocaleUpperCase('pt-BR') + name.slice(1)
@@ -75,14 +95,120 @@ const saveName = async (template: FlyerTemplateSummary) => {
     savingName.value = false
   }
 }
+const getTemplateCategory = (template: FlyerTemplateSummary): string | null =>
+  normalizeFlyerTemplateCategory(template.template_category)
+const getCategoryKey = (value: string | null | undefined): string | null =>
+  getFlyerTemplateCategoryKey(value)
+const categoryOptions = computed(() => {
+  const unique = new Map<string, FlyerTemplateCategory>()
+  const add = (category: FlyerTemplateCategory) => {
+    const key = getCategoryKey(category.name)
+    if (!key || unique.has(key)) return
+    unique.set(key, category)
+  }
+
+  categories.value.forEach(add)
+  // Se a consulta do catálogo falhar temporariamente, o modelo antigo ainda
+  // continua disponível para selecionar e não perde a categoria ao salvar.
+  templates.value.forEach((template) => {
+    const name = getTemplateCategory(template)
+    const key = getCategoryKey(name)
+    if (!name || !key) return
+    add({ id: `legacy:${key}`, name })
+  })
+
+  return [...unique.values()].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
+})
+const getCategoryNameById = (id: string): string | null => {
+  const category = categoryOptions.value.find(item => item.id === id)
+  return category?.name || null
+}
+const startCategoryEdit = (template: FlyerTemplateSummary) => {
+  renamingId.value = ''
+  categoryEditingId.value = template.id
+  const categoryKey = getCategoryKey(getTemplateCategory(template))
+  categoryDraftId.value = categoryKey
+    ? categoryOptions.value.find(item => getCategoryKey(item.name) === categoryKey)?.id || ''
+    : ''
+}
+const saveCategory = async (template: FlyerTemplateSummary) => {
+  if (savingCategory.value) return
+  const previousCategory = getTemplateCategory(template)
+  const category = normalizeFlyerTemplateCategory(getCategoryNameById(categoryDraftId.value))
+  if (categoryDraftId.value && !category) {
+    showToast('Escolha uma categoria existente ou crie uma nova.', 'error')
+    return
+  }
+  savingCategory.value = true
+  try {
+    await $fetch('/api/projects', {
+      method: 'PATCH',
+      headers: await getApiAuthHeaders(),
+      body: { id: template.id, template_category: category }
+    })
+    template.template_category = category
+    if (getCategoryKey(selectedCategory.value) === getCategoryKey(previousCategory) && previousCategory !== category) {
+      selectedCategory.value = category
+    }
+    categoryEditingId.value = ''
+    showToast(category ? 'Categoria atualizada.' : 'Categoria removida.')
+  } catch (error: any) {
+    showToast(String(error?.data?.statusMessage || error?.message || 'Não foi possível salvar a categoria.'), 'error')
+  } finally {
+    savingCategory.value = false
+  }
+}
+const openCategoryDialog = (target: 'create' | 'edit' | null = null) => {
+  categoryDialogTarget.value = target
+  categoryDialogName.value = ''
+  showCategoryDialog.value = true
+}
+const createCatalogCategory = async () => {
+  if (isCreatingCategory.value) return
+  const name = normalizeFlyerTemplateCategory(categoryDialogName.value)
+  if (!name) {
+    showToast('Informe o nome da categoria.', 'error')
+    return
+  }
+  isCreatingCategory.value = true
+  try {
+    const category = await createFlyerTemplateCategory({
+      headers: await getApiAuthHeaders(),
+      name
+    })
+    const key = getCategoryKey(category.name)
+    categories.value = [
+      ...categories.value.filter(item => getCategoryKey(item.name) !== key),
+      category
+    ].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
+    if (categoryDialogTarget.value === 'create') createCategoryId.value = category.id
+    if (categoryDialogTarget.value === 'edit') categoryDraftId.value = category.id
+    showCategoryDialog.value = false
+    categoryDialogName.value = ''
+    showToast(`Categoria “${category.name}” criada.`)
+  } catch (error: any) {
+    showToast(String(error?.data?.statusMessage || error?.message || 'Não foi possível criar a categoria.'), 'error')
+  } finally {
+    isCreatingCategory.value = false
+  }
+}
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 const filteredTemplates = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
-  if (!query) return templates.value
-  return templates.value.filter(item => String(item.name || '').toLowerCase().includes(query))
+  const query = searchQuery.value.trim().toLocaleLowerCase('pt-BR')
+  return templates.value.filter((item) => {
+    const category = getTemplateCategory(item)
+    const matchesCategory = !selectedCategory.value || (
+      getCategoryKey(category) === getCategoryKey(selectedCategory.value)
+    )
+    if (!matchesCategory) return false
+    if (!query) return true
+    return [item.name, category]
+      .some(value => String(value || '').toLocaleLowerCase('pt-BR').includes(query))
+  })
 })
+const hasTemplateFilter = computed(() => Boolean(searchQuery.value.trim() || selectedCategory.value))
 
 const selectedFormats = computed(() => {
   if (createAllFormats.value) return [...FLYER_TEMPLATE_FORMATS]
@@ -121,7 +247,9 @@ const loadTemplates = async () => {
   loadError.value = ''
   try {
     const headers = await getApiAuthHeaders()
+    const categoriesRequest = listFlyerTemplateCategories(headers).catch(() => [])
     templates.value = await listFlyerTemplates(headers)
+    categories.value = await categoriesRequest
   } catch (error: any) {
     loadError.value = String(error?.data?.statusMessage || error?.message || 'Não foi possível carregar os modelos.')
     templates.value = []
@@ -132,6 +260,7 @@ const loadTemplates = async () => {
 
 const openCreateDialog = () => {
   createName.value = 'Ofertas da semana'
+  createCategoryId.value = ''
   createPresetId.value = null
   createAllFormats.value = true
   createFormatIds.value = FLYER_TEMPLATE_FORMATS.map(format => format.id)
@@ -177,6 +306,7 @@ const createTemplate = async () => {
     const projectId = await createFlyerTemplate({
       headers,
       name: createName.value,
+      category: getCategoryNameById(createCategoryId.value),
       formatIds: selectedFormats.value.map(format => format.id),
       modelNames: [sentenceName(createName.value) || 'Ofertas da semana'],
       templatePresetId: createPresetId.value || undefined
@@ -263,11 +393,17 @@ onUnmounted(() => {
             <p class="hidden text-[11px] text-slate-400 sm:block">Monte o layout uma vez. Na edição rápida só entram os produtos.</p>
           </div>
         </div>
-        <button type="button" class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500 active:scale-[.98]" @click="openCreateDialog">
-          <Plus class="h-4 w-4" />
-          <span class="hidden sm:inline">Novo modelo</span>
-          <span class="sm:hidden">Novo</span>
-        </button>
+        <div class="flex shrink-0 items-center gap-2">
+          <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700" @click="openCategoryDialog()">
+            <Tag class="h-4 w-4" />
+            <span class="hidden sm:inline">Nova categoria</span>
+          </button>
+          <button type="button" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500 active:scale-[.98]" @click="openCreateDialog">
+            <Plus class="h-4 w-4" />
+            <span class="hidden sm:inline">Novo modelo</span>
+            <span class="sm:hidden">Novo</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -303,6 +439,28 @@ onUnmounted(() => {
           </label>
         </div>
 
+        <div v-if="categoryOptions.length" class="mt-4 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-xs font-semibold text-slate-600">Filtrar por categoria</p>
+          <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrar modelos por categoria">
+            <button
+              type="button"
+              class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+              :class="!selectedCategory ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
+              :aria-pressed="!selectedCategory"
+              @click="selectedCategory = null"
+            >Todos</button>
+            <button
+              v-for="category in categoryOptions"
+              :key="category.id"
+              type="button"
+              class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+              :class="getCategoryKey(selectedCategory) === getCategoryKey(category.name) ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
+              :aria-pressed="getCategoryKey(selectedCategory) === getCategoryKey(category.name)"
+              @click="selectedCategory = category.name"
+            >{{ category.name }}</button>
+          </div>
+        </div>
+
         <div v-if="isLoading" class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <div v-for="index in 4" :key="index" class="h-72 animate-pulse rounded-2xl border border-slate-200 bg-white" />
         </div>
@@ -317,9 +475,9 @@ onUnmounted(() => {
           <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
             <LayoutTemplate class="h-7 w-7" />
           </div>
-          <h3 class="mt-4 text-base font-bold text-slate-800">{{ searchQuery ? 'Nenhum modelo encontrado' : 'Nenhum modelo ainda' }}</h3>
-          <p class="mt-1 max-w-md text-sm leading-6 text-slate-500">{{ searchQuery ? 'Tente outro nome ou limpe a busca.' : 'Crie o primeiro encarte no editor avançado. Deixe a zona de produtos vazia para a edição rápida preenchê-la.' }}</p>
-          <button v-if="!searchQuery" type="button" class="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-indigo-500" @click="openCreateDialog">
+          <h3 class="mt-4 text-base font-bold text-slate-800">{{ hasTemplateFilter ? 'Nenhum modelo encontrado' : 'Nenhum modelo ainda' }}</h3>
+          <p class="mt-1 max-w-md text-sm leading-6 text-slate-500">{{ hasTemplateFilter ? 'Tente outra categoria, outro nome ou limpe os filtros.' : 'Crie o primeiro encarte no editor avançado. Deixe a zona de produtos vazia para a edição rápida preenchê-la.' }}</p>
+          <button v-if="!hasTemplateFilter" type="button" class="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-indigo-500" @click="openCreateDialog">
             <Plus class="h-4 w-4" /> Criar primeiro modelo
           </button>
         </div>
@@ -351,6 +509,28 @@ onUnmounted(() => {
               <div v-else class="flex items-center gap-2">
                 <h3 class="min-w-0 flex-1 truncate text-sm font-bold text-slate-800" :title="sentenceName(template.name)">{{ sentenceName(template.name) }}</h3>
                 <button class="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-violet-50 hover:text-violet-600" title="Alterar nome" aria-label="Alterar nome" @click="startRename(template)"><Pencil class="h-4 w-4" /></button>
+              </div>
+              <form v-if="categoryEditingId === template.id" class="mt-2 flex items-center gap-2" @submit.prevent="saveCategory(template)">
+                <label class="sr-only" :for="`template-category-${template.id}`">Categoria do modelo</label>
+                <select
+                  :id="`template-category-${template.id}`"
+                  v-model="categoryDraftId"
+                  class="min-w-0 flex-1 rounded-lg border border-indigo-300 px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                  @keydown.esc="categoryEditingId = ''"
+                >
+                  <option value="">Sem categoria</option>
+                  <option v-for="category in categoryOptions" :key="category.id" :value="category.id">{{ category.name }}</option>
+                </select>
+                <button type="button" class="rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-50" @click="openCategoryDialog('edit')">Nova</button>
+                <button type="submit" :disabled="savingCategory" class="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{{ savingCategory ? '...' : 'Salvar' }}</button>
+                <button type="button" :disabled="savingCategory" class="text-[11px] font-medium text-slate-500" @click="categoryEditingId = ''">Cancelar</button>
+              </form>
+              <div v-else class="mt-2 flex flex-wrap items-center gap-2">
+                <span class="inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold" :class="getTemplateCategory(template) ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'">
+                  <Tag class="h-3 w-3 shrink-0" />
+                  <span class="truncate">{{ getTemplateCategory(template) || 'Sem categoria' }}</span>
+                </span>
+                <button type="button" class="text-[10px] font-semibold text-indigo-600 transition hover:text-indigo-800" @click="startCategoryEdit(template)">Editar categoria</button>
               </div>
               <p class="mt-1 text-[11px] text-slate-400">{{ formatTemplateStructure(template) }} · {{ formatSize(template) }} · {{ formatDate(template.updated_at || template.created_at) }}</p>
               <div class="mt-4 flex items-center gap-2">
@@ -393,6 +573,20 @@ onUnmounted(() => {
             <span class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Nome do modelo</span>
             <input v-model="createName" type="text" maxlength="120" autofocus placeholder="Ex.: Oferta vermelha, Semana, Atacarejo..." class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" @keyup.enter="createTemplate" />
           </label>
+
+          <div>
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <label for="create-template-category" class="block text-xs font-bold uppercase tracking-wider text-slate-500">Categoria</label>
+              <button type="button" class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 transition hover:text-indigo-800" @click="openCategoryDialog('create')">
+                <Plus class="h-3.5 w-3.5" /> Nova categoria
+              </button>
+            </div>
+            <select id="create-template-category" v-model="createCategoryId" class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10">
+              <option value="">Sem categoria</option>
+              <option v-for="category in categoryOptions" :key="category.id" :value="category.id">{{ category.name }}</option>
+            </select>
+            <span class="mt-1.5 block text-[11px] leading-5 text-slate-400">Escolha uma categoria já criada ou crie uma nova. Ela poderá ser usada em vários modelos.</span>
+          </div>
 
           <div>
             <span class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Composição inicial</span>
@@ -477,6 +671,31 @@ onUnmounted(() => {
             </button>
         </div>
       </div>
+    </div>
+
+    <div v-if="showCategoryDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" @click.self="!isCreatingCategory && (showCategoryDialog = false)">
+      <form class="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl sm:p-6" @submit.prevent="createCatalogCategory">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-[.16em] text-indigo-500">Biblioteca</p>
+            <h2 class="mt-1 text-xl font-bold tracking-tight text-slate-900">Nova categoria</h2>
+            <p class="mt-1 text-sm leading-6 text-slate-500">Ela ficará disponível para selecionar em qualquer modelo.</p>
+          </div>
+          <button type="button" class="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" :disabled="isCreatingCategory" aria-label="Fechar" @click="showCategoryDialog = false"><X class="h-5 w-5" /></button>
+        </div>
+        <label class="mt-5 block">
+          <span class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Nome da categoria</span>
+          <input v-model="categoryDialogName" type="text" maxlength="60" autofocus placeholder="Ex.: Hortifruti, Limpeza, Fim de semana..." class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" />
+        </label>
+        <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" class="rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50" :disabled="isCreatingCategory" @click="showCategoryDialog = false">Cancelar</button>
+          <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500 disabled:opacity-60" :disabled="isCreatingCategory || !categoryDialogName.trim()">
+            <LoaderCircle v-if="isCreatingCategory" class="h-4 w-4 animate-spin" />
+            <Plus v-else class="h-4 w-4" />
+            {{ isCreatingCategory ? 'Criando...' : 'Criar categoria' }}
+          </button>
+        </div>
+      </form>
     </div>
 
     <Transition name="toast">

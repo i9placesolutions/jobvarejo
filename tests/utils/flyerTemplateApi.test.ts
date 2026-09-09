@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildFlyerTemplateConfigFromPages,
   buildFlyerTemplatePageBlueprints,
   FLYER_TEMPLATE_FORMATS,
   getFlyerTemplateFormat,
@@ -91,6 +92,26 @@ describe('buildFlyerTemplatePageBlueprints', () => {
       templateFormatId: 'square',
       templateFormatLabel: 'Post 1:1'
     })
+  })
+})
+
+describe('buildFlyerTemplateConfigFromPages', () => {
+  it('preserva a categoria normalizada ao reconstruir a biblioteca de páginas', () => {
+    const config = buildFlyerTemplateConfigFromPages({
+      category: '  Limpeza  ',
+      formatIds: ['feed'],
+      models: [{ id: 'model-1', name: 'Modelo 1' }]
+    }, [{
+      id: 'page-feed',
+      width: 1080,
+      height: 1350,
+      templateModelId: 'model-1',
+      templateModelName: 'Modelo 1',
+      templateFormatId: 'feed'
+    }])
+
+    expect(config.category).toBe('Limpeza')
+    expect(config.pageBlueprints).toHaveLength(1)
   })
 })
 

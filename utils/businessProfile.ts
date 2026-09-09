@@ -133,6 +133,16 @@ export const normalizeBusinessEntries = (
   return entries
 }
 
+/** Máscara apenas de apresentação; não altera o número salvo nem inventa DDD. */
+export const formatBrazilianBusinessPhone = (value: unknown): string => {
+  const text = String(value ?? '').trim()
+  if (!/^[+\d\s().-]+$/.test(text)) return text
+  let digits = text.replace(/\D/g, '')
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) digits = digits.slice(2)
+  if (digits.length !== 10 && digits.length !== 11) return text
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, -4)}-${digits.slice(-4)}`
+}
+
 const formatEntries = (
   value: unknown,
   legacyValue: unknown,
@@ -149,7 +159,8 @@ const formatEntries = (
   }
   return entries
     .map(entry => {
-      const text = normalizeBusinessText(entry.value, 300)
+      const rawText = normalizeBusinessText(entry.value, 300)
+      const text = prefix === 'whatsapp' ? formatBrazilianBusinessPhone(rawText) : rawText
       const label = normalizeBusinessText(entry.label, 60)
       // Labels are useful for repeatable WhatsApp numbers ("Delivery:") but
       // an address label is metadata, not part of the postal address. Prefixing

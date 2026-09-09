@@ -1131,6 +1131,7 @@ const updateObjectProperty = (prop: string, value: any) => {
 
     if (!canvas.value) return;
     let active = canvas.value.getActiveObject();
+    if (isQuickModeLockedObject(active)) return;
 
     if (active) {
         if (INSPECTOR_TRANSFORM_PROPS.has(prop)) {

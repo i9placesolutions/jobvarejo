@@ -1,5 +1,6 @@
 import { getQuickEditorSeedKey, QUICK_EDITOR_SEED_VERSION, type QuickEditorSeed } from '~/utils/quick-editor-seed'
 import { isFlyerTemplatePresetId, type FlyerTemplatePresetId } from '~/utils/mesDoConsumidorPreset'
+import { normalizeFlyerTemplateCategory } from '~/utils/flyerTemplateCategory'
 
 export const FLYER_TEMPLATE_FORMATS = [
   { id: 'feed', label: 'Feed 4:5', hint: 'Instagram e Facebook', width: 1080, height: 1350 },
@@ -45,6 +46,8 @@ export type FlyerTemplatePageBlueprint = {
  */
 export type FlyerTemplateConfig = {
   version: 1
+  /** Categoria principal exibida no seletor de modelos do cliente. */
+  category?: string
   formatIds: FlyerTemplateFormatId[]
   models: FlyerTemplateModelDraft[]
   defaultModelId: string
@@ -66,6 +69,7 @@ export type FlyerTemplateSummary = {
   updated_at: string | null
   created_at: string | null
   is_template?: boolean
+  template_category?: string | null
   template_page_count?: number
   template_model_count?: number
   template_format_count?: number
@@ -238,9 +242,11 @@ const normalizeTemplateConfig = (value: any, pages: any[] = []): FlyerTemplateCo
   const defaultFormatId = getFlyerTemplateFormat(
     String(value?.defaultFormatId || '').trim() || safeFormatIds[0] || 'feed'
   ).id
+  const category = normalizeFlyerTemplateCategory(value?.category)
 
   return {
     version: 1,
+    ...(category ? { category } : {}),
     formatIds: safeFormatIds,
     models: safeModels,
     defaultModelId,
@@ -293,6 +299,7 @@ export const listFlyerTemplates = async (headers: Record<string, string>): Promi
 export const createFlyerTemplate = async (opts: {
   headers: Record<string, string>
   name: string
+  category?: string | null
   formatIds?: FlyerTemplateFormatId[]
   modelNames?: string[]
   templatePresetId?: FlyerTemplatePresetId
@@ -318,8 +325,10 @@ export const createFlyerTemplate = async (opts: {
   const formatIds = formats.map(format => format.id)
   const models = normalizeModelDrafts(opts.modelNames)
   const firstModel = models[0] || { id: 'model-1', name: 'Modelo 1' }
+  const category = normalizeFlyerTemplateCategory(opts.category)
   const templateConfig: FlyerTemplateConfig = {
     version: 1,
+    ...(category ? { category } : {}),
     formatIds,
     models,
     defaultModelId: firstModel.id,

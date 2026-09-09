@@ -134,9 +134,8 @@ export const getDynamicBusinessField = (object: any): string => {
   // stored on the text object itself and do not come from the business
   // profile. It still needs the same editable Textbox controls as the other
   // dynamic store fields.
-  return String(object?.quickDataField || '').trim() === 'validity'
-    ? 'validity'
-    : ''
+  const legacyField = String(object?.quickDataField || '').trim()
+  return ['validity', 'address', 'instagram', 'whatsapp'].includes(legacyField) ? legacyField : ''
 }
 
 export const isDynamicBusinessFieldObject = (object: any): boolean => {
@@ -287,6 +286,9 @@ export const configureDynamicBusinessTextObject = (object: any, fabricNamespace?
   if (!isDynamicBusinessFieldObject(object) || typeof object?.set !== 'function') return false
   const field = getDynamicBusinessField(object)
   const options = getDynamicBusinessTextOptions(field)
+  if (['validity', 'address', 'instagram'].includes(field) && object.splitByGrapheme === true) {
+    options.splitByGrapheme = true
+  }
   const caseChanged = ensureDynamicBusinessTextCaseMetadata(object)
   const baselineChanged = captureDynamicBusinessTextBaseline(object)
   let changed = caseChanged || baselineChanged
@@ -347,6 +349,48 @@ export const fitDynamicBusinessTextObject = (
   const baseFontSize = finitePositive(options.maxFontSize)
     || finitePositive(object.dynamicFieldBaseFontSize)
     || currentFontSize
+  // Dados de leitura mantêm o tamanho escolhido: ao atingir a largura, o Textbox
+  // cria novas linhas e cresce para baixo, em vez de reduzir a fonte.
+  if (['validity', 'address', 'instagram'].includes(getDynamicBusinessField(object))) {
+    // Formatação por caractere herdada do texto de demonstração pode deixar
+    // só o começo grande. Unifica no maior tamanho escolhido, sem apagar cor,
+    // peso ou outros estilos do modelo.
+    let uniformFontSize = baseFontSize
+    let removedInlineSizes = false
+    for (const line of Object.values(object.styles || {}) as any[]) {
+      for (const style of Object.values(line || {}) as any[]) {
+        if (style && typeof style === 'object' && style.fontSize != null) {
+          uniformFontSize = Math.max(uniformFontSize, finitePositive(style.fontSize) || 0)
+          delete style.fontSize
+          removedInlineSizes = true
+        }
+      }
+    }
+    const width = finitePositive(options.maxWidth) || finitePositive(object.width)
+    const topAnchor = object.getPointByOrigin?.('center', 'top')
+    const previousHeight = Number(object.height)
+    const previousWidth = Number(object.width)
+    setObjectValues(object, {
+      fontSize: uniformFontSize,
+      dynamicFieldBaseFontSize: uniformFontSize,
+      dynamicFieldAutoFitFontSize: uniformFontSize,
+      splitByGrapheme: false,
+      ...(width != null ? { width } : {})
+    })
+    object.initDimensions?.()
+    // Um token maior que a caixa (ex.: data em coluna estreita) também deve
+    // quebrar, sem alargar a caixa nem diminuir a fonte.
+    if (width != null && (Number(object.width) > width + 0.5 || getMeasuredLineWidth(object) > width + 0.5)) {
+      setObjectValues(object, { width, splitByGrapheme: true })
+      object.initDimensions?.()
+    }
+    syncDynamicBusinessTextHeight(object)
+    if (topAnchor) object.setPositionByOrigin?.(topAnchor, 'center', 'top')
+    object.setCoords?.()
+    return changed || removedInlineSizes || Math.abs(currentFontSize - uniformFontSize) > 0.01
+      || previousHeight !== Number(object.height)
+      || previousWidth !== Number(object.width)
+  }
   const minFontSize = Math.max(
     MIN_DYNAMIC_FONT_SIZE,
     Math.min(baseFontSize, finitePositive(options.minFontSize) || MIN_DYNAMIC_FONT_SIZE)

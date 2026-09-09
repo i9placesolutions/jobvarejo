@@ -1155,6 +1155,10 @@ const toggleQuickProductOptions = (row: { index: number } | null) => {
     activeReviewRowIndex.value = row.index
     quickExpandedProductIndex.value = isSameProduct ? null : row.index
     showQuickProductProperties.value = !isSameProduct
+    if (!isSameProduct) {
+        const productId = activeReviewRow.value?.productId
+        if (productId) expandedImageSuggestionRows.value = new Set([...expandedImageSuggestionRows.value, productId])
+    }
 }
 
 const hasLabelPriceValue = (value: unknown): boolean => {
@@ -1515,7 +1519,7 @@ const applyCandidateToReviewRow = async (
 
 const fetchReviewSuggestionsForRow = async (
     row: { index: number; productId: string; product: SmartProduct } | null,
-    options: { force?: boolean } = {}
+    options: { force?: boolean; external?: boolean } = {}
 ) => {
     if (!row) return
     const productId = String(row.productId || '').trim()
@@ -1524,14 +1528,6 @@ const fetchReviewSuggestionsForRow = async (
     if (!options.force && Array.isArray(reviewSuggestionMap.value[productId]) && reviewSuggestionMap.value[productId]!.length > 0) {
         return
     }
-    if (
-        !options.force &&
-        Array.isArray(row.product?.imageCandidates) &&
-        row.product.imageCandidates.some((candidate) => candidate?.source === 's3')
-    ) {
-        return
-    }
-
     const query = buildCacheSearchTerm(row.product)
     if (query.length < MIN_ASSET_SEARCH_CHARS) return
 
@@ -1540,6 +1536,22 @@ const fetchReviewSuggestionsForRow = async (
 
     try {
         const headers = await getApiAuthHeaders()
+        if (options.external) {
+            expandedImageSuggestionRows.value = new Set([...expandedImageSuggestionRows.value, productId])
+            const data = await fetchUntyped('/api/product-image-suggestions', {
+                method: 'POST', headers, body: { term: query }, timeout: 90_000
+            })
+            const candidates = filterReviewCandidatesForProduct(row.product, Array.isArray(data?.candidates) ? data.candidates : [])
+            reviewSuggestionMap.value = {
+                ...reviewSuggestionMap.value,
+                [productId]: mergeReviewCandidates(reviewSuggestionMap.value[productId] || [], candidates)
+            }
+            if (!candidates.length) reviewSuggestionErrorMap.value = {
+                ...reviewSuggestionErrorMap.value,
+                [productId]: 'Não encontramos novas opções para este produto. Você pode tentar novamente ou enviar uma imagem.'
+            }
+            return
+        }
         const data = await fetchUntyped('/api/assets', {
             headers,
             query: {
@@ -1565,9 +1577,9 @@ const fetchReviewSuggestionsForRow = async (
     } catch (error: any) {
         reviewSuggestionErrorMap.value = {
             ...reviewSuggestionErrorMap.value,
-            [productId]: String(error?.data?.message || error?.message || 'Falha ao carregar sugestões internas.')
+            [productId]: String(error?.data?.statusMessage || error?.data?.message || error?.message || 'Falha ao carregar sugestões de imagem.')
         }
-        reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: [] }
+        if (!options.external) reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: [] }
     } finally {
         reviewSuggestionLoadingMap.value = { ...reviewSuggestionLoadingMap.value, [productId]: false }
     }
@@ -3799,11 +3811,11 @@ const getAssetDisplayName = (asset: any): string => {
                                                 type="button"
                                                 class="inline-flex h-7 items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 text-[9px] font-bold uppercase text-sky-100 transition-colors hover:bg-sky-500/20 disabled:cursor-wait disabled:opacity-60"
                                                 :disabled="isActiveReviewSuggestionLoading"
-                                                @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })"
+                                                @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true, external: true })"
                                             >
                                                 <Loader2 v-if="isActiveReviewSuggestionLoading" class="mr-1 h-3 w-3 animate-spin" />
                                                 <RefreshCw v-else class="mr-1 h-3 w-3" />
-                                                {{ isActiveReviewSuggestionLoading ? 'Buscando...' : 'Trocar imagem' }}
+                                                {{ isActiveReviewSuggestionLoading ? 'Buscando...' : 'Buscar mais opções' }}
                                             </button>
                                         </template>
                                         <template v-else>
@@ -3876,7 +3888,7 @@ const getAssetDisplayName = (asset: any): string => {
                                     Sugestões de imagem
                                     <span v-if="activeReviewCandidates.length" class="text-zinc-500 font-normal ml-1">({{ activeReviewCandidates.length }})</span>
                                 </div>
-                                <button v-if="!isQrofertasPresentation || isImageSuggestionsExpanded(activeReviewRowMeta.productId)" type="button" class="h-7 rounded-lg border border-zinc-700 bg-zinc-800/50 px-2.5 text-[9px] font-bold uppercase text-zinc-300 hover:bg-zinc-700/60 transition-colors disabled:opacity-50" :disabled="isActiveReviewSuggestionLoading" @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })">
+                                <button v-if="!isQrofertasPresentation || isImageSuggestionsExpanded(activeReviewRowMeta.productId)" type="button" class="h-7 rounded-lg border border-zinc-700 bg-zinc-800/50 px-2.5 text-[9px] font-bold uppercase text-zinc-300 hover:bg-zinc-700/60 transition-colors disabled:opacity-50" :disabled="isActiveReviewSuggestionLoading" @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true, external: true })">
                                     <Loader2 v-if="isActiveReviewSuggestionLoading" class="h-3 w-3 animate-spin inline" />
                                     <span v-else>Atualizar</span>
                                 </button>
@@ -4185,11 +4197,11 @@ const getAssetDisplayName = (asset: any): string => {
                                 type="button"
                                 class="inline-flex h-8 items-center rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 text-[9px] font-bold uppercase text-sky-100 transition-colors hover:bg-sky-500/20 disabled:cursor-wait disabled:opacity-60"
                                 :disabled="isActiveReviewSuggestionLoading"
-                                @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })"
+                                @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true, external: true })"
                             >
                                 <Loader2 v-if="isActiveReviewSuggestionLoading" class="mr-1 h-3 w-3 animate-spin" />
                                 <RefreshCw v-else class="mr-1 h-3 w-3" />
-                                {{ isActiveReviewSuggestionLoading ? 'Buscando...' : 'Trocar imagem' }}
+                                {{ isActiveReviewSuggestionLoading ? 'Buscando...' : 'Buscar mais opções' }}
                             </button>
                         </div>
                     </div>
@@ -4210,6 +4222,36 @@ const getAssetDisplayName = (asset: any): string => {
                         <option v-for="template in activeCompatibleLabelTemplates" :key="template.id" :value="template.id">{{ template.name }}</option>
                     </select>
                 </label>
+            </section>
+
+            <section class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
+                <button
+                    type="button"
+                    class="flex w-full items-center justify-between gap-3 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-300"
+                    :aria-expanded="isImageSuggestionsExpanded(activeReviewRowMeta.productId)"
+                    :aria-controls="`quick-image-suggestions-${activeReviewRowMeta.productId}`"
+                    @click="toggleImageSuggestions(activeReviewRowMeta.productId)"
+                >
+                    <span>Sugestões de imagem <span v-if="activeReviewCandidates.length" class="font-normal text-zinc-500">({{ activeReviewCandidates.length }})</span></span>
+                    <ChevronDown class="h-3.5 w-3.5 text-zinc-600 transition-transform" :class="isImageSuggestionsExpanded(activeReviewRowMeta.productId) ? 'rotate-180' : ''" />
+                </button>
+                <div v-if="activeReviewSuggestionError && activeReviewCandidates.length" role="alert" class="mt-2 text-xs text-rose-300">{{ activeReviewSuggestionError }}</div>
+                <div v-if="isImageSuggestionsExpanded(activeReviewRowMeta.productId)" :id="`quick-image-suggestions-${activeReviewRowMeta.productId}`" class="mt-3 space-y-2">
+                    <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-5 text-center text-[10px] text-zinc-500">Buscando imagens...</div>
+                    <div v-else-if="activeReviewCandidates.length" class="grid grid-cols-2 gap-2">
+                        <button
+                            v-for="(candidate, candidateIndex) in activeReviewCandidates"
+                            :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
+                            type="button"
+                            class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-colors hover:border-emerald-500/40"
+                            @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
+                        >
+                            <div class="relative aspect-4/3 bg-zinc-900/60"><img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" /></div>
+                            <div class="p-2 text-[9px] text-zinc-300"><span class="line-clamp-1">{{ candidate.title || candidate.domain || 'Imagem' }}</span><span class="mt-0.5 block text-emerald-300 opacity-0 transition-opacity group-hover:opacity-100">Usar esta</span></div>
+                        </button>
+                    </div>
+                    <div v-else class="rounded-lg border border-dashed border-zinc-800 px-3 py-5 text-center text-[10px] text-zinc-500">{{ activeReviewSuggestionError || 'Nenhuma imagem compatível encontrada. Use Enviar imagem para escolher um arquivo.' }}</div>
+                </div>
             </section>
 
             <section class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
@@ -4270,34 +4312,7 @@ const getAssetDisplayName = (asset: any): string => {
                 </div>
             </section>
 
-            <section class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
-                <button
-                    type="button"
-                    class="flex w-full items-center justify-between gap-3 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-300"
-                    :aria-expanded="isImageSuggestionsExpanded(activeReviewRowMeta.productId)"
-                    :aria-controls="`quick-image-suggestions-${activeReviewRowMeta.productId}`"
-                    @click="toggleImageSuggestions(activeReviewRowMeta.productId)"
-                >
-                    <span>Sugestões de imagem <span v-if="activeReviewCandidates.length" class="font-normal text-zinc-500">({{ activeReviewCandidates.length }})</span></span>
-                    <ChevronDown class="h-3.5 w-3.5 text-zinc-600 transition-transform" :class="isImageSuggestionsExpanded(activeReviewRowMeta.productId) ? 'rotate-180' : ''" />
-                </button>
-                <div v-if="isImageSuggestionsExpanded(activeReviewRowMeta.productId)" :id="`quick-image-suggestions-${activeReviewRowMeta.productId}`" class="mt-3 space-y-2">
-                    <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-5 text-center text-[10px] text-zinc-500">Buscando imagens...</div>
-                    <div v-else-if="activeReviewCandidates.length" class="grid grid-cols-2 gap-2">
-                        <button
-                            v-for="(candidate, candidateIndex) in activeReviewCandidates"
-                            :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
-                            type="button"
-                            class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-colors hover:border-emerald-500/40"
-                            @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
-                        >
-                            <div class="relative aspect-4/3 bg-zinc-900/60"><img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" /></div>
-                            <div class="p-2 text-[9px] text-zinc-300"><span class="line-clamp-1">{{ candidate.title || candidate.domain || 'Imagem' }}</span><span class="mt-0.5 block text-emerald-300 opacity-0 transition-opacity group-hover:opacity-100">Usar esta</span></div>
-                        </button>
-                    </div>
-                    <div v-else class="rounded-lg border border-dashed border-zinc-800 px-3 py-5 text-center text-[10px] text-zinc-500">{{ activeReviewSuggestionError || 'Nenhuma imagem compatível encontrada. Use Enviar imagem para escolher um arquivo.' }}</div>
-                </div>
-            </section>
+
         </div>
     </Dialog>
 

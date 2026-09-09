@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Clock3, LayoutTemplate, Loader2, Plus, RefreshCw, Search, Zap } from 'lucide-vue-next'
+import { ArrowLeft, Clock3, LayoutTemplate, Loader2, Plus, RefreshCw, Search, Tag, Zap } from 'lucide-vue-next'
 import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import { getProjectPreviewSource } from '~/utils/dashboardProjectPreview'
 import type { ProjectListRow } from '~/types/project'
@@ -8,6 +8,7 @@ import {
   listFlyerTemplates,
   type FlyerTemplateSummary
 } from '~/utils/flyerTemplateApi'
+import { normalizeFlyerTemplateCategory } from '~/utils/flyerTemplateCategory'
 
 definePageMeta({
   layout: false,
@@ -24,6 +25,7 @@ const isPicking = ref(false)
 const errorMessage = ref('')
 const templates = ref<FlyerTemplateSummary[]>([])
 const usingTemplateId = ref('')
+const selectedTemplateCategory = ref<string | null>(null)
 const existingProjects = ref<ProjectListRow[]>([])
 const projectSearch = ref('')
 const filteredProjects = computed(() => {
@@ -33,6 +35,24 @@ const filteredProjects = computed(() => {
     (Date.parse(b.updated_at || '') || 0) - (Date.parse(a.updated_at || '') || 0))
     .filter(project => String(project.name || '').toLocaleLowerCase('pt-BR').includes(normalizedSearch))
 })
+const getTemplateCategory = (template: FlyerTemplateSummary): string | null =>
+  normalizeFlyerTemplateCategory(template.template_category)
+const getCategoryKey = (value: string | null | undefined): string | null =>
+  normalizeFlyerTemplateCategory(value)?.toLocaleLowerCase('pt-BR') || null
+const templateCategories = computed(() => {
+  const unique = new Map<string, string>()
+  templates.value.forEach((template) => {
+    const category = getTemplateCategory(template)
+    if (!category) return
+    unique.set(getCategoryKey(category) as string, category)
+  })
+  return [...unique.values()].sort((left, right) => left.localeCompare(right, 'pt-BR'))
+})
+const filteredTemplates = computed(() => templates.value.filter((template) => (
+  !selectedTemplateCategory.value || (
+    getCategoryKey(getTemplateCategory(template)) === getCategoryKey(selectedTemplateCategory.value)
+  )
+)))
 
 const getLastEditedAt = (project: ProjectListRow): string => project.updated_at || project.created_at || ''
 
@@ -238,10 +258,31 @@ onMounted(() => {
           <h2 class="mt-1 text-xl font-bold tracking-tight text-slate-900">Escolha um modelo</h2>
           <p class="mt-1 text-sm text-slate-500">O modelo abre com os campos e a área de produtos prontos para preencher.</p>
         </div>
+        <div v-if="templateCategories.length" class="mb-4 rounded-2xl border border-slate-200 bg-white p-3">
+          <p class="mb-2 text-xs font-semibold text-slate-600">Filtre por categoria</p>
+          <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrar modelos por categoria">
+            <button
+              type="button"
+              class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+              :class="!selectedTemplateCategory ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
+              :aria-pressed="!selectedTemplateCategory"
+              @click="selectedTemplateCategory = null"
+            >Todos</button>
+            <button
+              v-for="category in templateCategories"
+              :key="category"
+              type="button"
+              class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+              :class="selectedTemplateCategory === category ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
+              :aria-pressed="selectedTemplateCategory === category"
+              @click="selectedTemplateCategory = category"
+            >{{ category }}</button>
+          </div>
+        </div>
         <p v-if="errorMessage" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{{ errorMessage }}</p>
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div v-if="filteredTemplates.length" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <button
-            v-for="template in templates"
+            v-for="template in filteredTemplates"
             :key="template.id"
             type="button"
             class="group overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-900/5 disabled:cursor-wait disabled:opacity-70"
@@ -259,6 +300,10 @@ onMounted(() => {
               />
               <LayoutTemplate v-else class="h-10 w-10 text-indigo-300" />
               <span class="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-indigo-600 shadow-sm">Modelo</span>
+              <span v-if="getTemplateCategory(template)" class="absolute right-3 top-3 inline-flex max-w-[65%] items-center gap-1 truncate rounded-full bg-slate-900/80 px-2.5 py-1 text-[9px] font-bold text-white shadow-sm">
+                <Tag class="h-3 w-3 shrink-0" />
+                <span class="truncate">{{ getTemplateCategory(template) }}</span>
+              </span>
             </div>
             <div class="flex items-center justify-between gap-3 p-4">
               <div class="min-w-0">
@@ -271,6 +316,9 @@ onMounted(() => {
               </span>
             </div>
           </button>
+        </div>
+        <div v-else class="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center text-sm text-slate-500">
+          Nenhum modelo encontrado nesta categoria. Escolha outra categoria ou veja todos os modelos.
         </div>
       </div>
     </section>

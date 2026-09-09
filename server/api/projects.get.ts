@@ -6,6 +6,7 @@ import {
 } from '../utils/project-storage-refs'
 import { pgOneOrNull, pgQuery } from '../utils/postgres'
 import { ensureProjectTemplateColumn } from '../utils/project-templates'
+import { getFlyerTemplateCategory, normalizeFlyerTemplateCategory } from '~/utils/flyerTemplateCategory'
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -97,6 +98,10 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const id = String(query.id || '').trim()
   const templatesOnly = String(query.templates || '').trim() === '1'
+  const rawTemplateCategory = Array.isArray(query.category) ? query.category[0] : query.category
+  const templateCategory = templatesOnly
+    ? normalizeFlyerTemplateCategory(rawTemplateCategory)
+    : null
   const limitParam = query.limit
   const requestedLimitRaw = Array.isArray(limitParam) ? limitParam[0] : limitParam
   const requestedLimit = Number.parseInt(String(requestedLimitRaw || ''), 10)
@@ -122,6 +127,7 @@ export default defineEventHandler(async (event) => {
       if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
       return {
         ...row,
+        template_category: getFlyerTemplateCategory(row?.template_config),
         preview_url: await resolveProjectPreviewUrl(row, user.id),
         ...getProjectPreviewSize(row?.canvas_data),
         ...getProjectTemplateCounts(row?.canvas_data, row?.template_config),
@@ -135,16 +141,20 @@ export default defineEventHandler(async (event) => {
 
   try {
     await ensureProjectTemplateColumn()
+    const params: any[] = [user.id, templatesOnly]
+    const categoryClause = templateCategory
+      ? `\n        and lower(btrim(template_config ->> 'category')) = lower($${params.push(templateCategory)})`
+      : ''
     const baseSql = `
       select id, name, created_at, updated_at, preview_url, canvas_data, template_config, folder_id, last_viewed, is_shared, shared_with, is_starred, is_template
       from public.projects
       where user_id = $1
         and coalesce(is_template, false) = $2
+        ${categoryClause}
       order by updated_at desc
     `
-    const params: any[] = [user.id, templatesOnly]
-    const sql = safeLimit !== null ? `${baseSql} limit $3` : baseSql
     if (safeLimit !== null) params.push(safeLimit)
+    const sql = safeLimit !== null ? `${baseSql} limit $${params.length}` : baseSql
 
     const { rows } = await pgQuery<any>(sql, params)
 
@@ -153,6 +163,7 @@ export default defineEventHandler(async (event) => {
         const { canvas_data: _canvasData, ...rest } = p || {}
         return {
           ...rest,
+          template_category: getFlyerTemplateCategory(p?.template_config),
           preview_url: await resolveProjectPreviewUrl(p, user.id),
           ...getProjectPreviewSize(p?.canvas_data),
           ...getProjectTemplateCounts(p?.canvas_data, p?.template_config)

@@ -10,6 +10,14 @@ import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull } from '../utils/postgres'
 import { ensureProjectTemplateColumn } from '../utils/project-templates'
 import { doesProjectPatchChangeContent } from '../../utils/projectEditedAt'
+import {
+  normalizeFlyerTemplateCategory,
+  normalizeFlyerTemplateConfigCategory
+} from '~/utils/flyerTemplateCategory'
+import {
+  hasSingleFlyerTemplateModel,
+  renameFlyerTemplateModelInPlace
+} from '~/utils/flyerTemplateNaming'
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -43,6 +51,16 @@ const ensureCanvasDataNotEmpty = (value: unknown) => {
   }
 }
 
+const getProjectPages = (canvasData: any): any[] => {
+  if (Array.isArray(canvasData)) return canvasData
+  if (canvasData && typeof canvasData === 'object' && Array.isArray(canvasData.pages)) {
+    return canvasData.pages
+  }
+  return []
+}
+
+const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value))
+
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   await enforceRateLimit(event, `projects-patch:${user.id}`, 180, 60_000)
@@ -54,6 +72,9 @@ export default defineEventHandler(async (event) => {
   if (!projectId || !isUuid(projectId)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid project id format' })
   }
+  if ('template_config' in body && 'template_category' in body) {
+    throw createError({ statusCode: 400, statusMessage: 'Atualize a configuração ou a categoria do modelo, não ambos no mesmo pedido.' })
+  }
 
   const updates: string[] = []
   const params: any[] = []
@@ -61,12 +82,42 @@ export default defineEventHandler(async (event) => {
     params.push(value)
     return `$${params.length}`
   }
+  let synchronizedTemplateCanvasData: any | undefined
+  let synchronizedTemplateConfig: any | undefined
 
   if ('name' in body) {
     const name = String(body?.name || '').trim()
     if (!name) throw createError({ statusCode: 400, statusMessage: 'Project name required' })
     if (name.length > 120) throw createError({ statusCode: 400, statusMessage: 'Project name too long (max 120 chars)' })
     updates.push(`name = ${pushParam(name)}`)
+
+    // The dashboard renames a project with only its name field. For a
+    // single-model flyer template, keep the page/model label in sync at the
+    // same time so a duplicated template no longer keeps the source title.
+    if (!('canvas_data' in body) && !('template_config' in body) && !('template_category' in body)) {
+      await ensureProjectTemplateColumn()
+      const current = await pgOneOrNull<any>(
+        `select canvas_data, template_config, is_template
+           from public.projects
+          where id = $1
+            and user_id = $2
+          limit 1`,
+        [projectId, user.id]
+      )
+      if (!current) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+      if (current.is_template === true) {
+        const canvasData = cloneJson(current.canvas_data)
+        const templateConfig = current.template_config && typeof current.template_config === 'object'
+          ? cloneJson(current.template_config)
+          : null
+        const pages = getProjectPages(canvasData)
+        if (hasSingleFlyerTemplateModel(pages) &&
+            renameFlyerTemplateModelInPlace(pages, pages[0], name, templateConfig)) {
+          synchronizedTemplateCanvasData = canvasData
+          if (templateConfig) synchronizedTemplateConfig = templateConfig
+        }
+      }
+    }
   }
 
   if ('preview_url' in body) {
@@ -114,8 +165,29 @@ export default defineEventHandler(async (event) => {
   if ('template_config' in body) {
     const templateConfig = body?.template_config == null
       ? null
-      : parseAndStringifyJsonbParam(body.template_config, 'template_config')
+      : parseAndStringifyJsonbParam(
+          normalizeFlyerTemplateConfigCategory(body.template_config),
+          'template_config'
+        )
     updates.push(`template_config = ${pushParam(templateConfig)}::jsonb`)
+  } else if (synchronizedTemplateConfig !== undefined) {
+    updates.push(`template_config = ${pushParam(parseAndStringifyJsonbParam(synchronizedTemplateConfig, 'template_config'))}::jsonb`)
+  }
+
+  if ('template_category' in body) {
+    const templateCategory = normalizeFlyerTemplateCategory(body?.template_category)
+    if (templateCategory) {
+      updates.push(
+        `template_config = jsonb_set(
+          coalesce(template_config, '{}'::jsonb),
+          '{category}',
+          to_jsonb(${pushParam(templateCategory)}::text),
+          true
+        )`
+      )
+    } else {
+      updates.push(`template_config = coalesce(template_config, '{}'::jsonb) - 'category'`)
+    }
   }
 
   if ('canvas_data' in body) {
@@ -128,6 +200,8 @@ export default defineEventHandler(async (event) => {
     )
     const canvasDataJson = parseAndStringifyJsonbParam(normalizedCanvasData, 'canvas_data')
     updates.push(`canvas_data = ${pushParam(canvasDataJson)}::jsonb`)
+  } else if (synchronizedTemplateCanvasData !== undefined) {
+    updates.push(`canvas_data = ${pushParam(parseAndStringifyJsonbParam(synchronizedTemplateCanvasData, 'canvas_data'))}::jsonb`)
   }
 
   if (updates.length === 0) {

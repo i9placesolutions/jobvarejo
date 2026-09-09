@@ -55,3 +55,19 @@ describe('businessProfile repeatable data', () => {
     expect(selectedPayments.__paymentMethodsConfigured).toBe(true)
   })
 })
+
+
+describe('máscara brasileira dos números exibidos', () => {
+  it.each([
+    ['64996185163', '(64) 99618-5163'],
+    ['+55 64 99618 5163', '(64) 99618-5163'],
+    ['6433334444', '(64) 3333-4444'],
+    ['(64) 99618-5163', '(64) 99618-5163'],
+    ['996185163', '996185163'],
+  ])('formata %s sem alterar o cadastro', (value, expected) => {
+    const entries = [{ value, label: 'Loja' }]
+    expect(formatBusinessContactValues(entries)).toBe(`Loja: ${expected}`)
+    expect(entries[0]?.value).toBe(value)
+    expect(formatBusinessContactValues(undefined, value)).toBe(expected)
+  })
+})

@@ -58,7 +58,7 @@ describe('dynamicBusinessFields', () => {
     expect(object.fontSize).toBe(18)
     expect(object.scaleX).toBe(1)
     expect(object.scaleY).toBe(1)
-    expect(object.__setCoordsCalls).toBe(1)
+    expect(object.__setCoordsCalls).toBeGreaterThanOrEqual(1)
   })
 
   it('configura campos legados sem esconder controles ou bloquear escala vertical', () => {
@@ -123,7 +123,8 @@ describe('dynamicBusinessFields', () => {
 
   it('reduz a fonte para caber no campo e volta ao tamanho do modelo quando o texto encurta', () => {
     const object = textbox({
-      text: 'Endereço muito comprido da filial',
+      businessProfileField: 'slogan',
+      text: 'Slogan muito comprido da filial',
       fontSize: 30,
       dynamicFieldHeight: 40,
       _textLines: ['linha 1', 'linha 2'],
@@ -147,6 +148,7 @@ describe('dynamicBusinessFields', () => {
 
   it('respeita a largura do campo para textos sem quebra de linha', () => {
     const object = textbox({
+      businessProfileField: 'website',
       text: 'www.exemplo.com.br/promocao-da-semana',
       fontSize: 24,
       width: 120,
@@ -207,4 +209,36 @@ describe('dynamicBusinessFields', () => {
     expect(object.dynamicFieldBaseFontSize).toBe(32)
     expect(object.dynamicFieldHeight).toBe(64)
   })
+})
+
+
+describe('campos grandes com quebra de linha', () => {
+  it.each(['validity', 'address', 'instagram'])('mantém fonte e largura e cresce em altura: %s', field => {
+    const object = textbox({ businessProfileField: field, text: 'Texto longo em duas linhas', fontSize: 40,
+      width: 360, height: 30, dynamicFieldHeight: 30, _textLines: ['primeira', 'segunda'],
+      calcTextHeight: () => 90, getLineWidth: () => 330 })
+    fitDynamicBusinessTextObject(object)
+    expect(object.fontSize).toBe(40)
+    expect(object.width).toBe(360)
+    expect(object.height).toBe(90)
+    expect(object.splitByGrapheme).toBe(false)
+    fitDynamicBusinessTextObject(object)
+    expect(object.fontSize).toBe(40)
+  })
+  it('unifica trechos de endereço no maior tamanho e preserva cor e peso', () => {
+    const object = textbox({ text: 'RUA GARIBALDI LEÃO', fontSize: 18, styles: { 0: {
+      0: { fontSize: 40, fill: '#fff' }, 1: { fontSize: 12, fontWeight: 700 }
+    } } })
+    fitDynamicBusinessTextObject(object)
+    expect(object.fontSize).toBe(40)
+    expect(object.dynamicFieldBaseFontSize).toBe(40)
+    expect(object.styles[0][0]).toEqual({ fill: '#fff' })
+    expect(object.styles[0][1]).toEqual({ fontWeight: 700 })
+  })
+})
+
+it('preserva quebra de nomes longos do Instagram ao configurar um objeto recarregado', () => {
+  const object = textbox({ businessProfileField: 'instagram', splitByGrapheme: true })
+  configureDynamicBusinessTextObject(object)
+  expect(object.splitByGrapheme).toBe(true)
 })

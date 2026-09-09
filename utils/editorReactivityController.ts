@@ -24,7 +24,7 @@ const setupReactivity = () => {
 
     ctx.setReactivityBoundCanvas(canvas.value);
 
-    type QuickModeZoneTransform = {
+    type QuickModeLockedTransform = {
         left: number;
         top: number;
         scaleX: number;
@@ -36,36 +36,37 @@ const setupReactivity = () => {
         flipY: boolean;
     };
 
-    // A zona continua editável no modo avançado, mas é uma estrutura fixa no
-    // modo rápido. Guardamos o transform apenas em memória para impedir um
+    // Zonas, selos e fundos continuam editáveis no avançado e fixos no rápido.
+    // Guardamos o transform apenas em memória para impedir um
     // drag/scale/rotate acidental sem gravar flags de bloqueio no modelo.
-    const quickModeZoneTransforms = new WeakMap<object, QuickModeZoneTransform>();
-    const getQuickModeLockedZones = (obj: any): any[] => {
+    const quickModeLockedTransforms = new WeakMap<object, QuickModeLockedTransform>();
+    const getQuickModeLockedObjects = (obj: any): any[] => {
         if (!isQuickMode.value || !obj) return [];
         const zones: any[] = [];
         const visited = new Set<any>();
         const visit = (candidate: any) => {
             if (!candidate || typeof candidate !== 'object' || visited.has(candidate)) return;
             visited.add(candidate);
-            if (isLikelyProductZone(candidate)) {
-                if (!zones.includes(candidate)) zones.push(candidate);
-                return;
-            }
             if (isActiveSelectionObject(candidate) && typeof candidate.getObjects === 'function') {
                 (candidate.getObjects() || []).forEach((member: any) => visit(member));
                 return;
             }
-            if (candidate.group) visit(candidate.group);
+            if (isQuickModeLockedObject(candidate)) {
+                if (!zones.includes(candidate)) zones.push(candidate);
+                return;
+            }
+            // A política já verifica os ancestrais dos produtos. Não herdar
+            // o bloqueio do grupo fixo ao mover uma logo ou texto dinâmico.
         };
         visit(obj);
         return zones;
     };
-    const rememberQuickModeZoneTransform = (zone: any) => {
-        if (!zone || !isQuickMode.value || !isLikelyProductZone(zone) || quickModeZoneTransforms.has(zone)) return;
+    const rememberQuickModeLockedTransform = (zone: any) => {
+        if (!zone || !isQuickMode.value || !isQuickModeLockedObject(zone) || quickModeLockedTransforms.has(zone)) return;
         const numberOr = (value: any, fallback: number) => (
             typeof value === 'number' && Number.isFinite(value) ? value : fallback
         );
-        quickModeZoneTransforms.set(zone, {
+        quickModeLockedTransforms.set(zone, {
             left: numberOr(zone.left, 0),
             top: numberOr(zone.top, 0),
             scaleX: numberOr(zone.scaleX, 1),
@@ -77,9 +78,9 @@ const setupReactivity = () => {
             flipY: zone.flipY === true
         });
     };
-    const restoreQuickModeZoneTransform = (zone: any): boolean => {
-        if (!zone || !isQuickMode.value || !isLikelyProductZone(zone)) return false;
-        const initial = quickModeZoneTransforms.get(zone);
+    const restoreQuickModeLockedTransform = (zone: any): boolean => {
+        if (!zone || !isQuickMode.value || !isQuickModeLockedObject(zone)) return false;
+        const initial = quickModeLockedTransforms.get(zone);
         if (!initial) return false;
         zone.set(initial);
         zone.setCoords?.();
@@ -87,11 +88,11 @@ const setupReactivity = () => {
         return true;
     };
     const discardQuickModeLockedSelection = (obj: any): boolean => {
-        const zones = getQuickModeLockedZones(obj);
+        const zones = getQuickModeLockedObjects(obj);
         if (!zones.length) return false;
         zones.forEach((zone: any) => {
-            rememberQuickModeZoneTransform(zone);
-            restoreQuickModeZoneTransform(zone);
+            rememberQuickModeLockedTransform(zone);
+            restoreQuickModeLockedTransform(zone);
         });
         try {
             canvas.value?.discardActiveObject?.();
@@ -1330,7 +1331,7 @@ const setupReactivity = () => {
     let previousShiftSelectionAtMousedown: any[] | null = null;
     trackOn('mouse:down:before', (e: any) => {
         if (isQuickModeLockedObject(e?.target)) {
-            getQuickModeLockedZones(e.target).forEach((zone: any) => rememberQuickModeZoneTransform(zone));
+            getQuickModeLockedObjects(e.target).forEach((zone: any) => rememberQuickModeLockedTransform(zone));
             return;
         }
         if (e?.e?.shiftKey) {
@@ -1380,22 +1381,44 @@ const setupReactivity = () => {
           updateProductImageSelectionIntent(e);
           updatePriceGroupSelectionIntent(e);
 
-         // Global Shift+click additive multi-selection:
-        // keep existing selection and append target in all editor contexts.
+         // Global Shift+click multi-selection:
+        // toggle the exact item under the pointer in all editor contexts.
         if (evt?.shiftKey && !isNormalizingShiftSelection) {
             evt.preventDefault?.();
             evt.stopPropagation?.();
+
+            // Fabric reports the enclosing ActiveSelection as `target` when the
+            // user clicks one of its members. Keep the pre-click baseline, then
+            // resolve that member under the pointer before applying the toggle.
+            // Without this, Shift+click can only add a new item because the
+            // individual member is lost behind the active-selection wrapper.
+            const currentMembersRaw = previousShiftSelectionAtMousedown || shiftSelectionBaselineMembers;
+            const currentMembers = currentMembersRaw
+                .map((member: any) => resolveShiftSelectionRootObject(member))
+                .filter((member: any) => !!member)
+                .filter((member: any) => !isQuickModeLockedObject(member))
+                .filter((member: any, idx: number, arr: any[]) => arr.indexOf(member) === idx);
 
             let rawTarget = target;
             if (e?.subTargets && e.subTargets.length > 0) {
                 // Get most precise sub-target if hitting a group/activeSelection
                 rawTarget = e.subTargets[e.subTargets.length - 1];
             }
+            const rawTargetRoot = resolveShiftSelectionRootObject(rawTarget);
+            const isCurrentMemberTarget = !!rawTargetRoot && currentMembers.includes(rawTargetRoot);
+            const pointedCurrentMember = (isActiveSelectionObject(target) || isCurrentMemberTarget)
+                ? pickGenericShiftTargetAtPointer(evt, {})
+                : null;
+            const pointedCurrentMemberRoot = resolveShiftSelectionRootObject(pointedCurrentMember);
+            const shiftSelectionMember = pointedCurrentMemberRoot && currentMembers.includes(pointedCurrentMemberRoot)
+                ? pointedCurrentMemberRoot
+                : null;
+
             if (rawTarget && isActiveSelectionObject(rawTarget)) {
                 rawTarget = null;
             }
             // Trust exactly what the user clicked. If null, fallback to the smart picker.
-            const shiftTarget = rawTarget || pickShiftSelectionTarget(e);
+            const shiftTarget = shiftSelectionMember || rawTarget || pickShiftSelectionTarget(e);
             let normalizedTarget = resolveShiftSelectionRootObject(shiftTarget);
 
             if (discardQuickModeLockedSelection(normalizedTarget)) {
@@ -1404,14 +1427,6 @@ const setupReactivity = () => {
             }
 
             if (normalizedTarget) {
-                const currentMembersRaw = previousShiftSelectionAtMousedown || shiftSelectionBaselineMembers;
-
-                const currentMembers = currentMembersRaw
-                    .map((member: any) => resolveShiftSelectionRootObject(member))
-                    .filter((member: any) => !!member)
-                    .filter((member: any) => !isQuickModeLockedObject(member))
-                    .filter((member: any, idx: number, arr: any[]) => arr.indexOf(member) === idx);
-
                 const finalTarget = normalizedTarget;
                 const isAlreadySelected = currentMembers.includes(finalTarget);
                 let nextMembers = [...currentMembers];
@@ -1501,11 +1516,11 @@ const setupReactivity = () => {
         ctx.setLastTransformMutationAt(Date.now());
         const target = e.target;
         if (isQuickLogoImageObject(target)) syncQuickLogoBackdrop(target);
-        const lockedZones = getQuickModeLockedZones(target);
+        const lockedZones = getQuickModeLockedObjects(target);
         if (lockedZones.length > 0) {
             lockedZones.forEach((zone: any) => {
-                rememberQuickModeZoneTransform(zone);
-                restoreQuickModeZoneTransform(zone);
+                rememberQuickModeLockedTransform(zone);
+                restoreQuickModeLockedTransform(zone);
             });
             pendingObjectMoveViewportCull = false;
             safeRequestRenderAll();
@@ -1687,11 +1702,11 @@ const setupReactivity = () => {
         updateFloatingUI();
         const obj = e.target;
         if (isQuickLogoImageObject(obj)) syncQuickLogoBackdrop(obj);
-        const lockedZones = getQuickModeLockedZones(obj);
+        const lockedZones = getQuickModeLockedObjects(obj);
         if (lockedZones.length > 0) {
             lockedZones.forEach((zone: any) => {
-                rememberQuickModeZoneTransform(zone);
-                restoreQuickModeZoneTransform(zone);
+                rememberQuickModeLockedTransform(zone);
+                restoreQuickModeLockedTransform(zone);
             });
             safeRequestRenderAll();
             return;
@@ -1861,11 +1876,11 @@ const setupReactivity = () => {
     trackOn('object:rotating', (e: any) => {
         ctx.setLastTransformMutationAt(Date.now());
         if (isQuickLogoImageObject(e?.target)) syncQuickLogoBackdrop(e.target);
-        const lockedZones = getQuickModeLockedZones(e?.target);
+        const lockedZones = getQuickModeLockedObjects(e?.target);
         if (lockedZones.length > 0) {
             lockedZones.forEach((zone: any) => {
-                rememberQuickModeZoneTransform(zone);
-                restoreQuickModeZoneTransform(zone);
+                rememberQuickModeLockedTransform(zone);
+                restoreQuickModeLockedTransform(zone);
             });
             safeRequestRenderAll();
         }
@@ -1875,10 +1890,10 @@ const setupReactivity = () => {
     trackOn('object:modified', (e: any) => {
         const obj = e.target;
         if (isQuickModeLockedObject(obj)) {
-            const lockedZones = getQuickModeLockedZones(obj);
+            const lockedZones = getQuickModeLockedObjects(obj);
             lockedZones.forEach((zone: any) => {
-                rememberQuickModeZoneTransform(zone);
-                restoreQuickModeZoneTransform(zone);
+                rememberQuickModeLockedTransform(zone);
+                restoreQuickModeLockedTransform(zone);
             });
             setFabricControlsHiddenDuringTransform(canvas.value, false);
             safeRequestRenderAll();

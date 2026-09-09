@@ -25,6 +25,15 @@ export const ensureProjectTemplateColumn = async (): Promise<void> => {
         on public.projects (user_id, is_template)
         where is_template = true
     `)
+    await pgQuery(`
+      create index if not exists idx_projects_user_template_category
+        on public.projects (
+          user_id,
+          lower(btrim(template_config ->> 'category'))
+        )
+        where coalesce(is_template, false) = true
+          and nullif(btrim(template_config ->> 'category'), '') is not null
+    `)
   })().catch((error) => {
     ensurePromise = null
     throw error

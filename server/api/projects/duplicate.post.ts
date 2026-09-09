@@ -16,6 +16,10 @@ import { getS3Client } from '../../utils/s3'
 import { ensureProjectTemplateColumn } from '../../utils/project-templates'
 import { isUserProjectKey } from '../../utils/storage-scope'
 import { clonePageCanvasDataWithFreshIds } from '~/utils/projectCanvasDuplication'
+import {
+  hasSingleFlyerTemplateModel,
+  renameFlyerTemplateModelInPlace
+} from '~/utils/flyerTemplateNaming'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MAX_PROJECT_NAME_LENGTH = 120
@@ -199,6 +203,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const targetProjectId = randomUUID()
+  const duplicateName = buildDuplicateName(sourceProject.name)
   const s3 = getS3Client()
   const writtenKeys: string[] = []
   const pageIdBySourceId = new Map<string, string>()
@@ -289,13 +294,21 @@ export default defineEventHandler(async (event) => {
       copiedPages.push(copiedPage)
     }
 
-    const canvasData = withProjectPages(sourceProject.canvas_data, copiedPages)
     const templateConfig = copyTemplateConfigForDuplicate(
       sourceProject.template_config,
       copiedPages,
       pageIdBySourceId,
       sourceProject.is_template === true
     )
+
+    // A cópia de um modelo com uma única variação representa um novo modelo
+    // independente. Dar a ele o nome da cópia evita que o título interno das
+    // páginas continue exibindo o nome do modelo de origem.
+    if (sourceProject.is_template === true && hasSingleFlyerTemplateModel(copiedPages)) {
+      renameFlyerTemplateModelInPlace(copiedPages, copiedPages[0], duplicateName, templateConfig)
+    }
+
+    const canvasData = withProjectPages(sourceProject.canvas_data, copiedPages)
     const previewUrl = String(copiedPages[0]?.thumbnailUrl || '').trim() || null
     const inserted = await pgTx(async (client) => {
       const result = await client.query<any>(
@@ -306,7 +319,7 @@ export default defineEventHandler(async (event) => {
          returning *`,
         [
           targetProjectId,
-          buildDuplicateName(sourceProject.name),
+          duplicateName,
           parseAndStringifyJsonbParam(canvasData, 'canvas_data'),
           previewUrl,
           user.id,
