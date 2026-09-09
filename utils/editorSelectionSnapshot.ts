@@ -158,7 +158,7 @@ export const snapshotForPropertiesPanel = (obj: any, extra?: Record<string, any>
     'isQuickGenerated', 'quickSeedId',
     'dynamicFieldResizeMode', 'dynamicFieldKey', 'dynamicFieldHeight',
     'dynamicFieldBaseFontSize', 'dynamicFieldAutoFitFontSize',
-    '__rawText', '__textCase', 'dynamicTextCase',
+    '__rawText', '__textCase', 'dynamicTextCase', 'dynamicUserText', 'dynamicUserTextSource',
     '__originalSrc', 'cropX', 'cropY', 'filters',
     '__stickerOutlineEnabled', '__stickerOutlineWidth',
     '__stickerOutlineColor', '__stickerOutlineMode',

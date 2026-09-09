@@ -1974,7 +1974,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                       <div class="flex items-center justify-between gap-2 mt-0.5">
                         <p class="text-[11px] text-slate-400 truncate flex items-center gap-1 font-medium">
                           <Clock class="w-3 h-3 shrink-0" />
-                          {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
+                          Última edição {{ formatDistanceToNow(project.updated_at || project.created_at) }}
                         </p>
                         <span v-if="!String(project.folder_id || '').trim()" class="text-[9px] font-semibold uppercase tracking-wider text-slate-400 border border-slate-200 rounded-full px-1.5 py-0.5 shrink-0">Raiz</span>
                       </div>
@@ -1999,7 +1999,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                         <h3 v-else class="text-[14px] font-semibold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">{{ project.name || 'Sem título' }}</h3>
                         <p class="text-[11px] text-slate-400 flex items-center gap-1 mt-1">
                           <Clock class="w-3 h-3 shrink-0" />
-                          {{ formatDistanceToNow(project.last_viewed || project.updated_at || project.created_at) }}
+                          Última edição {{ formatDistanceToNow(project.updated_at || project.created_at) }}
                         </p>
                       </div>
                       <div :class="['flex items-center gap-1.5 shrink-0 transition-all', dashMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100']">

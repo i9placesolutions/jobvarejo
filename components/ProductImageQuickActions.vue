@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ChevronDown, SlidersHorizontal, Copy, ImagePlus, Minus, Plus, Tag, Trash2 } from 'lucide-vue-next'
+import { getProductImageToolbarPlacement } from '~/utils/productImageToolbarPlacement'
 
 type TemplateOption = {
   id: string
@@ -56,11 +57,19 @@ onBeforeUnmount(() => { document.removeEventListener('pointerdown', closeOutside
 watch(() => props.visible, async () => { await nextTick(); if (root.value) observer?.observe(root.value); if (toolbar.value) observer?.observe(toolbar.value); measure() })
 const toolbarStyle = computed(() => {
   const width = Math.min(420, Math.max(240, bounds.value.width - 16))
-  const x = Number(props.left) + Number(props.width) / 2 - width / 2
-  const y = Number(props.top) - bounds.value.panelHeight - 10
+  const placement = getProductImageToolbarPlacement({
+    targetLeft: Number(props.left),
+    targetTop: Number(props.top),
+    targetWidth: Number(props.width),
+    targetHeight: Number(props.height),
+    containerWidth: bounds.value.width,
+    containerHeight: bounds.value.height,
+    toolbarWidth: width,
+    toolbarHeight: bounds.value.panelHeight
+  })
   return {
-    '--toolbar-left': `${Math.round(Math.max(8, Math.min(x, bounds.value.width - width - 8)))}px`,
-    '--toolbar-top': `${Math.round(Math.max(8, Math.min(y, bounds.value.height - bounds.value.panelHeight - 8)))}px`,
+    '--toolbar-left': `${Math.round(placement.left)}px`,
+    '--toolbar-top': `${Math.round(placement.top)}px`,
     '--toolbar-width': `${width}px`
   }
 })

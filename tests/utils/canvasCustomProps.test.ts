@@ -24,6 +24,7 @@ describe('CANVAS_CUSTOM_PROPS', () => {
 
   it('contem o contrato persistido da logo dinamica', () => {
     expect(CANVAS_CUSTOM_PROPS).toContain('businessProfileField')
+    expect(CANVAS_CUSTOM_PROPS).toContain('dynamicUserTextSource')
     expect(CANVAS_CUSTOM_PROPS).toContain('quickFieldEnabled')
     expect(CANVAS_CUSTOM_PROPS).toContain('quickLogoSource')
     expect(CANVAS_CUSTOM_PROPS).toContain('quickLogoSlot')

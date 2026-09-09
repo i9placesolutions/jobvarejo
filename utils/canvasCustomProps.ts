@@ -156,6 +156,9 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     // Text transform (preserva texto original antes de upper/lower case)
     '__rawText',
     'dynamicUserText',
+    // Distingue o texto de demonstração herdado do modelo de uma edição
+    // explícita feita pelo cliente no encarte rápido.
+    'dynamicUserTextSource',
     '__textCase',
     // Alias sem prefixo usado como fallback por serializadores legados.
     'dynamicTextCase',

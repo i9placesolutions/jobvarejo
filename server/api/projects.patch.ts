@@ -9,6 +9,7 @@ import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull } from '../utils/postgres'
 import { ensureProjectTemplateColumn } from '../utils/project-templates'
+import { doesProjectPatchChangeContent } from '../../utils/projectEditedAt'
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -48,6 +49,7 @@ export default defineEventHandler(async (event) => {
   const actorClientId = String(getHeader(event, 'x-client-id') || '').trim() || null
 
   const body = await readBody<Record<string, any>>(event)
+  const changesProjectContent = doesProjectPatchChangeContent(body)
   const projectId = String(body?.id || '').trim()
   if (!projectId || !isUuid(projectId)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid project id format' })
@@ -132,7 +134,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'No valid fields to update' })
   }
 
-  updates.push(`updated_at = timezone('utc', now())`)
+  if (changesProjectContent) {
+    updates.push(`updated_at = timezone('utc', now())`)
+  }
 
   const idPlaceholder = pushParam(projectId)
   const userPlaceholder = pushParam(user.id)

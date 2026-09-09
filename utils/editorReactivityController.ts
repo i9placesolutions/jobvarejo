@@ -2024,6 +2024,7 @@ const setupReactivity = () => {
             // Store direct edits separately from the profile-derived value.
             // Empty text is an intentional override too.
             target.dynamicUserText = String(target.text ?? '')
+            target.dynamicUserTextSource = isQuickMode.value ? 'quick-user' : 'designer'
             target.__rawText = target.dynamicUserText
             configureDynamicBusinessTextObject(target, fabric)
             fitDynamicBusinessTextObject(target)
@@ -2044,6 +2045,7 @@ const setupReactivity = () => {
             // Store direct edits separately from the profile-derived value.
             // Empty text is an intentional override too.
             target.dynamicUserText = String(target.text ?? '')
+            target.dynamicUserTextSource = isQuickMode.value ? 'quick-user' : 'designer'
             target.__rawText = target.dynamicUserText
             configureDynamicBusinessTextObject(target, fabric)
             fitDynamicBusinessTextObject(target)

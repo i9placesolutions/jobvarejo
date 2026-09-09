@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ArrowLeft, LayoutTemplate, Loader2, Plus, RefreshCw, Zap } from 'lucide-vue-next'
+import { ArrowLeft, Clock3, LayoutTemplate, Loader2, Plus, RefreshCw, Search, Zap } from 'lucide-vue-next'
+import { formatHistoryDateTime, formatHistoryRelative } from '~/utils/dateTimeFormat'
 import { getProjectPreviewSource } from '~/utils/dashboardProjectPreview'
+import type { ProjectListRow } from '~/types/project'
 import {
   instantiateFlyerTemplate,
   listFlyerTemplates,
@@ -22,19 +24,25 @@ const isPicking = ref(false)
 const errorMessage = ref('')
 const templates = ref<FlyerTemplateSummary[]>([])
 const usingTemplateId = ref('')
-const existingProjects = ref<any[]>([])
+const existingProjects = ref<ProjectListRow[]>([])
 const projectSearch = ref('')
 const filteredProjects = computed(() => {
-  // A lista de retomada mostra o último projeto por nome, sem apagar os anteriores.
-  const latestByName = new Map<string, any>()
-  const ordered = [...existingProjects.value].sort((a, b) =>
+  const normalizedSearch = projectSearch.value.trim().toLocaleLowerCase('pt-BR')
+  return [...existingProjects.value]
+    .sort((a, b) =>
     (Date.parse(b.updated_at || '') || 0) - (Date.parse(a.updated_at || '') || 0))
-  for (const project of ordered) {
-    const key = String(project.name || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR') || project.id
-    if (!latestByName.has(key)) latestByName.set(key, project)
-  }
-  return [...latestByName.values()].filter(p => String(p.name || '').toLocaleLowerCase('pt-BR').includes(projectSearch.value.toLocaleLowerCase('pt-BR')))
+    .filter(project => String(project.name || '').toLocaleLowerCase('pt-BR').includes(normalizedSearch))
 })
+
+const getLastEditedAt = (project: ProjectListRow): string => project.updated_at || project.created_at || ''
+
+const formatLastEdited = (project: ProjectListRow): string =>
+  formatHistoryRelative(getLastEditedAt(project)) || 'data não disponível'
+
+const getLastEditedTitle = (project: ProjectListRow): string => {
+  const date = getLastEditedAt(project)
+  return date ? `Última edição em ${formatHistoryDateTime(date)}` : 'Data da última edição indisponível'
+}
 
 const openExistingProject = async (projectId: string) => {
   await router.replace(`/editor/${projectId}?quick=1`)
@@ -56,7 +64,7 @@ const loadPicker = async () => {
   errorMessage.value = ''
   try {
     const headers = await getApiAuthHeaders()
-    const [models, saved] = await Promise.all([listFlyerTemplates(headers), $fetch<any[]>('/api/projects', { headers })])
+    const [models, saved] = await Promise.all([listFlyerTemplates(headers), $fetch<ProjectListRow[]>('/api/projects', { headers })])
     templates.value = models
     existingProjects.value = Array.isArray(saved) ? saved : []
   } catch (error: any) {
@@ -142,19 +150,57 @@ onMounted(() => {
     <section class="mx-auto max-w-5xl px-4 py-10 sm:px-6">
       <div class="max-w-2xl">
         <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">Edição rápida</p>
-        <h1 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Continue seu encarte ou comece um novo.</h1>
-        <p class="mt-3 text-sm leading-6 text-slate-500">Abra um projeto salvo para continuar de onde parou. Escolher um modelo abaixo cria um novo encarte.</p>
+        <h1 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Seus encartes, prontos para continuar.</h1>
+        <p class="mt-3 text-sm leading-6 text-slate-500">Toque em um encarte salvo para seguir de onde parou ou escolha um modelo para criar outro.</p>
       </div>
 
-      <section v-if="!isOpening && existingProjects.length" class="mt-8 rounded-2xl border border-indigo-200 bg-white p-5" aria-label="Continuar encarte salvo">
-        <h2 class="text-lg font-bold text-slate-900">Continuar editando</h2>
-        <p class="mt-1 text-sm text-slate-500">Abre o encarte mais recente de cada nome, com seus produtos e alterações.</p>
-        <input v-model="projectSearch" type="search" placeholder="Pesquisar seus encartes" aria-label="Pesquisar encartes salvos" class="mt-4 w-full rounded-xl border border-slate-200 p-3 text-base" />
-        <div class="mt-3 grid max-h-80 gap-2 overflow-y-auto sm:grid-cols-2">
-          <button v-for="saved in filteredProjects" :key="saved.id" type="button" class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 text-left hover:border-indigo-400 hover:bg-indigo-50" @click="openExistingProject(saved.id)">
-            <span class="min-w-0 truncate text-sm font-semibold text-slate-800">{{ saved.name }}</span><span class="text-sm font-semibold text-indigo-600">Continuar</span>
+      <section v-if="!isOpening && existingProjects.length" class="mt-8" aria-labelledby="saved-flyers-heading">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">Seus trabalhos</p>
+            <h2 id="saved-flyers-heading" class="mt-1 text-xl font-bold tracking-tight text-slate-900">Encartes</h2>
+            <p class="mt-1 text-sm text-slate-500">A lista já começa pelo que você editou por último.</p>
+          </div>
+          <span class="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">{{ existingProjects.length }} {{ existingProjects.length === 1 ? 'encarte salvo' : 'encartes salvos' }}</span>
+        </div>
+
+        <label class="sr-only" for="quick-editor-project-search">Pesquisar encartes salvos</label>
+        <div class="relative mt-4">
+          <Search class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input id="quick-editor-project-search" v-model="projectSearch" type="search" placeholder="Buscar pelo nome do encarte" class="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-base text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" />
+        </div>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <button
+            v-for="(saved, index) in filteredProjects"
+            :key="saved.id"
+            type="button"
+            class="group overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-900/5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
+            :title="`${saved.name || 'Sem título'} — ${getLastEditedTitle(saved)}`"
+            @click="openExistingProject(saved.id)"
+          >
+            <div class="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc]">
+              <img
+                v-if="getProjectPreviewSource(saved)"
+                :src="getProjectPreviewSource(saved) || undefined"
+                :alt="`Prévia do encarte ${saved.name || 'sem título'}`"
+                class="absolute inset-0 h-full w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]"
+                loading="lazy"
+                decoding="async"
+              />
+              <LayoutTemplate v-else class="h-10 w-10 text-indigo-300" />
+              <span v-if="index === 0 && !projectSearch" class="absolute left-3 top-3 rounded-full bg-slate-900/85 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm">Mais recente</span>
+            </div>
+            <div class="p-4">
+              <p class="truncate text-sm font-bold text-slate-800">{{ saved.name || 'Encarte sem título' }}</p>
+              <p class="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500" :title="getLastEditedTitle(saved)">
+                <Clock3 class="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                <span>Última edição {{ formatLastEdited(saved) }}</span>
+              </p>
+              <span class="mt-4 inline-flex min-h-10 items-center rounded-xl bg-indigo-50 px-3 text-xs font-bold text-indigo-700 transition group-hover:bg-indigo-600 group-hover:text-white">Abrir encarte</span>
+            </div>
           </button>
-          <p v-if="!filteredProjects.length" class="p-3 text-sm text-slate-500">Nenhum encarte com esse nome.</p>
+          <p v-if="!filteredProjects.length" class="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500 sm:col-span-2 lg:col-span-3">Nenhum encarte encontrado com esse nome.</p>
         </div>
       </section>
 
@@ -186,7 +232,12 @@ onMounted(() => {
         </NuxtLink>
       </div>
 
-      <div v-else class="mt-8">
+      <div v-else class="mt-10">
+        <div class="mb-4">
+          <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">Novo encarte</p>
+          <h2 class="mt-1 text-xl font-bold tracking-tight text-slate-900">Escolha um modelo</h2>
+          <p class="mt-1 text-sm text-slate-500">O modelo abre com os campos e a área de produtos prontos para preencher.</p>
+        </div>
         <p v-if="errorMessage" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{{ errorMessage }}</p>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <button

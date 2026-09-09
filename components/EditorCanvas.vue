@@ -7413,6 +7413,9 @@ const quickModeInitialProductText = ref('')
 const quickModeAutoFillImages = ref(false)
 const quickModeAutoParseProductText = ref(false)
 const quickBusinessProfile = ref<Record<string, any>>({})
+// O perfil e o canvas carregam de forma independente. A assinatura reativa
+// garante uma nova aplicação quando os dados chegam depois do loadFromJSON.
+const quickBusinessProfileFingerprint = computed(() => JSON.stringify(quickBusinessProfile.value || {}))
 const isQuickBusinessProfileSaving = ref(false)
 const quickBusinessProfileSetupError = ref('')
 const quickValidityStartDate = ref('')
@@ -8679,8 +8682,15 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                     .catch(error => console.warn('[quick-layout] Não foi possível salvar o ajuste:', error));
             }
         }
-        if (!isStaleLoad() && loadedOk && isQuickMode.value && project.templateConfig?.quickValidity) {
-            handleQuickModeValidityUpdate(project.templateConfig.quickValidity);
+        if (!isStaleLoad() && loadedOk && isQuickMode.value && canvas.value) {
+            if (project.templateConfig?.quickValidity) {
+                handleQuickModeValidityUpdate(project.templateConfig.quickValidity);
+            } else {
+                // Modelos criados antes de `template_config.quickValidity`
+                // guardam as datas no próprio Textbox. Reidratar aqui evita
+                // que a página reaberta volte ao texto de demonstração.
+                hydrateQuickModeDataFromCanvas()
+            }
         }
     }
 }, { deep: false, immediate: true }); // Watch the object reference change
@@ -18262,8 +18272,17 @@ const normalizeQuickBusinessField = (value: unknown): string => {
     return STORE_DYNAMIC_FIELDS.find(item => item.field.toLowerCase() === raw.toLowerCase())?.field || raw
 }
 
-const getQuickBusinessFieldFromObject = (object: any): string =>
-    normalizeQuickBusinessField(object?.businessProfileField)
+const getQuickBusinessFieldFromObject = (object: any): string => {
+    // `businessProfileField` é a marca atual. Alguns temas antigos, porém,
+    // salvaram o mesmo vínculo em `quickDataField`; aceitar ambos impede que
+    // WhatsApp/endereço fiquem apenas com o texto de demonstração.
+    const field = normalizeQuickBusinessField(
+        object?.businessProfileField || object?.quickDataField
+    )
+    // Validade é um dado próprio do encarte (não do perfil comercial) e tem
+    // seu fluxo dedicado de datas logo abaixo.
+    return field === 'validity' ? '' : field
+}
 
 const walkQuickCanvasObjects = (visitor: (object: any) => void): void => {
     if (!canvas.value || typeof visitor !== 'function') return
@@ -18281,6 +18300,18 @@ const walkQuickCanvasObjects = (visitor: (object: any) => void): void => {
     if (Array.isArray(objects)) objects.forEach((object: any) => walk(object))
 }
 
+/** Atualiza também os caches dos grupos que contêm um campo dinâmico. */
+const markQuickDynamicObjectDirty = (object: any): void => {
+    const visited = new Set<any>()
+    let current = object
+    while (current && !visited.has(current)) {
+        visited.add(current)
+        current.dirty = true
+        current.setCoords?.()
+        current = current.group
+    }
+}
+
 /**
  * Atualiza o valor de um Textbox dinamico sem descartar a caixa que o designer
  * ajustou no modelo. `initDimensions()` recalcula a altura natural, portanto a
@@ -18290,7 +18321,18 @@ const walkQuickCanvasObjects = (visitor: (object: any) => void): void => {
 const setQuickDynamicTextValue = (object: any, nextText: string): boolean => {
     if (!object || typeof object?.set !== 'function') return false
     const textCase = getDynamicBusinessTextCase(object)
-    const rawText = typeof object.dynamicUserText === 'string'
+    const field = getQuickBusinessFieldFromObject(object)
+    // Uma cópia de tema pode carregar `dynamicUserText` com o texto de
+    // demonstração que o designer digitou. No modo rápido isso não é uma
+    // escolha do cliente e não pode vencer os dados reais do cadastro. Só
+    // preservamos a sobreposição quando ela foi feita explicitamente neste
+    // encarte (`quick-user`). Fora do modo rápido, mantemos o comportamento
+    // de edição direta já existente.
+    const shouldUseManualText = typeof object.dynamicUserText === 'string' && (
+        !isQuickMode.value ||
+        (Boolean(field) && object.dynamicUserTextSource === 'quick-user')
+    )
+    const rawText = shouldUseManualText
         ? object.dynamicUserText
         : String(nextText ?? '')
     const renderedText = transformDynamicBusinessText(rawText, textCase)
@@ -18410,6 +18452,28 @@ const hydrateQuickModeDataFromCanvas = () => {
     quickShowValidity.value = validity.quickFieldEnabled !== false
     quickOfferScope.value = normalizeOfferValidityScope(validity.quickOfferScope)
     quickModeDataVersion.value += 1
+
+    // Instâncias antigas possuem as datas já escolhidas no objeto Fabric,
+    // mas ainda não têm `template_config.quickValidity`. Reaplicar o mesmo
+    // contrato usado pelo formulário substitui o texto de exemplo sem pedir
+    // que o cliente informe a mesma data novamente.
+    const hasStoredValidity = Boolean(
+        quickValidityStartDate.value ||
+        quickValidityEndDate.value ||
+        String(validity.quickValidityMode || '').trim() ||
+        String(validity.quickValidityDateFormat || '').trim()
+    )
+    if (isQuickMode.value && hasStoredValidity) {
+        handleQuickModeValidityUpdate({
+            startDate: quickValidityStartDate.value,
+            endDate: quickValidityEndDate.value,
+            mode: quickValidityMode.value,
+            whileStocks: quickValidityWhileStocks.value,
+            show: quickShowValidity.value,
+            dateFormat: quickValidityDateFormat.value,
+            scope: quickOfferScope.value
+        })
+    }
 }
 
 const ensureQuickValidityTextObject = (): any | null => {
@@ -18504,7 +18568,11 @@ const applyQuickBusinessProfileBindings = async (
         } else if (fitDynamicBusinessTextObject(object)) {
             changed = true
         }
-        const nextVisible = isQuickMode.value ? enabled && !!(typeof object.dynamicUserText === 'string' ? object.dynamicUserText : liveText) : object.visible !== false
+        const hasQuickUserOverride = field !== 'logo' && object.dynamicUserTextSource === 'quick-user'
+        const visibleText = hasQuickUserOverride && typeof object.dynamicUserText === 'string'
+            ? object.dynamicUserText
+            : liveText
+        const nextVisible = isQuickMode.value ? enabled && !!visibleText : object.visible !== false
         if (object.visible !== nextVisible) {
             object.set('visible', nextVisible)
             changed = true
@@ -18513,8 +18581,7 @@ const applyQuickBusinessProfileBindings = async (
             object.set('quickFieldEnabled', enabled)
             changed = true
         }
-        object.dirty = true
-        object.setCoords?.()
+        markQuickDynamicObjectDirty(object)
     })
 
     const logoChanged = await syncQuickLogoBinding(profile)
@@ -18571,8 +18638,7 @@ const handleQuickModeBusinessFieldToggle = async (payload: { field?: string; ena
             visible: enabled && !!nextText
         })
         fitDynamicBusinessTextObject(object)
-        object.dirty = true
-        object.setCoords?.()
+        markQuickDynamicObjectDirty(object)
         changed = true
     })
     quickModeDataVersion.value += 1
@@ -18654,8 +18720,7 @@ const handleQuickModeValidityUpdate = (payload: {
             validityContainer.set({ visible: quickShowValidity.value && !!nextText })
             validityContainer.dirty = true
         }
-        object.dirty = true
-        object.setCoords?.()
+        markQuickDynamicObjectDirty(object)
         changed = true
     })
     quickModeDataVersion.value += 1
@@ -18792,13 +18857,26 @@ const refreshBusinessProfile = async () => {
         const profile = getQuickBusinessProfilePayload(response)
         quickBusinessProfile.value = { ...profile }
         for (let attempt = 0; attempt < 80; attempt += 1) {
-            if (canvas.value && isFabricReady.value && isInitialDesignLoadDone.value) break
+            if (
+                canvas.value &&
+                isFabricReady.value &&
+                isInitialDesignLoadDone.value &&
+                !isDesignLoading.value &&
+                !isCanvasJsonLoadInProgress
+            ) break
             await new Promise<void>(resolve => window.setTimeout(resolve, 125))
         }
         const pendingSeed = quickSeedProcessing
         if (pendingSeed) {
             await pendingSeed.catch(() => undefined)
         }
+        if (
+            !canvas.value ||
+            !isFabricReady.value ||
+            !isInitialDesignLoadDone.value ||
+            isDesignLoading.value ||
+            isCanvasJsonLoadInProgress
+        ) return
         await applyQuickBusinessProfileBindings(profile, { persist: isQuickMode.value })
     } catch {
         // A quick seed can still render with its embedded profile when the
@@ -18811,7 +18889,15 @@ const refreshBusinessProfile = async () => {
 // que o canvas fica pronto e em cada página ativa, sem persistir uma alteração
 // silenciosa no modelo avançado.
 watch(
-    [isProjectLoaded, isFabricReady, isInitialDesignLoadDone, isDesignLoading, () => String(project.id || ''), () => String(activePage.value?.id || '')],
+    [
+        isProjectLoaded,
+        isFabricReady,
+        isInitialDesignLoadDone,
+        isDesignLoading,
+        () => String(project.id || ''),
+        () => String(activePage.value?.id || ''),
+        () => quickBusinessProfileFingerprint.value
+    ],
     ([loaded, fabricReady, designReady, designLoading, projectId, pageId]) => {
         if (
             !loaded ||
