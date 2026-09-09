@@ -3,6 +3,8 @@ import { registerCanvasImageLoadSession } from '~/utils/canvasImageLoadSession'
 import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
 import { confirmInSystem } from '~/utils/systemMessages'
 import { harmonizeProductCardTypography } from '~/utils/productCardResponsiveTypography'
+import { normalizeQuickBusinessFooter } from '~/utils/quickBusinessFooterTypography'
+import { syncProductNameColor } from '~/utils/productNameColors'
 import { isProductNameText, collectProductNameTexts } from '~/utils/productNameTypographyScope'
 import { fitResponsiveProductName } from '~/utils/productCardResponsiveTypography'
 import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed, nextTick, defineAsyncComponent, provide } from 'vue'
@@ -5342,6 +5344,16 @@ const resizeQuickModePage = (formatId: string) => {
                     templateSourcePageId: page.templateSourcePageId
                 }
                 const products = collectQuickModeProductsForFormatResize()
+                const sourceCardCount = flattenCardColorObjects(canvas.value?.getObjects?.() || [])
+                    .filter(object => object._productData && (object.isProductCard || object.parentZoneId)).length
+                if (sourceCardCount !== products.length) throw new Error('Não foi possível reunir todos os produtos. O formato original foi mantido.')
+                const validity = {
+                    startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value,
+                    mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value,
+                    show: quickShowValidity.value, dateFormat: quickValidityDateFormat.value,
+                    scope: { ...quickOfferScope.value }
+                }
+                const profileForResize = getQuickBusinessProfilePayload(await $fetch<any>('/api/profile', { headers: await getApiAuthHeaders() }))
                 const modelName = getQuickPageModelName(page)
                 const restoreOriginalPage = async (): Promise<boolean> => {
                     if (!originalPageSource.canvasData) return false
@@ -5350,8 +5362,14 @@ const resizeQuickModePage = (formatId: string) => {
                         metadata: originalMetadata
                     })
                     if (!restored) return false
+                    const previousSession = activePageLoadSessionId
                     pageReloadToken.value += 1
-                    return waitForTemplatePageReady(restored.id)
+                    const ready = await waitForTemplatePageReady(restored.id, previousSession)
+                    if (ready) {
+                        await applyQuickBusinessProfileBindings(profileForResize, { persist: false })
+                        handleQuickModeValidityUpdate(validity, { persist: false })
+                    }
+                    return ready
                 }
 
                 let replacementWasApplied = false
@@ -5377,14 +5395,21 @@ const resizeQuickModePage = (formatId: string) => {
                         })
                     } else {
                         replacementWasApplied = true
+                        const previousSession = activePageLoadSessionId
                         pageReloadToken.value += 1
-                        if (!await waitForTemplatePageReady(resizedPage.id)) {
+                        if (!await waitForTemplatePageReady(resizedPage.id, previousSession)) {
                             throw new Error('A composição do formato não terminou de carregar.')
                         }
 
                         if (products.length && !await rebuildQuickModeProductsForSelectedFormat(products)) {
                             throw new Error('O modelo escolhido não possui uma zona de produtos para organizar sua lista.')
                         }
+
+                        if (collectQuickModeProductsForFormatResize().length !== products.length) {
+                            throw new Error('A quantidade de produtos mudou durante o redimensionamento.')
+                        }
+                        await applyQuickBusinessProfileBindings(profileForResize, { persist: false })
+                        handleQuickModeValidityUpdate(validity, { persist: false })
 
                         await Promise.resolve(saveCurrentState({
                             allowEmptyOverwrite: true,
@@ -5531,6 +5556,8 @@ const resizeQuickModePage = (formatId: string) => {
         }))
         await flushPersistenceNow('quick-page-resize', { force: true })
         notifyEditorInfo(`Formato ${format.label} aplicado com os produtos reorganizados.`)
+        } catch (error) {
+            notifyEditorError(error instanceof Error ? error.message : 'Não foi possível redimensionar a página.')
         } finally {
             isQuickModePageResizeInFlight.value = false
         }
@@ -5629,6 +5656,7 @@ const scheduleInitialLabelTemplateSync = () => {
 let isBulkProductMutation = false
 let lastTransformMutationAt = 0
 let activePageLoadSessionId = 0
+let completedPageLoadSessionId = 0
 let lastLoadedPageKey: string | null = null
 const pageReloadToken = ref(0)
 const storageDegraded = ref(false)
@@ -6883,6 +6911,37 @@ function getQuickFontTargets(all = false): any[] {
     canvasObjects.value.forEach(visit)
     return [...targets]
 }
+const quickProductNameColorScope = ref('selected')
+const quickSelectedProductName = computed(() => {
+    void selectedObjectRef.value
+    void canvasObjects.value
+    const active = canvas.value?.getActiveObject?.()
+    return isQuickMode.value && isProductNameText(active) ? active : null
+})
+const quickSelectedNameCard = computed(() => findProductCardParentGroup(quickSelectedProductName.value))
+watch(quickSelectedProductName, () => { quickProductNameColorScope.value = 'selected' })
+const applyQuickProductNameColor = async (value: string | null) => {
+    const selected = quickSelectedNameCard.value
+    if (!selected || (value !== null && !/^#[\da-f]{6}$/i.test(value))) return
+    const zone = findProductZoneById(selected.parentZoneId)
+    const cards = flattenCardColorObjects(canvas.value?.getObjects?.() || [])
+        .filter(object => object._productData && object.parentZoneId === selected.parentZoneId)
+        .sort((a, b) => (a._zoneOrder || 0) - (b._zoneOrder || 0))
+    const highlights = zone ? getZoneHighlightPredicate(zone, cards) : null
+    cards.forEach((card, index) => {
+        if (quickProductNameColorScope.value === 'selected' && card !== selected) return
+        if (quickProductNameColorScope.value === 'highlights' && !(highlights?.isHighlighted(card, index) ?? card._cardHighlighted)) return
+        card._cardStyleOverrides = { ...card._cardStyleOverrides }
+        if (value === null) delete card._cardStyleOverrides.prodNameColor
+        else card._cardStyleOverrides.prodNameColor = value
+        syncProductNameColor(card)
+        touchQuickModeObjectAncestors(card)
+    })
+    refreshCanvasObjects({ immediate: true })
+    refreshSelectedRef()
+    safeRequestRenderAll()
+    await persistQuickModeDataChange('quick-product-name-color')
+}
 const quickFontApplyAllLabel = computed(() => {
     const targets = quickModeNativeTextObjects.value
     return targets.length > 0 && targets.every(isProductNameText)
@@ -7036,6 +7095,7 @@ const applyQuickCardColors = async (settings: { mode: 'auto' | 'manual'; color?:
                     if (!bg) return
                     const fill = resolveProductCardColor(zone._zoneGlobalStyles, card._cardHighlighted, card._cardStyleOverrides)
                     if (bg.set) bg.set('fill', fill); else bg.fill = fill
+                    syncProductNameColor(card)
                     card.dirty = true
                 })
             }
@@ -7168,6 +7228,7 @@ const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
         object.set?.({ [property]: color })
         if (target.kind === 'product-card' && object.group) {
             object.group._cardStyleOverrides = { ...object.group._cardStyleOverrides, cardColor: color, isProdBgTransparent: false }
+            syncProductNameColor(object.group)
         }
         object.setCoords?.()
         touchQuickModeObjectAncestors(object)
@@ -8562,6 +8623,11 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                         degradedNewPage = true
                         degradedFailedCount = isolatedImageFailures
                     }
+                    if (isQuickMode.value) {
+                        flattenCardColorObjects(canvas.value.getObjects())
+                            .filter(object => object._productData && object.parentZoneId)
+                            .forEach(syncProductNameColor)
+                    }
                     loadedOk = true
                     storageDegraded.value = degradedNewPage
                     storageDegradedFailedCount.value = degradedFailedCount
@@ -8872,6 +8938,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     }
 
     if (loadedOk) {
+        completedPageLoadSessionId = loadSessionId
         lastLoadedPageKey = nextPageId ? nextPageLoadKey : null
         isInitialDesignLoadDone.value = true
         scheduleInitialLabelTemplateSync()
@@ -18739,7 +18806,7 @@ const ensureQuickValidityTextObject = (): any | null => {
         originX: 'center',
         originY: 'top',
         fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
-        fontSize: Math.max(18, Math.round(frameWidth * 0.032)),
+        fontSize: 20,
         fontWeight: 600,
         fill: '#172033',
         textAlign: 'center',
@@ -18805,6 +18872,7 @@ const applyQuickBusinessProfileBindings = async (
         } else if (fitDynamicBusinessTextObject(object)) {
             changed = true
         }
+        if (isQuickMode.value && normalizeQuickBusinessFooter(object)) changed = true
         const hasQuickUserOverride = field !== 'logo' && object.dynamicUserTextSource === 'quick-user'
         const visibleText = hasQuickUserOverride && typeof object.dynamicUserText === 'string'
             ? object.dynamicUserText
@@ -18893,7 +18961,7 @@ const handleQuickModeValidityUpdate = (payload: {
     whileStocks?: boolean
     show?: boolean
     scope?: Partial<OfferValidityScope>
-}) => {
+}, options: { persist?: boolean } = {}) => {
     quickValidityDateFormat.value = normalizeOfferDateFormat(payload.dateFormat)
     quickValidityStartDate.value = String(payload?.startDate || '').trim()
     quickValidityEndDate.value = String(payload?.endDate || '').trim()
@@ -18964,7 +19032,7 @@ const handleQuickModeValidityUpdate = (payload: {
     if (!changed) return
     refreshCanvasObjects()
     safeRequestRenderAll()
-    void persistQuickModeDataChange('quick-data-validity')
+    if (options.persist !== false) void persistQuickModeDataChange('quick-data-validity')
 }
 
 const handleAdvancedValidityPromptConfirm = (payload: {
@@ -19154,7 +19222,7 @@ watch(
     { immediate: true }
 )
 
-const waitForTemplatePageReady = async (pageId: string): Promise<boolean> => {
+const waitForTemplatePageReady = async (pageId: string, afterLoadSession = -1): Promise<boolean> => {
     const targetId = String(pageId || '').trim()
     if (!targetId) return false
     const expectedLoadKey = `${String(project.id || '').trim()}:${targetId}`
@@ -19164,6 +19232,7 @@ const waitForTemplatePageReady = async (pageId: string): Promise<boolean> => {
         if (
             isTargetPageActive &&
             lastLoadedPageKey === expectedLoadKey &&
+            completedPageLoadSessionId > afterLoadSession &&
             !!canvas.value &&
             isFabricReady.value &&
             !isDesignLoading.value &&
@@ -29028,6 +29097,42 @@ const handleAutoOfferLayout = async () => {
                 @apply-opacity="applyQuickModeOpacityChange"
               />
 
+                   <ProductImageQuickActions
+                     v-if="selectedProductImageQuickActions"
+                     :visible="showProductImageQuickActions"
+                     :docked="isQuickMode"
+                     :top="selectedProductImageQuickActionsPos.top"
+                     :left="selectedProductImageQuickActionsPos.left"
+                     :width="selectedProductImageQuickActionsPos.width"
+                     :height="selectedProductImageQuickActionsPos.height"
+                     :templates="selectedProductImageQuickActions.templates"
+                     :selected-template-id="selectedProductImageQuickActions.selectedTemplateId"
+                     :fill-count="selectedProductImageQuickActions.card._productData?.autoFillImages ? (selectedProductImageQuickActions.card._productData.imageFillCount || 0) : 1"
+                     :fill-direction="selectedProductImageQuickActions.card._productData?.imageFillDirection || 'auto'"
+                     @remove="handleProductImageRemove"
+                     @replace="handleAction('replace-product-image-upload')"
+                     @duplicate="handleProductImageDuplicate"
+                     @fill="handleProductImageFill"
+                     @resize="handleProductImageResize"
+                     @template="handleProductImageTemplateChange"
+                     @manage-templates="openGlobalLabelTemplates"
+                   />
+
+              <section v-if="quickSelectedProductName" class="quick-product-name-colors flex flex-wrap items-center gap-3 rounded-lg border border-white/15 bg-zinc-900 px-3 py-2 text-xs text-white" @pointerdown.stop>
+                <label class="flex items-center gap-2">Cor do nome
+                  <input type="color" aria-label="Cor do nome do produto" :value="quickSelectedProductName.fill || '#000000'" @change="applyQuickProductNameColor(($event.target as HTMLInputElement).value)" />
+                </label>
+                <label class="flex items-center gap-2">Aplicar a
+                  <select v-model="quickProductNameColorScope" class="rounded bg-zinc-800 px-2 py-1" aria-label="Produtos que receberão a cor">
+                    <option value="selected">Este produto</option>
+                    <option value="all">Todos os produtos da zona</option>
+                    <option v-if="quickSelectedNameCard?._cardHighlighted" value="highlights">Somente destaques</option>
+                  </select>
+                </label>
+                <button type="button" class="rounded bg-white/10 px-3 py-2" @click="applyQuickProductNameColor(quickSelectedProductName.fill)">Aplicar cor atual</button>
+                <button type="button" class="rounded bg-violet-500/25 px-3 py-2" @click="applyQuickProductNameColor(null)">Cor automática</button>
+              </section>
+
               <!-- Infinite Canvas Effect (Wrapper) -->
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
@@ -29181,25 +29286,7 @@ const handleAutoOfferLayout = async () => {
                      @update-property="updateQuickLogoProperty"
                      @close="closeQuickLogoActions"
                    />
-                   <ProductImageQuickActions
-                     v-if="selectedProductImageQuickActions"
-                     :visible="showProductImageQuickActions"
-                     :top="selectedProductImageQuickActionsPos.top"
-                     :left="selectedProductImageQuickActionsPos.left"
-                     :width="selectedProductImageQuickActionsPos.width"
-                     :height="selectedProductImageQuickActionsPos.height"
-                     :templates="selectedProductImageQuickActions.templates"
-                     :selected-template-id="selectedProductImageQuickActions.selectedTemplateId"
-                     :fill-count="selectedProductImageQuickActions.card._productData?.autoFillImages ? (selectedProductImageQuickActions.card._productData.imageFillCount || 0) : 1"
-                     :fill-direction="selectedProductImageQuickActions.card._productData?.imageFillDirection || 'auto'"
-                     @remove="handleProductImageRemove"
-                     @replace="handleAction('replace-product-image-upload')"
-                     @duplicate="handleProductImageDuplicate"
-                     @fill="handleProductImageFill"
-                     @resize="handleProductImageResize"
-                     @template="handleProductImageTemplateChange"
-                     @manage-templates="openGlobalLabelTemplates"
-                   />
+
 
                    <ZoneQuickActions
                     v-if="selectedZoneQuickActions && !isQuickMode"
@@ -29760,6 +29847,8 @@ main {
     margin: 8px 0 16px;
     transform: none;
 }
+
+.quick-product-name-colors { order: 2; flex: 0 0 auto; margin: 4px 0; }
 
 .quick-mode-stage > .quick-mode-canvas-viewport {
     background-color: #303133;

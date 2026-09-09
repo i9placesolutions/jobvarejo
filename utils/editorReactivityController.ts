@@ -1329,12 +1329,22 @@ const setupReactivity = () => {
     let lastZoneState = { left: 0, top: 0 };
 
     let previousShiftSelectionAtMousedown: any[] | null = null;
+    let additiveProductImageTarget: any = null;
     trackOn('mouse:down:before', (e: any) => {
+        additiveProductImageTarget = null;
+        if (isQuickMode.value && e?.e?.button === 0 && !e.e.ctrlKey && !e.e.metaKey) {
+            const members = collectShiftSelectionMembers(canvas.value.getActiveObject?.());
+            if (members.length && members.every(isProductCardImageSelectionCandidate)) {
+                const hit = findTopProductImageAtPointer(e.e, {});
+                // Keep a normal click on the current image available for dragging.
+                if (hit && !members.includes(hit)) additiveProductImageTarget = hit;
+            }
+        }
         if (isQuickModeLockedObject(e?.target)) {
             getQuickModeLockedObjects(e.target).forEach((zone: any) => rememberQuickModeLockedTransform(zone));
             return;
         }
-        if (e?.e?.shiftKey) {
+        if (e?.e?.shiftKey || additiveProductImageTarget) {
             refreshShiftSelectionBaseline(canvas.value.getActiveObject?.());
             previousShiftSelectionAtMousedown = shiftSelectionBaselineMembers.slice();
             return;
@@ -1383,9 +1393,9 @@ const setupReactivity = () => {
 
          // Global Shift+click multi-selection:
         // toggle the exact item under the pointer in all editor contexts.
-        if (evt?.shiftKey && !isNormalizingShiftSelection) {
-            evt.preventDefault?.();
-            evt.stopPropagation?.();
+        if ((evt?.shiftKey || additiveProductImageTarget) && !isNormalizingShiftSelection) {
+            evt?.preventDefault?.();
+            evt?.stopPropagation?.();
 
             // Fabric reports the enclosing ActiveSelection as `target` when the
             // user clicks one of its members. Keep the pre-click baseline, then
@@ -1418,7 +1428,7 @@ const setupReactivity = () => {
                 rawTarget = null;
             }
             // Trust exactly what the user clicked. If null, fallback to the smart picker.
-            const shiftTarget = shiftSelectionMember || rawTarget || pickShiftSelectionTarget(e);
+            const shiftTarget = additiveProductImageTarget || shiftSelectionMember || rawTarget || pickShiftSelectionTarget(e);
             let normalizedTarget = resolveShiftSelectionRootObject(shiftTarget);
 
             if (discardQuickModeLockedSelection(normalizedTarget)) {

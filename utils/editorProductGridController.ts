@@ -1,3 +1,4 @@
+import { resolveProductNameColor, syncProductNameColor } from './productNameColors'
 type GlobalStyles = Record<string, any>
 type LabelTemplate = any
 type ProductZone = any
@@ -254,7 +255,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             fontSize: titleFontSize,
             fontFamily: effectiveStyles.prodNameFont || DEFAULT_EDITOR_FONT_FAMILY,
             fontWeight: (effectiveStyles.prodNameWeight as any) ?? '900',
-            fill: effectiveStyles.prodNameColor || '#1a1a1a',
+            fill: resolveProductNameColor(bg.fill),
             textAlign: effectiveStyles.prodNameAlign || 'center',
             lineHeight: typeof effectiveStyles.prodNameLineHeight === 'number' ? effectiveStyles.prodNameLineHeight : 1.16,
             originX: 'center',
@@ -1498,6 +1499,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
 
         if ((['cardColor', 'cardColorMode', 'highlightCardColor', 'isProdBgTransparent'].includes(p)) && bg && String(bg?.type || '').toLowerCase() === 'rect') {
             bg.set('fill', resolveProductCardColor(styles, card._cardHighlighted === true, getCardStyleOverrides(card)));
+            syncProductNameColor(card);
             changed = true;
         } else if (p === 'cardBorderRadius' && bg && String(bg?.type || '').toLowerCase() === 'rect') {
             const r = Number.isFinite(Number(styles.cardBorderRadius)) ? Number(styles.cardBorderRadius) : 0;
@@ -1528,7 +1530,8 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             title &&
             isTextLikeObject(title)
         ) {
-            if (styles.prodNameColor) title.set('fill', styles.prodNameColor);
+            if (p === 'prodNameColor') card._cardStyleOverrides = { ...getCardStyleOverrides(card), prodNameColor: styles.prodNameColor };
+            syncProductNameColor(card);
             if (styles.prodNameFont) title.set('fontFamily', styles.prodNameFont);
             if (styles.prodNameWeight !== undefined) title.set('fontWeight', styles.prodNameWeight as any);
             if (styles.prodNameAlign) title.set('textAlign', styles.prodNameAlign);

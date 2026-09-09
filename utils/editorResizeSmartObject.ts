@@ -1,3 +1,4 @@
+import { resolveProductNameColor, syncProductNameColor } from './productNameColors'
 import { resolveProductCardColor } from './productCardColors'
 import type { GlobalStyles } from '~/types/product-zone'
 
@@ -36,7 +37,10 @@ export const createResizeSmartObject = (deps: ResizeSmartObjectDeps) => {
     if (Object.keys(__cardStyleOv).length && styles && typeof styles === 'object') {
       styles = { ...styles, ...__cardStyleOv } as Partial<GlobalStyles>
     }
-    if (styles) styles = { ...styles, cardColor: resolveProductCardColor(styles, group._cardHighlighted === true, __cardStyleOv) }
+    if (styles) {
+      const cardColor = resolveProductCardColor(styles, group._cardHighlighted === true, __cardStyleOv)
+      styles = { ...styles, cardColor, prodNameColor: resolveProductNameColor(cardColor, __cardStyleOv) }
+    }
     // FIX: Permanently disable Fabric v7 LayoutManager on product card groups.
     // Card layout is fully managed by resizeSmartObject — Fabric's auto-layout
     // only causes corruption by recalculating bounds from children at stale positions.
@@ -956,6 +960,7 @@ export const createResizeSmartObject = (deps: ResizeSmartObjectDeps) => {
     objects.forEach((o: any) => {
       if (o && typeof o.setCoords === 'function') o.setCoords()
     })
+    syncProductNameColor(group)
     group.dirty = true
     if (typeof group.setCoords === 'function') group.setCoords()
 

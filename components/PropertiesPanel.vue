@@ -1139,7 +1139,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
         <div class="border-t border-white/5 pt-2.5">
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
-              <span class="block text-[11px] font-semibold tracking-wide text-zinc-200">Contorno sticker</span>
+              <span class="block text-[11px] font-semibold tracking-wide text-zinc-200">Contorno</span>
               <span class="mt-0.5 block text-[10px] leading-snug text-zinc-500">Destaca a silhueta da logo sobre qualquer fundo.</span>
             </div>
             <button

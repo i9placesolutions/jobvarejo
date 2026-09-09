@@ -10,6 +10,7 @@ type TemplateOption = {
 }
 
 const props = withDefaults(defineProps<{
+  docked?: boolean
   visible: boolean
   top: number
   left: number
@@ -85,7 +86,7 @@ watch(() => props.visible, (visible) => {
 </script>
 
 <template>
-  <div v-if="visible" ref="root" class="image-actions-root pointer-events-none absolute inset-0 z-[116]" @keydown.esc.stop="templateMenuOpen = false; expanded = false">
+  <div v-if="visible" ref="root" class="image-actions-root pointer-events-none absolute inset-0 z-[116]" :class="{ 'is-docked': docked }" @keydown.esc.stop="templateMenuOpen = false; expanded = false">
     <section ref="toolbar" class="image-actions pointer-events-auto" :style="toolbarStyle" aria-label="Imagem do produto" @pointerdown.stop @mousedown.stop @click.stop>
       <div class="image-actions-header">
         <button type="button" class="image-action image-action-primary" title="Trocar a imagem e suas cópias neste produto" @click="emit('replace')"><ImagePlus />Substituir imagem</button>
@@ -128,8 +129,9 @@ watch(() => props.visible, (visible) => {
 .image-action-primary {flex:1;background:#7c3aed26;color:#ddd6fe;font-weight:600;justify-content:flex-start;}
 .image-action-primary:hover {background:#7c3aed45;}
 .image-action-remove {color:#fda4af;}
-.image-action-settings {display:none;}
-.image-actions-details {border-top:1px solid #ffffff10;margin-top:8px;padding-top:10px;}
+.image-action-settings {display:inline-flex;}
+.image-actions-details {display:none;border-top:1px solid #ffffff10;margin-top:8px;padding-top:10px;}
+.image-actions-details.is-expanded {display:block;}
 .image-actions-fields {display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .image-actions-fields label {min-width:0;color:#a1a1aa;font-size:11px;}
 .image-actions-fields select {display:block;width:100%;min-height:40px;margin-top:4px;padding:0 8px;background:#303036;border:1px solid #ffffff12;border-radius:8px;color:#fafafa;font-size:13px;}
@@ -154,5 +156,7 @@ watch(() => props.visible, (visible) => {
 .image-actions-tools {flex-wrap:wrap;}
 .image-actions-size {margin-left:auto;}
 }
+.image-actions-root.is-docked {position:relative;inset:auto;order:2;flex:0 0 auto;width:100%;padding:4px 0;}
+.is-docked .image-actions {position:relative;inset:auto;width:100%;max-width:none;max-height:35dvh;overflow:auto;padding:6px;border-radius:10px;}
 @media(prefers-reduced-motion:reduce) {.image-action {transition:none;}}
 </style>

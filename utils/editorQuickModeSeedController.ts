@@ -482,7 +482,7 @@ export const createEditorQuickModeSeedController = (ctx: EditorQuickModeSeedCont
             left: validityCenterX,
             top: validityCenterY,
             width: validityWidth * 0.88,
-            fontSize: Math.max(11, Math.min(22, width * 0.016)),
+            fontSize: 20,
             fontWeight: 700,
             fill: MES_DO_CONSUMIDOR_COLORS.white,
             validity: true
@@ -983,7 +983,7 @@ export const createEditorQuickModeSeedController = (ctx: EditorQuickModeSeedCont
             left: validityCenterX,
             top: validityCenterY,
             width: validityWidth * 0.92,
-            fontSize: Math.max(11, Math.min(20, width * 0.017)),
+            fontSize: 20,
             fill: layout.panelText,
             fontWeight: 900
         })
@@ -1435,7 +1435,7 @@ export const createEditorQuickModeSeedController = (ctx: EditorQuickModeSeedCont
                     quickOfferScope.value,
                     quickValidityMode.value
                 )
-                addQuickText(dateLabel, '', validityTop, dateFontSize, {
+                addQuickText(dateLabel, '', validityTop, 20, {
                     dataField: 'validity',
                     startDate: seed.startDate || '',
                     endDate: seed.endDate || '',

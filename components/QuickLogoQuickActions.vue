@@ -30,8 +30,8 @@ const stickerColor = computed(() => /^#[\da-f]{6}$/i.test(props.logo.__stickerOu
             </div>
         </fieldset>
         <div class="sticker-toggle">
-            <span>Contorno sticker</span>
-            <button type="button" role="switch" :aria-checked="stickerEnabled" aria-label="Contorno sticker"
+            <span>Contorno</span>
+            <button type="button" role="switch" :aria-checked="stickerEnabled" aria-label="Contorno"
                 @click="emit('update-property', 'stickerOutlineEnabled', !stickerEnabled)">{{ stickerEnabled ? 'Ativado' : 'Desativado' }}</button>
         </div>
         <div v-if="stickerEnabled" class="sticker-options">

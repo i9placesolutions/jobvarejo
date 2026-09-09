@@ -286,7 +286,7 @@ export const configureDynamicBusinessTextObject = (object: any, fabricNamespace?
   if (!isDynamicBusinessFieldObject(object) || typeof object?.set !== 'function') return false
   const field = getDynamicBusinessField(object)
   const options = getDynamicBusinessTextOptions(field)
-  if (['validity', 'address', 'instagram'].includes(field) && object.splitByGrapheme === true) {
+  if (['validity', 'address', 'instagram', 'whatsapp'].includes(field) && object.splitByGrapheme === true) {
     options.splitByGrapheme = true
   }
   const caseChanged = ensureDynamicBusinessTextCaseMetadata(object)
@@ -351,7 +351,7 @@ export const fitDynamicBusinessTextObject = (
     || currentFontSize
   // Dados de leitura mantêm o tamanho escolhido: ao atingir a largura, o Textbox
   // cria novas linhas e cresce para baixo, em vez de reduzir a fonte.
-  if (['validity', 'address', 'instagram'].includes(getDynamicBusinessField(object))) {
+  if (['validity', 'address', 'instagram', 'whatsapp'].includes(getDynamicBusinessField(object))) {
     // Formatação por caractere herdada do texto de demonstração pode deixar
     // só o começo grande. Unifica no maior tamanho escolhido, sem apagar cor,
     // peso ou outros estilos do modelo.
