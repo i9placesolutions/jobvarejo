@@ -6919,7 +6919,6 @@ const quickSelectedProductName = computed(() => {
     return isQuickMode.value && isProductNameText(active) ? active : null
 })
 const quickSelectedNameCard = computed(() => findProductCardParentGroup(quickSelectedProductName.value))
-watch(quickSelectedProductName, () => { quickProductNameColorScope.value = 'selected' })
 const applyQuickProductNameColor = async (value: string | null) => {
     const selected = quickSelectedNameCard.value
     if (!selected || (value !== null && !/^#[\da-f]{6}$/i.test(value))) return
@@ -7270,6 +7269,8 @@ const applyQuickModeOpacityChange = async (payload: QuickModeOpacityChange) => {
 const selectedObjectId = ref<string | null>(null)
 const selectedObjectIds = ref<string[]>([])
 const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
+// watch reads its computed source immediately, so the selection ref must exist first.
+watch(quickSelectedProductName, () => { quickProductNameColorScope.value = 'selected' })
 const selectedProductImageSubTarget = shallowRef<any>(null)
 const selectedProductImageSelectionKind = ref<'image' | 'card' | 'other' | 'none'>('none')
 // O Fabric altera objetos fora da reatividade do Vue. Esta versao permite que
