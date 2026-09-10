@@ -53,6 +53,20 @@ export const removeUniformExteriorBackground = async (buffer: Buffer, sharp: any
         if (p < w * (h - 1)) add(p + w);
     }
     if (tail / (w * h) > 0.94 || tail / (w * h) < 0.02) return null;
+    // JPEGs e bordas claras misturam produto e fundo. O corte binario deixa
+    // esses pixels opacos e cria um halo branco. Nesse caso, usar o modelo,
+    // que estima alpha, em vez de ampliar a tolerancia e apagar produtos claros.
+    let boundaryPixels = 0, ambiguousPixels = 0;
+    for (let p = 0; p < w * h; p++) {
+        if (seen[p]) continue;
+        const touchesExterior = (p % w > 0 && seen[p - 1]) ||
+            (p % w < w - 1 && seen[p + 1]) ||
+            (p >= w && seen[p - w]) || (p < w * (h - 1) && seen[p + w]);
+        if (!touchesExterior) continue;
+        boundaryPixels++;
+        if ([0, 1, 2].every(c => Math.abs(data[p * 4 + c] - background[c]!) <= 45)) ambiguousPixels++;
+    }
+    if (ambiguousPixels >= 8 && ambiguousPixels / Math.max(1, boundaryPixels) > 0.08) return null;
     for (let i = 0; i < tail; i++) data[queue[i]! * 4 + 3] = 0;
     return sharp(data, { raw: info }).png().toBuffer();
 };

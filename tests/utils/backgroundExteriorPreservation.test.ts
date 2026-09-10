@@ -32,3 +32,14 @@ it('não usa remoção por cor quando o fundo é escuro', async () => {
   const source = await sharp({ create: { width: 40, height: 40, channels: 4, background: '#111111' } }).png().toBuffer()
   expect(await removeUniformExteriorBackground(source, sharp)).toBeNull()
 })
+
+it('encaminha bordas claras misturadas com o fundo para o modelo sem apagar o produto', async () => {
+  const width = 40, height = 40
+  const raw = Buffer.alloc(width * height * 4, 255)
+  for (let y = 8; y < 32; y++) for (let x = 8; x < 32; x++) {
+    const edge = x === 8 || x === 31 || y === 8 || y === 31
+    raw.set(edge ? [238, 240, 239, 255] : [30, 130, 110, 255], (y * width + x) * 4)
+  }
+  const source = await sharp(raw, { raw: { width, height, channels: 4 } }).png().toBuffer()
+  expect(await removeUniformExteriorBackground(source, sharp)).toBeNull()
+})

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { resolve } from 'node:path'
+import { resolveImageWorkerPath } from './image-worker-path'
 import type { GoogleCseImageCandidate } from './product-image-google-cse'
 
 let active = 0
@@ -17,7 +17,7 @@ export const searchChromiumImageCandidates = async (query: string): Promise<{ ca
   await acquire()
   try {
     const stdout = await new Promise<string>((resolveOutput, reject) => {
-      execFile(process.env.PRODUCT_IMAGE_PYTHON || 'python3', [resolve(process.cwd(), 'workers/chromium_image_search.py'), query],
+      execFile(process.env.PRODUCT_IMAGE_PYTHON || 'python3', [resolveImageWorkerPath('chromium_image_search.py'), query],
         { timeout: 60000, maxBuffer: 2 * 1024 * 1024 }, (error, stdout) => error && !stdout.trim() ? reject(error) : resolveOutput(stdout))
     })
     const result = JSON.parse(stdout)

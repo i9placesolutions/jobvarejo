@@ -1,0 +1,653 @@
+[
+  {
+    "id": "5dfbc32d-16a7-4f66-90fa-7256719cbe17",
+    "pageId": "32147467-7051-4c1d-921e-2c57d211b4b2",
+    "name": "Fds do hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/5dfbc32d-16a7-4f66-90fa-7256719cbe17/page_32147467-7051-4c1d-921e-2c57d211b4b2_1789037793694.json",
+    "verified": true
+  },
+  {
+    "id": "5dfbc32d-16a7-4f66-90fa-7256719cbe17",
+    "pageId": "9152b8ef-f3e8-4326-b578-715b3b193afd",
+    "name": "Fds do hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/5dfbc32d-16a7-4f66-90fa-7256719cbe17/page_9152b8ef-f3e8-4326-b578-715b3b193afd_1789037798314.json",
+    "verified": true
+  },
+  {
+    "id": "5dfbc32d-16a7-4f66-90fa-7256719cbe17",
+    "pageId": "1b1c94df-1494-4c8a-af6e-380e2096dd11",
+    "name": "Fds do hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/5dfbc32d-16a7-4f66-90fa-7256719cbe17/page_1b1c94df-1494-4c8a-af6e-380e2096dd11_1789037803285.json",
+    "verified": true
+  },
+  {
+    "id": "5dfbc32d-16a7-4f66-90fa-7256719cbe17",
+    "pageId": "70001f30-eabd-4b11-8cfd-25aac3dffe13",
+    "name": "Fds do hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/5dfbc32d-16a7-4f66-90fa-7256719cbe17/page_70001f30-eabd-4b11-8cfd-25aac3dffe13_1789037807682.json",
+    "verified": true
+  },
+  {
+    "id": "4b8b98f0-9a34-46e3-ab41-ddcc6135c79d",
+    "pageId": "e30edb30-2867-4079-8b7b-90b65079e5c7",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/4b8b98f0-9a34-46e3-ab41-ddcc6135c79d/page_e30edb30-2867-4079-8b7b-90b65079e5c7_1789037813611.json",
+    "verified": true
+  },
+  {
+    "id": "4b8b98f0-9a34-46e3-ab41-ddcc6135c79d",
+    "pageId": "84e14f36-b4c0-496c-a0fc-588be0fc6f52",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/4b8b98f0-9a34-46e3-ab41-ddcc6135c79d/page_84e14f36-b4c0-496c-a0fc-588be0fc6f52_1789037819363.json",
+    "verified": true
+  },
+  {
+    "id": "4b8b98f0-9a34-46e3-ab41-ddcc6135c79d",
+    "pageId": "26081365-66c9-4fea-937b-2ce0a1ac9f8f",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/4b8b98f0-9a34-46e3-ab41-ddcc6135c79d/page_26081365-66c9-4fea-937b-2ce0a1ac9f8f_1789037825294.json",
+    "verified": true
+  },
+  {
+    "id": "4b8b98f0-9a34-46e3-ab41-ddcc6135c79d",
+    "pageId": "fee2da54-ad99-4a13-85ea-259d7e90f48d",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/4b8b98f0-9a34-46e3-ab41-ddcc6135c79d/page_fee2da54-ad99-4a13-85ea-259d7e90f48d_1789037830205.json",
+    "verified": true
+  },
+  {
+    "id": "28df0d96-3190-422a-a698-ed3f47fe7cc9",
+    "pageId": "e6f7823b-64ad-45db-bbe8-4df642ba907c",
+    "name": "Aqui tem mais oferta",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/28df0d96-3190-422a-a698-ed3f47fe7cc9/page_e6f7823b-64ad-45db-bbe8-4df642ba907c_1789037835213.json",
+    "verified": true
+  },
+  {
+    "id": "28df0d96-3190-422a-a698-ed3f47fe7cc9",
+    "pageId": "40f30b27-d797-4a81-9e18-7d9257c9d2b7",
+    "name": "Aqui tem mais oferta",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/28df0d96-3190-422a-a698-ed3f47fe7cc9/page_40f30b27-d797-4a81-9e18-7d9257c9d2b7_1789037838275.json",
+    "verified": true
+  },
+  {
+    "id": "28df0d96-3190-422a-a698-ed3f47fe7cc9",
+    "pageId": "c98b11dc-0c84-4afd-aaf2-5520ec455b43",
+    "name": "Aqui tem mais oferta",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/28df0d96-3190-422a-a698-ed3f47fe7cc9/page_c98b11dc-0c84-4afd-aaf2-5520ec455b43_1789037841546.json",
+    "verified": true
+  },
+  {
+    "id": "28df0d96-3190-422a-a698-ed3f47fe7cc9",
+    "pageId": "0b1f5e92-2ad4-458f-8121-8810a1b5ba4c",
+    "name": "Aqui tem mais oferta",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/28df0d96-3190-422a-a698-ed3f47fe7cc9/page_0b1f5e92-2ad4-458f-8121-8810a1b5ba4c_1789037844164.json",
+    "verified": true
+  },
+  {
+    "id": "7506f335-2bf6-4650-8206-b283585a5a16",
+    "pageId": "bb3d585f-81b5-4d9b-9e84-24fa06c10e1d",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/7506f335-2bf6-4650-8206-b283585a5a16/page_bb3d585f-81b5-4d9b-9e84-24fa06c10e1d_1789037847024.json",
+    "verified": true
+  },
+  {
+    "id": "7506f335-2bf6-4650-8206-b283585a5a16",
+    "pageId": "39c34346-1148-4800-8fac-79292ea03173",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/7506f335-2bf6-4650-8206-b283585a5a16/page_39c34346-1148-4800-8fac-79292ea03173_1789037851824.json",
+    "verified": true
+  },
+  {
+    "id": "7506f335-2bf6-4650-8206-b283585a5a16",
+    "pageId": "e2eedea4-359a-4101-bafc-b98b1e178352",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/7506f335-2bf6-4650-8206-b283585a5a16/page_e2eedea4-359a-4101-bafc-b98b1e178352_1789037856920.json",
+    "verified": true
+  },
+  {
+    "id": "7506f335-2bf6-4650-8206-b283585a5a16",
+    "pageId": "7c409a2d-1f28-4e7e-9b40-c5656f60ee81",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/7506f335-2bf6-4650-8206-b283585a5a16/page_7c409a2d-1f28-4e7e-9b40-c5656f60ee81_1789037861678.json",
+    "verified": true
+  },
+  {
+    "id": "c69acb2e-1446-40a5-913e-82cfd822cffc",
+    "pageId": "e409d8ab-4381-4faa-81fa-d8a0e20c7d5f",
+    "name": "Ofertas da semana",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/c69acb2e-1446-40a5-913e-82cfd822cffc/page_e409d8ab-4381-4faa-81fa-d8a0e20c7d5f_1789037867484.json",
+    "verified": true
+  },
+  {
+    "id": "c69acb2e-1446-40a5-913e-82cfd822cffc",
+    "pageId": "3a17aa39-c563-472c-b4c1-5945d355043a",
+    "name": "Ofertas da semana",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/c69acb2e-1446-40a5-913e-82cfd822cffc/page_3a17aa39-c563-472c-b4c1-5945d355043a_1789037873046.json",
+    "verified": true
+  },
+  {
+    "id": "c69acb2e-1446-40a5-913e-82cfd822cffc",
+    "pageId": "63b58917-947c-41b0-b01b-61d00c075472",
+    "name": "Ofertas da semana",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/c69acb2e-1446-40a5-913e-82cfd822cffc/page_63b58917-947c-41b0-b01b-61d00c075472_1789037877219.json",
+    "verified": true
+  },
+  {
+    "id": "c69acb2e-1446-40a5-913e-82cfd822cffc",
+    "pageId": "42cadf5a-e91a-47e2-b7e9-3abbfb178b19",
+    "name": "Ofertas da semana",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/c69acb2e-1446-40a5-913e-82cfd822cffc/page_42cadf5a-e91a-47e2-b7e9-3abbfb178b19_1789037883434.json",
+    "verified": true
+  },
+  {
+    "id": "bfad873e-26f2-4abb-a219-6be73ef7bd4b",
+    "pageId": "d9a56e7c-1bed-4618-8d0c-7b9b600928e3",
+    "name": "Quarta e quinta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/bfad873e-26f2-4abb-a219-6be73ef7bd4b/page_d9a56e7c-1bed-4618-8d0c-7b9b600928e3_1789037889799.json",
+    "verified": true
+  },
+  {
+    "id": "bfad873e-26f2-4abb-a219-6be73ef7bd4b",
+    "pageId": "c53d6cdc-a346-4baa-97ae-cbd7cff0b4c1",
+    "name": "Quarta e quinta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/bfad873e-26f2-4abb-a219-6be73ef7bd4b/page_c53d6cdc-a346-4baa-97ae-cbd7cff0b4c1_1789037899036.json",
+    "verified": true
+  },
+  {
+    "id": "bfad873e-26f2-4abb-a219-6be73ef7bd4b",
+    "pageId": "493e2420-83c1-49d1-bd86-cf474d8844d9",
+    "name": "Quarta e quinta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/bfad873e-26f2-4abb-a219-6be73ef7bd4b/page_493e2420-83c1-49d1-bd86-cf474d8844d9_1789037903325.json",
+    "verified": true
+  },
+  {
+    "id": "bfad873e-26f2-4abb-a219-6be73ef7bd4b",
+    "pageId": "09c68431-a5f5-4f61-86c8-375e0d131d78",
+    "name": "Quarta e quinta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/bfad873e-26f2-4abb-a219-6be73ef7bd4b/page_09c68431-a5f5-4f61-86c8-375e0d131d78_1789037908809.json",
+    "verified": true
+  },
+  {
+    "id": "ab7f7789-7298-4b34-b4c7-6d8f583d870a",
+    "pageId": "c22fcf37-b51a-40be-91f8-2563031facc4",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/ab7f7789-7298-4b34-b4c7-6d8f583d870a/page_c22fcf37-b51a-40be-91f8-2563031facc4_1789037914950.json",
+    "verified": true
+  },
+  {
+    "id": "ab7f7789-7298-4b34-b4c7-6d8f583d870a",
+    "pageId": "4556f06d-f092-4639-bca1-da03654b87bd",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/ab7f7789-7298-4b34-b4c7-6d8f583d870a/page_4556f06d-f092-4639-bca1-da03654b87bd_1789037921644.json",
+    "verified": true
+  },
+  {
+    "id": "ab7f7789-7298-4b34-b4c7-6d8f583d870a",
+    "pageId": "2117d070-a176-471f-959f-834e6ea93b3d",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/ab7f7789-7298-4b34-b4c7-6d8f583d870a/page_2117d070-a176-471f-959f-834e6ea93b3d_1789037925874.json",
+    "verified": true
+  },
+  {
+    "id": "ab7f7789-7298-4b34-b4c7-6d8f583d870a",
+    "pageId": "9da5f376-9d9a-4d47-95d6-c82135cd353f",
+    "name": "Terça e quarta verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/ab7f7789-7298-4b34-b4c7-6d8f583d870a/page_9da5f376-9d9a-4d47-95d6-c82135cd353f_1789037930432.json",
+    "verified": true
+  },
+  {
+    "id": "6d2a76ae-d271-4957-9d39-baf0532c016d",
+    "pageId": "21aa1992-4112-49ae-9241-d6080e3b790a",
+    "name": "Independênica de preços baixos",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/6d2a76ae-d271-4957-9d39-baf0532c016d/page_21aa1992-4112-49ae-9241-d6080e3b790a_1789037937728.json",
+    "verified": true
+  },
+  {
+    "id": "66aaabb8-33ef-43f3-a3f4-f8cb406f8862",
+    "pageId": "b8b3436d-0087-4c62-934f-5d3e707a2bba",
+    "name": "Terça e quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/66aaabb8-33ef-43f3-a3f4-f8cb406f8862/page_b8b3436d-0087-4c62-934f-5d3e707a2bba_1789037940880.json",
+    "verified": true
+  },
+  {
+    "id": "66aaabb8-33ef-43f3-a3f4-f8cb406f8862",
+    "pageId": "d9cd4c65-beaf-4aa1-a0d3-13f5ce858782",
+    "name": "Terça e quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/66aaabb8-33ef-43f3-a3f4-f8cb406f8862/page_d9cd4c65-beaf-4aa1-a0d3-13f5ce858782_1789037946342.json",
+    "verified": true
+  },
+  {
+    "id": "66aaabb8-33ef-43f3-a3f4-f8cb406f8862",
+    "pageId": "9570c195-e527-4451-aecb-ab8b23078a19",
+    "name": "Terça e quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/66aaabb8-33ef-43f3-a3f4-f8cb406f8862/page_9570c195-e527-4451-aecb-ab8b23078a19_1789037951505.json",
+    "verified": true
+  },
+  {
+    "id": "fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "pageId": "83988ada-2763-4ba4-a5af-5203bb83aa2f",
+    "name": "Fim de Semana Maluco",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/fc95b924-a8a0-4deb-9b44-fdbc568a925f/page_83988ada-2763-4ba4-a5af-5203bb83aa2f_1789037956947.json",
+    "verified": true
+  },
+  {
+    "id": "66aaabb8-33ef-43f3-a3f4-f8cb406f8862",
+    "pageId": "430cde29-672f-4951-9c1b-15b22d10e891",
+    "name": "Terça e quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/66aaabb8-33ef-43f3-a3f4-f8cb406f8862/page_430cde29-672f-4951-9c1b-15b22d10e891_1789037960626.json",
+    "verified": true
+  },
+  {
+    "id": "fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "pageId": "b8a3635c-6bd7-44e1-85ff-a2bdfa768ef5",
+    "name": "Fim de Semana Maluco",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/fc95b924-a8a0-4deb-9b44-fdbc568a925f/page_b8a3635c-6bd7-44e1-85ff-a2bdfa768ef5_1789037966739.json",
+    "verified": true
+  },
+  {
+    "id": "fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "pageId": "8e360bd3-e9ae-4f48-b785-7d86ddc8a455",
+    "name": "Fim de Semana Maluco",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/fc95b924-a8a0-4deb-9b44-fdbc568a925f/page_8e360bd3-e9ae-4f48-b785-7d86ddc8a455_1789037969501.json",
+    "verified": true
+  },
+  {
+    "id": "fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "pageId": "168457f3-d71e-4cfe-9007-3b721903c260",
+    "name": "Fim de Semana Maluco",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/fc95b924-a8a0-4deb-9b44-fdbc568a925f/page_168457f3-d71e-4cfe-9007-3b721903c260_1789037973069.json",
+    "verified": true
+  },
+  {
+    "id": "88947f96-face-4e89-b6a1-3f3f2044d97b",
+    "pageId": "a8ae8db1-ba8d-4001-adb5-ca80b64d21a4",
+    "name": "Quinta da Carne",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/88947f96-face-4e89-b6a1-3f3f2044d97b/page_a8ae8db1-ba8d-4001-adb5-ca80b64d21a4_1789037976828.json",
+    "verified": true
+  },
+  {
+    "id": "88947f96-face-4e89-b6a1-3f3f2044d97b",
+    "pageId": "aba6d745-8d85-4d52-b814-8cb339072b7e",
+    "name": "Quinta da Carne",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/88947f96-face-4e89-b6a1-3f3f2044d97b/page_aba6d745-8d85-4d52-b814-8cb339072b7e_1789037980774.json",
+    "verified": true
+  },
+  {
+    "id": "88947f96-face-4e89-b6a1-3f3f2044d97b",
+    "pageId": "7332e1b9-9adb-4aed-bd87-3a652b5d786f",
+    "name": "Quinta da Carne",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/88947f96-face-4e89-b6a1-3f3f2044d97b/page_7332e1b9-9adb-4aed-bd87-3a652b5d786f_1789037984038.json",
+    "verified": true
+  },
+  {
+    "id": "88947f96-face-4e89-b6a1-3f3f2044d97b",
+    "pageId": "27d8735f-9ef3-4c35-ae9f-4b3610f5044f",
+    "name": "Quinta da Carne",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/88947f96-face-4e89-b6a1-3f3f2044d97b/page_27d8735f-9ef3-4c35-ae9f-4b3610f5044f_1789037987424.json",
+    "verified": true
+  },
+  {
+    "id": "9bb5f0d1-bdc7-4560-a4fd-511b32610b0a",
+    "pageId": "e2080f7e-eedc-4f06-8a2c-180cef4b07d5",
+    "name": "Quinta e Sexta Imbatível — Azul",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/9bb5f0d1-bdc7-4560-a4fd-511b32610b0a/page_e2080f7e-eedc-4f06-8a2c-180cef4b07d5_1789037991418.json",
+    "verified": true
+  },
+  {
+    "id": "9bb5f0d1-bdc7-4560-a4fd-511b32610b0a",
+    "pageId": "1045aee5-d0e2-4cb7-9aa1-570774dd24b5",
+    "name": "Quinta e Sexta Imbatível — Azul",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/9bb5f0d1-bdc7-4560-a4fd-511b32610b0a/page_1045aee5-d0e2-4cb7-9aa1-570774dd24b5_1789037994614.json",
+    "verified": true
+  },
+  {
+    "id": "9bb5f0d1-bdc7-4560-a4fd-511b32610b0a",
+    "pageId": "5bd541a9-40eb-4f47-8ea2-29830d63d491",
+    "name": "Quinta e Sexta Imbatível — Azul",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/9bb5f0d1-bdc7-4560-a4fd-511b32610b0a/page_5bd541a9-40eb-4f47-8ea2-29830d63d491_1789037999606.json",
+    "verified": true
+  },
+  {
+    "id": "6e394169-6597-4d8a-afcc-191412fc2430",
+    "pageId": "2e923665-0b1d-4e20-a7b2-4e14a51f080c",
+    "name": "Quinta e Sexta Imbatível",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/6e394169-6597-4d8a-afcc-191412fc2430/page_2e923665-0b1d-4e20-a7b2-4e14a51f080c_1789038007261.json",
+    "verified": true
+  },
+  {
+    "id": "9bb5f0d1-bdc7-4560-a4fd-511b32610b0a",
+    "pageId": "bbdb7ae6-cde6-4002-a1bf-19011236270b",
+    "name": "Quinta e Sexta Imbatível — Azul",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/9bb5f0d1-bdc7-4560-a4fd-511b32610b0a/page_bbdb7ae6-cde6-4002-a1bf-19011236270b_1789038011070.json",
+    "verified": true
+  },
+  {
+    "id": "6e394169-6597-4d8a-afcc-191412fc2430",
+    "pageId": "b9d3e68c-e943-463d-aec0-9e64f6fc1d09",
+    "name": "Quinta e Sexta Imbatível",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/6e394169-6597-4d8a-afcc-191412fc2430/page_b9d3e68c-e943-463d-aec0-9e64f6fc1d09_1789038015658.json",
+    "verified": true
+  },
+  {
+    "id": "6e394169-6597-4d8a-afcc-191412fc2430",
+    "pageId": "cb34ef8e-c47f-4501-a483-d904dcedd691",
+    "name": "Quinta e Sexta Imbatível",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/6e394169-6597-4d8a-afcc-191412fc2430/page_cb34ef8e-c47f-4501-a483-d904dcedd691_1789038020019.json",
+    "verified": true
+  },
+  {
+    "id": "3d1e6929-a287-4a65-9874-eb2204fa46bc",
+    "pageId": "8ecf5d36-c783-4e20-800f-307fc0366a5d",
+    "name": "Quinta da Carne — Dourada",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/3d1e6929-a287-4a65-9874-eb2204fa46bc/page_8ecf5d36-c783-4e20-800f-307fc0366a5d_1789038025706.json",
+    "verified": true
+  },
+  {
+    "id": "6e394169-6597-4d8a-afcc-191412fc2430",
+    "pageId": "3824d2b3-a5f2-4928-b8e8-a5c97a65fdc6",
+    "name": "Quinta e Sexta Imbatível",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/6e394169-6597-4d8a-afcc-191412fc2430/page_3824d2b3-a5f2-4928-b8e8-a5c97a65fdc6_1789038032833.json",
+    "verified": true
+  },
+  {
+    "id": "3d1e6929-a287-4a65-9874-eb2204fa46bc",
+    "pageId": "72c0c1b0-18b9-41b2-ba9e-c0052ad11f3c",
+    "name": "Quinta da Carne — Dourada",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/3d1e6929-a287-4a65-9874-eb2204fa46bc/page_72c0c1b0-18b9-41b2-ba9e-c0052ad11f3c_1789038036957.json",
+    "verified": true
+  },
+  {
+    "id": "3d1e6929-a287-4a65-9874-eb2204fa46bc",
+    "pageId": "a1d20bba-ea0f-4544-87e7-471caf668139",
+    "name": "Quinta da Carne — Dourada",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/3d1e6929-a287-4a65-9874-eb2204fa46bc/page_a1d20bba-ea0f-4544-87e7-471caf668139_1789038045109.json",
+    "verified": true
+  },
+  {
+    "id": "3d1e6929-a287-4a65-9874-eb2204fa46bc",
+    "pageId": "e7eeb682-be86-425d-b84b-7b114a0954e2",
+    "name": "Quinta da Carne — Dourada",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/3d1e6929-a287-4a65-9874-eb2204fa46bc/page_e7eeb682-be86-425d-b84b-7b114a0954e2_1789038053062.json",
+    "verified": true
+  },
+  {
+    "id": "2eabb51f-7918-497e-9aa5-40a05a15c102",
+    "pageId": "a76c6314-ce5e-4501-a0ee-8641fa6c6d18",
+    "name": "Mês do consumidor 3d",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/2eabb51f-7918-497e-9aa5-40a05a15c102/page_a76c6314-ce5e-4501-a0ee-8641fa6c6d18_1789038061472.json",
+    "verified": true
+  },
+  {
+    "id": "2eabb51f-7918-497e-9aa5-40a05a15c102",
+    "pageId": "15397b4a-ebc9-4dd8-a3aa-46901aba7127",
+    "name": "Mês do consumidor 3d",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/2eabb51f-7918-497e-9aa5-40a05a15c102/page_15397b4a-ebc9-4dd8-a3aa-46901aba7127_1789038067572.json",
+    "verified": true
+  },
+  {
+    "id": "2eabb51f-7918-497e-9aa5-40a05a15c102",
+    "pageId": "7d784cba-0258-4bd6-9e5e-862ec7f55d9b",
+    "name": "Mês do consumidor 3d",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/2eabb51f-7918-497e-9aa5-40a05a15c102/page_7d784cba-0258-4bd6-9e5e-862ec7f55d9b_1789038070810.json",
+    "verified": true
+  },
+  {
+    "id": "2eabb51f-7918-497e-9aa5-40a05a15c102",
+    "pageId": "b188cbdf-b04a-4079-975f-1d54ed0f48b7",
+    "name": "Mês do consumidor 3d",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/2eabb51f-7918-497e-9aa5-40a05a15c102/page_b188cbdf-b04a-4079-975f-1d54ed0f48b7_1789038077348.json",
+    "verified": true
+  },
+  {
+    "id": "87d633a3-da24-4245-90e7-7000cf26f988",
+    "pageId": "078e4bb9-0eb2-4d04-a949-4f51f6545ef0",
+    "name": "Fim de Semana Imbatível",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/87d633a3-da24-4245-90e7-7000cf26f988/page_078e4bb9-0eb2-4d04-a949-4f51f6545ef0_1789038081924.json",
+    "verified": true
+  },
+  {
+    "id": "87d633a3-da24-4245-90e7-7000cf26f988",
+    "pageId": "19bfbcbb-77ee-4e9d-a68a-010a8e2bd8f5",
+    "name": "Fim de Semana Imbatível",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/87d633a3-da24-4245-90e7-7000cf26f988/page_19bfbcbb-77ee-4e9d-a68a-010a8e2bd8f5_1789038086553.json",
+    "verified": true
+  },
+  {
+    "id": "87d633a3-da24-4245-90e7-7000cf26f988",
+    "pageId": "9f6092fd-ebcb-462f-bc64-3eae04ef8b65",
+    "name": "Fim de Semana Imbatível",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/87d633a3-da24-4245-90e7-7000cf26f988/page_9f6092fd-ebcb-462f-bc64-3eae04ef8b65_1789038090524.json",
+    "verified": true
+  },
+  {
+    "id": "87d633a3-da24-4245-90e7-7000cf26f988",
+    "pageId": "b6a9bb0c-4ce4-40ac-98c1-fe8f31d9bef0",
+    "name": "Fim de Semana Imbatível",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/87d633a3-da24-4245-90e7-7000cf26f988/page_b6a9bb0c-4ce4-40ac-98c1-fe8f31d9bef0_1789038098971.json",
+    "verified": true
+  },
+  {
+    "id": "ae849f4d-db0f-49eb-851c-97150216e4bb",
+    "pageId": "51cb6890-f9c1-478c-bc2b-e6dfe02054a5",
+    "name": "Dia de hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/ae849f4d-db0f-49eb-851c-97150216e4bb/page_51cb6890-f9c1-478c-bc2b-e6dfe02054a5_1789038105586.json",
+    "verified": true
+  },
+  {
+    "id": "ae849f4d-db0f-49eb-851c-97150216e4bb",
+    "pageId": "be3981a2-f15d-4d6c-83c4-927e033a6edf",
+    "name": "Dia de hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/ae849f4d-db0f-49eb-851c-97150216e4bb/page_be3981a2-f15d-4d6c-83c4-927e033a6edf_1789038114367.json",
+    "verified": true
+  },
+  {
+    "id": "ae849f4d-db0f-49eb-851c-97150216e4bb",
+    "pageId": "85625a77-bbe9-4294-998a-8048cab0f208",
+    "name": "Dia de hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/ae849f4d-db0f-49eb-851c-97150216e4bb/page_85625a77-bbe9-4294-998a-8048cab0f208_1789038119775.json",
+    "verified": true
+  },
+  {
+    "id": "ae849f4d-db0f-49eb-851c-97150216e4bb",
+    "pageId": "913b3318-c770-4555-b6fe-79ba97e98c38",
+    "name": "Dia de hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/ae849f4d-db0f-49eb-851c-97150216e4bb/page_913b3318-c770-4555-b6fe-79ba97e98c38_1789038129630.json",
+    "verified": true
+  },
+  {
+    "id": "3f7ab336-b854-4f50-9c06-893e14247418",
+    "pageId": "688de5d7-7b7b-40e1-963e-8f2d1e3d59ff",
+    "name": "Quinta Maluca",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/3f7ab336-b854-4f50-9c06-893e14247418/page_688de5d7-7b7b-40e1-963e-8f2d1e3d59ff_1789038139113.json",
+    "verified": true
+  },
+  {
+    "id": "3f7ab336-b854-4f50-9c06-893e14247418",
+    "pageId": "d1d81070-3ea8-4c03-9f36-760dc7dcc17c",
+    "name": "Quinta Maluca",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/3f7ab336-b854-4f50-9c06-893e14247418/page_d1d81070-3ea8-4c03-9f36-760dc7dcc17c_1789038145788.json",
+    "verified": true
+  },
+  {
+    "id": "3f7ab336-b854-4f50-9c06-893e14247418",
+    "pageId": "a087606b-9053-469d-87ba-09a1a8761947",
+    "name": "Quinta Maluca",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/3f7ab336-b854-4f50-9c06-893e14247418/page_a087606b-9053-469d-87ba-09a1a8761947_1789038149720.json",
+    "verified": true
+  },
+  {
+    "id": "3f7ab336-b854-4f50-9c06-893e14247418",
+    "pageId": "cd066e20-62ac-4f23-8a22-9933dc241d03",
+    "name": "Quinta Maluca",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/3f7ab336-b854-4f50-9c06-893e14247418/page_cd066e20-62ac-4f23-8a22-9933dc241d03_1789038155081.json",
+    "verified": true
+  },
+  {
+    "id": "d214f77a-3d3a-4f42-8cac-43f6234265f2",
+    "pageId": "d2af3ff4-91a8-4a3b-9f03-466c8b1a88c8",
+    "name": "Quinta da carne",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/d214f77a-3d3a-4f42-8cac-43f6234265f2/page_d2af3ff4-91a8-4a3b-9f03-466c8b1a88c8_1789038161669.json",
+    "verified": true
+  },
+  {
+    "id": "d214f77a-3d3a-4f42-8cac-43f6234265f2",
+    "pageId": "3df2f153-6b10-47d9-b12c-bb56cff6b525",
+    "name": "Quinta da carne",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/d214f77a-3d3a-4f42-8cac-43f6234265f2/page_3df2f153-6b10-47d9-b12c-bb56cff6b525_1789038170452.json",
+    "verified": true
+  },
+  {
+    "id": "d214f77a-3d3a-4f42-8cac-43f6234265f2",
+    "pageId": "96232480-fbab-4496-9a69-636e37266750",
+    "name": "Quinta da carne",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/d214f77a-3d3a-4f42-8cac-43f6234265f2/page_96232480-fbab-4496-9a69-636e37266750_1789038181132.json",
+    "verified": true
+  },
+  {
+    "id": "d214f77a-3d3a-4f42-8cac-43f6234265f2",
+    "pageId": "d5be7b7e-8676-4930-a32f-2d178ddd12e1",
+    "name": "Quinta da carne",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/d214f77a-3d3a-4f42-8cac-43f6234265f2/page_d5be7b7e-8676-4930-a32f-2d178ddd12e1_1789038187862.json",
+    "verified": true
+  },
+  {
+    "id": "2db9ae75-936e-4f95-815c-636a3c5bb0c4",
+    "pageId": "b93d4d6e-3fd6-41a4-becc-b59d1e8a2f6e",
+    "name": "Terça e quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/2db9ae75-936e-4f95-815c-636a3c5bb0c4/page_b93d4d6e-3fd6-41a4-becc-b59d1e8a2f6e_1789038196791.json",
+    "verified": true
+  },
+  {
+    "id": "2db9ae75-936e-4f95-815c-636a3c5bb0c4",
+    "pageId": "e7cbdcb5-c14c-4169-9f9e-18f174410172",
+    "name": "Terça e quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/2db9ae75-936e-4f95-815c-636a3c5bb0c4/page_e7cbdcb5-c14c-4169-9f9e-18f174410172_1789038201627.json",
+    "verified": true
+  },
+  {
+    "id": "2db9ae75-936e-4f95-815c-636a3c5bb0c4",
+    "pageId": "c1264638-03e5-48a3-98d5-96e97628de50",
+    "name": "Terça e quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/2db9ae75-936e-4f95-815c-636a3c5bb0c4/page_c1264638-03e5-48a3-98d5-96e97628de50_1789038206293.json",
+    "verified": true
+  },
+  {
+    "id": "2db9ae75-936e-4f95-815c-636a3c5bb0c4",
+    "pageId": "a6bf9503-89b4-4805-a044-7b8530af880b",
+    "name": "Terça e quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/2db9ae75-936e-4f95-815c-636a3c5bb0c4/page_a6bf9503-89b4-4805-a044-7b8530af880b_1789038210365.json",
+    "verified": true
+  },
+  {
+    "id": "990c6cb5-a6f6-428a-b044-8721319ab6e4",
+    "pageId": "4fe3a67d-2b23-4e6e-a228-40d24fd878ed",
+    "name": "Sextooou",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/990c6cb5-a6f6-428a-b044-8721319ab6e4/page_4fe3a67d-2b23-4e6e-a228-40d24fd878ed_1789038215070.json",
+    "verified": true
+  },
+  {
+    "id": "990c6cb5-a6f6-428a-b044-8721319ab6e4",
+    "pageId": "ac54e62f-3e4f-48cc-a2e6-f5ca8b0384f0",
+    "name": "Sextooou",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/990c6cb5-a6f6-428a-b044-8721319ab6e4/page_ac54e62f-3e4f-48cc-a2e6-f5ca8b0384f0_1789038218688.json",
+    "verified": true
+  },
+  {
+    "id": "990c6cb5-a6f6-428a-b044-8721319ab6e4",
+    "pageId": "e9d55770-7ba4-4a31-a850-4c0565c05109",
+    "name": "Sextooou",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/990c6cb5-a6f6-428a-b044-8721319ab6e4/page_e9d55770-7ba4-4a31-a850-4c0565c05109_1789038223556.json",
+    "verified": true
+  },
+  {
+    "id": "990c6cb5-a6f6-428a-b044-8721319ab6e4",
+    "pageId": "d589f8b3-db43-4a10-a235-a55cac3d527c",
+    "name": "Sextooou",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/990c6cb5-a6f6-428a-b044-8721319ab6e4/page_d589f8b3-db43-4a10-a235-a55cac3d527c_1789038229289.json",
+    "verified": true
+  },
+  {
+    "id": "a715443f-d6b4-45ed-a28f-18b1e8517c42",
+    "pageId": "8624d436-f497-4934-8c7c-a1d48da868d0",
+    "name": "Sexta do hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/a715443f-d6b4-45ed-a28f-18b1e8517c42/page_8624d436-f497-4934-8c7c-a1d48da868d0_1789038235072.json",
+    "verified": true
+  },
+  {
+    "id": "a715443f-d6b4-45ed-a28f-18b1e8517c42",
+    "pageId": "d541c6de-762b-457c-9ece-22b136ac58a7",
+    "name": "Sexta do hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/a715443f-d6b4-45ed-a28f-18b1e8517c42/page_d541c6de-762b-457c-9ece-22b136ac58a7_1789038239546.json",
+    "verified": true
+  },
+  {
+    "id": "a715443f-d6b4-45ed-a28f-18b1e8517c42",
+    "pageId": "f3512ff7-f758-448f-88e8-503b2651cb97",
+    "name": "Sexta do hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/a715443f-d6b4-45ed-a28f-18b1e8517c42/page_f3512ff7-f758-448f-88e8-503b2651cb97_1789038251303.json",
+    "verified": true
+  },
+  {
+    "id": "a715443f-d6b4-45ed-a28f-18b1e8517c42",
+    "pageId": "a0317cb6-4fc7-4726-a8ab-99343670e5db",
+    "name": "Sexta do hortifruti",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/a715443f-d6b4-45ed-a28f-18b1e8517c42/page_a0317cb6-4fc7-4726-a8ab-99343670e5db_1789038258647.json",
+    "verified": true
+  },
+  {
+    "id": "1d98aad4-2379-4f8d-bc7d-0e89f03693e2",
+    "pageId": "4399f7c3-d11f-4d7b-b533-36897595937c",
+    "name": "Quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/1d98aad4-2379-4f8d-bc7d-0e89f03693e2/page_4399f7c3-d11f-4d7b-b533-36897595937c_1789038264803.json",
+    "verified": true
+  },
+  {
+    "id": "1d98aad4-2379-4f8d-bc7d-0e89f03693e2",
+    "pageId": "a4ded287-1fc6-4ce4-9d54-c1ecc2a1efeb",
+    "name": "Quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/1d98aad4-2379-4f8d-bc7d-0e89f03693e2/page_a4ded287-1fc6-4ce4-9d54-c1ecc2a1efeb_1789038274212.json",
+    "verified": true
+  },
+  {
+    "id": "1d98aad4-2379-4f8d-bc7d-0e89f03693e2",
+    "pageId": "8b465c30-c838-441d-80cf-1dc3b77aacba",
+    "name": "Quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/1d98aad4-2379-4f8d-bc7d-0e89f03693e2/page_8b465c30-c838-441d-80cf-1dc3b77aacba_1789038279184.json",
+    "verified": true
+  },
+  {
+    "id": "1d98aad4-2379-4f8d-bc7d-0e89f03693e2",
+    "pageId": "1d2ebb92-5b40-4b3a-8caf-153f5dd737b0",
+    "name": "Quarta mais verde",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/1d98aad4-2379-4f8d-bc7d-0e89f03693e2/page_1d2ebb92-5b40-4b3a-8caf-153f5dd737b0_1789038285392.json",
+    "verified": true
+  },
+  {
+    "id": "e3c01941-7973-4999-9886-082332bdd00b",
+    "pageId": "ddaf6661-3736-477a-901b-43127b1ca498",
+    "name": "Fim de Semana da Família",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/e3c01941-7973-4999-9886-082332bdd00b/page_ddaf6661-3736-477a-901b-43127b1ca498_1789038290756.json",
+    "verified": true
+  },
+  {
+    "id": "e3c01941-7973-4999-9886-082332bdd00b",
+    "pageId": "3e153eba-4a85-4f00-9606-5636a907ad02",
+    "name": "Fim de Semana da Família",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/e3c01941-7973-4999-9886-082332bdd00b/page_3e153eba-4a85-4f00-9606-5636a907ad02_1789038294120.json",
+    "verified": true
+  },
+  {
+    "id": "e3c01941-7973-4999-9886-082332bdd00b",
+    "pageId": "2afd49c4-283b-4863-9245-4e41117c8be0",
+    "name": "Fim de Semana da Família",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/e3c01941-7973-4999-9886-082332bdd00b/page_2afd49c4-283b-4863-9245-4e41117c8be0_1789038301234.json",
+    "verified": true
+  },
+  {
+    "id": "e3c01941-7973-4999-9886-082332bdd00b",
+    "pageId": "08542a69-02bf-4f60-9877-712d2ae5753d",
+    "name": "Fim de Semana da Família",
+    "path": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/e3c01941-7973-4999-9886-082332bdd00b/page_08542a69-02bf-4f60-9877-712d2ae5753d_1789038306831.json",
+    "verified": true
+  }
+]
