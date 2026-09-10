@@ -116,7 +116,6 @@ export default defineEventHandler(async (event) => {
         strictOnly: false,
         keyAliases: assetNamesByKey,
         cacheNamespace: String(tenant.id || ''),
-        maxKeysPerPrefix: 12_000,
         limit: 3
       })
 

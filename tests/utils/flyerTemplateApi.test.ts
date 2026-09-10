@@ -99,6 +99,7 @@ describe('buildFlyerTemplateConfigFromPages', () => {
   it('preserva a categoria normalizada ao reconstruir a biblioteca de páginas', () => {
     const config = buildFlyerTemplateConfigFromPages({
       category: '  Limpeza  ',
+      subcategory: '  Ofertas relâmpago ',
       formatIds: ['feed'],
       models: [{ id: 'model-1', name: 'Modelo 1' }]
     }, [{
@@ -111,6 +112,7 @@ describe('buildFlyerTemplateConfigFromPages', () => {
     }])
 
     expect(config.category).toBe('Limpeza')
+    expect(config.subcategory).toBe('Ofertas relâmpago')
     expect(config.pageBlueprints).toHaveLength(1)
   })
 })

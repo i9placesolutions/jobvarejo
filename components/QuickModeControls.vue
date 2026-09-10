@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ProductPaletteControls from './ProductPaletteControls.vue'
+import type { GlobalStyles, ProductPalette } from '~/types/product-zone'
 import { useEditorVisualViewport } from '~/composables/useEditorVisualViewport'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import {
@@ -112,6 +114,7 @@ const BUSINESS_FIELDS: Array<{ id: BusinessFieldId; label: string }> = [
 ]
 
 const props = defineProps<{
+  productPaletteStyles?: Partial<GlobalStyles>
   cardColorMode?: 'auto' | 'manual'
   cardColor?: string
   zones: QuickModeZone[]
@@ -141,6 +144,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'mobile-section', value: string): void
   (event: 'export'): void
+  (event: 'product-palette', value: Partial<ProductPalette>): void
   (event: 'card-colors', payload: { mode: 'auto' | 'manual'; color?: string; allPages: boolean }): void
   (event: 'select-zone', zoneId: string): void
   (event: 'select-zone-structure', payload: { zoneId: string; variantId: string }): void
@@ -888,6 +892,7 @@ const useTemplateModel = (modelId: string) => {
                 <span><strong class="block text-sm">Um produto por página</strong><small class="block text-zinc-400">Coloca o primeiro produto nesta página e cria cópias para os demais, no mesmo formato.</small></span>
               </label>
               <div class="quick-product-advanced-option">
+                <ProductPaletteControls :styles="props.productPaletteStyles || {}" :busy="props.busy" @change="emit('product-palette', $event)" @reset="emit('product-palette', {})" />
                 <QuickCardColors :mode="props.cardColorMode || 'auto'" :color="props.cardColor || '#ffffff'" :busy="props.busy" @apply="emit('card-colors', $event)" />
               </div>
             </div>

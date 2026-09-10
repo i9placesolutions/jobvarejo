@@ -31,6 +31,15 @@ describe('logo e elementos fixos na edição rápida', () => {
 
 
 describe('restrição de movimento no editor rápido', () => {
+    it('mantém imagens editáveis enquanto o Fabric as coloca na seleção múltipla', () => {
+        const card = { type: 'group', isProductCard: true, parentZoneId: 'zone-1' }
+        const selection = { type: 'activeselection' }
+        const image = { type: 'image', parent: card, group: selection }
+        expect(isQuickModeFixedArtwork(image)).toBe(false)
+        image.group = card
+        expect(isQuickModeFixedArtwork(image)).toBe(false)
+        expect(isQuickModeFixedArtwork({ type: 'image', group: selection })).toBe(true)
+    })
     it.each(['image', 'rect', 'path', 'group', 'textbox'])('bloqueia %s sem vínculo editável', type => {
         expect(isQuickModeFixedArtwork({ type, name: 'elemento-do-modelo' })).toBe(true)
     })

@@ -1,29 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { ChevronDown, SlidersHorizontal, Copy, ImagePlus, Minus, Plus, Tag, Trash2 } from 'lucide-vue-next'
+import { ChevronDown, SlidersHorizontal, Copy, ImagePlus, Minus, Plus, Trash2 } from 'lucide-vue-next'
 import { getProductImageToolbarPlacement } from '~/utils/productImageToolbarPlacement'
 
-type TemplateOption = {
-  id: string
-  name: string
-  previewDataUrl?: string
-}
-
-const props = withDefaults(defineProps<{
-  docked?: boolean
+const props = defineProps<{
   visible: boolean
   top: number
   left: number
   width: number
   height: number
-  templates?: TemplateOption[]
-  selectedTemplateId?: string
   fillCount?: number
   fillDirection?: string
-}>(), {
-  templates: () => [],
-  selectedTemplateId: ''
-})
+}>()
 
 const emit = defineEmits<{
   (e: 'duplicate'): void
@@ -31,11 +19,8 @@ const emit = defineEmits<{
   (e: 'remove'): void
   (e: 'fill', count: number, direction?: string): void
   (e: 'resize', direction: 'smaller' | 'larger'): void
-  (e: 'template', templateId: string): void
-  (e: 'manage-templates'): void
 }>()
 
-const templateMenuOpen = ref(false)
 
 const root = ref<HTMLElement | null>(null)
 const toolbar = ref<HTMLElement | null>(null)
@@ -46,7 +31,7 @@ const measure = () => {
   if (root.value) bounds.value = { width: root.value.clientWidth, height: root.value.clientHeight, panelHeight: toolbar.value?.offsetHeight || 190 }
 }
 const closeOutside = (event: PointerEvent) => {
-  if (toolbar.value && !toolbar.value.contains(event.target as Node)) { templateMenuOpen.value = false; expanded.value = false }
+  if (toolbar.value && !toolbar.value.contains(event.target as Node)) { expanded.value = false }
 }
 onMounted(() => {
   document.addEventListener('pointerdown', closeOutside)
@@ -57,7 +42,7 @@ onMounted(() => {
 onBeforeUnmount(() => { document.removeEventListener('pointerdown', closeOutside); observer?.disconnect(); window.removeEventListener('resize', measure) })
 watch(() => props.visible, async () => { await nextTick(); if (root.value) observer?.observe(root.value); if (toolbar.value) observer?.observe(toolbar.value); measure() })
 const toolbarStyle = computed(() => {
-  const width = Math.min(420, Math.max(240, bounds.value.width - 16))
+  const width = Math.min(360, Math.max(200, bounds.value.width - 16))
   const placement = getProductImageToolbarPlacement({
     targetLeft: Number(props.left),
     targetTop: Number(props.top),
@@ -66,6 +51,7 @@ const toolbarStyle = computed(() => {
     containerWidth: bounds.value.width,
     containerHeight: bounds.value.height,
     toolbarWidth: width,
+    gap: 36,
     toolbarHeight: bounds.value.panelHeight
   })
   return {
@@ -75,23 +61,18 @@ const toolbarStyle = computed(() => {
   }
 })
 
-const selectTemplate = (templateId: string) => {
-  templateMenuOpen.value = false
-  if (templateId) emit('template', templateId)
-}
-
-watch(() => props.visible, (visible) => {
-  if (!visible) templateMenuOpen.value = false
-})
 </script>
 
 <template>
-  <div v-if="visible" ref="root" class="image-actions-root pointer-events-none absolute inset-0 z-[116]" :class="{ 'is-docked': docked }" @keydown.esc.stop="templateMenuOpen = false; expanded = false">
+  <div v-if="visible" ref="root" class="image-actions-root pointer-events-none absolute inset-0 z-[116]" @keydown.esc.stop="expanded = false">
     <section ref="toolbar" class="image-actions pointer-events-auto" :style="toolbarStyle" aria-label="Imagem do produto" @pointerdown.stop @mousedown.stop @click.stop>
       <div class="image-actions-header">
-        <button type="button" class="image-action image-action-primary" title="Trocar a imagem e suas cópias neste produto" @click="emit('replace')"><ImagePlus />Substituir imagem</button>
+        <button type="button" class="image-action image-action-primary" title="Trocar a imagem e suas cópias neste produto" @click="emit('replace')"><ImagePlus /><span>Trocar</span></button>
+        <button type="button" class="image-action" title="Duplicar imagem" @click="emit('duplicate')"><Copy /><span>Duplicar</span></button>
+        <button type="button" class="image-action" aria-label="Reduzir imagem" title="Reduzir imagem" @click="emit('resize', 'smaller')"><Minus /><span>Diminuir</span></button>
+        <button type="button" class="image-action" aria-label="Aumentar imagem" title="Aumentar imagem" @click="emit('resize', 'larger')"><Plus /><span>Aumentar</span></button>
         <button type="button" class="image-action image-action-settings" :aria-expanded="expanded" aria-label="Ajustar imagem" @click="expanded = !expanded"><SlidersHorizontal /><span>Ajustar</span><ChevronDown :class="{ 'rotate-180': expanded }" /></button>
-        <button type="button" class="image-action image-action-remove" aria-label="Remover imagem" title="Remover imagem" @click="emit('remove')"><Trash2 /></button>
+        <button type="button" class="image-action image-action-remove" aria-label="Remover imagem" title="Remover imagem" @click="emit('remove')"><Trash2 /><span>Excluir</span></button>
       </div>
       <div class="image-actions-details" :class="{ 'is-expanded': expanded }">
         <div class="image-actions-fields">
@@ -102,18 +83,6 @@ watch(() => props.visible, (visible) => {
             <option value="auto">Automática</option><option value="horizontal">Lado a lado</option><option value="vertical">Empilhadas</option>
           </select></label>
         </div>
-        <div class="image-actions-tools">
-          <button type="button" class="image-action" @click="emit('duplicate')"><Copy />Duplicar</button>
-          <button type="button" class="image-action" :aria-expanded="templateMenuOpen" @click="templateMenuOpen = !templateMenuOpen"><Tag />Etiqueta</button>
-          <div class="image-actions-size" role="group" aria-label="Tamanho da imagem"><button type="button" class="image-action" aria-label="Reduzir imagem" @click="emit('resize', 'smaller')"><Minus /></button><span>Tamanho</span><button type="button" class="image-action" aria-label="Aumentar imagem" @click="emit('resize', 'larger')"><Plus /></button></div>
-        </div>
-      </div>
-      <div v-if="templateMenuOpen" class="image-template-list">
-        <p>Etiqueta de preço</p>
-        <button v-for="template in templates" :key="template.id" type="button" class="image-template-option" :aria-pressed="template.id === selectedTemplateId" @click="selectTemplate(template.id)">
-          <img v-if="template.previewDataUrl" :src="template.previewDataUrl" alt="" /><Tag v-else /><span>{{ template.name }}</span><span v-if="template.id === selectedTemplateId">Atual</span>
-        </button>
-        <button v-if="!templates.length" type="button" class="image-action" @click="emit('manage-templates')">Abrir biblioteca de etiquetas</button>
       </div>
     </section>
   </div>
@@ -135,28 +104,16 @@ watch(() => props.visible, (visible) => {
 .image-actions-fields {display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .image-actions-fields label {min-width:0;color:#a1a1aa;font-size:11px;}
 .image-actions-fields select {display:block;width:100%;min-height:40px;margin-top:4px;padding:0 8px;background:#303036;border:1px solid #ffffff12;border-radius:8px;color:#fafafa;font-size:13px;}
-.image-actions-tools {margin-top:8px;gap:2px;justify-content:space-between;}
-.image-actions-size {display:flex;align-items:center;border-left:1px solid #ffffff15;padding-left:4px;}
-.image-actions-size span {font-size:10px;color:#a1a1aa;}
-.image-template-list {max-height:220px;overflow:auto;overscroll-behavior:contain;border-top:1px solid #ffffff15;margin-top:8px;padding-top:8px;}
-.image-template-list p {font-size:11px;color:#a1a1aa;margin:0 6px 8px;}
-.image-template-option {display:flex;align-items:center;gap:8px;width:100%;min-height:48px;padding:6px;border-radius:8px;text-align:left;}
-.image-template-option:hover,.image-template-option[aria-pressed=true] {background:#7c3aed26;}
-.image-template-option img {width:36px;height:32px;object-fit:contain;}
-.image-template-option span:first-of-type {flex:1;}
+/* Floating controls never participate in the canvas layout. */
+.image-actions-root {position:absolute;inset:0;pointer-events:none;z-index:116;}
+.image-actions {box-sizing:border-box;pointer-events:auto;padding:6px;border-radius:14px;max-height:calc(100% - 16px);overflow:auto;}
+.image-actions-header {gap:2px;}
+.image-actions-header .image-action {flex:1;min-width:0;min-height:48px;flex-direction:column;gap:4px;padding:4px 5px;font-size:10px;}
+.image-actions-header .image-action svg {width:19px;height:19px;}
+.image-actions-header .image-action-primary {justify-content:center;}
+.image-action-settings svg:last-child {display:none;}
 @media(max-width:767px) {
-.image-actions {position:fixed;left:8px;right:8px;top:auto;bottom:calc(76px + env(safe-area-inset-bottom, 0px));width:auto;max-width:none;max-height:45dvh;overflow:auto;padding:8px;border-radius:16px;}
-.image-action {min-height:44px;min-width:44px;padding:0 8px;}
-.image-action-primary {min-width:0;white-space:normal;text-align:left;}
-.image-action-settings {display:inline-flex;}
-.image-action-settings svg:last-child {width:12px;}
-.image-actions-details {display:none;}
-.image-actions-details.is-expanded {display:block;}
-.image-actions-fields select {min-height:44px;font-size:16px;}
-.image-actions-tools {flex-wrap:wrap;}
-.image-actions-size {margin-left:auto;}
+.image-actions-fields select {font-size:16px;}
 }
-.image-actions-root.is-docked {position:relative;inset:auto;order:2;flex:0 0 auto;width:100%;padding:4px 0;}
-.is-docked .image-actions {position:relative;inset:auto;width:100%;max-width:none;max-height:35dvh;overflow:auto;padding:6px;border-radius:10px;}
 @media(prefers-reduced-motion:reduce) {.image-action {transition:none;}}
 </style>

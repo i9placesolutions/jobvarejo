@@ -11,8 +11,17 @@ export type FlyerTemplateCategory = {
   id: string
   name: string
   normalized_name?: string
+  /** Nulo identifica uma categoria principal; preenchido, uma subcategoria. */
+  parent_id?: string | null
+  parent_name?: string | null
   created_at?: string | null
   updated_at?: string | null
+}
+
+/** Classificação em dois níveis usada dentro de `template_config`. */
+export type FlyerTemplateCategorySelection = {
+  category: string | null
+  subcategory: string | null
 }
 
 export const normalizeFlyerTemplateCategory = (value: unknown): string | null => {
@@ -30,24 +39,57 @@ export const normalizeFlyerTemplateCategory = (value: unknown): string | null =>
 export const getFlyerTemplateCategoryKey = (value: unknown): string | null =>
   normalizeFlyerTemplateCategory(value)?.toLocaleLowerCase('pt-BR') || null
 
-export const getFlyerTemplateCategory = (templateConfig: unknown): string | null => {
+/**
+ * `category` continua sendo a categoria principal para manter os modelos
+ * antigos compatíveis. A subcategoria só é válida quando há uma principal.
+ */
+export const getFlyerTemplateCategorySelection = (
+  templateConfig: unknown
+): FlyerTemplateCategorySelection => {
   if (!templateConfig || typeof templateConfig !== 'object' || Array.isArray(templateConfig)) {
-    return null
+    return { category: null, subcategory: null }
   }
 
-  return normalizeFlyerTemplateCategory((templateConfig as Record<string, unknown>).category)
+  const config = templateConfig as Record<string, unknown>
+  const category = normalizeFlyerTemplateCategory(config.category)
+  return {
+    category,
+    subcategory: category ? normalizeFlyerTemplateCategory(config.subcategory) : null
+  }
 }
 
-/** Mantém as demais opções do modelo intactas ao normalizar a categoria. */
+/** Categoria principal de um modelo. Mantém o contrato anterior. */
+export const getFlyerTemplateCategory = (templateConfig: unknown): string | null => {
+  return getFlyerTemplateCategorySelection(templateConfig).category
+}
+
+export const getFlyerTemplateSubcategory = (templateConfig: unknown): string | null =>
+  getFlyerTemplateCategorySelection(templateConfig).subcategory
+
+/** Rótulo de leitura para cards, buscas e filtros visuais. */
+export const getFlyerTemplateCategoryLabel = (templateConfig: unknown): string | null => {
+  const { category, subcategory } = getFlyerTemplateCategorySelection(templateConfig)
+  if (!category) return null
+  return subcategory ? `${category} · ${subcategory}` : category
+}
+
+/** Mantém as demais opções do modelo intactas ao normalizar a classificação. */
 export const normalizeFlyerTemplateConfigCategory = <T>(templateConfig: T): T => {
   if (!templateConfig || typeof templateConfig !== 'object' || Array.isArray(templateConfig)) {
     return templateConfig
   }
 
   const config = templateConfig as Record<string, unknown>
-  if (!Object.prototype.hasOwnProperty.call(config, 'category')) return templateConfig
+  const hasCategory = Object.prototype.hasOwnProperty.call(config, 'category')
+  const hasSubcategory = Object.prototype.hasOwnProperty.call(config, 'subcategory')
+  if (!hasCategory && !hasSubcategory) return templateConfig
 
-  const { category: _category, ...rest } = config
+  const { category: _category, subcategory: _subcategory, ...rest } = config
   const category = normalizeFlyerTemplateCategory(_category)
-  return (category ? { ...rest, category } : rest) as T
+  const subcategory = category ? normalizeFlyerTemplateCategory(_subcategory) : null
+  return ({
+    ...rest,
+    ...(category ? { category } : {}),
+    ...(subcategory ? { subcategory } : {})
+  }) as T
 }

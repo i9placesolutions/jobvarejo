@@ -10,7 +10,7 @@ const apply = (mode: 'auto' | 'manual', color?: string) => emit('apply', { mode,
 <template>
   <section class="mb-4 rounded-xl border border-white/15 bg-white/[0.03] p-4 text-white">
     <h3 class="text-sm font-semibold">Cores dos cards</h3>
-    <p class="mt-1 text-xs leading-relaxed text-zinc-400">Destaques com a paleta do encarte. Os demais produtos ficam brancos.</p>
+    <p class="mt-1 text-xs leading-relaxed text-zinc-400">Destaques com a paleta do encarte. A paleta do modelo é usada quando disponível.</p>
     <label class="mt-3 flex items-center gap-2 text-xs text-zinc-300">
       <input v-model="allPages" type="checkbox" :disabled="busy" class="accent-violet-500" />
       Aplicar também às páginas com um produto neste formato
@@ -23,7 +23,7 @@ const apply = (mode: 'auto' | 'manual', color?: string) => emit('apply', { mode,
     </div>
     <label class="mt-3 block text-xs text-zinc-300">Onde usar a cor escolhida
       <select :value="mode" :disabled="busy" class="mt-1 w-full rounded-lg border border-white/15 bg-zinc-900 p-2 text-sm text-white" @change="apply(($event.target as HTMLSelectElement).value as 'auto' | 'manual', color)">
-        <option value="auto">Somente nos destaques · demais brancos</option>
+        <option value="auto">Somente nos destaques</option>
         <option value="manual">Em todos os cards</option>
       </select>
     </label>

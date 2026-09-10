@@ -1,18 +1,11 @@
 import { getDynamicBusinessField, fitDynamicBusinessTextObject } from './dynamicBusinessFields'
 
-/** Contact fields share a readable default; explicit typography edits still win. */
+/** Reflow contacts while preserving all typography defined by the template. */
 export const normalizeQuickBusinessFooter = (object: any): boolean => {
   const field = getDynamicBusinessField(object)
   if (!['address', 'instagram', 'whatsapp'].includes(field) || typeof object?.set !== 'function') return false
   const before = JSON.stringify([object.text, object.fontSize, object.styles, object.textAlign, object.lineHeight])
   const anchor = object.getPointByOrigin?.('left', 'top')
-  if (!object.__manualTypography) {
-    object.set({ fontSize: 20, dynamicFieldBaseFontSize: 20, dynamicFieldAutoFitFontSize: 20, textAlign: 'left', lineHeight: 1.15 })
-  }
-  // Sample text often has tiny trailing character styles, notably on phones.
-  for (const line of Object.values(object.styles || {}) as any[]) {
-    for (const style of Object.values(line || {}) as any[]) delete style.fontSize
-  }
   fitDynamicBusinessTextObject(object)
   if (field === 'address' && !object.__manualTypography && (object.textLines?.length || 0) > 1 && !String(object.text).includes('\n')) {
     const text = String(object.text)

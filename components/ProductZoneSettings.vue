@@ -21,6 +21,8 @@ import {
 } from '~/types/product-zone';
 import type { LabelTemplate } from '~/types/label-template';
 import type { GlobalStyles, ProductZone } from '~/types/product-zone';
+import ProductPaletteControls from './ProductPaletteControls.vue';
+const { project: paletteProject } = useProject();
 import ColorPicker from './ui/ColorPicker.vue';
 import {
   AVAILABLE_FONT_FAMILIES,
@@ -757,6 +759,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="inspector-shell">
+    <ProductPaletteControls :styles="globalStyles || {}" :authoring="paletteProject.isTemplate" @change="updateGlobal(paletteProject.isTemplate ? 'templateProductPalette' : 'productPalette', $event)" @reset="updateGlobal('productPalette', {})" />
     <section class="inspector-card overview-card">
       <div class="overview-card__copy">
         <div class="overview-card__eyebrow">
@@ -1008,7 +1011,7 @@ onBeforeUnmount(() => {
           <div class="field-stack">
             <label class="flex items-start gap-2 text-sm">
               <input type="checkbox" :checked="globalStyles?.cardColorMode === 'auto'" @change="updateGlobal('cardColorMode', ($event.target as HTMLInputElement).checked ? 'auto' : 'manual')" />
-              <span>Usar paleta do encarte nos destaques<small class="block text-xs text-zinc-400">Os demais cards ficam brancos. Cores individuais são mantidas.</small></span>
+              <span>Usar paleta do encarte nos destaques<small class="block text-xs text-zinc-400">Cores individuais são mantidas. A paleta do modelo é usada quando disponível.</small></span>
             </label>
             <div class="color-field">
               <div class="color-field__copy">

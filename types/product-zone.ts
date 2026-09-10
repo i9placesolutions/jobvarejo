@@ -300,7 +300,18 @@ export interface ProductCardConfiguration {
 }
 
 // === GLOBAL STYLES ===
+export interface ProductPalette {
+  cardColor: string;
+  highlightCardColor: string;
+  prodNameColor: string;
+  highlightProdNameColor: string;
+}
+
 export interface GlobalStyles {
+  /** Defaults authored in the model; copied with the zone, never inferred over user choices. */
+  templateProductPalette?: Partial<ProductPalette>;
+  /** User choices for this zone, kept separate so defaults can be restored. */
+  productPalette?: Partial<ProductPalette>;
   // Card defaults
   cardColor?: string;
   cardColorMode?: 'auto' | 'manual';

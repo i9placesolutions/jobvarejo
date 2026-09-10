@@ -14,6 +14,8 @@ const normalizeCategory = (value: unknown): FlyerTemplateCategory | null => {
     id,
     name,
     normalized_name: getFlyerTemplateCategoryKey(raw.normalized_name || name) || undefined,
+    parent_id: raw.parent_id == null || raw.parent_id === '' ? null : String(raw.parent_id),
+    parent_name: raw.parent_name == null ? null : normalizeFlyerTemplateCategory(raw.parent_name),
     created_at: raw.created_at == null ? null : String(raw.created_at),
     updated_at: raw.updated_at == null ? null : String(raw.updated_at)
   }
@@ -31,12 +33,19 @@ const normalizeCategoryList = (value: unknown): FlyerTemplateCategory[] => {
     .map(normalizeCategory)
     .filter((category): category is FlyerTemplateCategory => {
       if (!category) return false
-      const key = getFlyerTemplateCategoryKey(category.name)
+      const nameKey = getFlyerTemplateCategoryKey(category.name)
+      const key = `${category.parent_id || 'root'}:${nameKey || ''}`
       if (!key || seen.has(key)) return false
       seen.add(key)
       return true
     })
-    .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
+    .sort((left, right) => {
+      const leftParent = left.parent_name || ''
+      const rightParent = right.parent_name || ''
+      const parentOrder = leftParent.localeCompare(rightParent, 'pt-BR')
+      if (parentOrder) return parentOrder
+      return left.name.localeCompare(right.name, 'pt-BR')
+    })
 }
 
 /** Lista o catálogo privado de categorias e inclui categorias de modelos antigos. */
@@ -51,6 +60,7 @@ export const listFlyerTemplateCategories = async (
 export const createFlyerTemplateCategory = async (opts: {
   headers: Record<string, string>
   name: string
+  parentId?: string | null
 }): Promise<FlyerTemplateCategory> => {
   const name = normalizeFlyerTemplateCategory(opts.name)
   if (!name) throw new Error('Informe o nome da categoria.')
@@ -58,7 +68,10 @@ export const createFlyerTemplateCategory = async (opts: {
   const response = await $fetch<unknown>('/api/flyer-template-categories', {
     method: 'POST',
     headers: opts.headers,
-    body: { name }
+    body: {
+      name,
+      ...(String(opts.parentId || '').trim() ? { parent_id: String(opts.parentId).trim() } : {})
+    }
   })
   const category = normalizeCategory(
     response && typeof response === 'object'

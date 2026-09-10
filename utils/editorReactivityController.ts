@@ -1329,22 +1329,12 @@ const setupReactivity = () => {
     let lastZoneState = { left: 0, top: 0 };
 
     let previousShiftSelectionAtMousedown: any[] | null = null;
-    let additiveProductImageTarget: any = null;
     trackOn('mouse:down:before', (e: any) => {
-        additiveProductImageTarget = null;
-        if (isQuickMode.value && e?.e?.button === 0 && !e.e.ctrlKey && !e.e.metaKey) {
-            const members = collectShiftSelectionMembers(canvas.value.getActiveObject?.());
-            if (members.length && members.every(isProductCardImageSelectionCandidate)) {
-                const hit = findTopProductImageAtPointer(e.e, {});
-                // Keep a normal click on the current image available for dragging.
-                if (hit && !members.includes(hit)) additiveProductImageTarget = hit;
-            }
-        }
         if (isQuickModeLockedObject(e?.target)) {
             getQuickModeLockedObjects(e.target).forEach((zone: any) => rememberQuickModeLockedTransform(zone));
             return;
         }
-        if (e?.e?.shiftKey || additiveProductImageTarget) {
+        if (e?.e?.shiftKey) {
             refreshShiftSelectionBaseline(canvas.value.getActiveObject?.());
             previousShiftSelectionAtMousedown = shiftSelectionBaselineMembers.slice();
             return;
@@ -1393,7 +1383,7 @@ const setupReactivity = () => {
 
          // Global Shift+click multi-selection:
         // toggle the exact item under the pointer in all editor contexts.
-        if ((evt?.shiftKey || additiveProductImageTarget) && !isNormalizingShiftSelection) {
+        if (evt?.shiftKey && !isNormalizingShiftSelection) {
             evt?.preventDefault?.();
             evt?.stopPropagation?.();
 
@@ -1428,7 +1418,7 @@ const setupReactivity = () => {
                 rawTarget = null;
             }
             // Trust exactly what the user clicked. If null, fallback to the smart picker.
-            const shiftTarget = additiveProductImageTarget || shiftSelectionMember || rawTarget || pickShiftSelectionTarget(e);
+            const shiftTarget = shiftSelectionMember || rawTarget || pickShiftSelectionTarget(e);
             let normalizedTarget = resolveShiftSelectionRootObject(shiftTarget);
 
             if (discardQuickModeLockedSelection(normalizedTarget)) {
@@ -2106,7 +2096,7 @@ const setupReactivity = () => {
         if (selected && isLikelyProductZone(selected)) ensureZoneSanity(selected);
         // Selecionar a página não pode aparar seu tamanho até os filhos.
         // O formato pertence ao frame; auto trim automático é exclusivo de imagens.
-        if (selected && !selected.isFrame && String(selected.type || '').toLowerCase() === 'image') {
+        if (!isQuickMode.value && selected && !selected.isFrame && String(selected.type || '').toLowerCase() === 'image') {
             if (trimContainerEmptySpace(selected)) {
                 applyVisibleSelectionChrome(selected);
                 safeRequestRenderAll();

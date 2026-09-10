@@ -1,3 +1,4 @@
+import { getProductPalette } from './productPalette'
 import type { GlobalStyles } from '~/types/product-zone'
 
 /** Explicit individual choices always win, including white and transparency. */
@@ -5,6 +6,9 @@ export const resolveProductCardColor = (styles: Partial<GlobalStyles>, highlight
   if (overrides.isProdBgTransparent === true) return 'transparent'
   if (typeof overrides.cardColor === 'string') return overrides.cardColor
   if (styles.isProdBgTransparent) return 'transparent'
+  const palette = getProductPalette(styles)
+  const color = highlighted ? palette.highlightCardColor : palette.cardColor
+  if (styles.cardColorMode !== 'manual' && color) return color
   if (styles.cardColorMode === 'auto') return highlighted ? (styles.highlightCardColor || '#ffffff') : '#ffffff'
   return styles.cardColor || '#ffffff'
 }

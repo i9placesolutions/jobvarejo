@@ -101,6 +101,19 @@ describe('product-card-configuration', () => {
     expect(isAlcoholicProduct({ name: 'Leite integral' })).toBe(false)
   })
 
+  it.each([
+    'ACHOCOLATADO PO TODDY 370G ORIGINAL',
+    'Achocolatado original',
+    'Iogurte de morango',
+    'Perfume floral',
+  ])('nao confunde partes do nome com bebidas: %s', (name) => {
+    expect(isAlcoholicProduct({ name })).toBe(false)
+  })
+
+  it.each(['Gin 750ml', 'Rum 1L', 'Vinho tinto', 'Cachaça', 'Whisky', 'Licor'])('mantem o selo para %s', (name) => {
+    expect(isAlcoholicProduct({ name })).toBe(true)
+  })
+
   it('preserva a posicao manual de filhos quando a receita do card e reaplicada', () => {
     const manualImage = makeTransformObject({
       __manualTransform: true,

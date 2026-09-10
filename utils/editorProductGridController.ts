@@ -230,7 +230,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
         const bg = new fabric.Rect({
             width: width,
             height: cardHeight,
-            fill: effectiveStyles.isProdBgTransparent ? 'transparent' : (effectiveStyles.cardColor || '#ffffff'),
+            fill: resolveProductCardColor(effectiveStyles, false),
             rx: typeof effectiveStyles.cardBorderRadius === 'number' ? effectiveStyles.cardBorderRadius : 8,
             ry: typeof effectiveStyles.cardBorderRadius === 'number' ? effectiveStyles.cardBorderRadius : 8,
             stroke: initialCardBorderColor,
@@ -255,7 +255,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             fontSize: titleFontSize,
             fontFamily: effectiveStyles.prodNameFont || DEFAULT_EDITOR_FONT_FAMILY,
             fontWeight: (effectiveStyles.prodNameWeight as any) ?? '900',
-            fill: resolveProductNameColor(bg.fill),
+            fill: resolveProductNameColor(bg.fill, {}, effectiveStyles),
             textAlign: effectiveStyles.prodNameAlign || 'center',
             lineHeight: typeof effectiveStyles.prodNameLineHeight === 'number' ? effectiveStyles.prodNameLineHeight : 1.16,
             originX: 'center',
@@ -751,7 +751,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
         const countForLayout = targetZone ? (existingCount + count) : count;
         if (targetZone && opts.autoLayout !== false) {
             const colorStyles = getZoneGlobalStyles(targetZone)
-            if (!colorStyles.cardColorMode && !getZoneStyleOverrides(targetZone).cardColor && !colorStyles.isProdBgTransparent && (!colorStyles.cardColor || /^#(?:fff|ffffff)$/i.test(colorStyles.cardColor))) {
+            if (!colorStyles.templateProductPalette && !colorStyles.productPalette && !colorStyles.cardColorMode && !getZoneStyleOverrides(targetZone).cardColor && !colorStyles.isProdBgTransparent && (!colorStyles.cardColor || /^#(?:fff|ffffff)$/i.test(colorStyles.cardColor))) {
                 targetZone._zoneGlobalStyles = { ...colorStyles, cardColorMode: 'auto', highlightCardColor: findFlyerAccent(canvas.value?.getObjects() || []) || '#ffffff' }
             }
             await Promise.all([productZoneStructuresState.load(), productCardConfigurationState.load()])
@@ -1499,7 +1499,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
 
         if ((['cardColor', 'cardColorMode', 'highlightCardColor', 'isProdBgTransparent'].includes(p)) && bg && String(bg?.type || '').toLowerCase() === 'rect') {
             bg.set('fill', resolveProductCardColor(styles, card._cardHighlighted === true, getCardStyleOverrides(card)));
-            syncProductNameColor(card);
+            syncProductNameColor(card, styles);
             changed = true;
         } else if (p === 'cardBorderRadius' && bg && String(bg?.type || '').toLowerCase() === 'rect') {
             const r = Number.isFinite(Number(styles.cardBorderRadius)) ? Number(styles.cardBorderRadius) : 0;
@@ -1531,7 +1531,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             isTextLikeObject(title)
         ) {
             if (p === 'prodNameColor') card._cardStyleOverrides = { ...getCardStyleOverrides(card), prodNameColor: styles.prodNameColor };
-            syncProductNameColor(card);
+            syncProductNameColor(card, styles);
             if (styles.prodNameFont) title.set('fontFamily', styles.prodNameFont);
             if (styles.prodNameWeight !== undefined) title.set('fontWeight', styles.prodNameWeight as any);
             if (styles.prodNameAlign) title.set('textAlign', styles.prodNameAlign);

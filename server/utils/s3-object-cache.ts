@@ -51,9 +51,15 @@ const listPrefixObjects = async (opts: {
         }
 
         scanned += contents.length;
-        continuationToken = (response.IsTruncated && scanned < maxKeysPerPrefix)
-            ? response.NextContinuationToken
-            : undefined;
+        if (response.IsTruncated && scanned < maxKeysPerPrefix) {
+            const next = response.NextContinuationToken;
+            if (!next || next === continuationToken) {
+                throw new Error('Wasabi retornou paginação incompleta; listagem não foi armazenada.');
+            }
+            continuationToken = next;
+        } else {
+            continuationToken = undefined;
+        }
     } while (continuationToken);
 
     return out;
@@ -73,7 +79,7 @@ export const getCachedS3Objects = async (opts: {
         bucket,
         prefixes,
         ttlMs = 120_000,
-        maxKeysPerPrefix = 1000,
+        maxKeysPerPrefix = Number.POSITIVE_INFINITY,
         excludeKeyPrefixes = [],
         forceRefresh = false
     } = opts;

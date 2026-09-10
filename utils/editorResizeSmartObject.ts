@@ -39,7 +39,7 @@ export const createResizeSmartObject = (deps: ResizeSmartObjectDeps) => {
     }
     if (styles) {
       const cardColor = resolveProductCardColor(styles, group._cardHighlighted === true, __cardStyleOv)
-      styles = { ...styles, cardColor, prodNameColor: resolveProductNameColor(cardColor, __cardStyleOv) }
+      styles = { ...styles, cardColor, prodNameColor: resolveProductNameColor(cardColor, __cardStyleOv, styles, group._cardHighlighted === true) }
     }
     // FIX: Permanently disable Fabric v7 LayoutManager on product card groups.
     // Card layout is fully managed by resizeSmartObject — Fabric's auto-layout
@@ -960,7 +960,7 @@ export const createResizeSmartObject = (deps: ResizeSmartObjectDeps) => {
     objects.forEach((o: any) => {
       if (o && typeof o.setCoords === 'function') o.setCoords()
     })
-    syncProductNameColor(group)
+    syncProductNameColor(group, styles)
     group.dirty = true
     if (typeof group.setCoords === 'function') group.setCoords()
 

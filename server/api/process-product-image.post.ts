@@ -812,7 +812,6 @@ export default defineEventHandler(async (event) => {
             strictOnly: strictMode,
             keyAliases: assetNamesByKey,
             cacheNamespace: String(user.id || ''),
-            maxKeysPerPrefix: 12_000
         });
 
         if (found) {
@@ -897,7 +896,6 @@ export default defineEventHandler(async (event) => {
             strictOnly: strictMode,
             keyAliases: assetNamesByKey,
             cacheNamespace: String(user.id || ''),
-            maxKeysPerPrefix: 12_000,
             limit: 6
         });
         internalReviewCandidates = await buildInternalReviewCandidates(rankedInternalMatches, String(user.id || ''));

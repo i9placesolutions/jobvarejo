@@ -280,7 +280,8 @@ export const isAlcoholicProduct = (product: any): boolean => {
   const searchText = normalizeSearchText(candidateValues.filter(Boolean).join(' '))
   if (!searchText || /sem\s+alcool|nao\s+alcool|zero\s+alcool|0\s*alcool/.test(searchText)) return false
 
-  return /bebida\s+alcool|cerveja|chopp|vinho|espumante|sidra|vodka|whisky|uisque|cachaca|rum|gin|tequila|licor|destilado|sake/.test(searchText)
+  // Palavras completas evitam classificar "original" como gin.
+  return /\b(?:bebidas?\s+alcoolicas?|cervejas?|chopps?|vinhos?|espumantes?|sidras?|vodkas?|whisk(?:y|ies)|uisques?|cachacas?|rum|runs|gins?|tequilas?|licor(?:es)?|destilados?|sakes?)\b/.test(searchText)
 }
 
 export const PRODUCT_CARD_ELEMENT_KEYS = ELEMENT_KEYS as ReadonlyArray<ProductCardElementKey>

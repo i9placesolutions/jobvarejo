@@ -121,7 +121,7 @@ describe('dynamicBusinessFields', () => {
     expect(object.scaleY).toBe(1.25)
   })
 
-  it('reduz a fonte para caber no campo e volta ao tamanho do modelo quando o texto encurta', () => {
+  it('preserva a fonte do modelo mesmo quando o conteúdo cresce', () => {
     const object = textbox({
       businessProfileField: 'slogan',
       text: 'Slogan muito comprido da filial',
@@ -133,7 +133,7 @@ describe('dynamicBusinessFields', () => {
     })
 
     expect(fitDynamicBusinessTextObject(object)).toBe(true)
-    expect(object.fontSize).toBeLessThanOrEqual(20.5)
+    expect(object.fontSize).toBe(30)
     expect(object.dynamicFieldBaseFontSize).toBe(30)
     expect(object.dynamicFieldAutoFitFontSize).toBe(object.fontSize)
 
@@ -160,8 +160,8 @@ describe('dynamicBusinessFields', () => {
 
     fitDynamicBusinessTextObject(object)
 
-    expect(object.fontSize).toBeLessThan(24)
-    expect(object.fontSize * 10).toBeLessThanOrEqual(120.5)
+    expect(object.fontSize).toBe(24)
+    expect(object.splitByGrapheme).toBe(true)
     expect(object.width).toBe(120)
   })
 
@@ -225,15 +225,15 @@ describe('campos grandes com quebra de linha', () => {
     fitDynamicBusinessTextObject(object)
     expect(object.fontSize).toBe(40)
   })
-  it('unifica trechos de endereço no maior tamanho e preserva cor e peso', () => {
+  it('preserva os tamanhos e estilos por caractere definidos no modelo', () => {
     const object = textbox({ text: 'RUA GARIBALDI LEÃO', fontSize: 18, styles: { 0: {
       0: { fontSize: 40, fill: '#fff' }, 1: { fontSize: 12, fontWeight: 700 }
     } } })
     fitDynamicBusinessTextObject(object)
-    expect(object.fontSize).toBe(40)
-    expect(object.dynamicFieldBaseFontSize).toBe(40)
-    expect(object.styles[0][0]).toEqual({ fill: '#fff' })
-    expect(object.styles[0][1]).toEqual({ fontWeight: 700 })
+    expect(object.fontSize).toBe(18)
+    expect(object.dynamicFieldBaseFontSize).toBe(18)
+    expect(object.styles[0][0]).toEqual({ fontSize: 40, fill: '#fff' })
+    expect(object.styles[0][1]).toEqual({ fontSize: 12, fontWeight: 700 })
   })
 })
 
@@ -241,4 +241,24 @@ it('preserva quebra de nomes longos do Instagram ao configurar um objeto recarre
   const object = textbox({ businessProfileField: 'instagram', splitByGrapheme: true })
   configureDynamicBusinessTextObject(object)
   expect(object.splitByGrapheme).toBe(true)
+})
+
+describe('limite de linhas da validade', () => {
+  it('preserva o tamanho e as quebras do modelo em caixas estreitas e largas', () => {
+    const object = textbox({ businessProfileField: 'validity', text: 'OFERTAS VÁLIDAS\nDE 01/04 A 07/04 ENQUANTO DURAREM OS ESTOQUES', width: 160, fontSize: 20 })
+    object.initDimensions = () => {
+      const count = Math.ceil(object.text.length * object.fontSize * 0.5 / object.width)
+      object.textLines = Array(count).fill('line')
+      object.height = count * object.fontSize
+    }
+    fitDynamicBusinessTextObject(object)
+    expect(object.textLines.length).toBeGreaterThan(2)
+    expect(object.text).toContain('\n')
+    expect(object.dynamicFieldBaseFontSize).toBe(20)
+    expect(object.fontSize).toBe(20)
+    object.width = 1000
+    fitDynamicBusinessTextObject(object)
+    expect(object.textLines.length).toBe(1)
+    expect(object.fontSize).toBe(20)
+  })
 })

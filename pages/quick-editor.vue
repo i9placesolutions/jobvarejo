@@ -26,6 +26,7 @@ const errorMessage = ref('')
 const templates = ref<FlyerTemplateSummary[]>([])
 const usingTemplateId = ref('')
 const selectedTemplateCategory = ref<string | null>(null)
+const selectedTemplateSubcategory = ref<string | null>(null)
 const existingProjects = ref<ProjectListRow[]>([])
 const projectSearch = ref('')
 const filteredProjects = computed(() => {
@@ -37,6 +38,13 @@ const filteredProjects = computed(() => {
 })
 const getTemplateCategory = (template: FlyerTemplateSummary): string | null =>
   normalizeFlyerTemplateCategory(template.template_category)
+const getTemplateSubcategory = (template: FlyerTemplateSummary): string | null =>
+  normalizeFlyerTemplateCategory(template.template_subcategory)
+const getTemplateCategoryLabel = (template: FlyerTemplateSummary): string | null => {
+  const category = getTemplateCategory(template)
+  const subcategory = getTemplateSubcategory(template)
+  return category ? (subcategory ? `${category} · ${subcategory}` : category) : null
+}
 const getCategoryKey = (value: string | null | undefined): string | null =>
   normalizeFlyerTemplateCategory(value)?.toLocaleLowerCase('pt-BR') || null
 const templateCategories = computed(() => {
@@ -48,11 +56,31 @@ const templateCategories = computed(() => {
   })
   return [...unique.values()].sort((left, right) => left.localeCompare(right, 'pt-BR'))
 })
-const filteredTemplates = computed(() => templates.value.filter((template) => (
-  !selectedTemplateCategory.value || (
-    getCategoryKey(getTemplateCategory(template)) === getCategoryKey(selectedTemplateCategory.value)
-  )
-)))
+const templateSubcategories = computed(() => {
+  const mainCategoryKey = getCategoryKey(selectedTemplateCategory.value)
+  if (!mainCategoryKey) return []
+  const unique = new Map<string, string>()
+  templates.value.forEach((template) => {
+    if (getCategoryKey(getTemplateCategory(template)) !== mainCategoryKey) return
+    const subcategory = getTemplateSubcategory(template)
+    const key = getCategoryKey(subcategory)
+    if (subcategory && key) unique.set(key, subcategory)
+  })
+  return [...unique.values()].sort((left, right) => left.localeCompare(right, 'pt-BR'))
+})
+const selectTemplateCategory = (category: string | null) => {
+  selectedTemplateCategory.value = category
+  selectedTemplateSubcategory.value = null
+}
+const filteredTemplates = computed(() => templates.value.filter((template) => {
+  if (selectedTemplateCategory.value && (
+    getCategoryKey(getTemplateCategory(template)) !== getCategoryKey(selectedTemplateCategory.value)
+  )) return false
+  if (selectedTemplateSubcategory.value && (
+    getCategoryKey(getTemplateSubcategory(template)) !== getCategoryKey(selectedTemplateSubcategory.value)
+  )) return false
+  return true
+}))
 
 const getLastEditedAt = (project: ProjectListRow): string => project.updated_at || project.created_at || ''
 
@@ -259,14 +287,14 @@ onMounted(() => {
           <p class="mt-1 text-sm text-slate-500">O modelo abre com os campos e a área de produtos prontos para preencher.</p>
         </div>
         <div v-if="templateCategories.length" class="mb-4 rounded-2xl border border-slate-200 bg-white p-3">
-          <p class="mb-2 text-xs font-semibold text-slate-600">Filtre por categoria</p>
+          <p class="mb-2 text-xs font-semibold text-slate-600">Categoria principal</p>
           <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrar modelos por categoria">
             <button
               type="button"
               class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
               :class="!selectedTemplateCategory ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
               :aria-pressed="!selectedTemplateCategory"
-              @click="selectedTemplateCategory = null"
+              @click="selectTemplateCategory(null)"
             >Todos</button>
             <button
               v-for="category in templateCategories"
@@ -275,8 +303,29 @@ onMounted(() => {
               class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
               :class="selectedTemplateCategory === category ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
               :aria-pressed="selectedTemplateCategory === category"
-              @click="selectedTemplateCategory = category"
+              @click="selectTemplateCategory(category)"
             >{{ category }}</button>
+          </div>
+          <div v-if="selectedTemplateCategory && templateSubcategories.length" class="mt-3 border-t border-slate-100 pt-3">
+            <p class="mb-2 text-xs font-semibold text-slate-600">Subcategoria</p>
+            <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrar modelos por subcategoria">
+              <button
+                type="button"
+                class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+                :class="!selectedTemplateSubcategory ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-violet-50 hover:text-violet-700'"
+                :aria-pressed="!selectedTemplateSubcategory"
+                @click="selectedTemplateSubcategory = null"
+              >Todas</button>
+              <button
+                v-for="subcategory in templateSubcategories"
+                :key="subcategory"
+                type="button"
+                class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+                :class="selectedTemplateSubcategory === subcategory ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-violet-50 hover:text-violet-700'"
+                :aria-pressed="selectedTemplateSubcategory === subcategory"
+                @click="selectedTemplateSubcategory = subcategory"
+              >{{ subcategory }}</button>
+            </div>
           </div>
         </div>
         <p v-if="errorMessage" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{{ errorMessage }}</p>
@@ -300,9 +349,9 @@ onMounted(() => {
               />
               <LayoutTemplate v-else class="h-10 w-10 text-indigo-300" />
               <span class="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-indigo-600 shadow-sm">Modelo</span>
-              <span v-if="getTemplateCategory(template)" class="absolute right-3 top-3 inline-flex max-w-[65%] items-center gap-1 truncate rounded-full bg-slate-900/80 px-2.5 py-1 text-[9px] font-bold text-white shadow-sm">
+              <span v-if="getTemplateCategoryLabel(template)" class="absolute right-3 top-3 inline-flex max-w-[65%] items-center gap-1 truncate rounded-full bg-slate-900/80 px-2.5 py-1 text-[9px] font-bold text-white shadow-sm">
                 <Tag class="h-3 w-3 shrink-0" />
-                <span class="truncate">{{ getTemplateCategory(template) }}</span>
+                <span class="truncate">{{ getTemplateCategoryLabel(template) }}</span>
               </span>
             </div>
             <div class="flex items-center justify-between gap-3 p-4">

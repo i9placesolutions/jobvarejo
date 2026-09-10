@@ -4,6 +4,7 @@ const CONTENT_EDIT_PATCH_FIELDS = [
   'canvas_data',
   'template_config',
   'template_category',
+  'template_subcategory',
   'is_template'
 ] as const
 

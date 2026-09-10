@@ -693,7 +693,7 @@ export const findBestS3Match = async (opts: {
     bucket: opts.bucketName,
     prefixes: opts.prefixes,
     ttlMs: 60_000,
-    maxKeysPerPrefix: Math.max(1_000, Number(opts.maxKeysPerPrefix || 8_000)),
+    maxKeysPerPrefix: opts.maxKeysPerPrefix ?? Number.POSITIVE_INFINITY,
     excludeKeyPrefixes: ['uploads/bg-removed-']
   })
 
@@ -952,7 +952,7 @@ export const findTopS3Matches = async (opts: {
     bucket: opts.bucketName,
     prefixes: opts.prefixes,
     ttlMs: 60_000,
-    maxKeysPerPrefix: Math.max(1_000, Number(opts.maxKeysPerPrefix || 8_000)),
+    maxKeysPerPrefix: opts.maxKeysPerPrefix ?? Number.POSITIVE_INFINITY,
     excludeKeyPrefixes: ['uploads/bg-removed-']
   })
 

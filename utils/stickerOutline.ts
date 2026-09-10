@@ -113,7 +113,10 @@ export const createStickerCoverage = (
     if (mode === 'outside') {
         const filled = fillMaskHoles(expanded, width, height)
         for (let i = 0; i < size; i++) {
-            if (filled[i]) coverage[i] = 1
+            // Preencher apenas novos vazios internos. A borda que ja existia
+            // em expanded deve manter sua cobertura fracionaria: arredonda-la
+            // para 1 corta metade do antialias e deixa curvas serrilhadas.
+            if (filled[i] && !expanded[i]) coverage[i] = 1
         }
     }
     return coverage

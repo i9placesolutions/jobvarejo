@@ -497,9 +497,13 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         }
 
 
-        // BiRefNet fornece a máscara; não aplicar remoção por cor nem erosão adicional.
-        const modelBuffer = await removeBackgroundBiRefNet(resizedBuffer);
-        const refinedBuffer = await restoreEnclosedProductPixels(resizedBuffer, modelBuffer, sharp);
+        // Em packshots de fundo claro uniforme, preservar todos os pixels que
+        // não pertencem ao fundo conectado às bordas. A segmentação semântica
+        // pode confundir a impressão da embalagem com o fundo e apagar partes dela.
+        const exteriorCutout = await removeUniformExteriorBackground(resizedBuffer, sharp);
+        const refinedBuffer = exteriorCutout ?? await restoreEnclosedProductPixels(
+            resizedBuffer, await removeBackgroundBiRefNet(resizedBuffer), sharp
+        );
 
         // 2.6. Auto-trim: recortar bordas transparentes para produto preencher a imagem
         let trimmedBuffer = refinedBuffer;
@@ -530,7 +534,9 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
             return fallbackBuffer;
         }
 
-        const outStats = await getAlphaStats(trimmedBuffer, sharp);
+        // Validar antes de aparar: uma embalagem retangular pode ocupar todo o
+        // recorte final, sem transparência, mesmo após remover o fundo corretamente.
+        const outStats = await getAlphaStats(refinedBuffer, sharp);
 
         // Additional guard for very light/low contrast images: if the result is mostly transparent,
         // prefer returning the original (better than deleting the subject).
@@ -554,7 +560,7 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         }
 
         // Guard geral para evitar "furos" agressivos no produto.
-        const shapeStats = await getAlphaShapeStats(trimmedBuffer, sharp);
+        const shapeStats = await getAlphaShapeStats(refinedBuffer, sharp);
         const aggressive = isOverAggressiveRemoval(outStats, shapeStats);
         if (aggressive.aggressive) {
             console.warn(`⚠️ [Image Process] Resultado agressivo de remoção detectado (${aggressive.reason})`);

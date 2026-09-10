@@ -72,8 +72,11 @@ export default defineEventHandler(async (event) => {
   if (!projectId || !isUuid(projectId)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid project id format' })
   }
-  if ('template_config' in body && 'template_category' in body) {
-    throw createError({ statusCode: 400, statusMessage: 'Atualize a configuração ou a categoria do modelo, não ambos no mesmo pedido.' })
+  if ('template_config' in body && ('template_category' in body || 'template_subcategory' in body)) {
+    throw createError({ statusCode: 400, statusMessage: 'Atualize a configuração ou as categorias do modelo, não ambos no mesmo pedido.' })
+  }
+  if ('template_subcategory' in body && !('template_category' in body)) {
+    throw createError({ statusCode: 400, statusMessage: 'Informe a categoria principal ao atualizar a subcategoria.' })
   }
 
   const updates: string[] = []
@@ -94,7 +97,7 @@ export default defineEventHandler(async (event) => {
     // The dashboard renames a project with only its name field. For a
     // single-model flyer template, keep the page/model label in sync at the
     // same time so a duplicated template no longer keeps the source title.
-    if (!('canvas_data' in body) && !('template_config' in body) && !('template_category' in body)) {
+    if (!('canvas_data' in body) && !('template_config' in body) && !('template_category' in body) && !('template_subcategory' in body)) {
       await ensureProjectTemplateColumn()
       const current = await pgOneOrNull<any>(
         `select canvas_data, template_config, is_template
@@ -174,19 +177,19 @@ export default defineEventHandler(async (event) => {
     updates.push(`template_config = ${pushParam(parseAndStringifyJsonbParam(synchronizedTemplateConfig, 'template_config'))}::jsonb`)
   }
 
-  if ('template_category' in body) {
+  if ('template_category' in body || 'template_subcategory' in body) {
     const templateCategory = normalizeFlyerTemplateCategory(body?.template_category)
+    const templateSubcategory = templateCategory
+      ? normalizeFlyerTemplateCategory(body?.template_subcategory)
+      : null
     if (templateCategory) {
-      updates.push(
-        `template_config = jsonb_set(
-          coalesce(template_config, '{}'::jsonb),
-          '{category}',
-          to_jsonb(${pushParam(templateCategory)}::text),
-          true
-        )`
-      )
+      const categoryParam = pushParam(templateCategory)
+      const subcategorySql = templateSubcategory
+        ? ` || jsonb_build_object('subcategory', ${pushParam(templateSubcategory)}::text)`
+        : ''
+      updates.push(`template_config = (coalesce(template_config, '{}'::jsonb) - 'category' - 'subcategory') || jsonb_build_object('category', ${categoryParam}::text)${subcategorySql}`)
     } else {
-      updates.push(`template_config = coalesce(template_config, '{}'::jsonb) - 'category'`)
+      updates.push(`template_config = coalesce(template_config, '{}'::jsonb) - 'category' - 'subcategory'`)
     }
   }
 

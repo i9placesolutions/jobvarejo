@@ -361,7 +361,7 @@ export default defineEventHandler(async (event) => {
         const rawSearchNormalized = normalizeText(rawSearch);
 
         const assetNameByKey = new Map<string, string>();
-        if (uploadsOnlyMode) {
+        {
             try {
                 const { rows } = await pgQuery<{ asset_key: string; display_name: string }>(
                     `select asset_key, display_name
@@ -389,7 +389,6 @@ export default defineEventHandler(async (event) => {
                     bucket: bucketName,
                     prefixes: libraryCategory ? [libraryCategory.prefix, "imagens/", "uploads/"] : ["imagens/", "uploads/"],
                     ttlMs: 90_000,
-                    maxKeysPerPrefix: (uploadsOnlyMode || libraryCategory) ? 12_000 : (hasVariants ? 10_000 : 1_500),
                     excludeKeyPrefixes: ["imagens/bg-removed-"],
                     forceRefresh: forceFresh
                 });
@@ -421,9 +420,7 @@ export default defineEventHandler(async (event) => {
                         `select id, search_term, product_name, brand, flavor, weight, image_url, s3_key, source, usage_count
                          from public.product_image_cache
                          where image_url is not null
-                         order by usage_count desc nulls last
-                         limit $1`,
-                        [hasVariants ? 1400 : 600]
+                         order by usage_count desc nulls last`
                     );
                     return Array.isArray(rows) ? rows : [] as CacheRow[];
                 } catch {
@@ -446,6 +443,9 @@ export default defineEventHandler(async (event) => {
                 String(row.search_term || "").trim() ||
                 resolvedKey ||
                 "Imagem de produto";
+            const matchScore = hasVariants ? scoreByTokens(buildSearchTextFromCache(row), queryVariants) : 0;
+            // Popularidade só desempata imagens relevantes; não cria correspondência.
+            if (hasVariants && matchScore <= 0) continue;
             const item: AssetItem = {
                 id: `cache:${row.id || resolvedKey || row.image_url}`,
                 key: resolvedKey || null,
@@ -453,7 +453,7 @@ export default defineEventHandler(async (event) => {
                 url: resolvedUrl,
                 source: "cache",
                 lastModified: null,
-                score: hasVariants ? scoreByTokens(buildSearchTextFromCache(row), queryVariants) + Math.min(25, Number(row.usage_count || 0)) : 0
+                score: hasVariants ? matchScore + Math.min(25, Number(row.usage_count || 0)) : 0
             };
             if (hasVariants && Number(item.score || 0) <= 0) continue;
             cacheItems.push(item);

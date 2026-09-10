@@ -45,7 +45,7 @@ export const createStickerOutlineRuntime = (deps: StickerOutlineRuntimeDeps) => 
 
     // Inclui a versao do algoritmo para descartar caches gerados pela mascara
     // antiga, que contornava cada parte separada da logo individualmente.
-    const cacheKey = `v4|${enabled}|${mode}|${width}|${color}|${opacity}|${obj.width}|${obj.height}|${obj.cropX || 0}|${obj.cropY || 0}`
+    const cacheKey = `v5|${enabled}|${mode}|${width}|${color}|${opacity}|${obj.width}|${obj.height}|${obj.cropX || 0}|${obj.cropY || 0}`
     if (obj.__stickerCacheKey !== cacheKey) {
       obj.__stickerOutlineCache = null
       obj.__stickerCacheKey = cacheKey

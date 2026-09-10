@@ -59,6 +59,17 @@ describe('sticker outline masks', () => {
     expect(coverage[10 * 21 + 16]).toBe(0)
   })
 
+  it('preserva a transicao suave nos dois lados da borda externa', () => {
+    const mask = new Uint8Array(21 * 21)
+    mask[10 * 21 + 10] = 1
+    const coverage = createStickerCoverage(mask, distances(mask, 21), 21, 21, 4, 2)
+    expect(coverage[10 * 21 + 14]).toBeCloseTo(0.75)
+    expect(coverage[10 * 21 + 15]).toBeCloseTo(0.25)
+    // A curva diagonal tambem precisa manter cobertura parcial.
+    expect(coverage[13 * 21 + 13]).toBeGreaterThan(0.5)
+    expect(coverage[13 * 21 + 13]).toBeLessThan(1)
+  })
+
   it('preenche o interior do adesivo e une detalhes proximos sem frestas', () => {
     const mask = maskFromRows(['000000000','001111100','001000100','001000100','001111100','000000000'])
     const coverage = createStickerCoverage(mask, distances(mask, 9), 9, 6, 1, 1)

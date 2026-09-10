@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectAssetSearchPages } from '~/utils/collectAssetSearchPages'
 import { ref, computed, watch, nextTick } from 'vue'
 import Dialog from './ui/Dialog.vue'
 import Button from './ui/Button.vue'
@@ -1552,27 +1553,28 @@ const fetchReviewSuggestionsForRow = async (
             }
             return
         }
-        const data = await fetchUntyped('/api/assets', {
-            headers,
-            query: {
-                q: query,
-                limit: 8,
-                source: 'uploads',
-                fresh: options.force ? '1' : undefined,
-                productName: String(row.product?.name || ''),
-                brand: String(row.product?.brand || ''),
-                flavor: String(row.product?.flavor || ''),
-                weight: String(row.product?.weight || '')
-            }
+        const data = await collectAssetSearchPages<any>(async (cursor) => {
+            return await fetchUntyped('/api/assets', {
+                headers,
+                query: {
+                    q: query,
+                    limit: 200,
+                    paginated: '1',
+                    cursor,
+                    ai: '0',
+                    fresh: options.force && !cursor ? '1' : undefined,
+                    productName: String(row.product?.name || ''),
+                    brand: String(row.product?.brand || ''),
+                    flavor: String(row.product?.flavor || ''),
+                    weight: String(row.product?.weight || '')
+                }
+            })
         })
-        const next = Array.isArray(data)
-            ? filterReviewCandidatesForProduct(
-                row.product,
-                data
-                    .map((asset, index) => mapAssetToReviewCandidate(asset, index))
-                    .filter((candidate): candidate is SmartProductImageCandidate => !!candidate)
-            ).slice(0, 6)
-            : []
+        const next = filterReviewCandidatesForProduct(
+            row.product,
+            data.map((asset, index) => mapAssetToReviewCandidate(asset, index))
+                .filter((candidate): candidate is SmartProductImageCandidate => !!candidate)
+        )
         reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: next }
     } catch (error: any) {
         reviewSuggestionErrorMap.value = {

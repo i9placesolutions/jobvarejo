@@ -168,8 +168,6 @@ export const getDynamicBusinessTextOptions = (field: string): Record<string, any
   }
 }
 
-const MIN_DYNAMIC_FONT_SIZE = 8
-const FIT_ITERATIONS = 14
 
 const setObjectValues = (object: any, values: Record<string, any>): void => {
   if (!object || !values || Object.keys(values).length === 0) return
@@ -186,11 +184,9 @@ const finitePositive = (value: unknown): number | null => {
 }
 
 /**
- * Guarda a tipografia e a caixa escolhidas no modelo antes de qualquer
- * recalculo do Fabric. O valor de `dynamicFieldBaseFontSize` permite reduzir a
- * fonte para um texto longo e depois voltar ao tamanho do modelo quando o
- * valor ficar curto. `dynamicFieldHeight` e a altura real do campo, e nao a
- * altura natural de uma string especifica.
+ * Guarda a fonte e a altura mínima definidas no modelo. O tamanho-base
+ * também permite recuperar campos reduzidos por versões antigas, sem
+ * aplicar novos ajustes automáticos de fonte ao conteúdo.
  */
 export const captureDynamicBusinessTextBaseline = (object: any): boolean => {
   if (!isDynamicBusinessFieldObject(object)) return false
@@ -323,20 +319,10 @@ const getMeasuredLineWidth = (object: any): number => {
   return maxWidth
 }
 
-const getMeasuredTextHeight = (object: any): number => {
-  const measured = typeof object?.calcTextHeight === 'function'
-    ? Number(object.calcTextHeight())
-    : Number(object?.height)
-  return Number.isFinite(measured) && measured > 0 ? measured : 0
-}
 
 /**
- * Reduz ou restaura a fonte de um campo dinâmico para que o conteúdo caiba na
- * caixa configurada. O algoritmo altera apenas `fontSize`; largura, escala,
- * posição e estilos continuam sendo os definidos no modelo. A fonte original
- * fica em `dynamicFieldBaseFontSize`, enquanto o resultado atual fica em
- * `dynamicFieldAutoFitFontSize` para que a próxima troca de conteúdo possa
- * recalcular a partir do mesmo tamanho-base.
+ * Reflui o conteúdo dentro da largura configurada, preservando a fonte,
+ * escala e estilos do modelo. A altura pode crescer para acomodar o texto.
  */
 export const fitDynamicBusinessTextObject = (
   object: any,
@@ -344,137 +330,34 @@ export const fitDynamicBusinessTextObject = (
 ): boolean => {
   if (!isDynamicBusinessFieldObject(object) || typeof object?.set !== 'function') return false
 
-  let changed = captureDynamicBusinessTextBaseline(object)
+  const changed = captureDynamicBusinessTextBaseline(object)
   const currentFontSize = finitePositive(object.fontSize) || 16
   const baseFontSize = finitePositive(options.maxFontSize)
     || finitePositive(object.dynamicFieldBaseFontSize)
     || currentFontSize
-  // Dados de leitura mantêm o tamanho escolhido: ao atingir a largura, o Textbox
-  // cria novas linhas e cresce para baixo, em vez de reduzir a fonte.
-  if (['validity', 'address', 'instagram', 'whatsapp'].includes(getDynamicBusinessField(object))) {
-    // Formatação por caractere herdada do texto de demonstração pode deixar
-    // só o começo grande. Unifica no maior tamanho escolhido, sem apagar cor,
-    // peso ou outros estilos do modelo.
-    let uniformFontSize = baseFontSize
-    let removedInlineSizes = false
-    for (const line of Object.values(object.styles || {}) as any[]) {
-      for (const style of Object.values(line || {}) as any[]) {
-        if (style && typeof style === 'object' && style.fontSize != null) {
-          uniformFontSize = Math.max(uniformFontSize, finitePositive(style.fontSize) || 0)
-          delete style.fontSize
-          removedInlineSizes = true
-        }
-      }
-    }
-    const width = finitePositive(options.maxWidth) || finitePositive(object.width)
-    const topAnchor = object.getPointByOrigin?.('center', 'top')
-    const previousHeight = Number(object.height)
-    const previousWidth = Number(object.width)
-    setObjectValues(object, {
-      fontSize: uniformFontSize,
-      dynamicFieldBaseFontSize: uniformFontSize,
-      dynamicFieldAutoFitFontSize: uniformFontSize,
-      splitByGrapheme: false,
-      ...(width != null ? { width } : {})
-    })
-    object.initDimensions?.()
-    // Um token maior que a caixa (ex.: data em coluna estreita) também deve
-    // quebrar, sem alargar a caixa nem diminuir a fonte.
-    if (width != null && (Number(object.width) > width + 0.5 || getMeasuredLineWidth(object) > width + 0.5)) {
-      setObjectValues(object, { width, splitByGrapheme: true })
-      object.initDimensions?.()
-    }
-    syncDynamicBusinessTextHeight(object)
-    if (topAnchor) object.setPositionByOrigin?.(topAnchor, 'center', 'top')
-    object.setCoords?.()
-    return changed || removedInlineSizes || Math.abs(currentFontSize - uniformFontSize) > 0.01
-      || previousHeight !== Number(object.height)
-      || previousWidth !== Number(object.width)
-  }
-  const minFontSize = Math.max(
-    MIN_DYNAMIC_FONT_SIZE,
-    Math.min(baseFontSize, finitePositive(options.minFontSize) || MIN_DYNAMIC_FONT_SIZE)
-  )
-  const maxWidth = finitePositive(options.maxWidth)
-    || finitePositive(object.width)
-  const maxHeight = object.dynamicFieldAutoHeight ? null : finitePositive(options.maxHeight)
-    || finitePositive(object.dynamicFieldHeight)
-    || finitePositive(object.height)
-
-  // Sem conteúdo, restaura o tamanho definido pelo modelo e evita uma fonte
-  // reduzida ficar presa no campo quando o dado da loja voltar a ser vazio.
-  if (!String(object.text ?? '').trim()) {
-    const emptyValues: Record<string, any> = {
-      fontSize: baseFontSize,
-      dynamicFieldAutoFitFontSize: baseFontSize
-    }
-    if (Math.abs(currentFontSize - baseFontSize) > 0.01) changed = true
-    if (Number(object.dynamicFieldAutoFitFontSize) !== baseFontSize) changed = true
-    setObjectValues(object, emptyValues)
-    object.initDimensions?.()
-    return changed
-  }
-
-  const restoreWidth = () => {
-    if (maxWidth == null) return false
-    const currentWidth = Number(object.width)
-    if (!Number.isFinite(currentWidth) || Math.abs(currentWidth - maxWidth) <= 0.01) return false
-    setObjectValues(object, { width: maxWidth })
-    return true
-  }
-
-  const measure = (fontSize: number) => {
-    setObjectValues(object, { fontSize })
-    object.initDimensions?.()
-    // Fabric's Textbox can enlarge itself for an unbroken token. Reapply the
-    // model width before reading the final line metrics so URLs/IDs are fitted
-    // against the actual field rather than a temporary expanded width.
-    const widthChanged = restoreWidth()
-    if (widthChanged) object.initDimensions?.()
-    return {
-      height: getMeasuredTextHeight(object),
-      width: getMeasuredLineWidth(object)
-    }
-  }
-
-  const fits = (metrics: { height: number; width: number }): boolean => {
-    const heightFits = maxHeight == null || metrics.height <= maxHeight + 0.5
-    const widthFits = maxWidth == null || metrics.width <= maxWidth + 0.5 || metrics.width <= 0
-    return heightFits && widthFits
-  }
-
-  const maxMetrics = measure(baseFontSize)
-  let chosenFontSize = baseFontSize
-  if (!fits(maxMetrics)) {
-    const minMetrics = measure(minFontSize)
-    if (fits(minMetrics)) {
-      let low = minFontSize
-      let high = baseFontSize
-      for (let index = 0; index < FIT_ITERATIONS; index += 1) {
-        const middle = (low + high) / 2
-        if (fits(measure(middle))) low = middle
-        else high = middle
-      }
-      chosenFontSize = low
-    } else {
-      // The field is smaller than even the readable minimum. Keep the minimum
-      // and let the existing height sync preserve the configured box.
-      chosenFontSize = minFontSize
-    }
-  }
-
-  const roundedFontSize = Math.max(minFontSize, Math.round(chosenFontSize * 100) / 100)
-  if (Math.abs(Number(object.fontSize) - roundedFontSize) > 0.01) changed = true
-  if (Number(object.dynamicFieldAutoFitFontSize) !== roundedFontSize) changed = true
+  // O modelo define a fonte; o conteúdo só recalcula linhas e altura.
+  // Inclui estilos por caractere: preencher dados não é uma edição tipográfica.
+  const width = finitePositive(options.maxWidth) || finitePositive(object.width)
+  const topAnchor = object.getPointByOrigin?.('center', 'top')
+  const previousHeight = Number(object.height)
+  const previousWidth = Number(object.width)
   setObjectValues(object, {
-    fontSize: roundedFontSize,
-    dynamicFieldAutoFitFontSize: roundedFontSize
+    fontSize: baseFontSize,
+    dynamicFieldAutoFitFontSize: baseFontSize,
+    splitByGrapheme: false,
+    ...(width != null ? { width } : {})
   })
   object.initDimensions?.()
-  if (restoreWidth()) object.initDimensions?.()
+  if (width != null && (Number(object.width) > width + 0.5 || getMeasuredLineWidth(object) > width + 0.5)) {
+    setObjectValues(object, { width, splitByGrapheme: true })
+    object.initDimensions?.()
+  }
   syncDynamicBusinessTextHeight(object)
+  if (topAnchor) object.setPositionByOrigin?.(topAnchor, 'center', 'top')
   object.setCoords?.()
-  return changed
+  return changed || Math.abs(currentFontSize - baseFontSize) > 0.01
+    || previousHeight !== Number(object.height) || previousWidth !== Number(object.width)
+
 }
 
 /**

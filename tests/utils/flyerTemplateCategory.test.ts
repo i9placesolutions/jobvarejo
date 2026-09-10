@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   getFlyerTemplateCategoryKey,
   getFlyerTemplateCategory,
+  getFlyerTemplateCategoryLabel,
+  getFlyerTemplateSubcategory,
   normalizeFlyerTemplateCategory,
   normalizeFlyerTemplateConfigCategory
 } from '~/utils/flyerTemplateCategory'
@@ -32,5 +34,23 @@ describe('flyerTemplateCategory', () => {
       formatIds: ['feed'],
       models: [{ id: 'model-1', name: 'Semana verde' }]
     })
+  })
+
+  it('mantém categoria principal e subcategoria sem quebrar os modelos antigos', () => {
+    const config = {
+      category: '  Hortifruti ',
+      subcategory: ' Quinta\n Verde ',
+      formatIds: ['feed']
+    }
+
+    expect(getFlyerTemplateCategory(config)).toBe('Hortifruti')
+    expect(getFlyerTemplateSubcategory(config)).toBe('Quinta Verde')
+    expect(getFlyerTemplateCategoryLabel(config)).toBe('Hortifruti · Quinta Verde')
+    expect(normalizeFlyerTemplateConfigCategory(config)).toEqual({
+      category: 'Hortifruti',
+      subcategory: 'Quinta Verde',
+      formatIds: ['feed']
+    })
+    expect(normalizeFlyerTemplateConfigCategory({ subcategory: 'Quinta Verde' })).toEqual({})
   })
 })

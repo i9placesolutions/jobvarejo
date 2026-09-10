@@ -3,6 +3,8 @@ import { registerCanvasImageLoadSession } from '~/utils/canvasImageLoadSession'
 import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
 import { confirmInSystem } from '~/utils/systemMessages'
 import { harmonizeProductCardTypography } from '~/utils/productCardResponsiveTypography'
+import { reconcileQuickPageFormatGeometry } from '~/utils/quickPageFormatGeometry'
+import { repairDynamicTextLayoutBounds } from '~/utils/dynamicTextLayoutBounds'
 import { normalizeQuickBusinessFooter } from '~/utils/quickBusinessFooterTypography'
 import { syncProductNameColor } from '~/utils/productNameColors'
 import { isProductNameText, collectProductNameTexts } from '~/utils/productNameTypographyScope'
@@ -5374,7 +5376,7 @@ const resizeQuickModePage = (formatId: string) => {
 
                 let replacementWasApplied = false
                 try {
-                    const resizedPage = await replacePageFromTemplateSource(page.id, templateSource, {
+                    const resizedPage = await replacePageFromTemplateSource(page.id, { ...templateSource, width: nextWidth, height: nextHeight }, {
                         name: `${modelName} · ${format.label}`,
                         metadata: {
                             templateModelId: modelId || templateSource.templateModelId,
@@ -6933,7 +6935,7 @@ const applyQuickProductNameColor = async (value: string | null) => {
         card._cardStyleOverrides = { ...card._cardStyleOverrides }
         if (value === null) delete card._cardStyleOverrides.prodNameColor
         else card._cardStyleOverrides.prodNameColor = value
-        syncProductNameColor(card)
+        syncProductNameColor(card, zone ? getZoneGlobalStyles(zone) : {})
         touchQuickModeObjectAncestors(card)
     })
     refreshCanvasObjects({ immediate: true })
@@ -7059,7 +7061,7 @@ const quickCardColorSettings = computed(() => {
     void canvasObjects.value
     const zone = findProductZoneById(quickModeTargetZoneId.value)
     const styles = zone ? getZoneGlobalStyles(zone) : {}
-    return { mode: styles.cardColorMode || 'auto', color: styles.cardColorMode === 'manual' ? (styles.cardColor || '#ffffff') : (styles.highlightCardColor || '#ffffff') }
+    return { styles, mode: styles.cardColorMode || 'auto', color: styles.cardColorMode === 'manual' ? (styles.cardColor || '#ffffff') : (styles.highlightCardColor || '#ffffff') }
 })
 const applyQuickCardColors = async (settings: { mode: 'auto' | 'manual'; color?: string; allPages: boolean }) => {
     if (!canvas.value || isProcessing.value) return
@@ -7085,7 +7087,7 @@ const applyQuickCardColors = async (settings: { mode: 'auto' | 'manual'; color?:
             const objects = flattenCardColorObjects(roots)
             for (const zone of objects.filter(node => node.isProductZone && (!onlyZone || node._customId === onlyZone))) {
                 const cards = objects.filter(node => node.parentZoneId === zone._customId && node._productData).sort((a, b) => (a._zoneOrder || 0) - (b._zoneOrder || 0))
-                zone._zoneGlobalStyles = { ...zone._zoneGlobalStyles, cardColorMode: settings.mode, highlightCardColor: color, cardColor: settings.mode === 'manual' ? color : '#ffffff', isProdBgTransparent: false }
+                zone._zoneGlobalStyles = { ...zone._zoneGlobalStyles, productPalette: settings.mode === 'auto' && settings.color ? { ...zone._zoneGlobalStyles?.productPalette, highlightCardColor: color } : settings.mode === 'auto' ? {} : zone._zoneGlobalStyles?.productPalette, cardColorMode: settings.mode, highlightCardColor: color, cardColor: settings.mode === 'manual' ? color : '#ffffff', isProdBgTransparent: false }
                 if (zone._zoneStateSnapshot) zone._zoneStateSnapshot.globalStyles = { ...zone._zoneStateSnapshot.globalStyles, ...zone._zoneGlobalStyles }
                 const highlight = getZoneHighlightPredicate(zone, cards)
                 cards.forEach((card, index) => {
@@ -7094,7 +7096,7 @@ const applyQuickCardColors = async (settings: { mode: 'auto' | 'manual'; color?:
                     if (!bg) return
                     const fill = resolveProductCardColor(zone._zoneGlobalStyles, card._cardHighlighted, card._cardStyleOverrides)
                     if (bg.set) bg.set('fill', fill); else bg.fill = fill
-                    syncProductNameColor(card)
+                    syncProductNameColor(card, zone._zoneGlobalStyles)
                     card.dirty = true
                 })
             }
@@ -7227,7 +7229,7 @@ const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
         object.set?.({ [property]: color })
         if (target.kind === 'product-card' && object.group) {
             object.group._cardStyleOverrides = { ...object.group._cardStyleOverrides, cardColor: color, isProdBgTransparent: false }
-            syncProductNameColor(object.group)
+            syncProductNameColor(object.group, getZoneGlobalStyles(findProductZoneById(object.group.parentZoneId)))
         }
         object.setCoords?.()
         touchQuickModeObjectAncestors(object)
@@ -8398,6 +8400,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     let loadedOk = false
     let shouldScheduleMissingProductImageRecovery = false
     let shouldPersistNormalizedAssetUrls = false
+    let repairedQuickPageGeometry = false
     isDesignLoading.value = true
     designLoadExpectedCounts.value = pageToLoad.canvasData ? countCanvasJsonObjectsAndImages(pageToLoad.canvasData) : { objects: 0, images: 0 }
     designLoadActualCounts.value = null
@@ -8627,7 +8630,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                     if (isQuickMode.value) {
                         flattenCardColorObjects(canvas.value.getObjects())
                             .filter(object => object._productData && object.parentZoneId)
-                            .forEach(syncProductNameColor)
+                            .forEach(card => syncProductNameColor(card, getZoneGlobalStyles(findProductZoneById(card.parentZoneId))))
                     }
                     loadedOk = true
                     storageDegraded.value = degradedNewPage
@@ -8939,6 +8942,10 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     }
 
     if (loadedOk) {
+        if (isQuickMode.value && reconcileQuickPageFormatGeometry(pageToLoad, canvas.value.getObjects())) {
+            repairedQuickPageGeometry = true
+            void ensureQuickPageThumbnail(pageToLoad)
+        }
         completedPageLoadSessionId = loadSessionId
         lastLoadedPageKey = nextPageId ? nextPageLoadKey : null
         isInitialDesignLoadDone.value = true
@@ -8966,6 +8973,12 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             // only after the loader releases its guards, otherwise a fallback
             // with placeholders would schedule a no-op and stay stuck forever.
             scheduleMissingProductImageRecovery(180, 10, nextPageId)
+        }
+        if (!isStaleLoad() && loadedOk && repairedQuickPageGeometry && !storageDegraded.value) {
+            scheduleIdleStatePersistence({
+                reason: 'quick-page-format-geometry', source: 'system', expectedPageId: nextPageId,
+                markUnsaved: true, skipIfUnchanged: false
+            }, 650)
         }
         if (!isStaleLoad() && loadedOk && shouldPersistNormalizedAssetUrls) {
             // A successful load is the only safe point to migrate stale
@@ -9115,12 +9128,14 @@ const zoomToFit = (opts: { persist?: boolean } = {}) => {
          return;
     }
 
-    const padding = Math.min(96, Math.max(36, Math.min(vWidth, vHeight) * 0.08));
+    // As barras já ocupam faixas fora do wrapper no modo rápido.
+    // Reservar só uma margem fina permite usar toda a altura/largura útil.
+    const padding = isQuickMode.value ? 12 : Math.min(96, Math.max(36, Math.min(vWidth, vHeight) * 0.08));
     const scaleX = (vWidth - padding * 2) / contentWidth;
     const scaleY = (vHeight - padding * 2) / contentHeight;
-    let scale = Math.min(scaleX, scaleY, 1);
+    let scale = Math.min(scaleX, scaleY, isQuickMode.value ? 4 : 1);
     if (!Number.isFinite(scale) || scale <= 0) scale = 0.2;
-    scale = Math.min(1, Math.max(0.15, scale));
+    scale = isQuickMode.value ? Math.min(4, Math.max(0.01, scale)) : Math.min(1, Math.max(0.15, scale));
 
     // Center Logic
     const contentCenterX = minX + contentWidth / 2;
@@ -17901,10 +17916,10 @@ const getQuickLogoSlotMetrics = (sourceObject: any = null) => {
     const storedMaxWidth = Number(sourceObject?.quickLogoMaxWidth)
     const storedMaxHeight = Number(sourceObject?.quickLogoMaxHeight)
     const maxWidth = Number.isFinite(storedMaxWidth) && storedMaxWidth > 0
-        ? Math.max(48, Math.min(frameWidth * 0.45, storedMaxWidth))
+        ? Math.max(48, Math.min(frameWidth, storedMaxWidth))
         : defaultMaxWidth
     const maxHeight = Number.isFinite(storedMaxHeight) && storedMaxHeight > 0
-        ? Math.max(36, Math.min(frameHeight * 0.3, storedMaxHeight))
+        ? Math.max(36, Math.min(frameHeight, storedMaxHeight))
         : defaultMaxHeight
     const storedCenterX = Number(sourceObject?.quickLogoCenterX)
     const storedCenterY = Number(sourceObject?.quickLogoCenterY)
@@ -18420,8 +18435,8 @@ const syncQuickLogoBinding = async (profile: Record<string, any>): Promise<boole
         }
 
         const metrics = getQuickLogoSlotMetrics(logoObject)
-        const slotWidth = Math.max(24, Math.abs(Number(logoObject.width || 0) * Number(logoObject.scaleX || 1)) || Number(metrics.maxWidth || 180))
-        const slotHeight = Math.max(24, Math.abs(Number(logoObject.height || 0) * Number(logoObject.scaleY || 1)) || Number(metrics.maxHeight || 88))
+        const slotWidth = logoObject.type === 'image' ? metrics.maxWidth : Math.max(24, Math.abs(Number(logoObject.width || 0) * Number(logoObject.scaleX || 1)) || metrics.maxWidth)
+        const slotHeight = logoObject.type === 'image' ? metrics.maxHeight : Math.max(24, Math.abs(Number(logoObject.height || 0) * Number(logoObject.scaleY || 1)) || metrics.maxHeight)
         const backdropPadding = getQuickLogoBackdropPadding(logoObject)
         const usableSlotWidth = Math.max(24, slotWidth - backdropPadding * 2)
         const usableSlotHeight = Math.max(24, slotHeight - backdropPadding * 2)
@@ -18429,8 +18444,10 @@ const syncQuickLogoBinding = async (profile: Record<string, any>): Promise<boole
         if (!Number.isFinite(scale) || scale <= 0) {
             throw new Error('Não foi possível encaixar a logo no espaço definido.')
         }
-        const nextLeft = Number.isFinite(Number(logoObject.left)) ? Number(logoObject.left) : metrics.centerX
-        const nextTop = Number.isFinite(Number(logoObject.top)) ? Number(logoObject.top) : metrics.centerY
+        // Fabric left/top follow the object's origin; a left-origin slot is not centered there.
+        const slotCenter = logoObject.getCenterPoint?.()
+        const nextLeft = Number.isFinite(slotCenter?.x) ? slotCenter.x : metrics.centerX
+        const nextTop = Number.isFinite(slotCenter?.y) ? slotCenter.y : metrics.centerY
         image.set({
             left: nextLeft,
             top: nextTop,
@@ -18890,6 +18907,11 @@ const applyQuickBusinessProfileBindings = async (
         markQuickDynamicObjectDirty(object)
     })
 
+    const textLayoutRepair = repairDynamicTextLayoutBounds(canvas.value.getObjects())
+    if (textLayoutRepair.changed) {
+        changed = true
+        sanitizeAllClipPaths()
+    }
     const logoChanged = await syncQuickLogoBinding(profile)
     if (changed || logoChanged) {
         refreshCanvasObjects()
@@ -19029,8 +19051,10 @@ const handleQuickModeValidityUpdate = (payload: {
         markQuickDynamicObjectDirty(object)
         changed = true
     })
+    const layoutRepair = repairDynamicTextLayoutBounds(canvas.value?.getObjects() || [])
+    if (layoutRepair.changed) sanitizeAllClipPaths()
     quickModeDataVersion.value += 1
-    if (!changed) return
+    if (!changed && !layoutRepair.changed) return
     refreshCanvasObjects()
     safeRequestRenderAll()
     if (options.persist !== false) void persistQuickModeDataChange('quick-data-validity')
@@ -21534,7 +21558,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
     const baseStylesForState = zone
         ? getZoneGlobalStyles(zone)
         : normalizeGlobalStyles(productZoneState.globalStyles.value);
-    const colorPatch = prop === 'cardColor' ? { cardColorMode: 'manual' as const } : prop === 'cardColorMode' && value === 'auto' ? { highlightCardColor: findFlyerAccent(canvas.value.getObjects()) || '#ffffff', isProdBgTransparent: false } : {}
+    const colorPatch = ['productPalette', 'templateProductPalette'].includes(prop) ? { cardColorMode: 'auto' as const, isProdBgTransparent: false } : prop === 'highlightCardColor' && baseStylesForState.templateProductPalette ? { productPalette: { ...baseStylesForState.productPalette, highlightCardColor: value } } : prop === 'cardColor' ? { cardColorMode: 'manual' as const } : prop === 'cardColorMode' && value === 'auto' ? { highlightCardColor: findFlyerAccent(canvas.value.getObjects()) || '#ffffff', isProdBgTransparent: false } : {}
     const nextStylesForState = normalizeGlobalStyles({ ...baseStylesForState, ...colorPatch, [prop]: value });
     productZoneState.updateGlobalStyles(nextStylesForState);
 
@@ -21584,7 +21608,7 @@ const handleUpdateGlobalStyles = async (propOrPayload: string | Record<string, a
             let totalFastApplied = 0;
             effectiveTargets.forEach((z: any) => {
                 const zStyles = getZoneGlobalStyles(z);
-                if (['cardColorMode', 'highlightCardColor'].includes(prop)) {
+                if (['cardColorMode', 'highlightCardColor', 'templateProductPalette', 'productPalette'].includes(prop)) {
                     const colorCards = getZoneChildren(z) || []
                     const colorHighlight = getZoneHighlightPredicate(z, colorCards)
                     colorCards.forEach((card: any, index: number) => { card._cardHighlighted = colorHighlight.isHighlighted(card, index) })
@@ -29013,6 +29037,8 @@ const handleAutoOfferLayout = async () => {
             :current-page-id="currentPageId"
             :template-models="quickModeTemplateModels"
             :current-model-id="quickModeCurrentModelId"
+            :product-palette-styles="quickCardColorSettings.styles"
+            @product-palette="handleUpdateGlobalStyles('productPalette', $event, { targetId: quickModeTargetZoneId })"
             :card-color-mode="quickCardColorSettings.mode"
             :card-color="quickCardColorSettings.color"
             @card-colors="applyQuickCardColors"
@@ -29098,26 +29124,7 @@ const handleAutoOfferLayout = async () => {
                 @apply-opacity="applyQuickModeOpacityChange"
               />
 
-                   <ProductImageQuickActions
-                     v-if="selectedProductImageQuickActions"
-                     :visible="showProductImageQuickActions"
-                     :docked="isQuickMode"
-                     :top="selectedProductImageQuickActionsPos.top"
-                     :left="selectedProductImageQuickActionsPos.left"
-                     :width="selectedProductImageQuickActionsPos.width"
-                     :height="selectedProductImageQuickActionsPos.height"
-                     :templates="selectedProductImageQuickActions.templates"
-                     :selected-template-id="selectedProductImageQuickActions.selectedTemplateId"
-                     :fill-count="selectedProductImageQuickActions.card._productData?.autoFillImages ? (selectedProductImageQuickActions.card._productData.imageFillCount || 0) : 1"
-                     :fill-direction="selectedProductImageQuickActions.card._productData?.imageFillDirection || 'auto'"
-                     @remove="handleProductImageRemove"
-                     @replace="handleAction('replace-product-image-upload')"
-                     @duplicate="handleProductImageDuplicate"
-                     @fill="handleProductImageFill"
-                     @resize="handleProductImageResize"
-                     @template="handleProductImageTemplateChange"
-                     @manage-templates="openGlobalLabelTemplates"
-                   />
+
 
               <section v-if="quickSelectedProductName" class="quick-product-name-colors flex flex-wrap items-center gap-3 rounded-lg border border-white/15 bg-zinc-900 px-3 py-2 text-xs text-white" @pointerdown.stop>
                 <label class="flex items-center gap-2">Cor do nome
@@ -29137,6 +29144,21 @@ const handleAutoOfferLayout = async () => {
               <!-- Infinite Canvas Effect (Wrapper) -->
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
+                   <ProductImageQuickActions
+                     v-if="selectedProductImageQuickActions"
+                     :visible="showProductImageQuickActions"
+                     :top="selectedProductImageQuickActionsPos.top"
+                     :left="selectedProductImageQuickActionsPos.left"
+                     :width="selectedProductImageQuickActionsPos.width"
+                     :height="selectedProductImageQuickActionsPos.height"
+                     :fill-count="selectedProductImageQuickActions.card._productData?.autoFillImages ? (selectedProductImageQuickActions.card._productData.imageFillCount || 0) : 1"
+                     :fill-direction="selectedProductImageQuickActions.card._productData?.imageFillDirection || 'auto'"
+                     @remove="handleProductImageRemove"
+                     @replace="handleAction('replace-product-image-upload')"
+                     @duplicate="handleProductImageDuplicate"
+                     @fill="handleProductImageFill"
+                     @resize="handleProductImageResize"
+                   />
 
                   <!-- A cópia do editor permanece disponível ao trocar de página, mesmo sem seleção. -->
                   <div
@@ -29849,7 +29871,7 @@ main {
     transform: none;
 }
 
-.quick-product-name-colors { order: 2; flex: 0 0 auto; margin: 4px 0; }
+.quick-product-name-colors { position: absolute; top: 70px; left: 12px; right: 12px; z-index: 116; }
 
 .quick-mode-stage > .quick-mode-canvas-viewport {
     background-color: #303133;

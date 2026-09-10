@@ -160,7 +160,11 @@ export default defineEventHandler(async (event) => {
         const hash = createHash('sha256').update(normalizedTerm || productName).digest('hex').substring(0, 12);
         const ext = contentType === 'image/webp' ? 'webp' : mime.split('/')[1] || 'png';
         const variant = canRemoveBackground ? 'bg' : 'original';
-        const key = `imagens/manual-${safeName}-${hash}-${PROCESS_VERSION}-${variant}.${ext}`;
+        // Uma troca de imagem precisa trocar a URL: o proxy e o navegador
+        // podem guardar a versão anterior. Incluir o conteúdo final também
+        // distingue um recorte corrigido do anterior para o mesmo produto.
+        const contentHash = createHash('sha256').update(processedBuffer).digest('hex').substring(0, 16);
+        const key = `imagens/manual-${safeName}-${hash}-${PROCESS_VERSION}-${contentHash}-${variant}.${ext}`;
 
         const putCommand = new PutObjectCommand({
             Bucket: bucketName,

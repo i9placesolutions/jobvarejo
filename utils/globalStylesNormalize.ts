@@ -9,6 +9,7 @@
  * Cobertura: tests/utils/globalStylesNormalize.test.ts
  */
 
+import { normalizeProductPalette } from './productPalette'
 import type { GlobalStyles } from '~/types/product-zone'
 import { normalizeHexColor } from './colorHelpers'
 import { toFinite } from './mathHelpers'
@@ -72,6 +73,8 @@ export const normalizeGlobalStyles = (
 
     const normalized: GlobalStyles = {
         ...merged,
+        templateProductPalette: normalizeProductPalette(merged.templateProductPalette),
+        productPalette: normalizeProductPalette(merged.productPalette),
         cardColor: normalizeHexColor(merged.cardColor, defaultColor.cardColor, { allowTransparent: true }) as string,
         cardBorderColor: normalizeHexColor(merged.cardBorderColor, defaultColor.cardBorderColor) as string,
         accentColor: normalizeHexColor(merged.accentColor, defaultColor.accentColor) as string,

@@ -55,6 +55,7 @@ const showCreateDialog = ref(false)
 const createName = ref('Ofertas da semana')
 const categories = ref<FlyerTemplateCategory[]>([])
 const createCategoryId = ref('')
+const createSubcategoryId = ref('')
 const createPresetId = ref<FlyerTemplatePresetId | null>(null)
 const createAllFormats = ref(true)
 const createFormatIds = ref<FlyerTemplateFormatId[]>(FLYER_TEMPLATE_FORMATS.map(format => format.id))
@@ -66,11 +67,14 @@ const renameDraft = ref('')
 const savingName = ref(false)
 const categoryEditingId = ref('')
 const categoryDraftId = ref('')
+const subcategoryDraftId = ref('')
 const savingCategory = ref(false)
 const selectedCategory = ref<string | null>(null)
+const selectedSubcategory = ref<string | null>(null)
 const showCategoryDialog = ref(false)
 const categoryDialogName = ref('')
 const categoryDialogTarget = ref<'create' | 'edit' | null>(null)
+const categoryDialogParentId = ref('')
 const isCreatingCategory = ref(false)
 const sentenceName = (value: string) => {
   const name = value.trim().toLocaleLowerCase('pt-BR')
@@ -97,6 +101,13 @@ const saveName = async (template: FlyerTemplateSummary) => {
 }
 const getTemplateCategory = (template: FlyerTemplateSummary): string | null =>
   normalizeFlyerTemplateCategory(template.template_category)
+const getTemplateSubcategory = (template: FlyerTemplateSummary): string | null =>
+  normalizeFlyerTemplateCategory(template.template_subcategory)
+const getTemplateCategoryLabel = (template: FlyerTemplateSummary): string | null => {
+  const category = getTemplateCategory(template)
+  const subcategory = getTemplateSubcategory(template)
+  return category ? (subcategory ? `${category} · ${subcategory}` : category) : null
+}
 const getCategoryKey = (value: string | null | undefined): string | null =>
   getFlyerTemplateCategoryKey(value)
 const categoryOptions = computed(() => {
@@ -107,7 +118,7 @@ const categoryOptions = computed(() => {
     unique.set(key, category)
   }
 
-  categories.value.forEach(add)
+  categories.value.filter(category => !category.parent_id).forEach(add)
   // Se a consulta do catálogo falhar temporariamente, o modelo antigo ainda
   // continua disponível para selecionar e não perde a categoria ao salvar.
   templates.value.forEach((template) => {
@@ -123,6 +134,44 @@ const getCategoryNameById = (id: string): string | null => {
   const category = categoryOptions.value.find(item => item.id === id)
   return category?.name || null
 }
+const getSubcategoryOptions = (parentId: string): FlyerTemplateCategory[] => {
+  const parent = categoryOptions.value.find(item => item.id === parentId)
+  if (!parent) return []
+
+  const unique = new Map<string, FlyerTemplateCategory>()
+  const add = (category: FlyerTemplateCategory) => {
+    const key = getCategoryKey(category.name)
+    if (!key || unique.has(key)) return
+    unique.set(key, category)
+  }
+
+  categories.value
+    .filter(category => category.parent_id === parent.id)
+    .forEach(add)
+
+  // A cópia de um modelo pode carregar uma subcategoria anterior ao catálogo.
+  // Ela continua selecionável para que uma edição não apague essa classificação.
+  const parentKey = getCategoryKey(parent.name)
+  templates.value.forEach((template) => {
+    if (getCategoryKey(getTemplateCategory(template)) !== parentKey) return
+    const name = getTemplateSubcategory(template)
+    const key = getCategoryKey(name)
+    if (!name || !key) return
+    add({ id: `legacy:${parentKey}:${key}`, name, parent_id: parent.id, parent_name: parent.name })
+  })
+
+  return [...unique.values()].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
+}
+const getSubcategoryNameById = (parentId: string, id: string): string | null => {
+  const category = getSubcategoryOptions(parentId).find(item => item.id === id)
+  return category?.name || null
+}
+const onCreateCategoryChange = () => {
+  createSubcategoryId.value = ''
+}
+const onCategoryDraftChange = () => {
+  subcategoryDraftId.value = ''
+}
 const startCategoryEdit = (template: FlyerTemplateSummary) => {
   renamingId.value = ''
   categoryEditingId.value = template.id
@@ -130,13 +179,25 @@ const startCategoryEdit = (template: FlyerTemplateSummary) => {
   categoryDraftId.value = categoryKey
     ? categoryOptions.value.find(item => getCategoryKey(item.name) === categoryKey)?.id || ''
     : ''
+  const subcategoryKey = getCategoryKey(getTemplateSubcategory(template))
+  subcategoryDraftId.value = subcategoryKey
+    ? getSubcategoryOptions(categoryDraftId.value).find(item => getCategoryKey(item.name) === subcategoryKey)?.id || ''
+    : ''
 }
 const saveCategory = async (template: FlyerTemplateSummary) => {
   if (savingCategory.value) return
   const previousCategory = getTemplateCategory(template)
+  const previousSubcategory = getTemplateSubcategory(template)
   const category = normalizeFlyerTemplateCategory(getCategoryNameById(categoryDraftId.value))
+  const subcategory = category
+    ? normalizeFlyerTemplateCategory(getSubcategoryNameById(categoryDraftId.value, subcategoryDraftId.value))
+    : null
   if (categoryDraftId.value && !category) {
-    showToast('Escolha uma categoria existente ou crie uma nova.', 'error')
+    showToast('Escolha uma categoria principal existente ou crie uma nova.', 'error')
+    return
+  }
+  if (subcategoryDraftId.value && !subcategory) {
+    showToast('Escolha uma subcategoria existente ou crie uma nova.', 'error')
     return
   }
   savingCategory.value = true
@@ -144,11 +205,20 @@ const saveCategory = async (template: FlyerTemplateSummary) => {
     await $fetch('/api/projects', {
       method: 'PATCH',
       headers: await getApiAuthHeaders(),
-      body: { id: template.id, template_category: category }
+      body: {
+        id: template.id,
+        template_category: category,
+        template_subcategory: subcategory
+      }
     })
     template.template_category = category
+    template.template_subcategory = subcategory
     if (getCategoryKey(selectedCategory.value) === getCategoryKey(previousCategory) && previousCategory !== category) {
       selectedCategory.value = category
+      selectedSubcategory.value = null
+    }
+    if (getCategoryKey(selectedSubcategory.value) === getCategoryKey(previousSubcategory) && previousSubcategory !== subcategory) {
+      selectedSubcategory.value = subcategory
     }
     categoryEditingId.value = ''
     showToast(category ? 'Categoria atualizada.' : 'Categoria removida.')
@@ -158,8 +228,9 @@ const saveCategory = async (template: FlyerTemplateSummary) => {
     savingCategory.value = false
   }
 }
-const openCategoryDialog = (target: 'create' | 'edit' | null = null) => {
+const openCategoryDialog = (target: 'create' | 'edit' | null = null, parentId = '') => {
   categoryDialogTarget.value = target
+  categoryDialogParentId.value = parentId
   categoryDialogName.value = ''
   showCategoryDialog.value = true
 }
@@ -174,18 +245,30 @@ const createCatalogCategory = async () => {
   try {
     const category = await createFlyerTemplateCategory({
       headers: await getApiAuthHeaders(),
-      name
+      name,
+      parentId: categoryDialogParentId.value || null
     })
-    const key = getCategoryKey(category.name)
     categories.value = [
-      ...categories.value.filter(item => getCategoryKey(item.name) !== key),
+      ...categories.value.filter(item => item.id !== category.id),
       category
     ].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
-    if (categoryDialogTarget.value === 'create') createCategoryId.value = category.id
-    if (categoryDialogTarget.value === 'edit') categoryDraftId.value = category.id
+    if (categoryDialogTarget.value === 'create') {
+      if (category.parent_id) createSubcategoryId.value = category.id
+      else {
+        createCategoryId.value = category.id
+        createSubcategoryId.value = ''
+      }
+    }
+    if (categoryDialogTarget.value === 'edit') {
+      if (category.parent_id) subcategoryDraftId.value = category.id
+      else {
+        categoryDraftId.value = category.id
+        subcategoryDraftId.value = ''
+      }
+    }
     showCategoryDialog.value = false
     categoryDialogName.value = ''
-    showToast(`Categoria “${category.name}” criada.`)
+    showToast(`${category.parent_id ? 'Subcategoria' : 'Categoria'} “${category.name}” criada.`)
   } catch (error: any) {
     showToast(String(error?.data?.statusMessage || error?.message || 'Não foi possível criar a categoria.'), 'error')
   } finally {
@@ -199,16 +282,34 @@ const filteredTemplates = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase('pt-BR')
   return templates.value.filter((item) => {
     const category = getTemplateCategory(item)
+    const subcategory = getTemplateSubcategory(item)
     const matchesCategory = !selectedCategory.value || (
       getCategoryKey(category) === getCategoryKey(selectedCategory.value)
     )
     if (!matchesCategory) return false
+    const matchesSubcategory = !selectedSubcategory.value || (
+      getCategoryKey(subcategory) === getCategoryKey(selectedSubcategory.value)
+    )
+    if (!matchesSubcategory) return false
     if (!query) return true
-    return [item.name, category]
+    return [item.name, category, subcategory]
       .some(value => String(value || '').toLocaleLowerCase('pt-BR').includes(query))
   })
 })
-const hasTemplateFilter = computed(() => Boolean(searchQuery.value.trim() || selectedCategory.value))
+const selectedCategoryId = computed(() => {
+  const key = getCategoryKey(selectedCategory.value)
+  return key
+    ? categoryOptions.value.find(category => getCategoryKey(category.name) === key)?.id || ''
+    : ''
+})
+const selectedSubcategoryOptions = computed(() =>
+  selectedCategoryId.value ? getSubcategoryOptions(selectedCategoryId.value) : []
+)
+const selectCategoryFilter = (category: string | null) => {
+  selectedCategory.value = category
+  selectedSubcategory.value = null
+}
+const hasTemplateFilter = computed(() => Boolean(searchQuery.value.trim() || selectedCategory.value || selectedSubcategory.value))
 
 const selectedFormats = computed(() => {
   if (createAllFormats.value) return [...FLYER_TEMPLATE_FORMATS]
@@ -261,6 +362,7 @@ const loadTemplates = async () => {
 const openCreateDialog = () => {
   createName.value = 'Ofertas da semana'
   createCategoryId.value = ''
+  createSubcategoryId.value = ''
   createPresetId.value = null
   createAllFormats.value = true
   createFormatIds.value = FLYER_TEMPLATE_FORMATS.map(format => format.id)
@@ -307,6 +409,7 @@ const createTemplate = async () => {
       headers,
       name: createName.value,
       category: getCategoryNameById(createCategoryId.value),
+      subcategory: getSubcategoryNameById(createCategoryId.value, createSubcategoryId.value),
       formatIds: selectedFormats.value.map(format => format.id),
       modelNames: [sentenceName(createName.value) || 'Ofertas da semana'],
       templatePresetId: createPresetId.value || undefined
@@ -396,7 +499,7 @@ onUnmounted(() => {
         <div class="flex shrink-0 items-center gap-2">
           <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700" @click="openCategoryDialog()">
             <Tag class="h-4 w-4" />
-            <span class="hidden sm:inline">Nova categoria</span>
+            <span class="hidden sm:inline">Nova categoria principal</span>
           </button>
           <button type="button" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500 active:scale-[.98]" @click="openCreateDialog">
             <Plus class="h-4 w-4" />
@@ -439,15 +542,15 @@ onUnmounted(() => {
           </label>
         </div>
 
-        <div v-if="categoryOptions.length" class="mt-4 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-          <p class="text-xs font-semibold text-slate-600">Filtrar por categoria</p>
+        <div v-if="categoryOptions.length" class="mt-4 rounded-2xl border border-slate-200 bg-white p-3">
+          <p class="mb-2 text-xs font-semibold text-slate-600">Filtrar por categoria principal</p>
           <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrar modelos por categoria">
             <button
               type="button"
               class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
               :class="!selectedCategory ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
               :aria-pressed="!selectedCategory"
-              @click="selectedCategory = null"
+              @click="selectCategoryFilter(null)"
             >Todos</button>
             <button
               v-for="category in categoryOptions"
@@ -456,8 +559,29 @@ onUnmounted(() => {
               class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
               :class="getCategoryKey(selectedCategory) === getCategoryKey(category.name) ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
               :aria-pressed="getCategoryKey(selectedCategory) === getCategoryKey(category.name)"
-              @click="selectedCategory = category.name"
+              @click="selectCategoryFilter(category.name)"
             >{{ category.name }}</button>
+          </div>
+          <div v-if="selectedCategory && selectedSubcategoryOptions.length" class="mt-3 border-t border-slate-100 pt-3">
+            <p class="mb-2 text-xs font-semibold text-slate-600">Subcategoria</p>
+            <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrar modelos por subcategoria">
+              <button
+                type="button"
+                class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+                :class="!selectedSubcategory ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-violet-50 hover:text-violet-700'"
+                :aria-pressed="!selectedSubcategory"
+                @click="selectedSubcategory = null"
+              >Todas</button>
+              <button
+                v-for="subcategory in selectedSubcategoryOptions"
+                :key="subcategory.id"
+                type="button"
+                class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+                :class="getCategoryKey(selectedSubcategory) === getCategoryKey(subcategory.name) ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-violet-50 hover:text-violet-700'"
+                :aria-pressed="getCategoryKey(selectedSubcategory) === getCategoryKey(subcategory.name)"
+                @click="selectedSubcategory = subcategory.name"
+              >{{ subcategory.name }}</button>
+            </div>
           </div>
         </div>
 
@@ -510,27 +634,45 @@ onUnmounted(() => {
                 <h3 class="min-w-0 flex-1 truncate text-sm font-bold text-slate-800" :title="sentenceName(template.name)">{{ sentenceName(template.name) }}</h3>
                 <button class="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-violet-50 hover:text-violet-600" title="Alterar nome" aria-label="Alterar nome" @click="startRename(template)"><Pencil class="h-4 w-4" /></button>
               </div>
-              <form v-if="categoryEditingId === template.id" class="mt-2 flex items-center gap-2" @submit.prevent="saveCategory(template)">
-                <label class="sr-only" :for="`template-category-${template.id}`">Categoria do modelo</label>
-                <select
-                  :id="`template-category-${template.id}`"
-                  v-model="categoryDraftId"
-                  class="min-w-0 flex-1 rounded-lg border border-indigo-300 px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
-                  @keydown.esc="categoryEditingId = ''"
-                >
-                  <option value="">Sem categoria</option>
-                  <option v-for="category in categoryOptions" :key="category.id" :value="category.id">{{ category.name }}</option>
-                </select>
-                <button type="button" class="rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-50" @click="openCategoryDialog('edit')">Nova</button>
-                <button type="submit" :disabled="savingCategory" class="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{{ savingCategory ? '...' : 'Salvar' }}</button>
-                <button type="button" :disabled="savingCategory" class="text-[11px] font-medium text-slate-500" @click="categoryEditingId = ''">Cancelar</button>
+              <form v-if="categoryEditingId === template.id" class="mt-2 space-y-2" @submit.prevent="saveCategory(template)">
+                <div class="flex items-center gap-2">
+                  <label class="sr-only" :for="`template-category-${template.id}`">Categoria principal do modelo</label>
+                  <select
+                    :id="`template-category-${template.id}`"
+                    v-model="categoryDraftId"
+                    class="min-w-0 flex-1 rounded-lg border border-indigo-300 px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                    @change="onCategoryDraftChange"
+                    @keydown.esc="categoryEditingId = ''"
+                  >
+                    <option value="">Sem categoria principal</option>
+                    <option v-for="category in categoryOptions" :key="category.id" :value="category.id">{{ category.name }}</option>
+                  </select>
+                  <button type="button" class="rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-50" @click="openCategoryDialog('edit')">Nova</button>
+                </div>
+                <div class="flex items-center gap-2">
+                  <label class="sr-only" :for="`template-subcategory-${template.id}`">Subcategoria do modelo</label>
+                  <select
+                    :id="`template-subcategory-${template.id}`"
+                    v-model="subcategoryDraftId"
+                    :disabled="!categoryDraftId"
+                    class="min-w-0 flex-1 rounded-lg border border-violet-300 px-2.5 py-1.5 text-xs text-slate-800 outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-violet-500"
+                  >
+                    <option value="">Sem subcategoria</option>
+                    <option v-for="subcategory in getSubcategoryOptions(categoryDraftId)" :key="subcategory.id" :value="subcategory.id">{{ subcategory.name }}</option>
+                  </select>
+                  <button type="button" :disabled="!categoryDraftId || categoryDraftId.startsWith('legacy:')" class="rounded-lg border border-violet-200 px-2.5 py-1.5 text-[11px] font-semibold text-violet-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40" @click="openCategoryDialog('edit', categoryDraftId)">Nova</button>
+                </div>
+                <div class="flex items-center gap-3">
+                  <button type="submit" :disabled="savingCategory" class="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{{ savingCategory ? '...' : 'Salvar' }}</button>
+                  <button type="button" :disabled="savingCategory" class="text-[11px] font-medium text-slate-500" @click="categoryEditingId = ''">Cancelar</button>
+                </div>
               </form>
               <div v-else class="mt-2 flex flex-wrap items-center gap-2">
                 <span class="inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold" :class="getTemplateCategory(template) ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'">
                   <Tag class="h-3 w-3 shrink-0" />
-                  <span class="truncate">{{ getTemplateCategory(template) || 'Sem categoria' }}</span>
+                  <span class="truncate">{{ getTemplateCategoryLabel(template) || 'Sem categoria' }}</span>
                 </span>
-                <button type="button" class="text-[10px] font-semibold text-indigo-600 transition hover:text-indigo-800" @click="startCategoryEdit(template)">Editar categoria</button>
+                <button type="button" class="text-[10px] font-semibold text-indigo-600 transition hover:text-indigo-800" @click="startCategoryEdit(template)">Editar classificação</button>
               </div>
               <p class="mt-1 text-[11px] text-slate-400">{{ formatTemplateStructure(template) }} · {{ formatSize(template) }} · {{ formatDate(template.updated_at || template.created_at) }}</p>
               <div class="mt-4 flex items-center gap-2">
@@ -574,18 +716,33 @@ onUnmounted(() => {
             <input v-model="createName" type="text" maxlength="120" autofocus placeholder="Ex.: Oferta vermelha, Semana, Atacarejo..." class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" @keyup.enter="createTemplate" />
           </label>
 
-          <div>
-            <div class="mb-2 flex items-center justify-between gap-3">
-              <label for="create-template-category" class="block text-xs font-bold uppercase tracking-wider text-slate-500">Categoria</label>
-              <button type="button" class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 transition hover:text-indigo-800" @click="openCategoryDialog('create')">
-                <Plus class="h-3.5 w-3.5" /> Nova categoria
-              </button>
+          <div class="space-y-4">
+            <div>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <label for="create-template-category" class="block text-xs font-bold uppercase tracking-wider text-slate-500">Categoria principal</label>
+                <button type="button" class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 transition hover:text-indigo-800" @click="openCategoryDialog('create')">
+                  <Plus class="h-3.5 w-3.5" /> Nova categoria
+                </button>
+              </div>
+              <select id="create-template-category" v-model="createCategoryId" class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" @change="onCreateCategoryChange">
+                <option value="">Sem categoria principal</option>
+                <option v-for="category in categoryOptions" :key="category.id" :value="category.id">{{ category.name }}</option>
+              </select>
+              <span class="mt-1.5 block text-[11px] leading-5 text-slate-400">Ex.: Hortifruti, Açougue ou Mercearia.</span>
             </div>
-            <select id="create-template-category" v-model="createCategoryId" class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10">
-              <option value="">Sem categoria</option>
-              <option v-for="category in categoryOptions" :key="category.id" :value="category.id">{{ category.name }}</option>
-            </select>
-            <span class="mt-1.5 block text-[11px] leading-5 text-slate-400">Escolha uma categoria já criada ou crie uma nova. Ela poderá ser usada em vários modelos.</span>
+            <div>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <label for="create-template-subcategory" class="block text-xs font-bold uppercase tracking-wider text-slate-500">Subcategoria</label>
+                <button type="button" :disabled="!createCategoryId || createCategoryId.startsWith('legacy:')" class="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-600 transition hover:text-violet-800 disabled:cursor-not-allowed disabled:opacity-40" @click="openCategoryDialog('create', createCategoryId)">
+                  <Plus class="h-3.5 w-3.5" /> Nova subcategoria
+                </button>
+              </div>
+              <select id="create-template-subcategory" v-model="createSubcategoryId" :disabled="!createCategoryId" class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 focus:border-violet-300 focus:ring-4 focus:ring-violet-500/10">
+                <option value="">Sem subcategoria</option>
+                <option v-for="subcategory in getSubcategoryOptions(createCategoryId)" :key="subcategory.id" :value="subcategory.id">{{ subcategory.name }}</option>
+              </select>
+              <span class="mt-1.5 block text-[11px] leading-5 text-slate-400">Ex.: Quinta Verde dentro de Hortifruti. Primeiro escolha a categoria principal.</span>
+            </div>
           </div>
 
           <div>
@@ -678,21 +835,22 @@ onUnmounted(() => {
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-[11px] font-bold uppercase tracking-[.16em] text-indigo-500">Biblioteca</p>
-            <h2 class="mt-1 text-xl font-bold tracking-tight text-slate-900">Nova categoria</h2>
-            <p class="mt-1 text-sm leading-6 text-slate-500">Ela ficará disponível para selecionar em qualquer modelo.</p>
+            <h2 class="mt-1 text-xl font-bold tracking-tight text-slate-900">{{ categoryDialogParentId ? 'Nova subcategoria' : 'Nova categoria principal' }}</h2>
+            <p v-if="categoryDialogParentId" class="mt-1 text-sm leading-6 text-slate-500">Ela ficará dentro de <strong>{{ getCategoryNameById(categoryDialogParentId) }}</strong>.</p>
+            <p v-else class="mt-1 text-sm leading-6 text-slate-500">Ela ficará disponível para selecionar em qualquer modelo.</p>
           </div>
           <button type="button" class="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" :disabled="isCreatingCategory" aria-label="Fechar" @click="showCategoryDialog = false"><X class="h-5 w-5" /></button>
         </div>
         <label class="mt-5 block">
-          <span class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Nome da categoria</span>
-          <input v-model="categoryDialogName" type="text" maxlength="60" autofocus placeholder="Ex.: Hortifruti, Limpeza, Fim de semana..." class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" />
+          <span class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Nome da {{ categoryDialogParentId ? 'subcategoria' : 'categoria' }}</span>
+          <input v-model="categoryDialogName" type="text" maxlength="60" autofocus :placeholder="categoryDialogParentId ? 'Ex.: Quinta Verde, Feira da Semana...' : 'Ex.: Hortifruti, Açougue, Limpeza...'" class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" />
         </label>
         <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" class="rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50" :disabled="isCreatingCategory" @click="showCategoryDialog = false">Cancelar</button>
           <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500 disabled:opacity-60" :disabled="isCreatingCategory || !categoryDialogName.trim()">
             <LoaderCircle v-if="isCreatingCategory" class="h-4 w-4 animate-spin" />
             <Plus v-else class="h-4 w-4" />
-            {{ isCreatingCategory ? 'Criando...' : 'Criar categoria' }}
+            {{ isCreatingCategory ? 'Criando...' : categoryDialogParentId ? 'Criar subcategoria' : 'Criar categoria' }}
           </button>
         </div>
       </form>

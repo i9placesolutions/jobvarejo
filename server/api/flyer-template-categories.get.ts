@@ -7,6 +7,8 @@ type CategoryRow = {
   id: string
   name: string
   normalized_name: string
+  parent_id: string | null
+  parent_name: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -18,10 +20,20 @@ export default defineEventHandler(async (event) => {
   try {
     await syncLegacyFlyerTemplateCategories(user.id)
     const { rows } = await pgQuery<CategoryRow>(`
-      select id, name, normalized_name, created_at, updated_at
-      from public.flyer_template_categories
-      where user_id = $1
-      order by name asc, created_at asc
+      select
+        category.id,
+        category.name,
+        category.normalized_name,
+        category.parent_id,
+        parent.name as parent_name,
+        category.created_at,
+        category.updated_at
+      from public.flyer_template_categories category
+      left join public.flyer_template_categories parent
+        on parent.id = category.parent_id
+       and parent.user_id = category.user_id
+      where category.user_id = $1
+      order by parent.name asc nulls first, category.name asc, category.created_at asc
       limit 500
     `, [user.id])
 

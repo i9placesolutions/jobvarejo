@@ -24,7 +24,10 @@ export const canMoveQuickModeObject = (object: any): boolean => {
             String(owner.name || '').startsWith('product-card')) return true
         // O conteúdo de uma zona é editável; a zona em si foi excluída acima.
         if (owner !== object && (owner.isProductZone || owner.isGridZone)) return true
-        owner = owner.group || owner.parent
+        // Fabric moves selected children into an ActiveSelection for rendering,
+        // but `parent` still points to the card that owns them. Using `group`
+        // first incorrectly locks these children and clears the new selection.
+        owner = owner.parent || owner.group
     }
     return false
 }
