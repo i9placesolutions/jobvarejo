@@ -1,3 +1,4 @@
+import { normalizeFooterPaymentImages } from './footerPaymentImages'
 import {
   BUSINESS_PAYMENT_CARD_NAMES,
   BUSINESS_PAYMENT_CARD_OPTIONS,
@@ -26,6 +27,7 @@ export type BusinessProfile = {
   cep: string
   hours: string
   paymentNotes: string
+  footerPaymentImages: string[]
   paymentMethods: string[]
 }
 
@@ -79,6 +81,7 @@ export const EMPTY_BUSINESS_PROFILE: BusinessProfile = {
   slogan: '',
   cep: '',
   hours: '',
+  footerPaymentImages: [],
   paymentNotes: '',
   paymentMethods: [...DEFAULT_BUSINESS_PAYMENT_METHODS]
 }
@@ -244,6 +247,7 @@ export const normalizeBusinessProfile = (value: unknown): BusinessProfile => {
     cep: normalizeBusinessText(source.cep, 20),
     hours: normalizeBusinessText(source.hours ?? source.openingHours, 180),
     paymentNotes: normalizeBusinessText(source.paymentNotes ?? source.payment_notes, 240),
+    footerPaymentImages: normalizeFooterPaymentImages(source.footerPaymentImages),
     paymentMethods
   }
 }

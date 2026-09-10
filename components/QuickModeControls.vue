@@ -95,6 +95,7 @@ type BusinessFieldId =
   | 'instagram'
   | 'facebook'
   | 'website'
+  | 'footerPaymentImages'
   | 'paymentMethods'
   | 'paymentNotes'
 
@@ -109,6 +110,7 @@ const BUSINESS_FIELDS: Array<{ id: BusinessFieldId; label: string }> = [
   { id: 'instagram', label: 'Instagram' },
   { id: 'facebook', label: 'Facebook' },
   { id: 'website', label: 'Site' },
+  { id: 'footerPaymentImages', label: 'Cartões aceitos' },
   { id: 'paymentMethods', label: 'Formas de pagamento' },
   { id: 'paymentNotes', label: 'Observação de pagamento' },
 ]
@@ -337,6 +339,7 @@ const businessFieldValue = (field: BusinessFieldId): string => {
   if (field === 'logo') {
     return String(profile.logo || '').trim() ? 'Logo padrão cadastrada' : ''
   }
+  if (field === 'footerPaymentImages') return (profile.footerPaymentImages || []).join(', ')
   if (field === 'paymentMethods') {
     return formatBusinessPaymentMethods(profile.paymentMethods ?? profile.payment_methods)
   }
@@ -371,6 +374,7 @@ const BUSINESS_FIELD_ALIASES: Record<string, BusinessFieldId> = {
   instagram: 'instagram',
   facebook: 'facebook',
   website: 'website',
+  footerpaymentimages: 'footerPaymentImages',
   paymentmethods: 'paymentMethods',
   payment_methods: 'paymentMethods',
   payments: 'paymentMethods',

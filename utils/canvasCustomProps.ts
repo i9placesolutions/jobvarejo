@@ -23,6 +23,8 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     'isQuickGenerated',
     'quickSeedId',
     'businessProfileField',
+    'footerPaymentWidth',
+    'footerPaymentHeight',
     'quickDataField',
     'quickFieldEnabled',
     'quickValidityStartDate',

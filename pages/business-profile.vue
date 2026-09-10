@@ -52,6 +52,7 @@ const form = reactive({
   slogan: '',
   cep: '',
   hours: '',
+  footerPaymentImages: [] as string[],
   paymentNotes: '',
   paymentMethods: [...DEFAULT_BUSINESS_PAYMENT_METHODS],
 })
@@ -302,6 +303,7 @@ onMounted(loadProfile)
             </button>
           </div>
 
+          <FooterPaymentPicker v-model="form.footerPaymentImages" />
           <div class="card-library">
             <div class="card-library__header"><div><h3>Cartões da loja</h3><p>Biblioteca com 92 cartões do catálogo Varejoon. A seleção vale para todos os encartes.</p></div><strong>{{ selectedPaymentCardCount }} selecionado(s)</strong></div>
             <div class="card-library__toolbar"><label class="search-field"><Search class="h-4 w-4" /><input v-model="paymentCardSearch" type="search" placeholder="Buscar cartão pelo nome" aria-label="Buscar cartão" /></label><button type="button" @click="selectAllPaymentCards">Selecionar todos</button><button type="button" @click="clearPaymentCards">Limpar cartões</button></div>

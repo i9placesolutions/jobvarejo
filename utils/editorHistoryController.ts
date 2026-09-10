@@ -89,17 +89,18 @@ const setupHistory = () => {
 	        const canvasInstance = canvas.value as any;
 	        if (!canvasInstance || isCanvasDestroyed.value) return;
 	        // Prevent cross-page contamination: while the editor is switching/loading pages,
-	        // ignore user-triggered saves (timers, debounced handlers). System saves used by
-	        // the loader itself always pass `source: 'system'` and/or an expectedPageId.
+	        // ignore all saves, including delayed system jobs, until the canvas belongs
+	        // to the active page and its load has completed.
 	        const src = (opts.source || 'user') as any;
-	        if (isDesignLoading.value && src !== 'system') {
+	        if (isDesignLoading.value) {
 	            return;
 	        }
 	        const saveReason = String(opts.reason || 'unknown');
 	        const expectedPageId = String(opts.expectedPageId || '').trim();
 	        const targetPageId = expectedPageId || getActiveProjectPageId();
 	        if (!targetPageId) return;
-        const isTargetPageActive = () => getActiveProjectPageId() === targetPageId;
+        const isTargetPageActive = () => getActiveProjectPageId() === targetPageId && (ctx.isCanvasPageCurrent?.() ?? true);
+        if (!isTargetPageActive()) return;
         if (expectedPageId && !isTargetPageActive()) {
             return;
         }

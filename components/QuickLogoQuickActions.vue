@@ -43,7 +43,7 @@ const stickerColor = computed(() => /^#[\da-f]{6}$/i.test(props.logo.__stickerOu
 </template>
 
 <style scoped>
-.quick-logo-actions { position:absolute; bottom:1rem; right:1rem; z-index:120; width:min(360px, calc(100% - 2rem)); max-height:calc(100% - 2rem); overflow:auto; padding:16px; border:1px solid #7951b4; border-radius:16px; background:#19191f; color:#f4f4f5; box-shadow:0 12px 36px #0006; font-size:13px; }
+.quick-logo-actions { position:relative; width:300px; min-height:0; max-height:100%; overflow:auto; padding:12px; border:1px solid #7951b4; border-radius:16px; background:#19191f; color:#f4f4f5; box-shadow:none; font-size:13px; }
 header { display:flex; align-items:flex-start; gap:8px; justify-content:space-between; }
 strong { font-size:15px; }
 p { margin:5px 0 16px; font-size:12px; line-height:1.4; color:#b4b4c0; }
@@ -66,4 +66,12 @@ button[aria-pressed=true], button[aria-checked=true] { background:#49306b; borde
 .sticker-options { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
 label { display:flex; flex-direction:column; gap:6px; color:#d4d4dc; font-size:12px; }
 input { width:100%; min-height:44px; border:1px solid #55505f; border-radius:8px; padding:6px; background:#27252e; color:#fff; }
+@media (max-width: 767px) {
+    .quick-logo-actions { padding:8px 12px; }
+    p { display:none; }
+    header { align-items:center; }
+    .backdrop-options button { flex-direction:row; justify-content:center; padding:5px 3px; gap:4px; }
+    .sticker-toggle { margin-top:6px; padding-top:6px; }
+    .sticker-options { margin-top:6px; }
+}
 </style>

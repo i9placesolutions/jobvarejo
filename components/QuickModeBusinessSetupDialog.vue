@@ -29,6 +29,7 @@ type SetupField =
   | 'instagram'
   | 'facebook'
   | 'website'
+  | 'footerPaymentImages'
   | 'paymentMethods'
   | 'paymentNotes'
 
@@ -36,7 +37,7 @@ type SetupFieldDefinition = {
   label: string
   hint: string
   placeholder?: string
-  kind: 'text' | 'textarea' | 'logo' | 'payments'
+  kind: 'text' | 'textarea' | 'logo' | 'payments' | 'footerCards'
   icon: any
 }
 
@@ -110,6 +111,7 @@ const FIELD_DEFINITIONS: Record<SetupField, SetupFieldDefinition> = {
     kind: 'text',
     icon: Building2,
   },
+  footerPaymentImages: { label: 'Cartões aceitos', hint: 'Escolha até cinco imagens do sistema.', kind: 'footerCards', icon: WalletCards },
   paymentMethods: {
     label: 'Formas de pagamento',
     hint: 'Marque o que sua loja realmente aceita.',
@@ -138,6 +140,7 @@ const FIELD_ALIASES: Record<string, SetupField> = {
   instagram: 'instagram',
   facebook: 'facebook',
   website: 'website',
+  footerpaymentimages: 'footerPaymentImages',
   paymentmethods: 'paymentMethods',
   payment_methods: 'paymentMethods',
   payments: 'paymentMethods',
@@ -177,6 +180,7 @@ const form = reactive<Record<SetupField, any>>({
   instagram: '',
   facebook: '',
   website: '',
+  footerPaymentImages: [] as string[],
   paymentMethods: [],
   paymentNotes: '',
 })
@@ -218,6 +222,7 @@ const hydrate = () => {
   const profile = props.businessProfile || {}
   const fallbackCompanyName = profile.__companyNameFromAccountFallback === true
   fields.value.forEach(field => {
+    if (field === 'footerPaymentImages') { form.footerPaymentImages = [...(profile.footerPaymentImages || [])].slice(0, 5); return }
     if (field === 'paymentMethods') {
       const hasConfirmedPaymentMethods = profile.__paymentMethodsConfigured !== false
       form.paymentMethods = hasConfirmedPaymentMethods && Array.isArray(profile.paymentMethods ?? profile.payment_methods)
@@ -249,6 +254,7 @@ watch(
 const isComplete = (field: SetupField): boolean => {
   if (skippedFields.value[field]) return true
   if (field === 'logo') return !!logoFile.value || !!String(form.logo || '').trim()
+  if (field === 'footerPaymentImages') return form.footerPaymentImages.length > 0
   if (field === 'paymentMethods') return Array.isArray(form.paymentMethods) && form.paymentMethods.length > 0
   return !!String(form[field] || '').trim()
 }
@@ -296,6 +302,7 @@ const submit = () => {
       businessProfile.paymentMethods = [...form.paymentMethods]
       return
     }
+    if (field === 'footerPaymentImages') { businessProfile.footerPaymentImages = [...form.footerPaymentImages]; return }
     businessProfile[field] = String(form[field] || '').trim()
   })
 
@@ -350,6 +357,7 @@ const submit = () => {
                 </div>
               </template>
 
+              <FooterPaymentPicker v-else-if="field === 'footerPaymentImages'" v-model="form.footerPaymentImages" />
               <template v-else-if="FIELD_DEFINITIONS[field].kind === 'payments'">
                 <div class="quick-setup-payments" role="group" aria-label="Formas de pagamento">
                   <button

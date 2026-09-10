@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { updateIsolatedPageFields } from '~/utils/isolatedPageFields'
 import { registerCanvasImageLoadSession } from '~/utils/canvasImageLoadSession'
 import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
 import { confirmInSystem } from '~/utils/systemMessages'
@@ -556,6 +557,7 @@ import {
     syncSelectionDomainState
 } from '~/utils/editorSelectionRuntime'
 import { applyVisibleSelectionChrome, attachFabricControlLayer, EDITOR_SELECTION_CHROME, patchFabricObjectSelectionDefaults, setFabricControlsHiddenDuringTransform } from '~/utils/fabricControlLayer'
+import { createFooterPaymentGroup } from '~/utils/footerPaymentImages'
 import { STORE_DYNAMIC_FIELDS } from '~/utils/storeDynamicFields'
 import {
     buildProductZoneDiagnostics,
@@ -5566,12 +5568,16 @@ const resizeQuickModePage = (formatId: string) => {
     })()
 }
 
+let pageSwitchRequestId = 0
 const switchToPage = (pageId: string) => {
+    const requestId = ++pageSwitchRequestId
     void (async () => {
         const idx = project.pages?.findIndex((p: any) => p.id === pageId);
         if (idx == null || idx < 0 || idx === project.activePageIndex) return;
         await flushBeforePageStructureChange('page-switch');
+        if (requestId !== pageSwitchRequestId || isCanvasDestroyed.value) return
         const controller = await loadPageActionsController();
+        if (requestId !== pageSwitchRequestId || isCanvasDestroyed.value) return
         controller.switchToPage(getPageActionsContext(), pageId);
         const targetPage = project.pages?.find((page: any) => String(page?.id || '') === String(pageId || ''))
         if (targetPage && isTemplateCompositionManagedPage(targetPage)) {
@@ -5660,6 +5666,7 @@ let lastTransformMutationAt = 0
 let activePageLoadSessionId = 0
 let completedPageLoadSessionId = 0
 let lastLoadedPageKey: string | null = null
+let activePageImageLoadAbort: AbortController | null = null
 const pageReloadToken = ref(0)
 const storageDegraded = ref(false)
 const storageDegradedHint = ref<string>('')
@@ -5892,6 +5899,8 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     startImageLoadTracking(sessionId, json)
     scheduleImageProgressFlush()
     const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null
+    activePageImageLoadAbort?.abort()
+    activePageImageLoadAbort = abortController
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null
     let loadTimedOut = false
     let failedImages = 0
@@ -5939,6 +5948,7 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
             }, timeoutMs)
         })
         await Promise.race([loadPromise, timeoutPromise])
+        if (sessionId !== activePageLoadSessionId || isCanvasDestroyed.value) throw new Error('Load session became stale')
         return failedImages
     } catch (error) {
         if (loadTimedOut) {
@@ -5949,6 +5959,7 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
         throw error
     } finally {
         if (timeoutHandle) clearTimeout(timeoutHandle)
+        if (activePageImageLoadAbort === abortController) activePageImageLoadAbort = null
         unregisterImageSession()
         // Publica antes de limpar: o RAF pendente não pode ler o tracker apagado.
         const tracker = activeImageLoadTracker
@@ -8295,7 +8306,7 @@ const MOCK_PRODUCTS: any[] = [];
 // canvas into the new page, making pages "share" content. We mark loading synchronously to
 // block user saves until the loader pipeline finishes.
 watch(
-    () => project.activePageIndex,
+    () => `${project.id}:${activePage.value?.id || ""}`,
     () => {
         // Only relevant client-side with a live canvas.
         if (typeof window === 'undefined') return
@@ -8303,6 +8314,9 @@ watch(
         // Match the loader preconditions; avoid getting stuck in "loading" during initial project fetch.
         if (!isProjectLoaded.value && project.id && !String(project.id).startsWith('proj_')) return
         if (isCanvasDestroyed.value) return
+        activePageLoadSessionId += 1
+        activePageImageLoadAbort?.abort()
+        quickLogoLoadSequence += 1
         isDesignLoading.value = true
     },
     { flush: 'sync' }
@@ -8342,7 +8356,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
         isSamePage: lastLoadedPageKey === nextPageLoadKey
     });
 
-    if (nextPageId && lastLoadedPageKey === nextPageLoadKey && !forceReload) {
+    if (nextPageId && lastLoadedPageKey === nextPageLoadKey && !forceReload && completedPageLoadSessionId === activePageLoadSessionId) {
         // If we already loaded this page and it has real objects, don't reload just because canvas/fabric became ready.
         try {
             const currentObjects = canvas.value?.getObjects?.() || [];
@@ -8394,7 +8408,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             });
         }
     }
-    const pageToLoad = (project.pages?.[project.activePageIndex] as any) || newPage
+    if (isStaleLoad()) return
+    const pageToLoad = project.pages?.find((page: any) => String(page.id) === nextPageId) as any
+    if (!pageToLoad) return
 
     const savedVpt = pageToLoad.canvasData ? getSavedViewportTransform(pageToLoad.canvasData) : null;
     let loadedOk = false
@@ -8448,7 +8464,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	                await new Promise(resolve => setTimeout(resolve, 100));
 	                if (!canvas.value || !canvas.value.getContext) {
 	                    console.error('❌ Canvas ainda não inicializado após espera');
-	                    isHistoryProcessing.value = false;
+	                    if (!isStaleLoad()) isHistoryProcessing.value = false;
 	                    return;
 	                }
 	            }
@@ -8518,6 +8534,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	                        objects: loadedObjectsInfo
 	                    });
 	                } catch (imageLoadErr: any) {
+                        if (isStaleLoad()) return;
 	                    const errorStr = imageLoadErr?.message || imageLoadErr?.toString?.() || '';
 	                    const timedOutImageLoad = imageLoadErr?.name === CANVAS_IMAGE_LOAD_TIMEOUT_NAME;
 	                    const isImageError =
@@ -8569,7 +8586,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	                console.error('❌ Erro ao carregar JSON no canvas:', loadErr);
 	                // FIX: Check stale session between each retry to prevent loading data
 	                // onto the wrong page if the user switched pages during retry cascade.
-	                if (isStaleLoad()) { isHistoryProcessing.value = false; return; }
+	                if (isStaleLoad()) return;
 	                // Try to clear and retry once - but only if canvas is fully ready
 	                if (canvas.value) {
 	                    try {
@@ -8578,7 +8595,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	                        if (ctx && typeof ctx.clearRect === 'function') {
 	                            canvas.value.clear();
 	                            await new Promise(resolve => setTimeout(resolve, 50));
-	                            if (isStaleLoad()) { isHistoryProcessing.value = false; return; }
+	                            if (isStaleLoad()) return;
 	                            await loadFromJSONWithImageProgress(canvasDataToLoad, loadSessionId);
 	                        } else {
 	                            console.warn('⚠️ Contexto do canvas não está disponível, pulando clear()');
@@ -8587,7 +8604,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 	                        }
                     } catch (retryErr) {
                         console.error('❌ Erro ao recarregar após clear:', retryErr);
-                        if (isStaleLoad()) { isHistoryProcessing.value = false; return; }
+                        if (isStaleLoad()) return;
                         // Penúltima tentativa: substituir imagens Contabo por placeholder (mantém layout)
                         try {
                             const dataWithPlaceholders = replaceContaboImagesWithPlaceholder(canvasDataToLoad);
@@ -8597,7 +8614,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                             degradedFailedCount = null
                             console.log('✅ loadFromJSON concluído com placeholder para imagens que falharam');
                         } catch (placeholderErr) {
-                            if (isStaleLoad()) { isHistoryProcessing.value = false; return; }
+                            if (isStaleLoad()) return;
                             // Last attempt: load without ANY images (never throw due to broken image)
                             try {
                                 const safeData = JSON.parse(JSON.stringify(canvasDataToLoad));
@@ -8619,7 +8636,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             }
 		                    // If we couldn't load, do NOT continue (prevents wiping saved data with empty state).
 		                    if (!didLoadNewPage) {
-			                isHistoryProcessing.value = false;
+			                if (!isStaleLoad()) isHistoryProcessing.value = false;
 			                return;
 			            }
                     const isolatedImageFailures = Number(designLoadImageProgress.value?.failed || 0)
@@ -8644,10 +8661,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                         Number(assetUrlNormalization?.contaboCount || 0) > 0 ||
                         Number(assetUrlNormalization?.wasabiCount || 0) > 0
                     )
-                    if (isStaleLoad()) {
-                        isHistoryProcessing.value = false;
-                        return;
-                    }
+                    if (isStaleLoad()) return;
 
 		            // Remove old frame label text objects (if any were saved)
 	            const objects = canvas.value.getObjects();
@@ -8818,12 +8832,13 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 storageDegradedHint.value = ''
 	        }
 	    } catch (err) {
-	        console.error("Error loading page data:", err);
+	        if (isStaleLoad()) return;
+        console.error("Error loading page data:", err);
             storageDegraded.value = true
             storageDegradedFailedCount.value = null
             storageDegradedHint.value = 'Falha ao carregar imagens do storage.'
 	    } finally {
-	        isHistoryProcessing.value = false;
+	        if (!isStaleLoad()) isHistoryProcessing.value = false;
 	    }
 
     // FIX #22: Verificar se o watch re-disparou enquanto operações assíncronas executavam
@@ -8834,6 +8849,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
         addFrame({ width: pageToLoad.width, height: pageToLoad.height });
     }
     if (loadedOk) await ensureTemplateProductZone();
+    if (isStaleLoad()) return;
     historyStack.value = [];
     historyIndex.value = -1;
 
@@ -8992,17 +9008,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 skipIfUnchanged: false
             }, 650)
         }
-        if (!isStaleLoad() && loadedOk && isQuickMode.value && canvas.value) {
-            // Existing saved cards need the responsive recipe too, even when
-            // the user has not inserted or removed a product this session.
-            const zones = canvas.value.getObjects().filter((object: any) => isLikelyProductZone(object));
-            if (relayoutProductZonesAfterCardRemoval(zones)) {
-                refreshCanvasObjects({ immediate: true });
-                safeRequestRenderAll();
-                void Promise.resolve(saveCurrentState({ reason: 'quick-existing-products-reflow', source: 'system', skipIfUnchanged: true }))
-                    .catch(error => console.warn('[quick-layout] Não foi possível salvar o ajuste:', error));
-            }
-        }
+        // Trocar de página restaura a composição salva. Reflow pertence apenas
+        // a mudanças explícitas de produtos, formato ou grade, nunca ao load.
+
         if (!isStaleLoad() && loadedOk && isQuickMode.value && canvas.value) {
             if (project.templateConfig?.quickValidity) {
                 handleQuickModeValidityUpdate(project.templateConfig.quickValidity);
@@ -11332,6 +11340,7 @@ const getEditorHistoryContext = () => ({
     getTeardownHistoryListeners: () => teardownHistoryListeners,
     setTeardownHistoryListeners: (value: (() => void) | null) => { teardownHistoryListeners = value },
     getHistoryRestoreCooldownUntil: () => _historyRestoreCooldownUntil,
+    isCanvasPageCurrent: () => lastLoadedPageKey === `${project.id}:${getActiveProjectPageId()}` && completedPageLoadSessionId === activePageLoadSessionId,
     getLastTransformMutationAt: () => lastTransformMutationAt,
     getIsBulkProductMutation: () => isBulkProductMutation,
     getApplyingZoneUpdateCount: () => applyingZoneUpdateCount,
@@ -18387,6 +18396,9 @@ const syncQuickLogoBinding = async (profile: Record<string, any>): Promise<boole
     if (!logoObject) return false
 
     const enabled = quickBusinessFieldOverrides.value.logo ?? logoObject?.quickFieldEnabled !== false
+    const pageSessionId = activePageLoadSessionId
+    const pageId = getActiveProjectPageId()
+    const isCurrentLogoPage = () => pageSessionId === activePageLoadSessionId && pageId === getActiveProjectPageId() && !!canvas.value?.getObjects().includes(logoObject)
     const requestId = ++quickLogoLoadSequence
 
     if (!source) {
@@ -18425,8 +18437,9 @@ const syncQuickLogoBinding = async (profile: Record<string, any>): Promise<boole
 
     try {
         const image = await fabric.Image.fromURL(getQuickLogoUrl(source), { crossOrigin: 'anonymous' })
-        if (requestId !== quickLogoLoadSequence || !canvas.value || !image) return false
+        if (requestId !== quickLogoLoadSequence || !isCurrentLogoPage() || !canvas.value || !image) return false
         await autoTrimFabricImageAsync(image, { preserveVisualPosition: true })
+        if (requestId !== quickLogoLoadSequence || !isCurrentLogoPage()) return false
         markProductImageTrimmed(image)
         const imageWidth = Number(image.width || 0)
         const imageHeight = Number(image.height || 0)
@@ -18858,19 +18871,25 @@ const ensureQuickValidityTextObject = (): any | null => {
     return object
 }
 
+let quickBusinessBindingSequence = 0
 const applyQuickBusinessProfileBindings = async (
     payload: any,
     options: { persist?: boolean } = {}
 ): Promise<void> => {
+    const bindingSequence = ++quickBusinessBindingSequence
     const profile = getQuickBusinessProfilePayload(payload)
+    if (isQuickMode.value) quickBusinessFieldOverrides.value = { ...(project.templateConfig?.quickBusinessFieldVisibility || {}) }
     quickBusinessProfile.value = { ...profile }
     quickModeDataVersion.value += 1
     if (!canvas.value) return
+    const expectedPageId = getActiveProjectPageId()
+    const pageSessionId = activePageLoadSessionId
+    const isCurrentPage = () => bindingSequence === quickBusinessBindingSequence && expectedPageId === getActiveProjectPageId() && pageSessionId === activePageLoadSessionId && !isCanvasDestroyed.value
     let changed = false
     walkQuickCanvasObjects((object: any) => {
         const field = getQuickBusinessFieldFromObject(object)
         if (!field || typeof object?.set !== 'function') return
-        if (field === 'logo') return
+        if (field === 'logo' || field === 'footerPaymentImages') return
         const dynamicConfigChanged = configureDynamicBusinessTextObject(object, fabric)
         if (dynamicConfigChanged) changed = true
         const liveText = getQuickBusinessProfileValue(profile, field)
@@ -18912,24 +18931,94 @@ const applyQuickBusinessProfileBindings = async (
         changed = true
         sanitizeAllClipPaths()
     }
+    for (const slot of canvas.value.getObjects().filter((o: any) => o.businessProfileField === 'footerPaymentImages')) {
+        try {
+            const group = await createFooterPaymentGroup(fabric, slot, profile.footerPaymentImages)
+            if (!isCurrentPage()) { group.dispose(); return }
+            group.set({ visible: quickBusinessFieldOverrides.value.footerPaymentImages ?? slot.quickFieldEnabled !== false, quickFieldEnabled: quickBusinessFieldOverrides.value.footerPaymentImages ?? slot.quickFieldEnabled !== false })
+            changed = replaceQuickLogoObject(slot, group) || changed
+        } catch (error) { if (!isCurrentPage()) return; slot.set({ visible: false }); changed = true; console.warn('[quick-editor] Falha ao carregar cartões do rodapé', error) }
+    }
     const logoChanged = await syncQuickLogoBinding(profile)
+    if (!isCurrentPage()) return
     if (changed || logoChanged) {
         refreshCanvasObjects()
         safeRequestRenderAll()
     }
     if (options.persist !== false && (changed || logoChanged)) {
-        await persistQuickModeDataChange('quick-business-profile')
+        await persistQuickModeDataChange('quick-business-profile', expectedPageId)
     }
 }
 
-const persistQuickModeDataChange = async (reason: string) => {
+// Atualiza os dados comerciais de páginas inativas pelo JSON de cada uma,
+// sem trocar de página nem copiar o canvas ativo para outro destino.
+const persistInactiveQuickBusinessFields = async () => {
+    if (!isQuickMode.value || !fabric) return
+    const projectId = project.id
+    const pageIds = project.pages.map((page: any) => page.id)
+    const profile = { ...quickBusinessProfile.value }
+    const overrides = { ...quickBusinessFieldOverrides.value }
+    const validity = project.templateConfig?.quickValidity ? { ...project.templateConfig.quickValidity } : null
+    const validityText = validity ? formatQuickValidity(validity.startDate, validity.endDate, validity.scope, validity.mode, validity.whileStocks) : null
+    for (const pageId of pageIds) {
+        if (project.id !== projectId || isCanvasDestroyed.value) return
+        if (pageId === getActiveProjectPageId()) continue
+        await ensurePageCanvasDataLoaded(pageId)
+        if (project.id !== projectId || isCanvasDestroyed.value) return
+        if (pageId === getActiveProjectPageId()) continue
+        const index = project.pages.findIndex((page: any) => page.id === pageId)
+        const page = project.pages[index]
+        if (!page?.canvasData) continue
+        let updated = updateIsolatedPageFields(page.canvasData, object => {
+            const isValidity = object.quickDataField === 'validity' || object.businessProfileField === 'validity'
+            const field = isValidity && validity ? 'validity' : getQuickBusinessFieldFromObject(object)
+            if (!field) return null
+            const enabled = field === 'validity' ? validity?.show !== false && validity?.dateFormat !== 'hidden' : overrides[field] ?? object.quickFieldEnabled !== false
+            if (field === 'logo') return { quickFieldEnabled: enabled, visible: enabled && !!getQuickLogoSource(profile) }
+            if (!['text', 'textbox', 'i-text'].includes(String(object.type || '').toLowerCase())) return null
+            const text = field === 'validity' ? String(validityText || '') : getQuickBusinessProfileValue(profile, field)
+            const runtime = new fabric.Textbox(String(object.text || ''), { ...object })
+            configureDynamicBusinessTextObject(runtime, fabric)
+            setQuickDynamicTextValue(runtime, text)
+            const result: Record<string, any> = {
+                quickFieldEnabled: enabled,
+                visible: enabled && !!(object.dynamicUserTextSource === 'quick-user' ? object.dynamicUserText : text)
+            }
+            if (field === 'validity' && validity) Object.assign(result, {
+                quickValidityStartDate: validity.startDate, quickValidityEndDate: validity.endDate,
+                quickValidityMode: validity.mode, quickValidityDateFormat: validity.dateFormat,
+                quickValidityWhileStocks: validity.whileStocks, quickOfferScope: validity.scope
+            })
+            for (const key of ['text', '__rawText', '__textCase', 'dynamicTextCase', 'fontSize', 'width', 'height', 'left', 'top', 'dynamicFieldHeight']) {
+                if (runtime[key] !== undefined) result[key] = runtime[key]
+            }
+            return result
+        })
+        const paymentData = updated || structuredClone(page.canvasData)
+        for (const [slotIndex, slot] of (paymentData.objects || []).entries()) {
+            if (slot.businessProfileField !== 'footerPaymentImages') continue
+            const group = await createFooterPaymentGroup(fabric, slot, profile.footerPaymentImages)
+            group.set({ visible: overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false, quickFieldEnabled: overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false })
+            paymentData.objects[slotIndex] = group.toObject(['_customId', 'parentFrameId', 'name', 'layerName', 'businessProfileField', 'quickFieldEnabled', 'footerPaymentWidth', 'footerPaymentHeight'])
+            group.dispose()
+            updated = paymentData
+        }
+        if (updated) updatePageData(index, updated, { source: 'user', markUnsaved: true, skipIfSameFingerprint: true, reason: 'quick-business-all-pages' })
+    }
+}
+
+const persistQuickModeDataChange = async (reason: string, expectedPageId = getActiveProjectPageId()) => {
+    if (expectedPageId !== getActiveProjectPageId()) return
     await Promise.resolve(saveCurrentState({
         allowEmptyOverwrite: true,
         reason,
+        expectedPageId,
         source: 'user',
         skipCoalesce: true,
         skipIfUnchanged: false
     }))
+    if (reason === 'quick-business-profile' || reason === 'quick-data-validity' || reason.startsWith('quick-data-field:')) await persistInactiveQuickBusinessFields()
+    if (expectedPageId !== getActiveProjectPageId()) return
     await flushPersistenceNow(reason, { force: true })
 }
 
@@ -18941,6 +19030,7 @@ const handleQuickModeBusinessFieldToggle = async (payload: { field?: string; ena
         ...quickBusinessFieldOverrides.value,
         [field]: enabled
     }
+    project.templateConfig = { ...(project.templateConfig || {}), quickBusinessFieldVisibility: { ...quickBusinessFieldOverrides.value } }
 
     if (field === 'logo') {
         quickModeDataVersion.value += 1
@@ -19240,7 +19330,8 @@ watch(
             designLoading ||
             isCanvasJsonLoadInProgress
         ) return
-        void applyQuickBusinessProfileBindings(quickBusinessProfile.value, { persist: false }).catch(error => {
+        if (lastLoadedPageKey !== `${projectId}:${pageId}` || completedPageLoadSessionId !== activePageLoadSessionId) return
+        void applyQuickBusinessProfileBindings(quickBusinessProfile.value, { persist: isQuickMode.value }).catch(error => {
             console.warn('[quick-editor] Falha ao reaplicar cadastro após o carregamento da página:', error)
         })
     },
@@ -29142,6 +29233,7 @@ const handleAutoOfferLayout = async () => {
               </section>
 
               <!-- Infinite Canvas Effect (Wrapper) -->
+              <div class="canvas-workspace" :class="{ 'has-logo-panel': selectedQuickLogo }">
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
                    <ProductImageQuickActions
@@ -29303,12 +29395,7 @@ const handleAutoOfferLayout = async () => {
                       @manage-templates="openGlobalLabelTemplates"
                     />
 
-                   <QuickLogoQuickActions
-                     v-if="selectedQuickLogo"
-                     :logo="selectedQuickLogo"
-                     @update-property="updateQuickLogoProperty"
-                     @close="closeQuickLogoActions"
-                   />
+
 
 
                    <ZoneQuickActions
@@ -29332,6 +29419,14 @@ const handleAutoOfferLayout = async () => {
                   />
 
                   <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" accept="image/*" multiple />
+              </div>
+
+                   <QuickLogoQuickActions
+                     v-if="selectedQuickLogo"
+                     :logo="selectedQuickLogo"
+                     @update-property="updateQuickLogoProperty"
+                     @close="closeQuickLogoActions"
+                   />
               </div>
 
               <!-- Contextual Toolbar for Vector Paths (Above Main Toolbar) -->
@@ -29873,13 +29968,22 @@ main {
 
 .quick-product-name-colors { position: absolute; top: 70px; left: 12px; right: 12px; z-index: 116; }
 
-.quick-mode-stage > .quick-mode-canvas-viewport {
+.quick-mode-stage > .canvas-workspace {
     background-color: #303133;
     order: 2;
     flex: 1 1 auto;
     width: 100%;
     height: auto !important;
     min-height: 0;
+}
+
+/* Reserve real layout space for logo settings instead of covering the canvas. */
+.canvas-workspace { display:flex; flex:1 1 auto; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; }
+.canvas-workspace > .quick-mode-canvas-viewport { flex:1 1 0; min-width:0; min-height:0; }
+.canvas-workspace > :deep(.quick-logo-actions) { flex:0 0 300px; align-self:stretch; margin:8px 0 8px 10px; }
+@media (max-width: 767px) {
+    .canvas-workspace.has-logo-panel { flex-direction:column; }
+    .canvas-workspace > :deep(.quick-logo-actions) { flex:0 1 auto; width:100%; max-height:38%; margin:6px 0 0; }
 }
 
 .quick-mode-stage :deep(.upper-canvas),
