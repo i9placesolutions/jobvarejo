@@ -1,0 +1,67 @@
+{
+  "collection": "Dia do Consumidor • Especial",
+  "items": [
+    {
+      "index": 0,
+      "name": "Celebre com alegria",
+      "id": "284b25cc-51f8-4ec8-af0e-7bb9599bc28c",
+      "src": "/api/art-studio/assets/284b25cc-51f8-4ec8-af0e-7bb9599bc28c",
+      "templateId": "72a41e51-abb8-403e-b8d7-66cfd80d9a23",
+      "revision": 10,
+      "published": false
+    },
+    {
+      "index": 1,
+      "name": "Supermercado — você em primeiro lugar",
+      "id": "c6e59f73-ade8-43a0-a79d-f4cf01e7f634",
+      "src": "/api/art-studio/assets/c6e59f73-ade8-43a0-a79d-f4cf01e7f634",
+      "templateId": "279fa894-4bee-4bba-a34e-85a4ab2b04f0",
+      "revision": 10,
+      "published": false
+    },
+    {
+      "index": 2,
+      "name": "Desconto especial",
+      "id": "a88cac39-aab2-4a2a-87bd-335db05cd53e",
+      "src": "/api/art-studio/assets/a88cac39-aab2-4a2a-87bd-335db05cd53e",
+      "templateId": "d183b708-2919-49a6-8524-f2685d8cc396",
+      "revision": 10,
+      "published": false
+    },
+    {
+      "index": 3,
+      "name": "Carrinho cheio de felicidade",
+      "id": "b5a01373-a748-4d53-99ee-4ea23eb549d1",
+      "src": "/api/art-studio/assets/b5a01373-a748-4d53-99ee-4ea23eb549d1",
+      "templateId": "0c2aa175-3bba-41a5-ac0e-7eeb211c7ca8",
+      "revision": 10,
+      "published": false
+    },
+    {
+      "index": 4,
+      "name": "Pizza — receita de sucesso",
+      "id": "a5a61be3-6d0b-4d65-af3f-322307fd6f40",
+      "src": "/api/art-studio/assets/a5a61be3-6d0b-4d65-af3f-322307fd6f40",
+      "templateId": "b9347720-2fc0-4258-b6ff-009530f7748d",
+      "revision": 10,
+      "published": false
+    },
+    {
+      "index": 5,
+      "name": "Você merece esse carinho",
+      "id": "7996173b-2587-48a0-af8f-3f9c65a9d842",
+      "src": "/api/art-studio/assets/7996173b-2587-48a0-af8f-3f9c65a9d842",
+      "templateId": "eb181b6d-ae00-4620-b3b9-3323498d291f",
+      "revision": 10,
+      "published": false
+    }
+  ],
+  "heart": {
+    "id": "9c3ed03c-bd57-4bac-99d7-fb729d0e5de6",
+    "src": "/api/art-studio/assets/9c3ed03c-bd57-4bac-99d7-fb729d0e5de6"
+  },
+  "basket": {
+    "id": "1509a430-7664-4bd2-8d26-a49696260e86",
+    "src": "/api/art-studio/assets/1509a430-7664-4bd2-8d26-a49696260e86"
+  }
+}
