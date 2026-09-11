@@ -352,6 +352,17 @@ export const fitDynamicBusinessTextObject = (
     setObjectValues(object, { width, splitByGrapheme: true })
     object.initDimensions?.()
   }
+  if (getDynamicBusinessField(object) === 'validity' && width != null) {
+    object.set({ text: String(object.text || '').replace(/\s*\n\s*/g, ' '), splitByGrapheme: false, styles: {} })
+    object.initDimensions?.()
+    let size = baseFontSize
+    while ((object.textLines?.length > 1 || getMeasuredLineWidth(object) > width + 0.5) && size > 1) {
+      size = Math.max(1, size - 0.5)
+      object.set({ fontSize: size, dynamicFieldAutoFitFontSize: size })
+      object.initDimensions?.()
+    }
+    object.set({ dynamicFieldAutoHeight: true })
+  }
   syncDynamicBusinessTextHeight(object)
   if (topAnchor) object.setPositionByOrigin?.(topAnchor, 'center', 'top')
   object.setCoords?.()

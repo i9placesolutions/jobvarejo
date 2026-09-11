@@ -1461,7 +1461,8 @@ const updateObjectProperty = (prop: string, value: any) => {
             if (prop === 'left' || prop === 'top') {
                 const prevLeft = active.left;
                 const prevTop = active.top;
-                active.set(prop, value);
+                if (['fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'charSpacing'].includes(prop) && ['text', 'textbox', 'i-text'].includes(String(active.type).toLowerCase())) active.__manualTypography = true;
+            active.set(prop, value);
                 active.setCoords();
 
                 const dx = active.left - prevLeft;

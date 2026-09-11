@@ -1,3 +1,5 @@
+import { extractPurchaseLimit } from './productPurchaseLimit'
+
 /**
  * Normalizadores puros de texto de produto (limite, observacao,
  * acentuacao). Usados em pipelines de importacao e renderizacao da
@@ -131,7 +133,10 @@ export const extractLimitFromName = (rawName: any): {
     if (!name) return { cleanedName: '', extractedLimit: null }
 
     const idx = name.toUpperCase().search(/\bLIMITE\b/)
-    if (idx === -1) return { cleanedName: name, extractedLimit: null }
+    if (idx === -1 || /\(\s*limite\b/i.test(name)) {
+        const { limit, rest } = extractPurchaseLimit(name)
+        return { cleanedName: rest || name, extractedLimit: limit }
+    }
 
     const extractedLimit = name.slice(idx).trim()
     const cleanedName = name

@@ -16,6 +16,7 @@ export const isProductImportParseTimeout = (err: any): boolean => {
 const mapParsedProduct = (p: any, i: number) => ({
   id: `prod_${Date.now()}_${i}`,
   name: p.name || 'Produto sem nome',
+  offerFormat: p.offerFormat,
   brand: p.brand || '',
   productCode: p.productCode || null,
   weight: p.weight || '',

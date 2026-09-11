@@ -67,6 +67,7 @@ defineProps<{
   showProductReviewModal: boolean
   reviewProducts: any[]
   productReviewInitialText?: string
+  productReviewInitialFile?: File | null
   productReviewAutoFillImages?: boolean
   productReviewOneProductPerPage?: boolean
   productReviewAutoParse?: boolean
@@ -219,6 +220,7 @@ const emit = defineEmits<{
     :model-value="showProductReviewModal"
     :initial-products="reviewProducts"
     :initial-text-input="productReviewInitialText"
+    :initial-file="productReviewInitialFile"
     :initial-auto-fill-images="productReviewAutoFillImages"
     :initial-one-product-per-page="productReviewOneProductPerPage"
     :auto-parse-on-open="productReviewAutoParse"

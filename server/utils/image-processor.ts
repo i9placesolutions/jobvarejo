@@ -429,31 +429,20 @@ const isOverAggressiveRemoval = (alphaStats: AlphaStats | null, shapeStats: Alph
     return { aggressive: false, reason: '' };
 };
 
-const shouldSkipBackgroundRemoval = async (buffer: Buffer, sharp: any): Promise<boolean> => {
-    const stats = await getAlphaStats(buffer, sharp);
-    if (!stats) return false;
-
-    // If the image already has a meaningful transparent background, background-removal is likely to
-    // degrade quality (punch holes in logos/text). In this case, keep the original alpha.
-    //
-    // Heuristic:
-    // - Transparent background cutouts typically have a large percentage of fully transparent pixels.
-    // - Small transparency around edges should not trigger the skip.
-    const totalTransparent = stats.transparentPercent + stats.semiPercent;
-    // Thresholds mais altos para evitar falsos positivos.
-    // Muitas imagens de produto do Google têm PNG com leve transparência
-    // em artefatos de compressão, mas ainda têm fundo branco visível.
-    const hasMeaningfulTransparency =
-        stats.transparentPercent >= 1;
-
-    if (hasMeaningfulTransparency) {
-        console.log(
-            `🧠 [Image Process] Skip BG removal: alpha already present (transparent=${stats.transparentPercent.toFixed(1)}%, semi=${stats.semiPercent.toFixed(1)}%)`
-        );
-        return true;
-    }
-
-    return false;
+// Qualquer transparência real deve sobreviver inclusive à ação explícita de remover fundo.
+// Não basta hasAlpha: PNG opaco também pode ter um canal alpha totalmente 255.
+export const preserveExistingTransparency = async (
+    buffer: Buffer, outputFormat: 'webp' | 'png' = 'png'
+): Promise<Buffer | null> => {
+    const sharp = await getSharp();
+    const meta = await sharp(buffer).metadata();
+    if (!meta.hasAlpha) return null;
+    const stats = await sharp(buffer).ensureAlpha().stats();
+    const alpha = stats.channels[stats.channels.length - 1];
+    if (!alpha || alpha.min >= 255) return null;
+    return outputFormat === 'png'
+        ? await sharp(buffer).png().toBuffer()
+        : await sharp(buffer).webp({ lossless: true }).toBuffer();
 };
 
 const isMostlyLightLowContrast = async (buffer: Buffer, sharp: any): Promise<boolean> => {
@@ -480,11 +469,8 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
 
     // Nunca segmentar de novo um recorte transparente, mesmo em upload forçado.
     // Usar a entrada original também evita degradar rótulos por resize/recompressão.
-    if (await shouldSkipBackgroundRemoval(imageBuffer, sharp)) {
-        return outputFormat === 'png'
-            ? await sharp(imageBuffer).png().toBuffer()
-            : await sharp(imageBuffer).webp({ lossless: true }).toBuffer()
-    }
+    const preserved = await preserveExistingTransparency(imageBuffer, outputFormat);
+    if (preserved) return preserved;
 
     // 1. Resize/Normalize (to max 800x800) mantendo transparência original
     console.log('📐 [Image Process] Redimensionando para max 800x800...');
@@ -500,22 +486,9 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
     console.log(`📊 [Image Process] Após resize: ${resizedBuffer.length} bytes, ${resizedMeta.width}x${resizedMeta.height}`);
 
     try {
-        // 1.5. If input already has transparency, we may skip to avoid degrading cutouts.
-        // In "forceBgRemoval" mode (used by explicit "remove background" action), always process.
-        const shouldSkip = await shouldSkipBackgroundRemoval(resizedBuffer, sharp);
-        if (shouldSkip) {
-            const passthrough = outputFormat === 'png'
-                ? await sharp(resizedBuffer).png().toBuffer()
-                : await sharp(resizedBuffer).webp({ quality: 85, alphaQuality: 100 }).toBuffer();
-            return passthrough;
-        }
-
-
-        // Em packshots de fundo claro uniforme, preservar todos os pixels que
-        // não pertencem ao fundo conectado às bordas. A segmentação semântica
-        // pode confundir a impressão da embalagem com o fundo e apagar partes dela.
-        const exteriorCutout = await removeUniformExteriorBackground(resizedBuffer, sharp);
-        const refinedBuffer = exteriorCutout ?? await restoreEnclosedProductPixels(
+        // BiRefNet é o único mecanismo de remoção. A restauração apenas
+        // recupera pixels internos do produto, sem remover novos pixels.
+        const refinedBuffer = await restoreEnclosedProductPixels(
             resizedBuffer, await removeBackgroundBiRefNet(resizedBuffer), sharp
         );
 

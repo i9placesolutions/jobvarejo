@@ -3,9 +3,7 @@
  * mudancas nao-salvas (`hasUnsavedChanges` ou pagina marcada `dirty`),
  * o sistema sobe o snapshot atual para o Wasabi.
  *
- * 90s = balanco entre risco de perda de trabalho e custo de upload.
- * Canvas events apenas atualizam estado em-memoria; persistencia ocorre
- * neste loop e em momentos chave (close, navigate-away).
+ * Rede de segurança para retries. Edições também agendam autosave com debounce.
  */
 export const PERIODIC_SAVE_INTERVAL_MS = 90_000
 
@@ -62,7 +60,7 @@ export const shouldSkipAutoSave = (source: SaveSource, reason: string): boolean 
     || reason === 'post-load-cleanup'
     || reason.startsWith('lifecycle:')
     || reason.startsWith('viewport:')
-    || reason.startsWith('object:')  // canvas events: only undo history, upload via periodic timer
+
 }
 
 export const shouldSkipThumbnailForReason = (source: SaveSource, reason: string): boolean => {

@@ -377,8 +377,8 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
       // Não aplicar uma escala extra baseada na área do card: em cards grandes
       // isso fazia a etiqueta ultrapassar a composição definida em Estrutura
       // de zona e cards.
-      const targetWidth = Math.max(6, w * (layout.width / 100))
-      const targetHeight = Math.max(6, h * (layout.height / 100))
+      const targetWidth = Math.max(1, w * (Math.min(layout.width, 2 * Math.min(layout.x, 100 - layout.x)) / 100))
+      const targetHeight = Math.max(1, h * (Math.min(layout.height, 2 * Math.min(layout.y, 100 - layout.y)) / 100))
       if (!preservesManualPosition) {
         const targetLeft = ((layout.x / 100) - 0.5) * w
         const targetTop = ((layout.y / 100) - 0.5) * h
@@ -469,7 +469,7 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
     if (group._productData?.autoFillImages && images.length && !images.some((image: any) => image.__manualTransform)) {
       const source = images[0]
       const layout = cardElements.image
-      const plan = planAutomaticProductImageFill(w * layout.width / 100, h * layout.height / 100,
+      const plan = planAutomaticProductImageFill(w * Math.min(layout.width, 2 * Math.min(layout.x, 100 - layout.x)) / 100, h * Math.min(layout.height, 2 * Math.min(layout.y, 100 - layout.y)) / 100,
         Number(source.width), Number(source.height), group._productData.imageFillCount, group._productData.imageFillDirection)
       const fabric = deps.fabric()
       while (images.length < plan.length && fabric?.Image) {

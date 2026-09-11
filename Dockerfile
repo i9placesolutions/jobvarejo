@@ -85,6 +85,8 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked npm install --omit=dev -
 # Copiar output do build (self-contained)
 COPY --from=builder /app/.output ./.output
 COPY workers/ ./workers/
+# Valida o motor isolado do Estúdio de Artes e suas fontes empacotadas.
+RUN /opt/image-worker/bin/python workers/art_studio.py --self-test
 
 EXPOSE 3000
 

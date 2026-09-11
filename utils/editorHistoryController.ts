@@ -148,7 +148,7 @@ const setupHistory = () => {
 
         // Don't persist transient geometry while the user is still in a brusque transform.
         // Keeping the previous stable snapshot is safer than saving an in-flight state.
-        if (shouldSkipLifecycleSave(saveReason, ctx.getLastTransformMutationAt())) {
+        if (!opts.skipCoalesce && shouldSkipLifecycleSave(saveReason, ctx.getLastTransformMutationAt())) {
             console.warn(`[saveState] Pulando flush de lifecycle durante transformação ativa (${saveReason})`);
             return;
         }

@@ -12,17 +12,17 @@ const image = (id: string, src = '/api/storage/proxy?key=products%2Frice.png') =
 const replacement = { width: 200, height: 400, cropX: 8, cropY: 12, getElement: () => 'new texture' }
 
 describe('replaceProductImageCopies', () => {
-  it('troca todas as cópias mantendo IDs, posições, rotação e tamanho visual', () => {
+  it('troca todas as cópias preservando IDs e rotação, com proporção e novo encaixe', () => {
     const first = image('one'), copy = image('two')
     copy.left = 70
     const card = { width: 300, height: 300, getObjects: () => [first, copy] }
     expect(replaceProductImageCopies(card, copy, replacement, '/new.png')).toEqual([first, copy])
     for (const img of [first, copy]) {
-      expect(img.width * img.scaleX).toBe(80)
-      expect(img.height * img.scaleY).toBe(100)
-      expect(img).toMatchObject({ src: '/new.png', __originalSrc: '/new.png', angle: 12, top: -15, flipX: true, cropX: 8, cropY: 12, __manualTransform: true })
+      expect(img.width * img.scaleX).toBe(96)
+      expect(img.height * img.scaleY).toBe(192)
+      expect(img).toMatchObject({ src: '/new.png', __originalSrc: '/new.png', angle: 12, top: 0, flipX: true, cropX: 8, cropY: 12, __manualTransform: true })
     }
-    expect([first._customId, copy._customId, first.left, copy.left]).toEqual(['one', 'two', 20, 70])
+    expect([first._customId, copy._customId, first.left, copy.left]).toEqual(['one', 'two', -64.5, 64.5])
   })
   it('não troca imagens diferentes, fundos da etiqueta nem outro card', () => {
     const first = image('one'), other = image('other', '/beans.png'), label = image('label')
@@ -78,3 +78,15 @@ it('seleciona pixels da imagem fora do card, sem tomar cliques dentro do card', 
   product.visible = false
   expect(findOverflowingProductImageAtPoint([card], { x: 200, y: 0 })).toBeNull()
 })
+
+it('amplia uma foto nova sem herdar a caixa pequena e evita título/preço', () => {
+ const target = image('tiny'); target.width=20;target.height=20;target.scaleX=.1;target.scaleY=.1;
+ const title={name:'smart_title',top:-145,height:35,scaleY:1,originY:'top'};
+ const price={name:'priceGroup',top:100,height:70,scaleY:1,originY:'center'};
+ const card={width:300,height:300,getObjects:()=>[title,target,price]};
+ replaceProductImageCopies(card,target,{width:600,height:300,getElement:()=> 'new'},'/wide.png');
+ expect(target.scaleX).toBe(target.scaleY);
+ expect(target.width*target.scaleX).toBe(258);
+ expect(target.top-target.height*target.scaleY/2).toBeGreaterThan(-110);
+ expect(target.top+target.height*target.scaleY/2).toBeLessThan(65);
+});

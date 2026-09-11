@@ -1,42 +1,28 @@
 <script setup lang="ts">
+import { BUSINESS_PAYMENT_CARD_OPTIONS } from '~/utils/paymentCards'
 import { footerPaymentImageUrl, MAX_FOOTER_PAYMENT_IMAGES } from '~/utils/footerPaymentImages'
 const props = defineProps<{ modelValue: string[] }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string[]] }>()
-const { getApiAuthHeaders } = useApiAuth()
-const search = ref('cartão')
-const items = ref<any[]>([])
-const loading = ref(false)
-const error = ref('')
-const cursor = ref<string | null>(null)
-let request = 0
-async function load(more = false) {
-  const token = ++request
-  loading.value = true; error.value = ''
-  try {
-    const result = await $fetch<any>('/api/assets', { headers: await getApiAuthHeaders(), query: { paginated: 1, source: 'uploads', ai: 0, limit: 60, q: search.value, ...(more && cursor.value ? { cursor: cursor.value } : {}) } })
-    if (token !== request) return
-    const next = Array.isArray(result) ? result : result.items || []
-    items.value = more ? [...items.value, ...next] : next
-    cursor.value = result.nextCursor || null
-  } catch { if (token === request) error.value = 'Não foi possível carregar as imagens. Tente novamente.' }
-  finally { if (token === request) loading.value = false }
-}
+const search = ref('')
+const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+const items = computed(() => BUSINESS_PAYMENT_CARD_OPTIONS
+  .filter(item => normalized(item.label).includes(normalized(search.value.trim())))
+  .map(item => ({ key: `uploads/payment-cards/v1/${item.id}.png`, name: item.label,
+    url: footerPaymentImageUrl(`uploads/payment-cards/v1/${item.id}.png`) })))
 function toggle(key: string) {
   if (props.modelValue.includes(key)) emit('update:modelValue', props.modelValue.filter(v => v !== key))
   else if (props.modelValue.length < MAX_FOOTER_PAYMENT_IMAGES) emit('update:modelValue', [...props.modelValue, key])
 }
-onMounted(() => load())
+
 </script>
 <template>
   <section class="footer-payment-picker">
     <h3>Cartões aceitos no rodapé <small>{{ modelValue.length }}/5</small></h3>
     <p>Escolha até cinco imagens da biblioteca. A seleção será reutilizada nos encartes.</p>
     <div class="selected-cards"><button v-for="key in modelValue" :key="key" type="button" aria-label="Remover cartão" @click="toggle(key)"><img :src="footerPaymentImageUrl(key)" alt="Cartão selecionado" /><span>×</span></button></div>
-    <div class="search"><input v-model="search" placeholder="Buscar bandeira ou cartão" aria-label="Buscar imagens de cartões" @keydown.enter.prevent="load()" /><button type="button" @click="load()">Buscar</button></div>
-    <p v-if="error" role="alert">{{ error }}</p>
-    <div class="catalog"><button v-for="item in items" :key="item.key || item.id" type="button" :aria-pressed="modelValue.includes(item.key || item.url)" :disabled="!modelValue.includes(item.key || item.url) && modelValue.length >= 5" @click="toggle(item.key || item.url)"><img :src="item.url" :alt="item.name" loading="lazy" /><span>{{ item.name }}</span></button></div>
-    <p v-if="loading">Carregando imagens…</p><p v-else-if="!items.length">Nenhuma imagem encontrada. Busque pelo nome da bandeira.</p>
-    <button v-if="cursor" type="button" :disabled="loading" @click="load(true)">Carregar mais</button>
+    <div class="search"><input v-model="search" placeholder="Buscar bandeira ou cartão" aria-label="Buscar imagens de cartões" @keydown.enter.prevent /></div>
+    <div class="catalog"><button v-for="item in items" :key="item.key" type="button" :aria-pressed="modelValue.includes(item.key || item.url)" :disabled="!modelValue.includes(item.key || item.url) && modelValue.length >= 5" @click="toggle(item.key || item.url)"><img :src="item.url" :alt="item.name" loading="lazy" /><span>{{ item.name }}</span></button></div>
+    <p v-if="!items.length">Nenhuma imagem encontrada. Busque pelo nome da bandeira.</p>
   </section>
 </template>
 <style scoped>

@@ -27,6 +27,7 @@ export interface ProductImage {
 
 // === PRODUCT ===
 export interface Product {
+  offerFormat?: 'wholesale-pack-v1';
   id: string | number;
   name: string;
   uiPriority?: 'primary' | 'advanced';

@@ -1,7 +1,6 @@
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { processImageWithOptions, downloadImage } from "~/server/utils/image-processor";
+import { processImageWithOptions, preserveExistingTransparency, downloadImage } from "~/server/utils/image-processor";
 import { getS3Client } from "~/server/utils/s3";
-import { openAiEditImage } from "~/server/utils/openai-images";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { assertSafeExternalHttpUrl } from "../utils/url-safety";
@@ -239,160 +238,6 @@ const hasLikelySubjectPreserved = async (buffer: Buffer): Promise<boolean> => {
     }
 };
 
-const guessOpenAiSize = async (buffer: Buffer): Promise<'1024x1024' | '1024x1536' | '1536x1024'> => {
-    try {
-        const sharp = (await import("sharp")).default;
-        const meta = await sharp(buffer).metadata();
-        const w = Math.max(1, Number(meta.width || 1));
-        const h = Math.max(1, Number(meta.height || 1));
-        const ar = w / h;
-        if (ar > 1.15) return '1536x1024';
-        if (ar < 0.87) return '1024x1536';
-        return '1024x1024';
-    } catch {
-        return '1024x1024';
-    }
-};
-
-const convertBufferFormat = async (buffer: Buffer, outputFormat: 'webp' | 'png'): Promise<Buffer> => {
-    if (outputFormat === 'png') return buffer;
-    const sharp = (await import("sharp")).default;
-    return sharp(buffer).webp({ quality: 88, alphaQuality: 100 }).toBuffer();
-};
-
-const removeBgWithOpenAI = async (rawBuffer: Buffer, outputFormat: 'webp' | 'png'): Promise<Buffer> => {
-    const sharp = (await import("sharp")).default;
-    const pngInput = await sharp(rawBuffer).png().toBuffer();
-    const size = await guessOpenAiSize(pngInput);
-
-    const edited = await openAiEditImage({
-        prompt: 'Remova apenas o fundo externo da imagem. Preserve totalmente o produto, rótulos, textos e detalhes finos. Não crie furos internos nem apague partes semitransparentes do produto. Retorne fundo transparente.',
-        size,
-        background: 'transparent',
-        images: [{ data: pngInput, filename: 'source.png', mime: 'image/png' }]
-    });
-
-    return convertBufferFormat(edited.buffer, outputFormat);
-};
-
-const removeLightEdgeBackgroundFallback = async (rawBuffer: Buffer, outputFormat: 'webp' | 'png'): Promise<Buffer | null> => {
-    try {
-        const sharp = (await import("sharp")).default;
-        const { data, info } = await sharp(rawBuffer)
-            .ensureAlpha()
-            .raw()
-            .toBuffer({ resolveWithObject: true });
-
-        const w = Math.max(1, Number(info.width || 1));
-        const h = Math.max(1, Number(info.height || 1));
-        const total = w * h;
-        if (total <= 0) return null;
-
-        const sampleRadius = Math.max(2, Math.floor(Math.min(w, h) * 0.03));
-        const cornerSeeds = [
-            { x: 0, y: 0 },
-            { x: w - 1, y: 0 },
-            { x: 0, y: h - 1 },
-            { x: w - 1, y: h - 1 }
-        ];
-
-        let sr = 0, sg = 0, sb = 0, count = 0;
-        for (const seed of cornerSeeds) {
-            for (let dy = 0; dy < sampleRadius; dy++) {
-                for (let dx = 0; dx < sampleRadius; dx++) {
-                    const x = seed.x === 0 ? dx : Math.max(0, w - 1 - dx);
-                    const y = seed.y === 0 ? dy : Math.max(0, h - 1 - dy);
-                    const p = (y * w + x) * 4;
-                    sr += data[p] ?? 0;
-                    sg += data[p + 1] ?? 0;
-                    sb += data[p + 2] ?? 0;
-                    count++;
-                }
-            }
-        }
-
-        if (count <= 0) return null;
-        const bgR = sr / count;
-        const bgG = sg / count;
-        const bgB = sb / count;
-        const bgBrightness = (bgR + bgG + bgB) / 3;
-
-        const colorThreshold = bgBrightness > 210 ? 62 : bgBrightness > 175 ? 52 : 42;
-        const brightnessThreshold = Math.min(248, bgBrightness + 16);
-        const maxSaturation = 36;
-
-        const visited = new Uint8Array(total);
-        const queue = new Int32Array(total);
-        let head = 0;
-        let tail = 0;
-
-        const canBeBackground = (idx: number): boolean => {
-            const p = idx * 4;
-            const r = data[p] ?? 0;
-            const g = data[p + 1] ?? 0;
-            const b = data[p + 2] ?? 0;
-            const a = data[p + 3] ?? 0;
-            if (a <= 12) return true;
-
-            const dr = r - bgR;
-            const dg = g - bgG;
-            const db = b - bgB;
-            const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-            const brightness = (r + g + b) / 3;
-            const saturation = Math.max(r, g, b) - Math.min(r, g, b);
-
-            const nearBackground = dist <= colorThreshold;
-            const lightNeutral = brightness >= brightnessThreshold && saturation <= maxSaturation;
-            return nearBackground || lightNeutral;
-        };
-
-        const push = (idx: number) => {
-            if (idx < 0 || idx >= total) return;
-            if (visited[idx]) return;
-            if (!canBeBackground(idx)) return;
-            visited[idx] = 1;
-            queue[tail++] = idx;
-        };
-
-        for (let x = 0; x < w; x++) {
-            push(x);
-            push((h - 1) * w + x);
-        }
-        for (let y = 0; y < h; y++) {
-            push(y * w);
-            push(y * w + (w - 1));
-        }
-
-        while (head < tail) {
-            const idx = queue[head++];
-            if (idx === undefined) continue;
-            const x = idx % w;
-            const y = Math.floor(idx / w);
-            if (x > 0) push(idx - 1);
-            if (x < w - 1) push(idx + 1);
-            if (y > 0) push(idx - w);
-            if (y < h - 1) push(idx + w);
-        }
-
-        if (tail < Math.floor(total * 0.02)) {
-            return null;
-        }
-
-        for (let i = 0; i < tail; i++) {
-            const q = queue[i];
-            if (q === undefined) continue;
-            const px = q * 4 + 3;
-            data[px] = 0;
-        }
-
-        const png = await sharp(data, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer();
-        return convertBufferFormat(png, outputFormat);
-    } catch (err) {
-        console.warn("⚠️ [Remove BG] Fallback light-edge falhou:", (err as any)?.message || err);
-        return null;
-    }
-};
-
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event);
     await enforceRateLimit(event, `remove-image-bg:${user.id}`, 20, 60_000);
@@ -505,90 +350,22 @@ export default defineEventHandler(async (event) => {
             key = `${outputPrefix}/bg-removed-${timestamp}.${outputFormat === 'png' ? 'png' : 'webp'}`;
         }
 
-        // Process (remove BG obrigatório para ação explícita do botão "Fundo")
-        // Estratégia em cascata para evitar 500 e aumentar taxa de sucesso.
-        let processedBuffer: Buffer | null = null;
-        let lastLocalError: any = null;
-
-        const isVercelRuntime = !!(process.env.VERCEL || process.env.VERCEL_URL);
-        const tryOpenAiFallback = async () => {
-            if (processedBuffer || !config.openaiApiKey) return;
-            try {
-                console.log("🤖 [Remove BG] Tentando fallback OpenAI...");
-                const openAiBuffer = await removeBgWithOpenAI(rawBuffer, outputFormat);
-                const hasAlphaCut = await hasMeaningfulTransparency(openAiBuffer);
-                const hasSubject = await hasLikelySubjectPreserved(openAiBuffer);
-                if (hasAlphaCut && hasSubject) {
-                    processedBuffer = openAiBuffer;
-                    console.log("✅ [Remove BG] Fallback OpenAI aplicado com transparência");
-                } else {
-                    console.warn(`⚠️ [Remove BG] OpenAI retornou saída inválida (alpha=${hasAlphaCut}, subject=${hasSubject})`);
-                }
-            } catch (openAiErr: any) {
-                console.warn("⚠️ [Remove BG] Fallback OpenAI falhou:", openAiErr?.message || openAiErr);
-            }
-        };
-
-        if (isVercelRuntime) {
-            await tryOpenAiFallback();
-        }
-
-        const localAttempts: Array<{ model?: 'small' | 'medium' | 'large'; strict: boolean }> = isVercelRuntime
-            ? [{ model: 'small', strict: true }]
-            : [
-                { model: 'large', strict: true },
-                { model: 'medium', strict: true },
-                { model: 'small', strict: true }
-            ];
-
-        for (const attempt of localAttempts) {
-            try {
-                processedBuffer = await processImageWithOptions(rawBuffer, {
-                    outputFormat,
-                    strict: attempt.strict,
-                    forceBgRemoval: true,
-                    bgRemoval: attempt.model ? { model: attempt.model } : undefined
-                });
-                if (!processedBuffer) continue;
-                const hasAlphaCut = await hasMeaningfulTransparency(processedBuffer);
-                const hasSubject = await hasLikelySubjectPreserved(processedBuffer);
-                if (hasAlphaCut && hasSubject) {
-                    console.log(`✅ [Remove BG] Sucesso local (model=${attempt.model || 'default'}, strict=${attempt.strict})`);
-                    break;
-                }
-                console.warn(`⚠️ [Remove BG] Saída local inválida (alpha=${hasAlphaCut}, subject=${hasSubject}) (model=${attempt.model || 'default'}, strict=${attempt.strict})`);
-                processedBuffer = null;
-            } catch (err: any) {
-                lastLocalError = err;
-                console.warn(`⚠️ [Remove BG] Tentativa local falhou (model=${attempt.model || 'default'}, strict=${attempt.strict}):`, err?.message || err);
-            }
-        }
-
-        await tryOpenAiFallback();
-
+        // Imagens transparentes são preservadas; a única remoção permitida é BiRefNet.
+        let processedBuffer = await preserveExistingTransparency(rawBuffer, outputFormat);
         if (!processedBuffer) {
-            const lightEdge = await removeLightEdgeBackgroundFallback(rawBuffer, outputFormat);
-            if (lightEdge) {
-                const hasAlphaCut = await hasMeaningfulTransparency(lightEdge);
-                const hasSubject = await hasLikelySubjectPreserved(lightEdge);
-                if (hasAlphaCut && hasSubject) {
-                    processedBuffer = lightEdge;
-                    console.log("✅ [Remove BG] Fallback light-edge aplicado com transparência");
-                } else {
-                    console.warn(`⚠️ [Remove BG] Fallback light-edge inválido (alpha=${hasAlphaCut}, subject=${hasSubject})`);
-                }
-            }
-        }
-
-        if (!processedBuffer) {
-            const fallbackHint = isVercelRuntime && !config.openaiApiKey
-                ? " Configure NUXT_OPENAI_API_KEY (or OPENAI_API_KEY) on Vercel to enable fallback."
-                : "";
-            throw createError({
-                statusCode: 422,
-                statusMessage: "Background removal failed",
-                message: `${String(lastLocalError?.message || "Background removal failed in all strategies")}${fallbackHint}`
+            processedBuffer = await processImageWithOptions(rawBuffer, {
+                outputFormat,
+                strict: true,
+                forceBgRemoval: true
             });
+            if (!processedBuffer || !await hasMeaningfulTransparency(processedBuffer) ||
+                !await hasLikelySubjectPreserved(processedBuffer)) {
+                throw createError({
+                    statusCode: 422,
+                    statusMessage: "Background removal failed",
+                    message: "O BiRefNet não produziu um recorte válido. A imagem anterior foi mantida."
+                });
+            }
         }
 
         // Upload to Wasabi S3 (overwrite or new key)

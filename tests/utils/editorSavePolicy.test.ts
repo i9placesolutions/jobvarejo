@@ -104,8 +104,8 @@ describe('shouldSkipAutoSave — autosave nao roda em razoes barulhentas', () =>
     expect(shouldSkipAutoSave('user', 'post-load-cleanup')).toBe(true)
     expect(shouldSkipAutoSave('user', 'lifecycle:mount')).toBe(true)
     expect(shouldSkipAutoSave('user', 'viewport:zoom')).toBe(true)
-    expect(shouldSkipAutoSave('user', 'object:modified')).toBe(true)
-    expect(shouldSkipAutoSave('user', 'object:added')).toBe(true)
+    expect(shouldSkipAutoSave('user', 'object:modified')).toBe(false)
+    expect(shouldSkipAutoSave('user', 'object:added')).toBe(false)
   })
 
   it('razoes regulares passam', () => {

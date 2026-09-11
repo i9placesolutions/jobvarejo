@@ -1504,6 +1504,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <button @click="navigateTo('/label-templates'); showMobileDrawer = false" class="dash-nav-item w-full">
                 <Tag class="w-3.5 h-3.5 shrink-0 text-amber-500" /><span class="flex-1 text-left">Etiquetas de preço</span>
               </button>
+              <NuxtLink to="/art-studio" class="dash-nav-item w-full"><Sparkles class="w-3.5 h-3.5 shrink-0 text-emerald-500"/><span class="flex-1 text-left">Estúdio de Artes</span></NuxtLink>
               <button @click="navigateTo('/quick-editor'); showMobileDrawer = false" class="dash-nav-item w-full">
                 <Zap class="w-3.5 h-3.5 shrink-0 text-indigo-500" /><span class="flex-1 text-left">Edição rápida</span>
               </button>
@@ -1648,6 +1649,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <Tag class="w-4 h-4 shrink-0 text-amber-500" />
               <span class="flex-1 text-left">Etiquetas de preço</span>
             </button>
+            <NuxtLink to="/art-studio" class="dash-nav-item w-full"><Sparkles class="w-4 h-4 shrink-0 text-emerald-500"/><span class="flex-1 text-left">Estúdio de Artes</span></NuxtLink>
             <button
               @click="navigateTo('/quick-editor')"
               class="dash-nav-item w-full"

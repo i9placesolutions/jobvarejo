@@ -1,3 +1,4 @@
+import { extractProductPdfText, toStandalonePdfBuffer } from '../utils/product-pdf-text'
 import { requireAuthenticatedUser } from '../utils/auth'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { parseProductsAuto, type ParsedProduct } from '../utils/product-text-parser'
@@ -47,17 +48,17 @@ const parsePdfBufferToText = async (buf: Buffer): Promise<string> => {
         parser.on('pdfParser_dataError', (errData: any) => {
             done(() => reject(errData?.parserError || errData || new Error('Failed to parse PDF')))
         })
-        parser.on('pdfParser_dataReady', () => {
+        parser.on('pdfParser_dataReady', (data: any) => {
             done(() => {
                 const rawText = typeof parser.getRawTextContent === 'function'
                     ? parser.getRawTextContent()
                     : ''
-                resolve(String(rawText || ''))
+                resolve(extractProductPdfText(data, String(rawText || '')))
             })
         })
 
         try {
-            parser.parseBuffer(buf, 0)
+            parser.parseBuffer(toStandalonePdfBuffer(buf), 0)
         } catch (err) {
             done(() => reject(err))
         }
@@ -100,6 +101,7 @@ export default defineEventHandler(async (event) => {
 
                 if (mime === 'application/pdf' || ext === 'pdf') {
                     text = clampText(await parsePdfBufferToText(buf))
+                    if (!text) throw createError({ statusCode: 422, statusMessage: 'PDF sem texto selecionável', message: 'Este PDF parece digitalizado. Envie uma planilha ou um PDF com texto selecionável.' })
                 } else if (
                     mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
                     mime === 'application/vnd.ms-excel' ||

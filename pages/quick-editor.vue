@@ -214,6 +214,7 @@ onMounted(() => {
           <ArrowLeft class="h-4 w-4" />
           Voltar ao dashboard
         </button>
+        <NuxtLink to="/art-studio" class="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700">Estúdio de Artes</NuxtLink>
         <NuxtLink to="/flyer-templates" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-indigo-200 hover:text-indigo-600">
           <LayoutTemplate class="h-4 w-4" />
           Gerenciar modelos

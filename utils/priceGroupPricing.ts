@@ -24,7 +24,7 @@ export const createPriceGroupPricing = (deps: PriceGroupPricingDeps) => {
   const applyAtacarejoPricingToPriceGroup = (priceGroup: any, data: any) => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return
     deps.migratePriceGroupToRichText?.(priceGroup)
-    if ((priceGroup as any).__atacarejoLabelVariant === 'fardo-special-v1') {
+    if (data?.offerFormat === 'wholesale-pack-v1' || (priceGroup as any).__atacarejoLabelVariant === 'fardo-special-v1') {
       deps.applyFardoSpecialPricingToPriceGroup(priceGroup, data)
       return
     }

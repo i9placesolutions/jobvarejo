@@ -522,6 +522,7 @@ export const migrateProduct = (oldProduct: any): Product => {
   return {
     id,
     name: oldProduct.name ?? 'Produto',
+    ...(oldProduct.offerFormat === 'wholesale-pack-v1' ? { offerFormat: oldProduct.offerFormat } : {}),
     images,
     imageUrl: imageRef ?? undefined,
     image: oldProduct.image ?? imageRef ?? undefined,

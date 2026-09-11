@@ -4,9 +4,9 @@ vi.mock('../../server/utils/birefnet', () => ({ removeBackgroundBiRefNet: vi.fn(
 import { removeBackgroundBiRefNet } from '../../server/utils/birefnet'
 import { processImageWithOptions, removeUniformExteriorBackground } from '../../server/utils/image-processor'
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => vi.resetAllMocks())
 
-it('preserva embalagem escura, amarela e impressão branca sem segmentação semântica', async () => {
+it('preserva embalagem escura, amarela e impressão branca após o recorte do BiRefNet', async () => {
   const width = 100, height = 100
   const raw = Buffer.alloc(width * height * 4, 255)
   for (let y = 15; y < 85; y++) for (let x = 15; x < 85; x++) {
@@ -24,8 +24,17 @@ it('preserva embalagem escura, amarela e impressão branca sem segmentação sem
     expect(pixels.subarray(p, p + 4)).toEqual(raw.subarray(p, p + 4))
   }
   expect(pixels[3]).toBe(0)
-  await processImageWithOptions(source, { outputFormat: 'png', strict: true })
-  expect(removeBackgroundBiRefNet).not.toHaveBeenCalled()
+  // O recorte simulado representa a resposta do modelo obrigatório.
+  vi.mocked(removeBackgroundBiRefNet).mockResolvedValueOnce(exterior!)
+  const output = await processImageWithOptions(source, { outputFormat: 'png', strict: true })
+  expect(removeBackgroundBiRefNet).toHaveBeenCalledTimes(1)
+  const { data: result, info } = await sharp(output).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  expect([info.width, info.height]).toEqual([70, 70])
+  for (let y = 0; y < 70; y++) for (let x = 0; x < 70; x++) {
+    const originalOffset = ((y + 15) * width + x + 15) * 4
+    const resultOffset = (y * info.width + x) * 4
+    expect(result.subarray(resultOffset, resultOffset + 4)).toEqual(raw.subarray(originalOffset, originalOffset + 4))
+  }
 })
 
 it('não usa remoção por cor quando o fundo é escuro', async () => {

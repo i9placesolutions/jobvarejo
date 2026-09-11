@@ -2211,7 +2211,7 @@ export const useProject = () => {
     let scheduledAutoSaveProjectId = ''
     // Draft local e salvo imediatamente; o upload remoto e mais caro
     // (canvas grande + Wasabi), entao coalesce melhor pequenas edicoes seguidas.
-    const AUTO_SAVE_DELAY = 30_000
+    const AUTO_SAVE_DELAY = 3_000
 
     const triggerAutoSave = () => {
         if (_moduleDisposed) return

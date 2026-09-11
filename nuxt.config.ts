@@ -250,6 +250,8 @@ export default defineNuxtConfig({
     '/': {
       ssr: false,
     },
+    '/art-studio': { ssr: false },
+    '/art-studio/**': { ssr: false },
     '/label-templates': {
       ssr: false,
     },

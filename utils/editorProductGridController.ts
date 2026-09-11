@@ -1,3 +1,4 @@
+import { isProductLabelTemplateCompatible } from './productLabelCompatibility'
 import { resolveProductNameColor, syncProductNameColor } from './productNameColors'
 type GlobalStyles = Record<string, any>
 type LabelTemplate = any
@@ -206,7 +207,9 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
         // A preferência de etiqueta pode vir da zona, mas nunca deve forçar uma
         // etiqueta de dois preços em um produto simples (ou o inverso).
         const compatibleLabelTpl = labelTpl && (
-            isAtacarejoTemplateGroupJson(labelTpl.group) === productNeedsAtacarejoLabel(product)
+            product?.offerFormat === 'wholesale-pack-v1'
+                ? isProductLabelTemplateCompatible(product, labelTpl)
+                : isAtacarejoTemplateGroupJson(labelTpl.group) === productNeedsAtacarejoLabel(product)
         ) ? labelTpl : undefined
         const initialCardBorderWidth = Math.max(0, Number(effectiveStyles.cardBorderWidth ?? 0));
         const initialCardBorderColor = initialCardBorderWidth > 0
@@ -464,7 +467,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             const hasCondition = !!availablePrices.condition;
             const hasWholesalePrice = hasSpecial && hasMain;
             // Mesmo com 1 preço, se houver condição/observação o card deve manter o template atacarejo e colapsar.
-            const shouldUseAtacarejoTemplate = hasWholesalePrice || hasCondition || !!formatPriceValue(product.priceWholesale);
+            const shouldUseAtacarejoTemplate = productNeedsAtacarejoLabel(product);
             const packageToken = String(product?.packageLabel || product?.packUnit || '').trim().toUpperCase().replace(/\s+/g, '');
             const isFardoOrPackPricing = /^(FD|FARDO|FARDOS|CX|CAIXA|CAIXAS|PCT|PACOTE|PACOTES|PACK|SIXPACK)/.test(packageToken);
             const hasExplicitFardoTiers = !!formatPriceValue(product?.priceUnit ?? product?.pricePack)
@@ -476,7 +479,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
                 && hasExplicitFardoTiers;
             if (shouldUseAtacarejoTemplate) {
                 // Prefer template-driven atacarejo (edited in Mini Editor) over hardcoded fallback.
-                const preferredTemplateId = shouldUseFardoSpecialTemplate
+                const preferredTemplateId = product?.offerFormat === 'wholesale-pack-v1' || shouldUseFardoSpecialTemplate
                     ? BUILTIN_FARDO_SPECIAL_LABEL_TEMPLATE_ID
                     : BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID;
                 const builtInAtacTpl = labelTemplates.value.find((t: any) => String(t?.id || '') === preferredTemplateId)
@@ -2360,6 +2363,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
         if (isRedBurst) tuneRedBurstPriceGroupLayout(newPg);
         // Apply wholesale/pack metadata when the template supports it (no-op otherwise).
         applyAtacarejoPricingToPriceGroup(newPg, {
+            offerFormat: (card as any)._productData?.offerFormat,
             price: (card as any).price ?? (typeof oldPriceText === 'string' ? oldPriceText : null),
             pricePack: (card as any).pricePack ?? null,
             priceUnit: (card as any).priceUnit ?? null,

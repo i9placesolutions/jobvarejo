@@ -128,14 +128,6 @@ const confirm = () => {
         Defina a validade antes de começar a editar.
       </p>
 
-      <label class="mb-4 grid gap-2 text-sm">
-        <span>Como exibir a validade</span>
-        <select v-model="dateFormat" aria-label="Formato da validade" class="min-h-11 rounded-lg border border-white/20 bg-zinc-900 p-3 text-white">
-          <option value="numeric">07/09/2026 — numérica</option>
-          <option value="long">07 de setembro de 2026 — por extenso</option>
-          <option value="hidden">Não mostrar validade no encarte</option>
-        </select>
-      </label>
       <div class="offer-validity-prompt__options" role="radiogroup" aria-label="Tipo de validade e exibição">
         <button
           type="button"
@@ -185,14 +177,22 @@ const confirm = () => {
         >
           <span class="offer-validity-prompt__option-radio" aria-hidden="true"></span>
           <span class="offer-validity-prompt__option-copy">
-            <strong>Não mostrar validade no encarte</strong>
-            <small>Oculta a validade no encarte</small>
+            <strong>Não exibir</strong>
+            <small>Encarte sem validade visível</small>
           </span>
         </button>
       </div>
       <div v-if="dateFormat !== 'hidden'">
-        <p class="offer-validity-prompt__stock-note">Todas as opções incluem “enquanto durarem os estoques”.</p>
+        <p class="offer-validity-prompt__stock-note">As ofertas são limitadas à disponibilidade de estoque.</p>
 
+      <label v-if="mode !== 'while_stocks'" class="offer-validity-prompt__format">
+        <span>Como exibir a validade</span>
+        <select v-model="dateFormat" aria-label="Formato da validade" class="offer-validity-prompt__select">
+          <option value="numeric">07/09/2026 — numérica</option>
+          <option value="long">07 de setembro de 2026 — por extenso</option>
+
+        </select>
+      </label>
         <div v-if="mode === 'single_day'" class="offer-validity-prompt__dates">
           <label>
             <span>Data da oferta</span>
@@ -219,7 +219,7 @@ const confirm = () => {
       </div>
 
       <div class="offer-validity-prompt__preview" aria-live="polite">
-        <span class="offer-validity-prompt__preview-label">Assim vai aparecer no encarte</span>
+        <span class="offer-validity-prompt__preview-label">PRÉVIA NO ENCARTE</span>
         <strong>{{ validityPreview }}</strong>
       </div>
 
@@ -227,7 +227,7 @@ const confirm = () => {
       </div>
       <footer class="offer-validity-prompt__footer">
       <button type="button" class="offer-validity-prompt__confirm" @click="confirm">
-        Continuar para editar
+        Continuar para editar <span aria-hidden="true">→</span>
       </button>
       </footer>
     </section>
@@ -248,7 +248,7 @@ const confirm = () => {
 }
 
 .offer-validity-prompt__card {
-  width: min(560px, 100%);
+  width: min(600px, 100%);
   max-height: calc(100dvh - 36px);
   display: flex;
   flex-direction: column;
@@ -305,22 +305,23 @@ const confirm = () => {
 
 .offer-validity-prompt__options {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .offer-validity-prompt__option {
   display: flex;
   align-items: flex-start;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  gap: 12px;
   width: 100%;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #ffffff;
   color: #1e293b;
   cursor: pointer;
-  padding: 12px;
+  padding: 14px;
+  min-height: 76px;
   text-align: left;
   transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
 }
@@ -463,7 +464,8 @@ const confirm = () => {
   margin-top: 16px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  background: #f8fafc;
+  background: #f5f3ff;
+  border-left: 3px solid #7c5cff;
   padding: 14px 15px;
 }
 
@@ -508,6 +510,15 @@ const confirm = () => {
 .offer-validity-prompt__confirm:active {
   transform: translateY(1px);
 }
+
+.offer-validity-prompt__format { display:grid; gap:7px; margin-top:18px; color:#475569; font-size:12px; font-weight:700; }
+.offer-validity-prompt__select { width:100%; min-height:44px; padding:10px 12px; border:1px solid #dbe2ed; border-radius:10px; background:#f8fafc; color:#243047; color-scheme:light; font:inherit; font-size:14px; font-weight:500; }
+.offer-validity-prompt__select:focus-visible { outline:3px solid #ddd6fe; border-color:#7c5cff; }
+.offer-validity-prompt__confirm { display:flex; align-items:center; justify-content:center; gap:12px; }
+.offer-validity-prompt__confirm span { font-size:20px; font-weight:500; }
+.offer-validity-prompt__option-copy strong { line-height:1.3; }
+.offer-validity-prompt__footer { border-top:1px solid #f1f5f9; margin-top:18px; padding-top:16px; }
+@media (prefers-reduced-motion: reduce) { .offer-validity-prompt button { transition:none; } }
 
 @media (max-width: 520px) {
   .offer-validity-prompt__options {

@@ -6,6 +6,7 @@ import { confirmInSystem } from '~/utils/systemMessages'
 import { harmonizeProductCardTypography } from '~/utils/productCardResponsiveTypography'
 import { reconcileQuickPageFormatGeometry } from '~/utils/quickPageFormatGeometry'
 import { repairDynamicTextLayoutBounds } from '~/utils/dynamicTextLayoutBounds'
+import { compactBusinessFooter } from '~/utils/compactBusinessFooter'
 import { normalizeQuickBusinessFooter } from '~/utils/quickBusinessFooterTypography'
 import { syncProductNameColor } from '~/utils/productNameColors'
 import { isProductNameText, collectProductNameTexts } from '~/utils/productNameTypographyScope'
@@ -25,6 +26,8 @@ import { useResponsive } from '~/composables/useResponsive'
 import { useFigmaCrop } from '~/composables/useFigmaCrop'
 import { useProductZone } from '~/composables/useProductZone'
 import { useProductZoneStructures } from '~/composables/useProductZoneStructures'
+import { resolveWholesalePackPriceState } from '~/utils/wholesalePackOffer'
+import { isProductLabelTemplateCompatible as isCompatibleProductLabel, productNeedsMultiPriceLabel } from '~/utils/productLabelCompatibility'
 import { useProductCardConfiguration } from '~/composables/useProductCardConfiguration'
 import { useQuickEditorControls } from '~/composables/useQuickEditorControls'
 import { useAiImageStudio } from '~/composables/useAiImageStudio'
@@ -3809,7 +3812,7 @@ const createPriceLayout = (product: any, width: number, top: number) => {
     const hasWholesalePrice = hasSpecial && hasMain;
     // Usar atacarejo se há dados de atacado OU se o modo foi explicitamente definido como atacarejo
     const explicitAtacarejo = product?.priceMode === 'atacarejo';
-    const shouldAtacarejo = explicitAtacarejo || hasWholesalePrice || hasCondition || !!formatPriceValue(product?.priceWholesale);
+    const shouldAtacarejo = explicitAtacarejo || productNeedsMultiPriceLabel(product);
 
     let pg: any;
     if (shouldAtacarejo) {
@@ -7065,7 +7068,7 @@ const applyQuickFontSize = async (value: number) => {
     refreshCanvasObjects({ immediate: true })
     safeRequestRenderAll()
     refreshSelectedRef()
-    debouncedSaveCurrentState()
+    await persistQuickModeDataChange('quick-font-size')
 }
 
 const quickCardColorSettings = computed(() => {
@@ -7403,23 +7406,22 @@ let propertySaveTimer: ReturnType<typeof setTimeout> | null = null;
 // Padrao "single-flight com pending bit": garante que mudancas chegadas
 // durante um save em andamento nao sao descartadas. Quando o save em voo
 // termina, se houve novas edicoes (propertySavePending=true), reroda.
-let propertySaveInFlight = false;
+let propertySaveTask: Promise<void> | null = null;
 let propertySavePending = false;
-const runPropertySave = async (reason: string) => {
-    if (propertySaveInFlight) {
-        // Marca que ha edicoes novas; o save em andamento vai re-executar ao terminar.
-        propertySavePending = true;
-        return;
-    }
-    propertySaveInFlight = true;
-    try {
-        do {
-            propertySavePending = false;
-            await saveCurrentState({ reason });
-        } while (propertySavePending);
-    } finally {
-        propertySaveInFlight = false;
-    }
+const runPropertySave = (reason: string): Promise<void> => {
+    propertySavePending = true;
+    if (propertySaveTask) return propertySaveTask;
+    propertySaveTask = (async () => {
+        try {
+            do {
+                propertySavePending = false;
+                await saveCurrentState({ reason, skipCoalesce: true });
+            } while (propertySavePending);
+        } finally {
+            propertySaveTask = null;
+        }
+    })();
+    return propertySaveTask;
 };
 const debouncedSaveCurrentState = () => {
     if (propertySaveTimer) clearTimeout(propertySaveTimer);
@@ -7452,7 +7454,7 @@ const flushTextEditSave = (reason = 'text-edit-exit') => {
     saveCurrentState({ reason });
 };
 
-let isLifecycleFlushInProgress = false;
+let lifecycleFlushTask: Promise<void> | null = null;
 let lastLifecycleFlushAt = 0;
 let hasPendingCoalescedSave = false;
 
@@ -7505,16 +7507,16 @@ const clearPendingPersistenceTimers = () => {
     }
 };
 
-const flushPersistenceNow = async (reason: string, opts: { force?: boolean } = {}) => {
+const performPersistenceFlush = async (reason: string, opts: { force?: boolean } = {}) => {
     const now = Date.now();
     const force = !!opts.force;
     if (!force && now - lastLifecycleFlushAt < 250) return;
     lastLifecycleFlushAt = now;
-    if (isLifecycleFlushInProgress) return;
-    isLifecycleFlushInProgress = true;
 
-    try {
-        const hadPendingPropertySave = !!propertySaveTimer;
+
+    {
+        const hadPendingPropertySave = !!propertySaveTimer || !!propertySaveTask;
+        if (propertySaveTask) await propertySaveTask;
         const hadPendingTextEditSave = !!textEditSaveTimer;
         const hadPendingGlobalStylesSave = !!globalStylesSaveTimer;
         const hadPendingViewportSave = !!viewportStateSaveTimer;
@@ -7574,9 +7576,21 @@ const flushPersistenceNow = async (reason: string, opts: { force?: boolean } = {
                 console.warn('[persist] Falha no flushAutoSave:', err);
             });
         }
-    } finally {
-        isLifecycleFlushInProgress = false;
     }
+};
+
+// Navegação concorrente aguarda o flush em andamento e captura a última edição.
+const flushPersistenceNow = (reason: string, opts: { force?: boolean } = {}): Promise<void> => {
+    const previous = lifecycleFlushTask;
+    const task = (async () => {
+        if (previous) await previous;
+        await performPersistenceFlush(reason, opts);
+    })();
+    lifecycleFlushTask = task;
+    void task.finally(() => {
+        if (lifecycleFlushTask === task) lifecycleFlushTask = null;
+    }).catch(() => {});
+    return task;
 };
 
 // CORRECAO: provide/inject so desce de pai para filho em Vue.
@@ -7716,6 +7730,7 @@ const reviewProducts = ref<any[]>([])
 const productImportExistingCount = ref(0)
 const productReviewInitialImportMode = ref<'replace' | 'append'>('replace')
 const quickModeInitialProductText = ref('')
+const quickModeInitialProductFile = shallowRef<File | null>(null)
 const quickModeAutoFillImages = ref(false)
 const quickModeAutoParseProductText = ref(false)
 const quickBusinessProfile = ref<Record<string, any>>({})
@@ -13273,9 +13288,20 @@ const deleteActiveSelectionFromCanvas = (confirmed = false): boolean => {
 const handleKeyDown = async (
     e: KeyboardEvent,
     options: { explicitEditorPaste?: boolean } = {}
-) => getEditorCanvasActionsController().handleKeyDown(e, options);
+) => {
+    const pasteShortcut = ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') || (e.shiftKey && e.key === 'Insert');
+    if (isQuickMode.value && (options.explicitEditorPaste || pasteShortcut)
+        && !isEditableClipboardTarget(e.target)
+        && !(canvas.value?.getActiveObject?.() as any)?.isEditing) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+    }
+    return getEditorCanvasActionsController().handleKeyDown(e, options);
+};
 
 const runEditorClipboardCommand = async (action: 'copy' | 'paste') => {
+    if (isQuickMode.value && action === 'paste') return;
     await handleKeyDown(
         new KeyboardEvent('keydown', {
             key: action === 'copy' ? 'c' : 'v',
@@ -14686,6 +14712,7 @@ const updateSmartGroup = (keyOrUpdates: any, value?: any) => {
 
              const mockProduct = {
                  name: storedData.name || group.productName || '',
+                 offerFormat: storedData.offerFormat,
                  price: currentPrice,
                  priceUnit: storedData.priceUnit ?? (group as any).priceUnit ?? currentPrice,
                  pricePack: storedData.pricePack ?? (group as any).pricePack ?? null,
@@ -16465,6 +16492,11 @@ const handlePaste = async (e: ClipboardEvent) => {
     if (!e.clipboardData || !canvas.value) return;
     if (isEditableClipboardTarget(e.target)) return;
     if ((canvas.value.getActiveObject?.() as any)?.isEditing) return;
+    if (isQuickMode.value) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+    }
     const hasImage = Array.from(e.clipboardData.items || []).some((item) => item?.type?.includes('image'));
     if (!hasImage) return;
     const controller = await loadProductImageActionsController();
@@ -16706,12 +16738,7 @@ const resolveProductImageRef = (product: any): string | null => {
     return resolveSharedProductImageRef(product);
 }
 
-const productNeedsAtacarejoLabel = (product: any): boolean => {
-    const available = getAvailablePrices(product)
-    const hasSpecial = available.prices.some((price: any) => price.type === 'special')
-    const hasMain = available.prices.some((price: any) => price.type === 'main' || price.type === 'pack')
-    return (hasSpecial && hasMain) || !!available.condition || !!formatPriceValue(product?.priceWholesale)
-}
+const productNeedsAtacarejoLabel = productNeedsMultiPriceLabel
 
 const getEditorProductGridContext = () => ({
     BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID,
@@ -17449,6 +17476,7 @@ const handleProductReviewModalVisibility = (value: boolean) => {
     if (value || isConfirmingProductImport.value) return
 
     quickModeInitialProductText.value = ''
+    quickModeInitialProductFile.value = null
     quickModeAutoParseProductText.value = false
     reviewProducts.value = []
     targetGridZone.value = null
@@ -18885,7 +18913,25 @@ const applyQuickBusinessProfileBindings = async (
     const expectedPageId = getActiveProjectPageId()
     const pageSessionId = activePageLoadSessionId
     const isCurrentPage = () => bindingSequence === quickBusinessBindingSequence && expectedPageId === getActiveProjectPageId() && pageSessionId === activePageLoadSessionId && !isCanvasDestroyed.value
-    let changed = false
+    let changed = compactBusinessFooter(canvas.value.getObjects())
+    // Alguns fundos trazem a chamada pronta, mas não o campo dinâmico do telefone.
+    for (const label of canvas.value.getObjects().filter((o: any) => String(o.text || '').trim().toUpperCase() === 'FALE CONOSCO')) {
+        const name = `header-whatsapp-${label._customId || label.left}`
+        const existingPhone = canvas.value.getObjects().find((o: any) => o.name === name)
+        if (existingPhone) {
+            existingPhone.set({fontSize:32,dynamicFieldBaseFontSize:32,dynamicFieldAutoFitFontSize:32})
+            existingPhone.initDimensions?.()
+            changed = true
+            continue
+        }
+        const anchor = label.getPointByOrigin('left', 'bottom')
+        const phone = new fabric.Textbox('', { left: anchor.x, top: anchor.y + 3, width: label.getScaledWidth(),
+            fontFamily: 'Barlow', fontWeight: 900, fontSize: 32, fill: label.fill, originX: 'left', originY: 'top', name })
+        Object.assign(phone, { _customId: makeId(), parentFrameId: label.parentFrameId,
+            businessProfileField: 'whatsapp', quickFieldEnabled: true, dynamicFieldBaseFontSize: 32 })
+        canvas.value.add(phone)
+        changed = true
+    }
     walkQuickCanvasObjects((object: any) => {
         const field = getQuickBusinessFieldFromObject(object)
         if (!field || typeof object?.set !== 'function') return
@@ -19933,6 +19979,22 @@ const handleResetCardStyle = async (cardId?: string) => {
     await saveCurrentState({ reason: 'card-style:reset', skipIfUnchanged: false });
 };
 
+// O snapshot acompanha a seleção, mas a alteração sempre usa o card real pelo ID.
+const quickSelectedCardConfiguration = computed(() => {
+    const selected = selectedObjectRef.value;
+    if (!isQuickMode.value || !selected || String(selected.type || '').toLowerCase() === 'activeselection') return null;
+    const id = String(selected.parentCardId || (isLikelyProductCard(selected) ? selected._customId : '') || '').trim();
+    if (!id) return null;
+    return { id, profile: String(selected.__cardConfigurationProfile || '').trim() };
+});
+const quickCardConfigurationOptions = computed(() => {
+    if (!productCardConfigurationState.isLoaded.value || !productCardConfigurationState.configuration.value.enabled) return [];
+    const names = { compact: 'Compacto', standard: 'Médio', wide: 'Largo', tall: 'Vertical estreito', featured: 'Destaque' };
+    return PRODUCT_CARD_CONFIGURATION_PROFILE_KEYS
+        .filter(key => productCardConfigurationState.configuration.value.profiles?.[key])
+        .map(key => ({ id: key, name: names[key] }));
+});
+
 // Permite escolher manualmente um dos modelos cadastrados para um unico card.
 // Sem escolha explicita, o layout continua sendo resolvido automaticamente
 // pelo formato e pela funcao da zona.
@@ -20392,10 +20454,9 @@ const labelTemplateUsesMultiPrice = (template: any): boolean => {
 }
 
 const getCompatibleProductLabelTemplateOptions = (card: any) => {
-    const wantsMulti = productCardUsesMultiPriceLabel(card)
     return (labelTemplates.value || [])
         .filter((template: any) => String(template?.id || '').trim())
-        .filter((template: any) => labelTemplateUsesMultiPrice(template) === wantsMulti)
+        .filter((template: any) => isProductLabelTemplateCompatible(card, template))
         .map((template: any) => ({
             id: String(template.id).trim(),
             name: String(template.name || 'Etiqueta sem nome').trim() || 'Etiqueta sem nome',
@@ -20404,7 +20465,9 @@ const getCompatibleProductLabelTemplateOptions = (card: any) => {
 }
 
 const isProductLabelTemplateCompatible = (card: any, template: any): boolean => (
-    labelTemplateUsesMultiPrice(template) === productCardUsesMultiPriceLabel(card)
+    (card?._productData || card)?.offerFormat === 'wholesale-pack-v1'
+        ? isCompatibleProductLabel(card?._productData || card, template)
+        : labelTemplateUsesMultiPrice(template) === productCardUsesMultiPriceLabel(card)
 )
 
 const selectedProductImageQuickActions = computed(() => {
@@ -23050,7 +23113,9 @@ const applyFardoSpecialPricingToPriceGroup = (pg: any, data: any) => {
     const displayUnit = inferredProductUnit && configuredUnitNorm === 'UN'
         ? inferredProductUnit
         : configuredDisplayUnit
-    const state = resolveFardoSpecialPriceState(data, {
+    const state = data?.offerFormat === 'wholesale-pack-v1'
+        ? resolveWholesalePackPriceState(data)
+        : resolveFardoSpecialPriceState(data, {
         autoCollapseMissingPrices: (pg as any).__autoCollapseMissingPrices !== false,
         displayUnit,
         compactPackLine: (pg as any).__atacPackLineCompact !== false,
@@ -26548,7 +26613,7 @@ const legacyResizeSmartObject = (group: any, w: number, h: number, styles?: Part
             });
         }
 
-        if (styles) {
+        if (styles && !(title as any).__manualTypography) {
             if (styles.prodNameFont) title.set('fontFamily', styles.prodNameFont);
             if (styles.prodNameColor) title.set('fill', styles.prodNameColor);
             if (styles.prodNameWeight !== undefined) title.set('fontWeight', styles.prodNameWeight as any);
@@ -26571,7 +26636,7 @@ const legacyResizeSmartObject = (group: any, w: number, h: number, styles?: Part
             const baseFont = baseSize * 0.09;
             const cardHeightScale = Math.min(1, Math.sqrt(h / _refH));
             const nextFont = clamp(baseFont * scale * cardHeightScale, 10, baseSize * 0.22);
-            title.set('fontSize', nextFont);
+            if (!(title as any).__manualTypography) title.set('fontSize', nextFont);
         }
 
         // Responsive Text Width
@@ -26626,7 +26691,7 @@ const legacyResizeSmartObject = (group: any, w: number, h: number, styles?: Part
                 });
             }
 
-        if (styles) {
+        if (styles && !(limit as any).__manualTypography) {
             if (styles.limitFont) limit.set('fontFamily', styles.limitFont);
             if (styles.limitColor) limit.set('fill', styles.limitColor);
 
@@ -26634,11 +26699,11 @@ const legacyResizeSmartObject = (group: any, w: number, h: number, styles?: Part
             const mult = (typeof styles.limitSize === 'number' && styles.limitSize > 0) ? (styles.limitSize / 14) : 1;
             const baseFont = baseSize * 0.045;
             const nextFont = clamp(baseFont * mult, 8, baseSize * 0.12);
-            limit.set('fontSize', nextFont);
+            if (!(limit as any).__manualTypography) limit.set('fontSize', nextFont);
         } else {
             // Reasonable default if older cards have this text but no styles passed
             const baseFont = baseSize * 0.045;
-            limit.set('fontSize', clamp(baseFont, 8, baseSize * 0.12));
+            if (!(limit as any).__manualTypography) limit.set('fontSize', clamp(baseFont, 8, baseSize * 0.12));
         }
 
         // Hide if empty
@@ -28421,9 +28486,10 @@ const handleQuickModeBulkLabelChange = async (templateId: string) => {
     await persistQuickModeDataChange('quick-products-label-bulk')
 }
 
-const handleQuickModeImport = async (payload: { mode?: 'replace' | 'append'; text?: string; autoFillImages?: boolean; oneProductPerPage?: boolean }) => {
+const handleQuickModeImport = async (payload: { mode?: 'replace' | 'append'; text?: string; file?: File; autoFillImages?: boolean; oneProductPerPage?: boolean }) => {
     quickModeOneProductPerPage.value = payload.oneProductPerPage === true
     quickModeAutoFillImages.value = payload.autoFillImages === true
+    quickModeInitialProductFile.value = payload.file || null
     quickModeInitialProductText.value = String(payload?.text || '').trim()
     quickModeAutoParseProductText.value = quickModeInitialProductText.value.length > 0
     await openQuickProductImport(payload?.mode === 'append' ? 'append' : 'replace')
@@ -29236,6 +29302,26 @@ const handleAutoOfferLayout = async () => {
               <div class="canvas-workspace" :class="{ 'has-logo-panel': selectedQuickLogo }">
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
+                   <label
+                     v-if="quickSelectedCardConfiguration && quickCardConfigurationOptions.length > 1 && selectedObjectPos.visible && !isDesignLoading && !figmaCrop.isCropActive.value"
+                     class="absolute z-[118] flex max-w-[calc(100%-16px)] items-center gap-2 rounded-lg border border-violet-400/30 bg-[#18181b]/95 px-2 py-1.5 text-xs text-white shadow-xl"
+                     :style="{ top: `${Math.max(8, selectedObjectPos.top - 76)}px`, left: `${Math.max(8, Math.min(selectedObjectPos.left, (wrapperEl?.clientWidth || 300) - 260))}px` }"
+                     @pointerdown.stop
+                     @mousedown.stop
+                     @click.stop
+                     @keydown.stop
+                   >
+                     <span>Modelo do card</span>
+                     <select
+                       :value="quickSelectedCardConfiguration.profile"
+                       aria-label="Modelo deste card"
+                       class="min-h-8 min-w-0 rounded-md border border-white/15 bg-[#27272a] px-2 text-xs text-white"
+                       @change="handleUpdateCardConfigurationProfile(($event.target as HTMLSelectElement).value, quickSelectedCardConfiguration.id)"
+                     >
+                       <option value="">Automático</option>
+                       <option v-for="option in quickCardConfigurationOptions" :key="option.id" :value="option.id">{{ option.name }}</option>
+                     </select>
+                   </label>
                    <ProductImageQuickActions
                      v-if="selectedProductImageQuickActions"
                      :visible="showProductImageQuickActions"
@@ -29267,6 +29353,7 @@ const handleAutoOfferLayout = async () => {
                         type="button"
                         class="rounded-lg border border-violet-300/25 bg-violet-500/25 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-violet-500/40 focus:outline-none focus:ring-2 focus:ring-violet-300/70"
                         title="Colar nesta página (Ctrl/Cmd+Shift+V)"
+                        v-if="!isQuickMode"
                         aria-label="Colar cópia do editor nesta página"
                         @click="triggerEditorClipboardPaste"
                       >
@@ -29550,7 +29637,7 @@ const handleAutoOfferLayout = async () => {
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                   </button>
                   <!-- Paste editor copy -->
-                  <button class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Colar nesta página (Ctrl/Cmd+Shift+V)" @click="triggerEditorClipboardPaste">
+                  <button v-if="!isQuickMode" class="touch-target flex items-center justify-center text-white/60 hover:text-white active:text-violet-400 rounded-lg hover:bg-white/10 px-2 shrink-0" title="Colar nesta página (Ctrl/Cmd+Shift+V)" @click="triggerEditorClipboardPaste">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H9a1 1 0 0 0-1 1v2c0 .6.4 1 1 1h6c.6 0 1-.4 1-1V3c0-.6-.4-1-1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2M16 4h2a2 2 0 0 1 2 2v2"/><path d="M12 12h4"/><path d="M12 16h4"/></svg>
                   </button>
                   <div class="w-px h-5 bg-white/10 mx-0.5 shrink-0"></div>
@@ -29784,6 +29871,7 @@ const handleAutoOfferLayout = async () => {
         :show-product-review-modal="showProductReviewModal"
         :review-products="reviewProducts"
         :product-review-initial-text="quickModeInitialProductText"
+        :product-review-initial-file="quickModeInitialProductFile"
         :product-review-auto-fill-images="quickModeAutoFillImages"
         :product-review-one-product-per-page="quickModeOneProductPerPage"
         :product-review-auto-parse="quickModeAutoParseProductText"

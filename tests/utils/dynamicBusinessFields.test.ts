@@ -244,7 +244,7 @@ it('preserva quebra de nomes longos do Instagram ao configurar um objeto recarre
 })
 
 describe('limite de linhas da validade', () => {
-  it('preserva o tamanho e as quebras do modelo em caixas estreitas e largas', () => {
+  it('mantém validade em uma linha e recupera a fonte base quando há espaço', () => {
     const object = textbox({ businessProfileField: 'validity', text: 'OFERTAS VÁLIDAS\nDE 01/04 A 07/04 ENQUANTO DURAREM OS ESTOQUES', width: 160, fontSize: 20 })
     object.initDimensions = () => {
       const count = Math.ceil(object.text.length * object.fontSize * 0.5 / object.width)
@@ -252,10 +252,10 @@ describe('limite de linhas da validade', () => {
       object.height = count * object.fontSize
     }
     fitDynamicBusinessTextObject(object)
-    expect(object.textLines.length).toBeGreaterThan(2)
-    expect(object.text).toContain('\n')
+    expect(object.textLines.length).toBe(1)
+    expect(object.text).not.toContain('\n')
     expect(object.dynamicFieldBaseFontSize).toBe(20)
-    expect(object.fontSize).toBe(20)
+    expect(object.fontSize).toBeLessThan(20)
     object.width = 1000
     fitDynamicBusinessTextObject(object)
     expect(object.textLines.length).toBe(1)

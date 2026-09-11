@@ -17,6 +17,7 @@ import { getCardTitleText } from './productCardLookup'
  * compatibilidade com inputs).
  */
 export type ZoneReviewProduct = {
+    offerFormat?: 'wholesale-pack-v1'
     id: string
     productId?: string
     productInstanceId?: string
@@ -82,6 +83,7 @@ export const mapCardToZoneReviewProduct = (
         productInstanceId: productInstanceId || undefined,
         zoneInstanceId: zoneInstanceId || undefined,
         name,
+        ...(base.offerFormat === 'wholesale-pack-v1' ? { offerFormat: base.offerFormat } : {}),
         brand: base.brand ?? '',
         weight: base.weight ?? '',
         price: base.price ?? (card as any)?.price ?? '',

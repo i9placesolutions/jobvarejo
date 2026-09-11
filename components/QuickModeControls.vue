@@ -156,7 +156,7 @@ const emit = defineEmits<{
   (event: 'delete-product', productId: string): void
   (event: 'move-product', payload: { productId: string; direction: 'up' | 'down' }): void
   (event: 'change-all-labels', templateId: string): void
-  (event: 'import', payload: { mode: QuickModeImportMode; text: string; autoFillImages: boolean; oneProductPerPage: boolean }): void
+  (event: 'import', payload: { mode: QuickModeImportMode; text: string; file?: File; autoFillImages: boolean; oneProductPerPage: boolean }): void
   (event: 'toggle-business-field', payload: { field: BusinessFieldId; enabled: boolean }): void
   (event: 'save-business-setup', payload: { businessProfile: Record<string, any>; hiddenFields: string[]; logoFile?: File | null }): void
   (event: 'update-validity', payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean; show: boolean; dateFormat: OfferDateFormat; scope: OfferValidityScope }): void
@@ -172,6 +172,21 @@ const mobileSection = ref<'products' | 'pages' | 'preview' | 'tools'>('preview')
 watch(mobileSection, value => emit('mobile-section', value))
 const activeTab = ref<'search' | 'mine'>('search')
 const listText = ref('')
+const listFile = ref<File | null>(null)
+const listFileInput = ref<HTMLInputElement | null>(null)
+const listFileError = ref('')
+const selectListFile = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  listFileError.value = ''
+  if (!file) return
+  if (!/\.(xlsx?|csv|tsv|pdf|txt)$/i.test(file.name) || file.size > 12 * 1024 * 1024 || !file.size) {
+    listFileError.value = 'Escolha uma planilha, PDF ou TXT de até 12 MB.'
+    return
+  }
+  listFile.value = file
+}
 const productListInput = ref<HTMLTextAreaElement | null>(null)
 const autoFillImages = ref(true)
 const oneProductPerPage = ref(false)
@@ -204,7 +219,7 @@ const selectedZone = computed(() => {
 
 const productCount = computed(() => selectedZone.value?.count || 0)
 const products = computed(() => Array.isArray(props.products) ? props.products : [])
-const hasListText = computed(() => listText.value.trim().length > 0)
+const hasImportContent = computed(() => !!listFile.value || listText.value.trim().length > 0)
 const selectedZoneStructure = computed(() => selectedZone.value?.structure || null)
 const selectedZoneStructureVariants = computed<ProductZoneStructureVariant[]>(() => (
   Array.isArray(selectedZone.value?.structureVariants)
@@ -512,10 +527,11 @@ const handleZoneStructureChange = (event: Event) => {
 }
 
 const submitList = (mode: QuickModeImportMode = 'replace') => {
-  if (!listText.value.trim() || props.busy) return
+  if (!hasImportContent.value || props.busy) return
   emit('import', {
     mode,
-    text: listText.value.trim(),
+    text: listFile.value ? '' : listText.value.trim(),
+    file: listFile.value || undefined,
     autoFillImages: autoFillImages.value,
     oneProductPerPage: oneProductPerPage.value
   })
@@ -538,7 +554,7 @@ const openMobileTools = () => {
 }
 
 const handlePrimaryProductAction = () => {
-  if (!hasListText.value) {
+  if (!hasImportContent.value) {
     if (productCount.value > 0) openMobileProductList()
     else startMobileProductList()
     return
@@ -870,17 +886,28 @@ const useTemplateModel = (modelId: string) => {
             <span class="quick-mobile-flow__line" aria-hidden="true"></span>
             <span class="quick-mobile-flow__step"><b>3</b>Adicionar</span>
           </div>
-          <h3>1. Cole sua lista de produtos</h3>
+          <h3>1. Envie sua lista de produtos</h3>
           <p class="quick-mobile-import-copy">Na próxima tela você confere preço, nome e imagem de cada produto antes de colocar no encarte.</p>
           <p class="quick-mode-example">
             Exemplo:
             <button type="button" @click="useExample">Picanha kg</button>
           </p>
 
+          <input ref="listFileInput" type="file" class="hidden" accept=".xlsx,.xls,.csv,.tsv,.pdf,.txt" :disabled="props.busy" @change="selectListFile" />
+          <button type="button" class="quick-mode-append-button mb-3" :disabled="props.busy" @click="listFileInput?.click()">
+            Enviar planilha ou PDF
+          </button>
+          <p v-if="listFile" class="mb-3 text-sm text-violet-200">
+            {{ listFile.name }}
+            <button type="button" class="ml-2 underline" :disabled="props.busy" @click="listFile = null">Remover arquivo</button>
+          </p>
+          <p v-if="listFileError" role="alert" class="mb-3 text-sm text-red-300">{{ listFileError }}</p>
+          <p class="mb-3 text-xs text-zinc-400">XLSX, XLS, CSV, TSV ou PDF com texto · até 12 MB. Preços, embalagem e condição de atacado serão levados para conferência.</p>
+
           <textarea
             ref="productListInput"
             v-model="listText"
-            :disabled="props.busy"
+            :disabled="props.busy || !!listFile"
             aria-label="Cole ou escreva uma lista de produtos"
             placeholder="Cole / Escreva a lista aqui. Ex: Picanha kg R$ 49,90"
           ></textarea>
@@ -911,7 +938,7 @@ const useTemplateModel = (modelId: string) => {
             :class="[
               'quick-mode-search-button',
             ]"
-            :disabled="props.busy || !hasListText"
+            :disabled="props.busy || !hasImportContent"
           >
             <span v-if="props.busy" class="quick-mode-spinner" aria-hidden="true"></span>
             {{ props.busy ? 'Analisando...' : 'Continuar para conferir produtos' }}
@@ -922,7 +949,7 @@ const useTemplateModel = (modelId: string) => {
           v-if="productCount > 0"
           type="button"
           class="quick-mode-append-button"
-          :disabled="props.busy || !hasListText"
+          :disabled="props.busy || !hasImportContent"
           @click="submitList('append')"
         >
           Adicionar sem apagar os atuais
@@ -1209,12 +1236,12 @@ const useTemplateModel = (modelId: string) => {
         type="button"
         class="quick-mode-sidebar__footer-action"
         :disabled="props.busy"
-        :aria-label="hasListText ? 'Continuar para conferir produtos' : productCount > 0 ? 'Conferir produtos do encarte' : 'Adicionar uma lista de produtos'"
+        :aria-label="hasImportContent ? 'Continuar para conferir produtos' : productCount > 0 ? 'Conferir produtos do encarte' : 'Adicionar uma lista de produtos'"
         @click="handlePrimaryProductAction"
       >
-        <ClipboardPaste v-if="!hasListText && productCount === 0" :size="18" aria-hidden="true" />
+        <ClipboardPaste v-if="!hasImportContent && productCount === 0" :size="18" aria-hidden="true" />
         <CheckCircle2 v-else :size="18" aria-hidden="true" />
-        {{ hasListText ? 'Continuar para conferir' : productCount > 0 ? 'Conferir produtos do encarte' : 'Colar lista de produtos' }}
+        {{ hasImportContent ? 'Continuar para conferir' : productCount > 0 ? 'Conferir produtos do encarte' : 'Colar lista de produtos' }}
       </button>
     </footer>
     </aside>

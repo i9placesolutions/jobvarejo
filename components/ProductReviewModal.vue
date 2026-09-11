@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { productSuggestionFamily, scoreProductFamilySuggestion } from '~/utils/productSuggestionFamily'
 import { collectAssetSearchPages } from '~/utils/collectAssetSearchPages'
 import { ref, computed, watch, nextTick } from 'vue'
 import Dialog from './ui/Dialog.vue'
@@ -10,6 +11,8 @@ import { useResponsive } from '~/composables/useResponsive'
 import { toWasabiDirectUrl } from '~/utils/storageProxy'
 import type { LabelTemplate } from '~/types/label-template'
 import { isAtacarejoTemplateGroupJson } from '~/utils/canvasJsonClassifiers'
+import { getAvailablePrices } from '~/utils/productPriceHelpers'
+import { isProductLabelTemplateCompatible } from '~/utils/productLabelCompatibility'
 
 type ImportTargetMode = 'zone' | 'multi-frame'
 type ImportSourceMode = 'manual' | 'paste-list' | 'file-import'
@@ -59,6 +62,7 @@ const props = defineProps<{
     modelValue: boolean
     initialProducts?: SmartProduct[]
     initialTextInput?: string
+    initialFile?: File | null
     autoParseOnOpen?: boolean
     quickMode?: boolean
     showImportMode?: boolean
@@ -103,7 +107,7 @@ const reviewSuggestionMap = ref<Record<string, SmartProductImageCandidate[]>>({}
 const reviewSuggestionLoadingMap = ref<Record<string, boolean>>({})
 const reviewSuggestionErrorMap = ref<Record<string, string | null>>({})
 
-const LIST_FILE_ACCEPT = 'image/*,.csv,.tsv,.xlsx,.xls,.pdf,text/plain'
+const LIST_FILE_ACCEPT = '.csv,.tsv,.xlsx,.xls,.pdf,.txt,text/plain'
 const REVIEW_PAGE_SIZE = 80
 const clampImageConcurrency = (value: number): number => Math.min(8, Math.max(1, Number.isFinite(value) ? Math.floor(value) : 0))
 const clampImageMatchMode = (value: string): ImageMatchMode => String(value) === 'fast' ? 'fast' : 'precise'
@@ -558,6 +562,10 @@ const handleFileSelected = async (event: Event) => {
     input.value = ''
     if (!file) return
 
+    await importListFile(file)
+}
+
+const importListFile = async (file: File) => {
     const shouldAppend = !!appendBaseProducts.value
     importSource.value = 'file-import'
     quickExpandedProductIndex.value = null
@@ -730,6 +738,7 @@ const withRequestTimeout = async <T>(
 }
 
 const MANUAL_UPLOAD_API_TIMEOUT_MS = 20_000
+const MANUAL_BACKGROUND_REMOVAL_TIMEOUT_MS = 240_000
 const MANUAL_UPLOAD_PRESIGNED_TIMEOUT_MS = 30_000
 const MANUAL_UPLOAD_REMOTE_COOLDOWN_MS = 2 * 60_000
 let manualUploadRemoteDisabledUntil = 0
@@ -1174,6 +1183,7 @@ const hasLabelPriceValue = (value: unknown): boolean => {
  * incompatível no modo rápido.
  */
 const productUsesMultiPriceLabel = (product: any): boolean => {
+    if (product?.offerFormat === 'wholesale-pack-v1') return true
     if (!product || typeof product !== 'object') return false
     const hasRetail = [product.priceUnit, product.pricePack, product.price]
         .some(hasLabelPriceValue)
@@ -1194,17 +1204,25 @@ const activeProductLabelMode = computed<'simple' | 'multi'>(() => (
     productUsesMultiPriceLabel(activeReviewRow.value?.product) ? 'multi' : 'simple'
 ))
 
+const activeProductOfferSummary = computed(() => {
+    const product = activeReviewRow.value?.product
+    if (product?.offerFormat !== 'wholesale-pack-v1') return activeProductLabelMode.value === 'multi' ? 'Atacado + varejo' : 'Valor simples'
+    return `Atacado por embalagem · ${getAvailablePrices(product).prices.length} preços`
+})
+
 const activeCompatibleLabelTemplates = computed(() => {
-    const mode = activeProductLabelMode.value
     return labelTemplateList.value.filter((template: any) => (
-        templateUsesMultiPriceLabel(template) === (mode === 'multi')
+        activeReviewRow.value?.product?.offerFormat === 'wholesale-pack-v1'
+            ? isProductLabelTemplateCompatible(activeReviewRow.value?.product, template)
+            : templateUsesMultiPriceLabel(template) === productUsesMultiPriceLabel(activeReviewRow.value?.product)
     ))
 })
 
 const resolveCompatibleLabelTemplateId = (product: any, requestedId?: string): string => {
-    const mode = productUsesMultiPriceLabel(product) ? 'multi' : 'simple'
     const compatible = labelTemplateList.value.filter((template: any) => (
-        templateUsesMultiPriceLabel(template) === (mode === 'multi')
+        product?.offerFormat === 'wholesale-pack-v1'
+            ? isProductLabelTemplateCompatible(product, template)
+            : templateUsesMultiPriceLabel(template) === productUsesMultiPriceLabel(product)
     ))
     const requested = String(requestedId || '').trim()
     if (requested && compatible.some((template: any) => String(template.id) === requested)) return requested
@@ -1373,11 +1391,10 @@ const filterReviewCandidatesForProduct = (
     product: any,
     candidates: SmartProductImageCandidate[]
 ): SmartProductImageCandidate[] => candidates
-    .filter((candidate) => candidateMatchesProductIdentity(product, candidate))
-    .map((candidate, index) => ({
-        ...candidate,
-        recommended: index === 0
-    }))
+    .map(candidate => ({ candidate, score: scoreProductFamilySuggestion(product, [candidate.title, candidate.key].filter(Boolean).join(' ')) }))
+    .filter(({ candidate, score }) => score > 0 || candidateMatchesProductIdentity(product, candidate))
+    .sort((a, b) => b.score - a.score)
+    .map(({ candidate }) => ({ ...candidate, recommended: candidateMatchesProductIdentity(product, candidate) }))
 
 const mergeReviewCandidates = (...lists: Array<SmartProductImageCandidate[] | undefined | null>): SmartProductImageCandidate[] => {
     const merged: SmartProductImageCandidate[] = []
@@ -1492,7 +1509,6 @@ watch(
         // produto entra em foco, mesmo quando a busca principal já aprovou a
         // primeira imagem. O helper evita uma nova requisição se já houver
         // candidatas válidas no cache.
-        if (decision === 'approved' && !isQrofertasPresentation.value) return
         const row = activeReviewRow.value
         if (!row) return
         void fetchReviewSuggestionsForRow(row)
@@ -1537,6 +1553,33 @@ const fetchReviewSuggestionsForRow = async (
 
     try {
         const headers = await getApiAuthHeaders()
+        const data = await collectAssetSearchPages<any>(async (cursor) => {
+            return await fetchUntyped('/api/assets', {
+                headers,
+                query: {
+                    q: productSuggestionFamily(row.product) || query,
+                    familySearch: '1',
+                    limit: 200,
+                    paginated: '1',
+                    cursor,
+                    ai: '0',
+                    fresh: options.force && !cursor ? '1' : undefined,
+                    productName: productSuggestionFamily(row.product),
+                    brand: '',
+                    flavor: '',
+                    weight: ''
+                }
+            })
+        })
+        const next = filterReviewCandidatesForProduct(
+            row.product,
+            data.map((asset, index) => mapAssetToReviewCandidate(asset, index))
+                .filter((candidate): candidate is SmartProductImageCandidate => !!candidate)
+        )
+        reviewSuggestionMap.value = {
+            ...reviewSuggestionMap.value,
+            [productId]: mergeReviewCandidates(reviewSuggestionMap.value[productId] || [], next)
+        }
         if (options.external) {
             expandedImageSuggestionRows.value = new Set([...expandedImageSuggestionRows.value, productId])
             const data = await fetchUntyped('/api/product-image-suggestions', {
@@ -1553,35 +1596,12 @@ const fetchReviewSuggestionsForRow = async (
             }
             return
         }
-        const data = await collectAssetSearchPages<any>(async (cursor) => {
-            return await fetchUntyped('/api/assets', {
-                headers,
-                query: {
-                    q: query,
-                    limit: 200,
-                    paginated: '1',
-                    cursor,
-                    ai: '0',
-                    fresh: options.force && !cursor ? '1' : undefined,
-                    productName: String(row.product?.name || ''),
-                    brand: String(row.product?.brand || ''),
-                    flavor: String(row.product?.flavor || ''),
-                    weight: String(row.product?.weight || '')
-                }
-            })
-        })
-        const next = filterReviewCandidatesForProduct(
-            row.product,
-            data.map((asset, index) => mapAssetToReviewCandidate(asset, index))
-                .filter((candidate): candidate is SmartProductImageCandidate => !!candidate)
-        )
-        reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: next }
     } catch (error: any) {
         reviewSuggestionErrorMap.value = {
             ...reviewSuggestionErrorMap.value,
             [productId]: String(error?.data?.statusMessage || error?.data?.message || error?.message || 'Falha ao carregar sugestões de imagem.')
         }
-        if (!options.external) reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: [] }
+        // Uma falha de atualização não apaga as sugestões já disponíveis.
     } finally {
         reviewSuggestionLoadingMap.value = { ...reviewSuggestionLoadingMap.value, [productId]: false }
     }
@@ -2298,7 +2318,13 @@ watch(() => props.modelValue, (newVal) => {
         }
     }
 
-    if (props.autoParseOnOpen && step.value === 'input' && textInput.value.trim()) {
+    if (props.initialFile && step.value === 'input') {
+        const file = props.initialFile
+        nextTick(() => {
+            if (!props.modelValue || step.value !== 'input') return
+            void importListFile(file)
+        })
+    } else if (props.autoParseOnOpen && step.value === 'input' && textInput.value.trim()) {
         nextTick(() => {
             if (!props.modelValue || !props.autoParseOnOpen || step.value !== 'input') return
             void handleParse()
@@ -2752,6 +2778,9 @@ const uploadManualImageForProduct = async (
         const browserOffline = typeof navigator !== 'undefined' && navigator.onLine === false
         const remoteDisabled = isManualUploadRemoteTemporarilyDisabled()
         const applyLocalFallback = async (reason = 'Imagem aplicada manualmente em modo fallback') => {
+            if (options.removeBackground !== false) {
+                throw new Error('Não foi possível remover o fundo. Confira a conexão e tente enviar novamente. A imagem anterior foi mantida.')
+            }
             const localDataUrl = await createLocalImageFallbackUrl(uploadBlob, file)
             if (localDataUrl) {
                 product.imageUrl = localDataUrl
@@ -2797,7 +2826,7 @@ const uploadManualImageForProduct = async (
 
         let result: any = null
         try {
-            result = await withRequestTimeout(MANUAL_UPLOAD_API_TIMEOUT_MS, (signal) =>
+            result = await withRequestTimeout(options.removeBackground === false ? MANUAL_UPLOAD_API_TIMEOUT_MS : MANUAL_BACKGROUND_REMOVAL_TIMEOUT_MS, (signal) =>
                 fetchUntyped('/api/upload-product-image', {
                     method: 'POST',
                     headers,
@@ -2806,6 +2835,9 @@ const uploadManualImageForProduct = async (
                 })
             )
         } catch (primaryErr) {
+            if (options.removeBackground !== false) {
+                throw new Error('Não foi possível concluir a remoção do fundo. Tente enviar novamente. A imagem anterior foi mantida.')
+            }
             if (isAuthFailureError(primaryErr)) {
                 console.warn('[Upload Manual] Upload remoto bloqueado por autenticação. Aplicando fallback local.', primaryErr)
                 await applyLocalFallback('Imagem aplicada localmente. Faça login novamente para persistir no storage.')
@@ -2849,6 +2881,10 @@ const uploadManualImageForProduct = async (
                     return
                 }
             }
+        }
+
+        if (options.removeBackground !== false && result?.backgroundRemovalApplied !== true) {
+            throw new Error('O servidor não confirmou a remoção do fundo. A imagem anterior foi mantida.')
         }
 
         if (result?.url) {
@@ -3836,7 +3872,7 @@ const getAssetDisplayName = (asset: any): string => {
                                         <span class="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-widest text-violet-200">
                                             <span>Trocar etiqueta</span>
                                             <span class="font-normal tracking-normal text-violet-200/60">
-                                                {{ activeProductLabelMode === 'multi' ? 'Atacado + varejo' : 'Valor simples' }}
+                                                {{ activeProductOfferSummary }}
                                             </span>
                                         </span>
                                         <select
@@ -4212,7 +4248,7 @@ const getAssetDisplayName = (asset: any): string => {
                 <label class="mt-3 grid gap-1 rounded-xl border border-violet-500/20 bg-violet-500/5 px-2.5 py-2">
                     <span class="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-widest text-violet-200">
                         <span>Trocar etiqueta</span>
-                        <span class="font-normal tracking-normal text-violet-200/60">{{ activeProductLabelMode === 'multi' ? 'Atacado + varejo' : 'Valor simples' }}</span>
+                        <span class="font-normal tracking-normal text-violet-200/60">{{ activeProductOfferSummary }}</span>
                     </span>
                     <select
                         class="h-8 w-full rounded-lg border border-violet-400/20 bg-zinc-950/70 px-2 text-[10px] text-zinc-100 outline-none focus:border-violet-300/60"
@@ -4237,10 +4273,13 @@ const getAssetDisplayName = (asset: any): string => {
                     <span>Sugestões de imagem <span v-if="activeReviewCandidates.length" class="font-normal text-zinc-500">({{ activeReviewCandidates.length }})</span></span>
                     <ChevronDown class="h-3.5 w-3.5 text-zinc-600 transition-transform" :class="isImageSuggestionsExpanded(activeReviewRowMeta.productId) ? 'rotate-180' : ''" />
                 </button>
+                <button type="button" class="mt-3 rounded-lg border border-emerald-500/30 px-3 py-2 text-xs font-semibold text-emerald-300 disabled:opacity-50" :disabled="isActiveReviewSuggestionLoading" @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })">
+                    {{ isActiveReviewSuggestionLoading ? 'Consultando biblioteca...' : 'Atualizar busca na biblioteca' }}
+                </button>
                 <div v-if="activeReviewSuggestionError && activeReviewCandidates.length" role="alert" class="mt-2 text-xs text-rose-300">{{ activeReviewSuggestionError }}</div>
                 <div v-if="isImageSuggestionsExpanded(activeReviewRowMeta.productId)" :id="`quick-image-suggestions-${activeReviewRowMeta.productId}`" class="mt-3 space-y-2">
                     <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-5 text-center text-[10px] text-zinc-500">Buscando imagens...</div>
-                    <div v-else-if="activeReviewCandidates.length" class="grid grid-cols-2 gap-2">
+                    <div v-else-if="activeReviewCandidates.length" class="grid grid-cols-2 xl:grid-cols-3 gap-2">
                         <button
                             v-for="(candidate, candidateIndex) in activeReviewCandidates"
                             :key="getReviewCandidateRenderKey(candidate, candidateIndex)"

@@ -1,3 +1,5 @@
+import { getBuilderTenantPrefix, getUserProjectsPrefix } from '../utils/storage-scope'
+import { scoreProductFamilySuggestion } from '~/utils/productSuggestionFamily'
 import { getAssetLibraryCategory, categoryFromAssetKey } from '~/utils/assetLibraryCategories'
 import { getPublicUrl, getS3Client } from "../utils/s3";
 import { getCachedS3Objects } from "../utils/s3-object-cache";
@@ -359,6 +361,13 @@ export default defineEventHandler(async (event) => {
         const queryVariants = uniqueStrings([...heuristicVariants, ...aiVariants]).slice(0, 24);
         const hasVariants = queryVariants.length > 0;
         const rawSearchNormalized = normalizeText(rawSearch);
+        // A galeria manual aceita alternativas da mesma família, inclusive
+        // nomes abreviados no storage. A busca de identidade mantém suas regras.
+        const familySearch = String(query.familySearch || '') === '1';
+        const scoreAssetText = (text: string) => Math.max(
+            scoreByTokens(text, queryVariants),
+            familySearch ? scoreProductFamilySuggestion({ name: rawSearch }, text) * 100 : 0
+        );
 
         const assetNameByKey = new Map<string, string>();
         {
@@ -387,12 +396,17 @@ export default defineEventHandler(async (event) => {
                 const listedObjects = await getCachedS3Objects({
                     s3,
                     bucket: bucketName,
-                    prefixes: libraryCategory ? [libraryCategory.prefix, "imagens/", "uploads/"] : ["imagens/", "uploads/"],
+                    prefixes: [...new Set([
+                        ...(libraryCategory ? [libraryCategory.prefix] : []),
+                        'imagens/', 'uploads/', 'logo/',
+                        getBuilderTenantPrefix(user.id), getUserProjectsPrefix(user.id)
+                    ])],
                     ttlMs: 90_000,
-                    excludeKeyPrefixes: ["imagens/bg-removed-"],
                     forceRefresh: forceFresh
                 });
-                const mapped: AssetItem[] = listedObjects.map((item) => ({
+                const mapped: AssetItem[] = listedObjects
+                    .filter(item => /\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(item.key))
+                    .map((item) => ({
                     id: `s3:${item.key}`,
                     key: item.key,
                     name: assetNameByKey.get(item.key) || extractDisplayNameFromKey(item.key),
@@ -406,7 +420,7 @@ export default defineEventHandler(async (event) => {
                 return mapped
                     .map((asset) => {
                         const text = buildSearchTextFromAsset(asset);
-                        const tokenScore = scoreByTokens(text, queryVariants);
+                        const tokenScore = scoreAssetText(text);
                         const substringBoost =
                             rawSearchNormalized && text.includes(rawSearchNormalized) ? 80 : 0;
                         return { ...asset, score: tokenScore + substringBoost };
@@ -443,7 +457,7 @@ export default defineEventHandler(async (event) => {
                 String(row.search_term || "").trim() ||
                 resolvedKey ||
                 "Imagem de produto";
-            const matchScore = hasVariants ? scoreByTokens(buildSearchTextFromCache(row), queryVariants) : 0;
+            const matchScore = hasVariants ? scoreAssetText(buildSearchTextFromCache(row)) : 0;
             // Popularidade só desempata imagens relevantes; não cria correspondência.
             if (hasVariants && matchScore <= 0) continue;
             const item: AssetItem = {
@@ -497,7 +511,7 @@ export default defineEventHandler(async (event) => {
             if (sb !== sa) return sb - sa;
             const da = a.lastModified ? new Date(a.lastModified).getTime() : 0;
             const db = b.lastModified ? new Date(b.lastModified).getTime() : 0;
-            return db - da;
+            return db - da || String(a.key || a.url).localeCompare(String(b.key || b.url));
         });
 
         const mapToPayload = async (item: AssetItem) => ({

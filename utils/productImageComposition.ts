@@ -160,7 +160,7 @@ export const collectDirectProductCardImages = (card: any): any[] => {
   })
 }
 
-/** Substitui a textura das cópias sem recriar objetos ou redistribuir o card. */
+/** Reencaixa a nova textura proporcionalmente, preservando os objetos e o card. */
 export const replaceProductImageCopies = (card: any, target: any, replacement: any, source: string): any[] => {
   const originalSource = normalizeComparableSource(getProductImageObjectSource(target))
   const images = collectDirectProductCardImages(card).filter(image =>
@@ -169,21 +169,33 @@ export const replaceProductImageCopies = (card: any, target: any, replacement: a
   if (!images.includes(target) || !replacement?.getElement?.()) return []
   const width = Math.max(1, Number(replacement.width) || 1)
   const height = Math.max(1, Number(replacement.height) || 1)
+  const cardWidth = Math.max(1, Number(card._cardWidth || card.width))
+  const cardHeight = Math.max(1, Number(card._cardHeight || card.height))
+  const allImages = collectDirectProductCardImages(card)
+  const count = allImages.length
+  const columns = count <= 3 ? count : Math.ceil(Math.sqrt(count))
+  const rows = Math.ceil(count / columns)
+  const children = card.getObjects?.() || []
+  const edge = (o: any, bottom: boolean) => {
+    const size = Math.abs(Number(o.height || 0) * Number(o.scaleY ?? 1))
+    const top = Number(o.top || 0) - (o.originY === 'top' ? 0 : o.originY === 'bottom' ? size : size / 2)
+    return top + (bottom ? size : 0)
+  }
+  const title = children.find((o: any) => o.name === 'smart_title')
+  const price = children.find((o: any) => /^(smart_price|price_group|priceGroup)$/.test(o.name || ''))
+  const areaTop = Math.max(-cardHeight * .32, title ? edge(title, true) + cardHeight * .025 : -cardHeight * .32)
+  const areaBottom = Math.min(cardHeight * .32, price ? edge(price, false) - cardHeight * .025 : cardHeight * .32)
+  const areaHeight = Math.max(cardHeight * .12, areaBottom - areaTop)
+  const cellWidth = cardWidth * .86 / columns
+  const cellHeight = areaHeight / rows
   for (const image of images) {
-    const cardWidth = Math.max(1, Number(card._cardWidth || card.width))
-    const cardHeight = Math.max(1, Number(card._cardHeight || card.height))
-    const oldWidth = Math.abs(Number(image.width) * Number(image.scaleX ?? 1))
-    const oldHeight = Math.abs(Number(image.height) * Number(image.scaleY ?? 1))
-    const oversized = oldWidth > cardWidth || oldHeight > cardHeight
-    const fit = Math.min(cardWidth * 0.86 / width, cardHeight * 0.64 / height)
-    const scaleX = oversized ? fit : oldWidth / width
-    const scaleY = oversized ? fit : oldHeight / height
-    const halfW = width * scaleX / 2
-    const halfH = height * scaleY / 2
-    const left = oversized ? 0 : Math.max(-cardWidth / 2 + halfW, Math.min(cardWidth / 2 - halfW, Number(image.left || 0)))
-    const top = oversized ? 0 : Math.max(-cardHeight / 2 + halfH, Math.min(cardHeight / 2 - halfH, Number(image.top || 0)))
+    const index = allImages.indexOf(image)
+    const scaleX = Math.min(cellWidth / width, cellHeight / height)
+    const scaleY = scaleX
+    const left = -cardWidth * .43 + cellWidth * (index % columns + .5)
+    const top = areaTop + cellHeight * (Math.floor(index / columns) + .5)
     image.setElement(replacement.getElement())
-    image.set({ width, height, scaleX, scaleY, left, top,
+    image.set({ width, height, scaleX, scaleY, left, top, originX: 'center', originY: 'center',
       cropX: Number(replacement.cropX || 0), cropY: Number(replacement.cropY || 0),
       src: source, __originalSrc: source, dirty: true,
       __manualTransform: true,

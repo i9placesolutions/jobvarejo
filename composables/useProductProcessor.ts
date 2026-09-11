@@ -17,6 +17,7 @@ export interface SmartProductImageCandidate {
 }
 
 export interface SmartProduct {
+    offerFormat?: 'wholesale-pack-v1';
     id: string;
     productId?: string | null;
     productInstanceId?: string | null;
@@ -333,6 +334,7 @@ export const useProductProcessor = () => {
         return data.products.map((p: any) => ({
             id: makeId(),
             name: p.name || 'Produto sem nome',
+            offerFormat: p.offerFormat,
             brand: p.brand || '',
             productCode: p.productCode || null,
             weight: p.weight || '',

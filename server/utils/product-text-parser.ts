@@ -1,3 +1,5 @@
+import { extractPurchaseLimit } from '../../utils/productPurchaseLimit'
+
 // Parser deterministico de listas de produtos.
 // Substitui a chamada OpenAI no /api/parse-products para os formatos suportados:
 // - Texto livre (uma linha por produto, ex: "coca cola 2lt 12,99 limite 12 por cliente")
@@ -6,6 +8,7 @@
 
 export type ParsedProduct = {
   name: string
+  offerFormat?: 'wholesale-pack-v1'
   productCode: string | null
   brand: string | null
   weight: string | null
@@ -191,42 +194,7 @@ export const extractDefaultSpecialRuleFromSource = (
 // Extracao de "limite por cliente" (LIMITE 3 UND POR CLIENTE, etc.)
 // ============================================================================
 
-const LIMIT_PATTERNS: RegExp[] = [
-  // LIMITE 3 UND POR CLIENTE / LIM. 5 UN POR PESSOA
-  /(lim(?:ite|\.)?)\s+(\d{1,3})\s*(un[d.]?|unid(?:ades?)?|pct|cx|fd|fardo|caixa|pacote)?\s*(?:por\s+(cliente|pessoa))?/i,
-  // MÁXIMO 2 POR CLIENTE / MAX 5 UN
-  /(m[aá]x(?:imo|\.)?)\s+(\d{1,3})\s*(un[d.]?|unid(?:ades?)?)?\s*(?:por\s+(cliente|pessoa))?/i,
-  // ATÉ 4 UN POR CLIENTE
-  /(at[eé])\s+(\d{1,3})\s*(un[d.]?|unid(?:ades?)?)\s+por\s+(cliente|pessoa)/i,
-  // LIMITADO A 3
-  /(limitado\s+a)\s+(\d{1,3})\s*(un[d.]?|unid(?:ades?)?)?(?:\s+por\s+(cliente|pessoa))?/i
-]
-
-export const extractLimitFromText = (raw: string): { limit: string | null; rest: string } => {
-  if (!raw) return { limit: null, rest: '' }
-  let text = raw
-
-  for (const pattern of LIMIT_PATTERNS) {
-    const m = text.match(pattern)
-    if (!m) continue
-    const qty = Number.parseInt(m[2] || '', 10)
-    if (!Number.isFinite(qty) || qty <= 0) continue
-
-    const unitRaw = (m[3] || '').toLowerCase()
-    const unit = unitRaw.startsWith('un') ? 'UN'
-      : unitRaw === 'pct' || unitRaw.startsWith('pacote') ? 'PCT'
-      : unitRaw === 'cx' || unitRaw.startsWith('caixa') ? 'CX'
-      : unitRaw === 'fd' || unitRaw.startsWith('fardo') ? 'FD'
-      : 'UN'
-    const target = (m[4] || '').toLowerCase() === 'pessoa' ? 'POR PESSOA' : 'POR CLIENTE'
-
-    const limit = `LIMITE ${qty} ${unit} ${target}`
-    const rest = (text.slice(0, m.index) + text.slice((m.index || 0) + m[0].length)).replace(/\s{2,}/g, ' ').trim()
-    return { limit, rest }
-  }
-
-  return { limit: null, rest: text }
-}
+export const extractLimitFromText = extractPurchaseLimit
 
 // ============================================================================
 // Parser de TEXTO LIVRE
@@ -256,7 +224,16 @@ export const parseProductsFromFreeText = (raw: string): ParsedProduct[] => {
   const text = String(raw || '').trim()
   if (!text) return []
 
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  const lines: string[] = []
+  for (const line of text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)) {
+    const restriction = extractLimitFromText(line)
+    if (restriction.limit && !restriction.rest && lines.length) {
+      // PDFs/listas podem colocar a restrição em uma segunda linha da descrição.
+      lines[lines.length - 1] += ` ${line}`
+    } else {
+      lines.push(line)
+    }
+  }
   const products: ParsedProduct[] = []
 
   for (const line of lines) {
@@ -270,6 +247,10 @@ export const parseProductsFromFreeText = (raw: string): ParsedProduct[] => {
     const matches: { value: string; index: number; length: number }[] = []
     let m: RegExpExecArray | null
     while ((m = PRICE_TOKEN_REGEX.exec(afterLimit)) !== null) {
+      // Peso/volume decimal pertence à descrição: 1,01KG não é R$ 1,01.
+      // R$ 11,99 KG e 11,99/KG continuam sendo preços explicitamente indicados.
+      const suffix = afterLimit.slice(m.index + m[0].indexOf(m[1]!) + m[1]!.length)
+      if (!/^r\$/i.test(m[0]) && /^\s*(?:kg|mg|gr?|ml|lt?|litros?)\b/i.test(suffix)) continue
       matches.push({ value: m[1] || '', index: m.index, length: m[0].length })
     }
 
@@ -447,9 +428,9 @@ const matchHeaderToField = (header: string): FieldMapping | null => {
   // Fallback: busca parcial por palavras-chave (ordem: especificos antes de genericos)
   const norm = cleaned.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim()
   const hasPreco = /\bPRE[CÇ]?O\b/.test(norm)
-  const hasCx = /\b(CX|CAIXA)\b/.test(norm)
+  const hasCx = /\b(CX|CAIXA|FARDO|FD|PACOTE|PCT|PACK|SIXPACK|POTE)\b/.test(norm)
   const hasUn = /\b(UN[D.]?|UNIDADE|UNITARIO)\b/.test(norm)
-  const hasEspecial = /\b(ESPECIAL|ESP\.?|ACIMA|PROMO)\b/.test(norm)
+  const hasEspecial = /\b(ESPECIAL|ESP\.?|ACIMA|PROMO|ATACADO)\b/.test(norm)
   // Preco + CX/UN + ESPECIAL → campo especial (DEVE vir antes do generico)
   if (hasPreco && hasCx && hasEspecial) return 'priceSpecial'
   if (hasPreco && hasUn && hasEspecial) return 'priceSpecialUnit'
@@ -548,15 +529,15 @@ export const parseProductsFromTable = (raw: string): ParsedProduct[] => {
     }
   }
 
-  // Detectar colunas nao mapeadas que podem ser specialCondition (ultima coluna com texto)
-  const hasMappedCondition = fieldMap.includes('specialCondition')
-  if (!hasMappedCondition) {
-    // Procura a ultima coluna nao mapeada — provavel condicao
+  // Uma coluna sem mapeamento pode ser posição na lâmina, código ou categoria.
+  // Só inferimos condição a partir do conteúdo comercial, nunca pelo simples fato
+  // de ser a última coluna desconhecida (posição "1" não é condição de atacado).
+  if (!fieldMap.includes('specialCondition')) {
     for (let c = fieldMap.length - 1; c >= 0; c--) {
-      if (fieldMap[c] !== null) continue
-      const headerText = (headerCells[c] || '').trim()
-      // Se o header nao esta vazio e nao parece numerico, assumir que e condicao
-      if (headerText && !/^\d/.test(headerText)) {
+      if (fieldMap[c] !== null && fieldMap[c] !== 'priceSpecial') continue
+      const samples = lines.slice(dataStartIdx, dataStartIdx + 20)
+        .map(line => (splitRow(line, sep)[c] || '').trim()).filter(Boolean)
+      if (samples.length && samples.every(value => /^(?:ACIMA\b|A PARTIR\b|QUALQUER QUANTIDADE\b|M[IÍ]NIMO\b)/i.test(value))) {
         fieldMap[c] = 'specialCondition'
         break
       }
@@ -571,13 +552,18 @@ export const parseProductsFromTable = (raw: string): ParsedProduct[] => {
   }
 
   const products: ParsedProduct[] = []
+  const isWholesalePackTable = fieldMap.includes('packageLabel') && fieldMap.includes('packQuantity')
+    && fieldMap.includes('pricePack') && fieldMap.includes('priceUnit')
+    && fieldMap.includes('priceSpecial') && fieldMap.includes('priceSpecialUnit')
   const defaultRule = extractDefaultSpecialRuleFromSource(text)
 
   for (let i = dataStartIdx; i < lines.length; i++) {
     const cells = splitRow(lines[i]!, sep)
     if (cells.length === 1 && !cells[0]?.trim()) continue
 
+    if (cells.map(matchHeaderToField).includes('name')) continue
     const product = emptyProduct()
+    if (isWholesalePackTable) product.offerFormat = 'wholesale-pack-v1'
     let nameRaw = ''
 
     for (let c = 0; c < headerCells.length; c++) {
@@ -655,6 +641,14 @@ export const parseProductsFromTable = (raw: string): ParsedProduct[] => {
       if (codeFromName) product.productCode = codeFromName
     }
 
+    // A quantidade da embalagem e o gatilho da oferta são campos distintos.
+    if (product.packQuantity !== null) product.packUnit = 'UN'
+    const trigger = product.specialCondition?.match(/^(?:ACIMA\s+DE|A\s+PARTIR\s+DE|M[IÍ]NIMO(?:\s+DE)?)\s+(\d+)\s+(.+)$/i)
+    if (trigger) {
+      product.wholesaleTrigger = Number(trigger[1])
+      product.wholesaleTriggerUnit = normalizePackageUnit(trigger[2])
+    }
+
     // Preco principal (legacy)
     if (!product.price) {
       product.price = product.priceUnit || product.pricePack || null
@@ -705,20 +699,6 @@ export const postProcessProducts = (products: ParsedProduct[]): ParsedProduct[] 
     }
     if (prod.priceSpecialUnit && !prod.priceSpecial && prod.packQuantity === 1) {
       prod.priceSpecial = prod.priceSpecialUnit
-    }
-
-    // FIX: peso interpretado como preco ("CHAMBARI 12,99 kg")
-    if (!prod.price && !prod.priceUnit && !prod.pricePack && prod.weight) {
-      const weightStr = String(prod.weight).trim()
-      const weightPriceMatch = weightStr.match(/^(\d{1,4}[.,]\d{2})\s*(?:KG|UN[D.]?|LT|ML|PCT|G|GR)$/i)
-      if (weightPriceMatch) {
-        const extractedPrice = normalizePrice(weightPriceMatch[1])
-        if (extractedPrice) {
-          prod.price = extractedPrice
-          prod.priceUnit = extractedPrice
-          prod.weight = null
-        }
-      }
     }
 
     if (!prod.price) {
