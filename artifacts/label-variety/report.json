@@ -1,0 +1,191 @@
+{
+  "date": "2026-09-11T12:14:25.382Z",
+  "models": 26,
+  "pages": 120,
+  "styles": 8,
+  "verified": true,
+  "assignments": [
+    {
+      "projectId": "e3c01941-7973-4999-9886-082332bdd00b",
+      "name": "Fim de Semana da Família",
+      "labelId": "z2re0yurd",
+      "labelName": "vermelha/oval",
+      "pages": 5
+    },
+    {
+      "projectId": "5dfbc32d-16a7-4f66-90fa-7256719cbe17",
+      "name": "Fds do hortifruti",
+      "labelId": "z2re0yurd",
+      "labelName": "vermelha/oval",
+      "pages": 5
+    },
+    {
+      "projectId": "c69acb2e-1446-40a5-913e-82cfd822cffc",
+      "name": "Ofertas da semana",
+      "labelId": "tpl_red_burst",
+      "labelName": "VERMELHA",
+      "pages": 5
+    },
+    {
+      "projectId": "1b226234-5206-491c-840b-59f1ad401af6",
+      "name": "Segunda suína",
+      "labelId": "h1zcro9bo",
+      "labelName": "PRETA VERMELHA AMARELA",
+      "pages": 2
+    },
+    {
+      "projectId": "60114ab3-bb51-4e81-b164-9afa2ecd3437",
+      "name": "Terça verde",
+      "labelId": "nz2bk9f8m",
+      "labelName": "preto/amarelo 3d",
+      "pages": 1
+    },
+    {
+      "projectId": "6d2a76ae-d271-4957-9d39-baf0532c016d",
+      "name": "Independênica de preços baixos",
+      "labelId": "tpl_black_yellow",
+      "labelName": "Preto/Amarelo",
+      "pages": 2
+    },
+    {
+      "projectId": "4b8b98f0-9a34-46e3-ab41-ddcc6135c79d",
+      "name": "Terça e quarta verde",
+      "labelId": "tpl_default",
+      "labelName": "Padrão",
+      "pages": 5
+    },
+    {
+      "projectId": "fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+      "name": "Fim de Semana Maluco",
+      "labelId": "tpl_barlow_black",
+      "labelName": "Barlow Black",
+      "pages": 5
+    },
+    {
+      "projectId": "88947f96-face-4e89-b6a1-3f3f2044d97b",
+      "name": "Quinta da Carne",
+      "labelId": "tpl_oferta_amarela",
+      "labelName": "Oferta (amarela)",
+      "pages": 5
+    },
+    {
+      "projectId": "28df0d96-3190-422a-a698-ed3f47fe7cc9",
+      "name": "Aqui tem mais oferta",
+      "labelId": "z2re0yurd",
+      "labelName": "vermelha/oval",
+      "pages": 5
+    },
+    {
+      "projectId": "7506f335-2bf6-4650-8206-b283585a5a16",
+      "name": "Terça e quarta verde",
+      "labelId": "tpl_red_burst",
+      "labelName": "VERMELHA",
+      "pages": 5
+    },
+    {
+      "projectId": "ab7f7789-7298-4b34-b4c7-6d8f583d870a",
+      "name": "Terça e quarta verde",
+      "labelId": "h1zcro9bo",
+      "labelName": "PRETA VERMELHA AMARELA",
+      "pages": 5
+    },
+    {
+      "projectId": "9bb5f0d1-bdc7-4560-a4fd-511b32610b0a",
+      "name": "Quinta e Sexta Imbatível — Azul",
+      "labelId": "tpl_barlow_black",
+      "labelName": "Barlow Black",
+      "pages": 5
+    },
+    {
+      "projectId": "6e394169-6597-4d8a-afcc-191412fc2430",
+      "name": "Quinta e Sexta Imbatível",
+      "labelId": "tpl_black_yellow",
+      "labelName": "Preto/Amarelo",
+      "pages": 5
+    },
+    {
+      "projectId": "3d1e6929-a287-4a65-9874-eb2204fa46bc",
+      "name": "Quinta da Carne — Dourada",
+      "labelId": "nz2bk9f8m",
+      "labelName": "preto/amarelo 3d",
+      "pages": 5
+    },
+    {
+      "projectId": "87d633a3-da24-4245-90e7-7000cf26f988",
+      "name": "Fim de Semana Imbatível",
+      "labelId": "tpl_barlow_black",
+      "labelName": "Barlow Black",
+      "pages": 5
+    },
+    {
+      "projectId": "66aaabb8-33ef-43f3-a3f4-f8cb406f8862",
+      "name": "Terça e quarta mais verde",
+      "labelId": "tpl_oferta_amarela",
+      "labelName": "Oferta (amarela)",
+      "pages": 5
+    },
+    {
+      "projectId": "3f7ab336-b854-4f50-9c06-893e14247418",
+      "name": "Quinta Maluca",
+      "labelId": "tpl_oferta_amarela",
+      "labelName": "Oferta (amarela)",
+      "pages": 5
+    },
+    {
+      "projectId": "ae849f4d-db0f-49eb-851c-97150216e4bb",
+      "name": "Dia de hortifruti",
+      "labelId": "tpl_red_burst",
+      "labelName": "VERMELHA",
+      "pages": 5
+    },
+    {
+      "projectId": "2db9ae75-936e-4f95-815c-636a3c5bb0c4",
+      "name": "Terça e quarta mais verde",
+      "labelId": "h1zcro9bo",
+      "labelName": "PRETA VERMELHA AMARELA",
+      "pages": 5
+    },
+    {
+      "projectId": "990c6cb5-a6f6-428a-b044-8721319ab6e4",
+      "name": "Sextooou",
+      "labelId": "h1zcro9bo",
+      "labelName": "PRETA VERMELHA AMARELA",
+      "pages": 5
+    },
+    {
+      "projectId": "a715443f-d6b4-45ed-a28f-18b1e8517c42",
+      "name": "Sexta do hortifruti",
+      "labelId": "tpl_black_yellow",
+      "labelName": "Preto/Amarelo",
+      "pages": 5
+    },
+    {
+      "projectId": "2eabb51f-7918-497e-9aa5-40a05a15c102",
+      "name": "Mês do consumidor 3d",
+      "labelId": "tpl_default",
+      "labelName": "Padrão",
+      "pages": 5
+    },
+    {
+      "projectId": "d214f77a-3d3a-4f42-8cac-43f6234265f2",
+      "name": "Quinta da carne",
+      "labelId": "tpl_barlow_black",
+      "labelName": "Barlow Black",
+      "pages": 5
+    },
+    {
+      "projectId": "bfad873e-26f2-4abb-a219-6be73ef7bd4b",
+      "name": "Quarta e quinta verde",
+      "labelId": "tpl_oferta_amarela",
+      "labelName": "Oferta (amarela)",
+      "pages": 5
+    },
+    {
+      "projectId": "1d98aad4-2379-4f8d-bc7d-0e89f03693e2",
+      "name": "Quarta mais verde",
+      "labelId": "z2re0yurd",
+      "labelName": "vermelha/oval",
+      "pages": 5
+    }
+  ]
+}
