@@ -23,7 +23,7 @@ export const loadArtFonts = async (doc: ArtComposition) => {
           700: 'Bold',
           800: 'ExtraBold'
         }
-        const special: Record<string,string> = {'Patua One':'PatuaOne-Regular.ttf','Consumidor Referencia':'ConsumidorReferencia-Regular.ttf','Russo One':'RussoOne-Regular.ttf','Roboto Slab':'RobotoSlab[wght].ttf',Audiowide:'Audiowide-Regular.ttf','Bebas Neue':'BebasNeue-Regular.ttf',Caveat:'Caveat[wght].ttf'}
+        const special: Record<string,string> = {'Montserrat':'Montserrat[wght].ttf','Patua One':'PatuaOne-Regular.ttf','Consumidor Referencia':'ConsumidorReferencia-Regular.ttf','Russo One':'RussoOne-Regular.ttf','Roboto Slab':'RobotoSlab[wght].ttf',Audiowide:'Audiowide-Regular.ttf','Bebas Neue':'BebasNeue-Regular.ttf',Caveat:'Caveat[wght].ttf'}
         const file = special[family] || (family === 'Oswald'
             ? 'Oswald[wght].ttf'
             : `${familyFiles[family] || 'Barlow'}-${family === 'Anton' ? 'Regular' : suffix[weight] || 'Regular'}.ttf`)

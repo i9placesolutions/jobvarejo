@@ -27,11 +27,11 @@ export const useUpload = () => {
         return data as UploadResult
     }
 
-    const uploadFile = async (file: File): Promise<UploadResult> => {
+    const uploadFile = async (file: File, options?: { removeBackground?: boolean }): Promise<UploadResult> => {
         isUploading.value = true
         error.value = null
         try {
-            return await uploadSingle(file)
+            return await uploadSingle(file, options?.removeBackground)
         } catch (err: any) {
             console.error('Upload failed:', err)
             error.value = err?.message || 'Falha no upload'

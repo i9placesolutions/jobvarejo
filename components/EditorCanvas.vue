@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { isSplitFooterValidity, splitFooterValidityText } from '~/utils/splitFooterValidity'
+import { createWholesaleReferenceTemplateJson, WHOLESALE_REFERENCE_TEMPLATE_ID, WHOLESALE_REFERENCE_MARKER } from '~/utils/wholesaleReferenceLayout'
 import { updateIsolatedPageFields } from '~/utils/isolatedPageFields'
 import { registerCanvasImageLoadSession } from '~/utils/canvasImageLoadSession'
 import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
@@ -157,7 +159,7 @@ import { isCollaboratorsCacheValid } from '~/utils/collaboratorsCache'
 import { reviveRedBurstObjectNode, sanitizeRedBurstTemplateGroupJson, isRedBurstPriceGroup } from '~/utils/redBurstTemplateRevive'
 import { normalizeGlobalStyles as normalizeGlobalStylesHelper } from '~/utils/globalStylesNormalize'
 import { repairLivePriceGroupBackgrounds as repairLivePriceGroupBackgroundsHelper } from '~/utils/livePriceGroupRepair'
-import { createStickerOutlineRuntime } from '~/utils/editorStickerOutline'
+import { createStickerOutlineRuntime, restoreCanvasStickerOutlines } from '~/utils/editorStickerOutline'
 import {
     extractWeightTokenForHeader,
     normalizeHeaderWeightToken,
@@ -1455,6 +1457,7 @@ const ensureLabelTemplatesReady = async () => {
     await ensureBuiltInDefaultLabelTemplate();
     await ensureBuiltInAtacarejoLabelTemplate();
     await ensureBuiltInFardoSpecialLabelTemplate();
+    await ensureWholesaleReferenceLabelTemplate();
     await ensureBuiltInBlackYellowLabelTemplate();
     await ensureBuiltInOfertaAmarelaLabelTemplate();
     await ensureBuiltInRedBurstLabelTemplate();
@@ -5688,12 +5691,12 @@ type ImageLoadTracker = {
 
 let activeImageLoadTracker: ImageLoadTracker | null = null
 let imageProgressRafId: number | null = null
-// Cada imagem remota tem prazo próprio de 15s e fallback isolado. O limite
+// Cada imagem remota tem duas tentativas de 30s e fallback isolado. O limite
 // global precisa deixar margem para o Fabric montar grupos/filtros e carregar
 // os placeholders, sem interromper a sessão antes do tratamento individual.
-const CANVAS_LOAD_TIMEOUT_BASE_MS = 20_000
+const CANVAS_LOAD_TIMEOUT_BASE_MS = 70_000
 const CANVAS_LOAD_TIMEOUT_PER_IMAGE_MS = 300
-const CANVAS_LOAD_TIMEOUT_MAX_MS = 30_000
+const CANVAS_LOAD_TIMEOUT_MAX_MS = 80_000
 const CANVAS_IMAGE_LOAD_TIMEOUT_NAME = 'CanvasImageLoadTimeoutError'
 
 const getCanvasLoadTimeoutMs = (sessionId: number): number => {
@@ -5909,7 +5912,8 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     let failedImages = 0
     const unregisterImageSession = abortController
         ? registerCanvasImageLoadSession(fabric.FabricImage || fabric.Image, abortController.signal, {
-            timeoutMs: 15_000,
+            timeoutMs: 30_000,
+            retryCount: 1,
             onSettled: (src, failed) => {
                 if (failed) failedImages += 1
                 const tracker = activeImageLoadTracker
@@ -5952,6 +5956,7 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
         })
         await Promise.race([loadPromise, timeoutPromise])
         if (sessionId !== activePageLoadSessionId || isCanvasDestroyed.value) throw new Error('Load session became stale')
+        restoreCanvasStickerOutlines(canvas.value)
         return failedImages
     } catch (error) {
         if (loadTimedOut) {
@@ -8975,7 +8980,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     if (loadedOk) {
         if (isQuickMode.value && reconcileQuickPageFormatGeometry(pageToLoad, canvas.value.getObjects())) {
             repairedQuickPageGeometry = true
-            void ensureQuickPageThumbnail(pageToLoad)
+        }
+        if (isQuickMode.value && !storageDegraded.value) {
+            void ensureQuickPageThumbnail(pageToLoad, true)
         }
         completedPageLoadSessionId = loadSessionId
         lastLoadedPageKey = nextPageId ? nextPageLoadKey : null
@@ -17387,6 +17394,8 @@ const importOneProductPerPage = async (products: any[], opts?: ProductImportOpti
     notifyEditorInfo(`${snapshots.length} produtos distribuídos: o primeiro na página atual e os demais nas cópias.`)
 }
 
+const quickCompletedProductReviews = ref(0)
+
 // Confirm import from review modal
 const confirmProductImport = async (products: any[], opts?: ProductImportOptions) => {
     if (isConfirmingProductImport.value) {
@@ -17406,6 +17415,7 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
 
         if (opts?.oneProductPerPage) {
             await importOneProductPerPage(products, opts)
+            if (isQuickMode.value) quickCompletedProductReviews.value += 1
             return
         }
         const targetMode: ImportTargetMode = opts?.targetMode === 'multi-frame' ? 'multi-frame' : 'zone'
@@ -17447,6 +17457,7 @@ const confirmProductImport = async (products: any[], opts?: ProductImportOptions
                 syncZoneDerivedMetadata(zone)
             }
         }
+        if (isQuickMode.value) quickCompletedProductReviews.value += 1
     } catch (error: any) {
         notifyEditorError(error?.message || 'Não foi possível importar os produtos.')
     } finally {
@@ -18972,7 +18983,7 @@ const applyQuickBusinessProfileBindings = async (
         markQuickDynamicObjectDirty(object)
     })
 
-    const textLayoutRepair = repairDynamicTextLayoutBounds(canvas.value.getObjects())
+    const textLayoutRepair = repairDynamicTextLayoutBounds(canvas.value.getObjects(), createQuickValidityBackdrop)
     if (textLayoutRepair.changed) {
         changed = true
         sanitizeAllClipPaths()
@@ -19015,14 +19026,21 @@ const persistInactiveQuickBusinessFields = async () => {
         const index = project.pages.findIndex((page: any) => page.id === pageId)
         const page = project.pages[index]
         if (!page?.canvasData) continue
+        const splitValidity = (page.canvasData.objects || []).some(isSplitFooterValidity)
+        const splitText = validity ? splitFooterValidityText(validity) : null
         let updated = updateIsolatedPageFields(page.canvasData, object => {
+            if (splitValidity && splitText && ['validity-heading', 'stock-validity', 'validity-backdrop'].includes(object.name)) {
+                if (object.name === 'validity-backdrop') return { visible: false }
+                const text = object.name === 'validity-heading' ? splitText.heading : splitText.stock
+                return { text, visible: validity?.show !== false && validity?.dateFormat !== 'hidden' && !!splitText.period && !!text }
+            }
             const isValidity = object.quickDataField === 'validity' || object.businessProfileField === 'validity'
             const field = isValidity && validity ? 'validity' : getQuickBusinessFieldFromObject(object)
             if (!field) return null
             const enabled = field === 'validity' ? validity?.show !== false && validity?.dateFormat !== 'hidden' : overrides[field] ?? object.quickFieldEnabled !== false
             if (field === 'logo') return { quickFieldEnabled: enabled, visible: enabled && !!getQuickLogoSource(profile) }
             if (!['text', 'textbox', 'i-text'].includes(String(object.type || '').toLowerCase())) return null
-            const text = field === 'validity' ? String(validityText || '') : getQuickBusinessProfileValue(profile, field)
+            const text = field === 'validity' ? (isSplitFooterValidity(object) && splitText ? splitText.period : String(validityText || '')) : getQuickBusinessProfileValue(profile, field)
             const runtime = new fabric.Textbox(String(object.text || ''), { ...object })
             configureDynamicBusinessTextObject(runtime, fabric)
             setQuickDynamicTextValue(runtime, text)
@@ -19112,6 +19130,14 @@ const handleQuickModeBusinessFieldToggle = async (payload: { field?: string; ena
     await persistQuickModeDataChange(`quick-data-field:${field}`)
 }
 
+function createQuickValidityBackdrop(props: Record<string, any>, index: number) {
+    if (!canvas.value || !fabric) return null
+    const rect = new fabric.Rect({ ...props, _customId: makeId() })
+    canvas.value.insertAt(Math.max(0, index), rect)
+    syncObjectFrameClip(rect)
+    return rect
+}
+
 const handleQuickModeValidityUpdate = (payload: {
     dateFormat?: OfferDateFormat
     startDate?: string
@@ -19178,7 +19204,27 @@ const handleQuickModeValidityUpdate = (payload: {
             quickOfferScope: { ...quickOfferScope.value },
             visible: quickShowValidity.value && !!nextText
         })
-        setQuickDynamicTextValue(object, nextText)
+        const split = isSplitFooterValidity(object)
+        const splitText = splitFooterValidityText({ startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value })
+        setQuickDynamicTextValue(object, split ? splitText.period : nextText)
+        if (split) {
+            object.set({ quickValidityLayout: 'split-footer', visible: quickShowValidity.value && !!splitText.period })
+            for (const sibling of canvas.value?.getObjects() || []) {
+                if (sibling.parentFrameId !== object.parentFrameId) continue
+                if (sibling.name === 'validity-backdrop') sibling.set({ visible: false })
+                if (sibling.name === 'validity-heading' || sibling.name === 'stock-validity') {
+                    const text = sibling.name === 'validity-heading' ? splitText.heading : splitText.stock
+                    setQuickDynamicTextValue(sibling, text)
+                    sibling.set({ visible: quickShowValidity.value && !!splitText.period && !!text })
+                    markQuickDynamicObjectDirty(sibling)
+                }
+            }
+        }
+        for (const sibling of canvas.value?.getObjects() || []) {
+            if (sibling.parentFrameId === object.parentFrameId && ((!split && sibling.name === 'validity-backdrop') || sibling.quickDynamicIconFor === 'validity')) {
+                sibling.set({ visible: quickShowValidity.value && !!nextText, dirty: true })
+            }
+        }
         const validityContainer = getOfferValidityVisibilityTarget(object)
         if (validityContainer !== object) {
             validityContainer.set({ visible: quickShowValidity.value && !!nextText })
@@ -19187,7 +19233,7 @@ const handleQuickModeValidityUpdate = (payload: {
         markQuickDynamicObjectDirty(object)
         changed = true
     })
-    const layoutRepair = repairDynamicTextLayoutBounds(canvas.value?.getObjects() || [])
+    const layoutRepair = repairDynamicTextLayoutBounds(canvas.value?.getObjects() || [], createQuickValidityBackdrop)
     if (layoutRepair.changed) sanitizeAllClipPaths()
     quickModeDataVersion.value += 1
     if (!changed && !layoutRepair.changed) return
@@ -19407,12 +19453,13 @@ const waitForTemplatePageReady = async (pageId: string, afterLoadSession = -1): 
     return false
 }
 
-const ensureQuickPageThumbnail = async (page: any): Promise<void> => {
+const ensureQuickPageThumbnail = async (page: any, refresh = false): Promise<void> => {
     // A materialized template page must have its own thumbnail. Reusing the
     // source thumbnail can preserve a stale crop/letterbox from another
     // format (especially Story), even when the live canvas is correct.
     const isTemplatePage = isTemplateCompositionManagedPage(page)
-    if (!page?.id || page.thumbnail || (!isTemplatePage && page.thumbnailUrl) || !page.canvasData || !fabric?.StaticCanvas) return
+    if (!page?.id || (!refresh && (page.thumbnail || (!isTemplatePage && page.thumbnailUrl))) || !page.canvasData || !fabric?.StaticCanvas) return
+    const sourceFingerprint = computeCanvasFingerprint(page.canvasData)
     try {
         const dataURL = await generateThumbnailFromCanvasJson({
             sourceJson: page.canvasData,
@@ -19424,7 +19471,10 @@ const ensureQuickPageThumbnail = async (page: any): Promise<void> => {
         })
         if (!dataURL) return
         const pageIndex = project.pages.findIndex((item: any) => String(item?.id || '').trim() === String(page.id).trim())
-        if (pageIndex >= 0) updatePageThumbnail(pageIndex, dataURL)
+        if (pageIndex >= 0 && computeCanvasFingerprint(project.pages[pageIndex]?.canvasData) === sourceFingerprint) {
+            updatePageThumbnail(pageIndex, dataURL)
+            if (refresh) triggerAutoSave()
+        }
     } catch (error) {
         // A miniatura é um aprimoramento visual; a página continua válida
         // mesmo se uma imagem remota não puder ser renderizada no offscreen.
@@ -23203,6 +23253,17 @@ const applyFardoSpecialPricingToPriceGroup = (pg: any, data: any) => {
     if (wholesalePack) setVisible(wholesalePack, state.showSpecial && !!state.special.packLine)
 
     const preserveTemplateVisual = shouldPreserveManualTemplateVisual(pg)
+    const referencePackaging = find(WHOLESALE_REFERENCE_MARKER)
+    if (referencePackaging) {
+        const aliases: Record<string, string> = { CX: 'CAIXA', FD: 'FARDO', PCT: 'PACOTE', UN: 'UNIDADE' }
+        const raw = String(data?.packageLabel || '').toUpperCase()
+        const quantity = Number(data?.packQuantity)
+        setText(referencePackaging, [aliases[raw] || raw, quantity > 1 ? `C/ ${quantity} UNIDADES` : ''].filter(Boolean).join('\n'))
+        setText(retailPack, data?.pricePack && data?.priceUnit ? `UNID R$ ${formatPriceValue(data.priceUnit)}` : '')
+        setText(wholesalePack, data?.priceSpecial && data?.priceSpecialUnit ? `UNID R$ ${formatPriceValue(data.priceSpecialUnit)}` : '')
+        setVisible(find('reference_retail_heading'), state.showRetail)
+        setVisible(find('reference_special_heading'), state.showSpecial)
+    }
     const forceCanonicalAtac = (pg as any).__forceAtacarejoCanonical === true
     if (preserveTemplateVisual && !forceCanonicalAtac) {
         fitManualAtacarejoValuesIntoTemplate(pg)
@@ -25582,6 +25643,14 @@ async function ensureBuiltInAtacarejoLabelTemplate() {
     await persistBuiltInLabelTemplateToCatalog(tpl);
 }
 
+async function ensureWholesaleReferenceLabelTemplate() {
+    if (!fabric || labelTemplates.value.some(t => t.id === WHOLESALE_REFERENCE_TEMPLATE_ID)) return;
+    const now = new Date().toISOString();
+    const tpl: LabelTemplate = { id: WHOLESALE_REFERENCE_TEMPLATE_ID, name: 'Atacado — referência lateral (4 preços)', kind: 'priceGroup-v1', group: createWholesaleReferenceTemplateJson(), isBuiltIn: true, createdAt: now, updatedAt: now };
+    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    labelTemplates.value = [tpl, ...labelTemplates.value];
+}
+
 async function ensureBuiltInFardoSpecialLabelTemplate() {
     // Modelo específico para tabelas com preço unitário + preço especial por fardo.
     // A faixa azul é o regular, a vermelha é o especial e a amarela é a condição.
@@ -26193,10 +26262,8 @@ async function handleUpdateTemplateFromMiniEditor(
             // Mini editor is explicit manual mode: preserve exact element layout on cards/reload.
             nextGroup.__preserveManualLayout = true;
             nextGroup.__isCustomTemplate = true;
-            // Preserve explicit canonical flag (only if the template opted into it).
-            if (nextGroup.__forceAtacarejoCanonical == null && prev?.group && (prev.group as any).__forceAtacarejoCanonical != null) {
-                nextGroup.__forceAtacarejoCanonical = (prev.group as any).__forceAtacarejoCanonical;
-            }
+            // Salvar no Mini Editor substitui o layout automatico do modelo original.
+            nextGroup.__forceAtacarejoCanonical = false;
             const useVariantSnapshots = shouldUseAtacVariantSnapshotsForTemplate(nextGroup);
             if (!useVariantSnapshots) {
                 (nextGroup as any).__atacVariantGroups = {};
@@ -29207,6 +29274,7 @@ const handleAutoOfferLayout = async () => {
             :business-profile="quickBusinessProfile"
             :business-field-visibility="quickModeBusinessFieldVisibility"
             :required-business-fields="quickModeRequiredBusinessFields"
+            :completed-product-reviews="quickCompletedProductReviews"
             :business-setup-saving="isQuickBusinessProfileSaving"
             :business-setup-error="quickBusinessProfileSetupError"
             :validity-date-format="quickValidityDateFormat"
@@ -29215,7 +29283,7 @@ const handleAutoOfferLayout = async () => {
             :validity-mode="quickValidityMode"
             :validity-while-stocks="quickValidityWhileStocks"
             :show-validity="quickShowValidity"
-            :validity-prompt-ready="isFabricReady && isInitialDesignLoadDone"
+            :validity-prompt-ready="isFabricReady"
             :offer-scope="quickOfferScope"
             @select-zone="selectQuickModeZone"
             @select-zone-structure="handleQuickModeZoneStructureChange"
@@ -30065,13 +30133,12 @@ main {
     min-height: 0;
 }
 
-/* Reserve real layout space for logo settings instead of covering the canvas. */
-.canvas-workspace { display:flex; flex:1 1 auto; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; }
+/* Abrir as opcoes nao pode redimensionar/recentralizar o encarte. */
+.canvas-workspace { position:relative; display:flex; flex:1 1 auto; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; }
 .canvas-workspace > .quick-mode-canvas-viewport { flex:1 1 0; min-width:0; min-height:0; }
-.canvas-workspace > :deep(.quick-logo-actions) { flex:0 0 300px; align-self:stretch; margin:8px 0 8px 10px; }
+.canvas-workspace > :deep(.quick-logo-actions) { position:absolute; z-index:40; top:8px; left:8px; width:300px; max-height:calc(100% - 16px); margin:0; }
 @media (max-width: 767px) {
-    .canvas-workspace.has-logo-panel { flex-direction:column; }
-    .canvas-workspace > :deep(.quick-logo-actions) { flex:0 1 auto; width:100%; max-height:38%; margin:6px 0 0; }
+    .canvas-workspace > :deep(.quick-logo-actions) { top:auto; bottom:8px; right:8px; width:auto; max-height:38%; }
 }
 
 .quick-mode-stage :deep(.upper-canvas),

@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageChops, ImageFilter
 
-FAMILIES = {'Barlow': 'Barlow', 'Barlow Condensed': 'BarlowCondensed', 'Anton': 'Anton', 'Oswald': 'Oswald','Roboto Slab':'RobotoSlab','Audiowide':'Audiowide','Bebas Neue':'BebasNeue','Caveat':'Caveat','Russo One':'RussoOne','Consumidor Referencia':'ConsumidorReferencia','Patua One':'PatuaOne'}
+FAMILIES = {'Montserrat':'Montserrat','Barlow': 'Barlow', 'Barlow Condensed': 'BarlowCondensed', 'Anton': 'Anton', 'Oswald': 'Oswald','Roboto Slab':'RobotoSlab','Audiowide':'Audiowide','Bebas Neue':'BebasNeue','Caveat':'Caveat','Russo One':'RussoOne','Consumidor Referencia':'ConsumidorReferencia','Patua One':'PatuaOne'}
 WEIGHTS = {400: 'Regular', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold'}
 ICONS = {
  'heart': 'M 50 88 C 0 55 0 12 27 12 C 40 12 48 22 50 28 C 52 22 60 12 73 12 C 100 12 100 55 50 88 Z',
@@ -37,11 +37,11 @@ def font_for(layer, size):
     filename = f'{prefix}-{WEIGHTS.get(weight, "Regular")}.ttf'
     if family == 'Anton': filename = 'Anton-Regular.ttf'
     if family == 'Oswald': filename = 'Oswald[wght].ttf'
-    if family in ['Roboto Slab','Caveat']: filename=FAMILIES[family]+'[wght].ttf'
+    if family in ['Roboto Slab','Caveat','Montserrat']: filename=FAMILIES[family]+'[wght].ttf'
     if family in ['Audiowide','Bebas Neue','Russo One','Consumidor Referencia','Patua One']: filename=FAMILIES[family]+'-Regular.ttf'
     font = ImageFont.truetype(str(fonts_dir()/filename), max(6, int(size)))
     if family == 'Oswald': font.set_variation_by_axes([min(700, weight)])
-    if family in ['Roboto Slab','Caveat']: font.set_variation_by_axes([min(700 if family=='Caveat' else 900,weight)])
+    if family in ['Roboto Slab','Caveat','Montserrat']: font.set_variation_by_axes([min(700 if family=='Caveat' else 900,weight)])
     return font
 
 

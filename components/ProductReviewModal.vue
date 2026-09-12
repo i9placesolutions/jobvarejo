@@ -13,6 +13,7 @@ import type { LabelTemplate } from '~/types/label-template'
 import { isAtacarejoTemplateGroupJson } from '~/utils/canvasJsonClassifiers'
 import { getAvailablePrices } from '~/utils/productPriceHelpers'
 import { isProductLabelTemplateCompatible } from '~/utils/productLabelCompatibility'
+import { trimImageFile } from '~/utils/fabricImageHelpers'
 
 type ImportTargetMode = 'zone' | 'multi-frame'
 type ImportSourceMode = 'manual' | 'paste-list' | 'file-import'
@@ -103,6 +104,7 @@ const isSubmittingImport = ref(false)
 const appendBaseProducts = ref<SmartProduct[] | null>(null)
 const reviewFilter = ref<ReviewFilter>('all')
 const zoneFilterId = ref<string | null>(null)
+let reviewSuggestionGeneration = 0
 const reviewSuggestionMap = ref<Record<string, SmartProductImageCandidate[]>>({})
 const reviewSuggestionLoadingMap = ref<Record<string, boolean>>({})
 const reviewSuggestionErrorMap = ref<Record<string, string | null>>({})
@@ -692,12 +694,18 @@ const handleImport = () => {
     emit('update:modelValue', false)
 }
 
+const quickReviewConfirmed = ref(false)
+watch(() => props.modelValue, () => { quickReviewConfirmed.value = false })
+
 const addAllQuickProductsToEncarte = () => {
     if (!isQrofertasPresentation.value || !products.value.length || isSubmittingImport.value) return
 
-    // A ação é global: o lote inteiro da busca entra na zona selecionada,
-    // preservando os produtos que já estavam no encarte.
-    importMode.value = 'append'
+    if (!quickReviewConfirmed.value) {
+        quickReviewConfirmed.value = true
+        return
+    }
+
+    // A revisão mantém a escolha de adicionar ou substituir feita pelo usuário.
     handleImport()
 }
 
@@ -1551,59 +1559,52 @@ const fetchReviewSuggestionsForRow = async (
     reviewSuggestionLoadingMap.value = { ...reviewSuggestionLoadingMap.value, [productId]: true }
     reviewSuggestionErrorMap.value = { ...reviewSuggestionErrorMap.value, [productId]: null }
 
-    try {
-        const headers = await getApiAuthHeaders()
-        const data = await collectAssetSearchPages<any>(async (cursor) => {
-            return await fetchUntyped('/api/assets', {
-                headers,
-                query: {
-                    q: productSuggestionFamily(row.product) || query,
-                    familySearch: '1',
-                    limit: 200,
-                    paginated: '1',
-                    cursor,
-                    ai: '0',
-                    fresh: options.force && !cursor ? '1' : undefined,
-                    productName: productSuggestionFamily(row.product),
-                    brand: '',
-                    flavor: '',
-                    weight: ''
-                }
-            })
-        })
-        const next = filterReviewCandidatesForProduct(
-            row.product,
-            data.map((asset, index) => mapAssetToReviewCandidate(asset, index))
-                .filter((candidate): candidate is SmartProductImageCandidate => !!candidate)
-        )
+    const generation = reviewSuggestionGeneration
+    const isCurrent = () => generation === reviewSuggestionGeneration
+    const append = (candidates: SmartProductImageCandidate[]) => {
+        if (!isCurrent()) return
+        const next = filterReviewCandidatesForProduct(row.product, candidates)
         reviewSuggestionMap.value = {
             ...reviewSuggestionMap.value,
             [productId]: mergeReviewCandidates(reviewSuggestionMap.value[productId] || [], next)
         }
+    }
+    try {
+        const headers = await getApiAuthHeaders()
+        const librarySearch = collectAssetSearchPages<any>(async (cursor) => {
+            return await fetchUntyped('/api/assets', {
+                headers, timeout: 30_000, retry: 0,
+                query: {
+                    q: productSuggestionFamily(row.product) || query,
+                    familySearch: '1', limit: 200, paginated: '1', cursor, ai: '0',
+                    fresh: options.force && !cursor ? '1' : undefined,
+                    productName: productSuggestionFamily(row.product),
+                    brand: '', flavor: '', weight: ''
+                }
+            })
+        }, items => append(items.map((asset, index) => mapAssetToReviewCandidate(asset, index))
+            .filter((candidate): candidate is SmartProductImageCandidate => !!candidate)))
+        const searches: Promise<unknown>[] = [librarySearch]
         if (options.external) {
             expandedImageSuggestionRows.value = new Set([...expandedImageSuggestionRows.value, productId])
-            const data = await fetchUntyped('/api/product-image-suggestions', {
-                method: 'POST', headers, body: { term: query }, timeout: 90_000
-            })
-            const candidates = filterReviewCandidatesForProduct(row.product, Array.isArray(data?.candidates) ? data.candidates : [])
-            reviewSuggestionMap.value = {
-                ...reviewSuggestionMap.value,
-                [productId]: mergeReviewCandidates(reviewSuggestionMap.value[productId] || [], candidates)
-            }
-            if (!candidates.length) reviewSuggestionErrorMap.value = {
-                ...reviewSuggestionErrorMap.value,
-                [productId]: 'Não encontramos novas opções para este produto. Você pode tentar novamente ou enviar uma imagem.'
-            }
-            return
+            searches.push(fetchUntyped('/api/product-image-suggestions', {
+                method: 'POST', headers, body: { term: query }, timeout: 90_000, retry: 0
+            }).then((data: any) => append(Array.isArray(data?.candidates) ? data.candidates : [])))
+        }
+        const results = await Promise.allSettled(searches)
+        if (!isCurrent()) return
+        const failed = results.some(result => result.status === 'rejected')
+        if (failed) reviewSuggestionErrorMap.value = {
+            ...reviewSuggestionErrorMap.value,
+            [productId]: 'Parte da busca não respondeu. As imagens encontradas continuam disponíveis; tente atualizar para buscar as restantes.'
         }
     } catch (error: any) {
-        reviewSuggestionErrorMap.value = {
+        if (isCurrent()) reviewSuggestionErrorMap.value = {
             ...reviewSuggestionErrorMap.value,
-            [productId]: String(error?.data?.statusMessage || error?.data?.message || error?.message || 'Falha ao carregar sugestões de imagem.')
+            [productId]: String(error?.data?.statusMessage || error?.message || 'Falha ao carregar sugestões de imagem.')
         }
-        // Uma falha de atualização não apaga as sugestões já disponíveis.
     } finally {
-        reviewSuggestionLoadingMap.value = { ...reviewSuggestionLoadingMap.value, [productId]: false }
+        if (isCurrent()) reviewSuggestionLoadingMap.value = { ...reviewSuggestionLoadingMap.value, [productId]: false }
     }
 }
 
@@ -2231,6 +2232,7 @@ watch(() => props.modelValue, (newVal) => {
         appendBaseProducts.value = null
         lockedTargetZoneId.value = ''
         reviewFilter.value = 'all'
+        reviewSuggestionGeneration += 1
         reviewSuggestionMap.value = {}
         reviewSuggestionLoadingMap.value = {}
         reviewSuggestionErrorMap.value = {}
@@ -2253,6 +2255,7 @@ watch(() => props.modelValue, (newVal) => {
     isSubmittingImport.value = false
     lockedTargetZoneId.value = String(props.initialTargetZoneId || '').trim()
     reviewFilter.value = 'all'
+    reviewSuggestionGeneration += 1
     reviewSuggestionMap.value = {}
     reviewSuggestionLoadingMap.value = {}
     reviewSuggestionErrorMap.value = {}
@@ -2769,8 +2772,10 @@ const uploadManualImageForProduct = async (
     product.imageCandidates = []
 
     try {
-        const compressed = await compressImageInBrowser(file).catch(() => file)
-        const uploadBlob = compressed instanceof Blob ? compressed : file
+        // Aparar antes da compressão cobre também presigned e fallback local.
+        const trimmedFile = await trimImageFile(file)
+        const compressed = await compressImageInBrowser(trimmedFile).catch(() => trimmedFile)
+        const uploadBlob = compressed instanceof Blob ? compressed : trimmedFile
         const contentType = String((uploadBlob as any)?.type || file.type || 'image/png')
         const uploadFilenameBase = sanitizeFilenameBase(product?.name || file.name || 'produto')
         const uploadFilenameExt = contentType.includes('webp') ? 'webp' : (contentType.split('/')[1] || 'png')
@@ -3944,21 +3949,15 @@ const getAssetDisplayName = (asset: any): string => {
                                     <button
                                         v-for="(candidate, candidateIndex) in activeReviewCandidates"
                                         :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
+                                        :aria-label="`Usar imagem ${candidateIndex + 1}`"
                                         type="button"
                                         class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/4"
                                         @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
                                     >
                                         <div class="relative aspect-4/3 bg-zinc-900/60">
-                                            <img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" />
+                                            <img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" loading="lazy" decoding="async" />
                                             <div v-if="candidate.recommended" class="absolute left-1.5 top-1.5 rounded-md bg-emerald-500/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">Recomendada</div>
                                             <div class="absolute right-1.5 top-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">{{ candidate.source === 's3' ? 'Storage' : 'Busca' }}</div>
-                                        </div>
-                                        <div class="p-2">
-                                            <div class="flex items-center justify-between gap-1">
-                                                <div class="line-clamp-1 text-[10px] font-medium text-white">{{ candidate.title || candidate.domain || 'Imagem' }}</div>
-                                                <span class="text-[9px] font-semibold text-zinc-300 shrink-0">{{ formatCandidateConfidence(candidate) }}</span>
-                                            </div>
-                                            <div class="text-[9px] text-emerald-300 font-medium mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">Usar esta</div>
                                         </div>
                                     </button>
                                 </div>
@@ -4133,20 +4132,32 @@ const getAssetDisplayName = (asset: any): string => {
         </div>
         <template v-if="isQrofertasPresentation" #footer>
           <div class="flex w-full min-w-0 flex-col gap-3">
+            <details v-if="quickReviewConfirmed" open class="rounded-xl border border-white/10 text-sm text-zinc-300">
+              <summary class="cursor-pointer px-3 py-2">Opções de aplicação</summary>
+              <div class="space-y-3 p-3">
+                <label v-if="props.existingCount" class="block">
+                  <span class="mb-2 block">Como usar a lista conferida?</span>
+                  <select v-model="importMode" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2" :disabled="isSubmittingImport">
+                    <option value="append">Adicionar aos produtos atuais</option>
+                    <option value="replace">Substituir os produtos atuais</option>
+                  </select>
+                </label>
             <label class="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 text-sm text-white">
                 <input v-model="oneProductPerPage" type="checkbox" class="mt-1 accent-violet-500" :disabled="isSubmittingImport" />
                 <span class="min-w-0"><strong class="block font-semibold">Um produto por página</strong><small class="mt-1 block leading-relaxed text-zinc-400">Usa esta página para o primeiro produto e cria {{ Math.max(0, products.length - 1) }} cópias para os demais, no mesmo formato.</small></span>
             </label>
+              </div>
+            </details>
             <button
                 type="button"
                 class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-lg shadow-emerald-950/30 transition-colors hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-50"
                 :disabled="importButtonDisabled"
-                aria-label="Adicionar todos os produtos no encarte"
+                :aria-label="quickReviewConfirmed ? 'Adicionar todos os produtos no encarte' : 'Confirmar conferência dos produtos'"
                 @click="addAllQuickProductsToEncarte"
             >
                 <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="h-4 w-4 animate-spin" />
                 <Check v-else class="h-4 w-4" />
-                {{ isSubmittingImport ? 'Adicionando...' : 'Adicionar no encarte' }}
+                {{ isSubmittingImport ? 'Adicionando...' : quickReviewConfirmed ? 'Adicionar no encarte' : 'Conferi os produtos · Continuar' }}
             </button>
           </div>
         </template>
@@ -4273,8 +4284,8 @@ const getAssetDisplayName = (asset: any): string => {
                     <span>Sugestões de imagem <span v-if="activeReviewCandidates.length" class="font-normal text-zinc-500">({{ activeReviewCandidates.length }})</span></span>
                     <ChevronDown class="h-3.5 w-3.5 text-zinc-600 transition-transform" :class="isImageSuggestionsExpanded(activeReviewRowMeta.productId) ? 'rotate-180' : ''" />
                 </button>
-                <button type="button" class="mt-3 rounded-lg border border-emerald-500/30 px-3 py-2 text-xs font-semibold text-emerald-300 disabled:opacity-50" :disabled="isActiveReviewSuggestionLoading" @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true })">
-                    {{ isActiveReviewSuggestionLoading ? 'Consultando biblioteca...' : 'Atualizar busca na biblioteca' }}
+                <button type="button" class="mt-3 rounded-lg border border-emerald-500/30 px-3 py-2 text-xs font-semibold text-emerald-300 disabled:opacity-50" :disabled="isActiveReviewSuggestionLoading" @click="fetchReviewSuggestionsForRow(activeReviewRowMeta, { force: true, external: true })">
+                    {{ isActiveReviewSuggestionLoading ? 'Buscando mais imagens…' : 'Atualizar busca de imagens' }}
                 </button>
                 <div v-if="activeReviewSuggestionError && activeReviewCandidates.length" role="alert" class="mt-2 text-xs text-rose-300">{{ activeReviewSuggestionError }}</div>
                 <div v-if="isImageSuggestionsExpanded(activeReviewRowMeta.productId)" :id="`quick-image-suggestions-${activeReviewRowMeta.productId}`" class="mt-3 space-y-2">
@@ -4283,12 +4294,12 @@ const getAssetDisplayName = (asset: any): string => {
                         <button
                             v-for="(candidate, candidateIndex) in activeReviewCandidates"
                             :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
+                            :aria-label="`Usar imagem ${candidateIndex + 1}`"
                             type="button"
                             class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-colors hover:border-emerald-500/40"
                             @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
                         >
-                            <div class="relative aspect-4/3 bg-zinc-900/60"><img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" /></div>
-                            <div class="p-2 text-[9px] text-zinc-300"><span class="line-clamp-1">{{ candidate.title || candidate.domain || 'Imagem' }}</span><span class="mt-0.5 block text-emerald-300 opacity-0 transition-opacity group-hover:opacity-100">Usar esta</span></div>
+                            <div class="relative aspect-4/3 bg-zinc-900/60"><img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" loading="lazy" decoding="async" /></div>
                         </button>
                     </div>
                     <div v-else class="rounded-lg border border-dashed border-zinc-800 px-3 py-5 text-center text-[10px] text-zinc-500">{{ activeReviewSuggestionError || 'Nenhuma imagem compatível encontrada. Use Enviar imagem para escolher um arquivo.' }}</div>

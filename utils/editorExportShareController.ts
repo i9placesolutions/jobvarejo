@@ -1,3 +1,4 @@
+import { restoreCanvasStickerOutlines } from './editorStickerOutline'
 import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
 import { waitForFabricImagesDecoded } from './fabricImageHelpers'
 import { collectObjectsDeep } from './fabricObjectClassifiers'
@@ -483,6 +484,7 @@ const exportSelectedObjectBlob = async (
         qualityPreset,
         format,
         renderDataUrlAtMultiplier: async (multiplier: number) => {
+            restoreCanvasStickerOutlines(ctx.canvas.value)
             try {
                 return await runWithNeutralViewport(ctx, async () => (
                     active.toDataURL({
@@ -539,6 +541,7 @@ const exportSingleFrameBlob = async (
         qualityPreset,
         format,
         renderDataUrlAtMultiplier: async (multiplier: number) => {
+            restoreCanvasStickerOutlines(ctx.canvas.value)
             try {
                 return await withProductZonesHiddenForOutput(ctx, async () => (
                     await runWithNeutralViewport(ctx, async () => {

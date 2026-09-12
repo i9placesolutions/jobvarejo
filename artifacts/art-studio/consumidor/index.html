@@ -7,7 +7,8 @@ const manifest=await (await fetch('./manifest.json')).json()
 for(const [family,file,weight]of [['Patua One','PatuaOne-Regular.ttf','400'],['Consumidor Referencia','ConsumidorReferencia-Regular.ttf','400'],['Russo One','RussoOne-Regular.ttf','400'],['Roboto Slab','RobotoSlab[wght].ttf','100 900'],['Audiowide','Audiowide-Regular.ttf','400'],['Bebas Neue','BebasNeue-Regular.ttf','400'],['Caveat','Caveat[wght].ttf','400 700']]){const f=new FontFace(family,`url(/public/art-studio/fonts/${encodeURIComponent(file)})`,{weight});await f.load();document.fonts.add(f)}
 const gradient=g=>{const colorStops=[{offset:0,color:g.from+Math.round(g.startOpacity*255).toString(16).padStart(2,'0')},{offset:1,color:g.to+Math.round(g.endOpacity*255).toString(16).padStart(2,'0')}];return new Gradient({type:g.type,gradientUnits:'percentage',coords:g.type==='radial'?{x1:.5,y1:.5,r1:0,x2:.5,y2:.5,r2:.5}:{x1:.5-Math.cos(g.angle*Math.PI/180)/2,y1:.5-Math.sin(g.angle*Math.PI/180)/2,x2:.5+Math.cos(g.angle*Math.PI/180)/2,y2:.5+Math.sin(g.angle*Math.PI/180)/2},colorStops})}
 const heart='M 50 88 C 0 55 0 12 27 12 C 40 12 48 22 50 28 C 52 22 60 12 73 12 C 100 12 100 55 50 88 Z'
-for(let i=1;i<=6;i++){
+if(manifest.deletedAt){document.querySelector('#status').textContent='Coleção excluída a pedido do usuário.'}
+for(let i=1;!manifest.deletedAt&&i<=6;i++){
  const template=await (await fetch(`./modelo-${i}.json`)).json();const sec=document.createElement('section');sec.id='model-'+i;sec.innerHTML=`<h2>${i}. ${template.name}</h2><div class="row"></div>`;root.append(sec)
  for(const doc of [template.composition,...template.composition.alternates]){
   const el=document.createElement('div');el.className='item';el.innerHTML=`<small>${doc.width} × ${doc.height}</small><canvas></canvas>`;sec.querySelector('.row').append(el)

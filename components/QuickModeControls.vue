@@ -136,6 +136,7 @@ const props = defineProps<{
   validityWhileStocks?: boolean
   showValidity?: boolean
   validityPromptReady?: boolean
+  completedProductReviews?: number
   offerScope?: Partial<OfferValidityScope>
   pages?: QuickModePage[]
   currentPageId?: string
@@ -171,7 +172,9 @@ const mobileStructureExpanded = ref(false)
 const mobileSection = ref<'products' | 'pages' | 'preview' | 'tools'>('preview')
 watch(mobileSection, value => emit('mobile-section', value))
 const activeTab = ref<'search' | 'mine'>('search')
+const productsReviewed = ref(false)
 const listText = ref('')
+const importMode = ref<QuickModeImportMode>('append')
 const listFile = ref<File | null>(null)
 const listFileInput = ref<HTMLInputElement | null>(null)
 const listFileError = ref('')
@@ -202,8 +205,8 @@ const validityMode = ref<OfferValidityMode>(normalizeOfferValidityMode(
 const validityWhileStocks = ref(props.validityWhileStocks !== false)
 const showValidity = ref(props.showValidity !== false)
 const offerScope = reactive<OfferValidityScope>(normalizeOfferValidityScope(props.offerScope))
-// A validade precisa ser escolhida novamente em cada entrada do encarte.
-const validityPromptOpen = ref(props.validityPromptReady !== false)
+// Confirmar a validade em cada abertura, depois de carregar os dados do encarte.
+const validityPromptOpen = ref(false)
 const validityPromptResolved = ref(false)
 const validityPromptError = ref('')
 const businessSetupOpen = ref(false)
@@ -440,6 +443,7 @@ const requiredBusinessSetupFields = computed<BusinessFieldId[]>(() => {
 const shouldOpenBusinessSetup = computed(() => (
   props.validityPromptReady === true &&
   validityPromptResolved.value &&
+  productsReviewed.value &&
   requiredBusinessSetupFields.value.length > 0
 ))
 
@@ -503,7 +507,19 @@ watch(() => props.validityWhileStocks, value => {
   validityWhileStocks.value = value !== false
 })
 watch(() => props.validityPromptReady, ready => {
-  if (ready && !validityPromptResolved.value) validityPromptOpen.value = true
+  if (ready !== false && !validityPromptResolved.value) validityPromptOpen.value = true
+}, { immediate: true })
+
+const continueAfterProductReview = () => {
+  productsReviewed.value = true
+  mobileSection.value = 'tools'
+}
+watch(() => props.completedProductReviews, (value, previous) => {
+  if (!value || value === previous) return
+  listText.value = ''
+  listFile.value = null
+  activeTab.value = 'mine'
+  continueAfterProductReview()
 })
 watch(() => props.showValidity, value => { showValidity.value = value !== false })
 watch(() => props.offerScope, value => {
@@ -554,12 +570,12 @@ const openMobileTools = () => {
 }
 
 const handlePrimaryProductAction = () => {
-  if (!hasImportContent.value) {
-    if (productCount.value > 0) openMobileProductList()
-    else startMobileProductList()
+  if (activeTab.value === 'mine') {
+    continueAfterProductReview()
     return
   }
-  submitList(productCount.value > 0 ? 'append' : 'replace')
+  if (!hasImportContent.value) return
+  submitList(productCount.value > 0 ? importMode.value : 'replace')
 }
 
 const mobilePrimaryAction = computed(() => {
@@ -578,10 +594,6 @@ const mobilePrimaryAction = computed(() => {
     action: 'Adicionar lista',
   }
 })
-
-const useExample = () => {
-  listText.value = 'Picanha kg R$ 49,90'
-}
 
 const toggleBusinessField = (field: BusinessFieldId) => {
   emit('toggle-business-field', {
@@ -777,13 +789,14 @@ const useTemplateModel = (modelId: string) => {
   <div class="quick-mode-controls-layout" :data-mobile-section="mobileSection" :style="{ '--mobile-keyboard-inset': `${mobileKeyboardInset}px`, '--mobile-visible-height': mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh' }">
     <nav class="quick-mobile-sections" aria-label="Edição rápida">
       <button type="button" :aria-pressed="mobileSection === 'preview'" @click="mobileSection = 'preview'"><CanvasIcon :size="20" /><span>Encarte</span></button>
-      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection === 'products' ? mobileSection = 'preview' : openMobileProductList()"><ShoppingBasket :size="20" /><span>Lista</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection === 'products' ? mobileSection = 'preview' : startMobileProductList()"><ShoppingBasket :size="20" /><span>Lista</span></button>
       <button type="button" :aria-pressed="mobileSection === 'pages'" @click="mobileSection = mobileSection === 'pages' ? 'preview' : 'pages'"><Layers :size="20" /><span>Páginas</span></button>
       <button type="button" :aria-pressed="mobileSection === 'tools'" @click="mobileSection === 'tools' ? mobileSection = 'preview' : openMobileTools()"><SlidersHorizontal :size="20" /><span>Ajustes</span></button>
       <button type="button" :disabled="props.busy" @click="emit('export')"><Download :size="20" /><span>Exportar</span></button>
     </nav>
     <aside class="quick-mode-sidebar" :aria-label="mobileSection === 'tools' ? 'Ajustes da edição rápida' : 'Produtos da edição rápida'">
     <div class="quick-mode-sidebar__content">
+      <p v-if="mobileSection === 'tools' && !productsReviewed" class="quick-mobile-import-copy">Confira os produtos para liberar a grade, as cores e as outras opções.</p>
       <div class="quick-mode-sidebar__topbar">
         <div class="quick-mode-sidebar__title-wrap">
           <span class="quick-mode-sidebar__backmark" aria-hidden="true">+</span>
@@ -797,7 +810,7 @@ const useTemplateModel = (modelId: string) => {
         </span>
       </div>
 
-      <div v-if="props.zones.length > 1" class="quick-mode-sidebar__zone-picker">
+      <div v-if="props.zones.length > 1 && activeTab !== 'search'" class="quick-mode-sidebar__zone-picker">
         <label for="quick-mode-zone">Destino do encarte</label>
         <select id="quick-mode-zone" :value="props.selectedZoneId" @change="handleZoneChange">
           <option v-for="item in props.zones" :key="item.id" :value="item.id">
@@ -806,55 +819,26 @@ const useTemplateModel = (modelId: string) => {
         </select>
       </div>
 
-      <section v-if="selectedZone" class="quick-mode-structure-card" aria-label="Estrutura da zona">
-        <button type="button" class="quick-mobile-structure-toggle" :aria-expanded="mobileStructureExpanded" @click="mobileStructureExpanded = !mobileStructureExpanded"><span>Grade · {{ selectedZoneStructureDimensions }}</span><span>{{ mobileStructureExpanded ? 'Recolher' : 'Configurar' }}</span></button>
-        <div class="quick-structure-details" :class="{ 'is-expanded': mobileStructureExpanded }">
-        <div class="quick-mode-structure-card__header">
-          <span class="quick-mode-structure-card__icon" aria-hidden="true"><Layers :size="15" /></span>
-          <div class="quick-mode-structure-card__title">
-            <span>Estrutura da zona</span>
-            <strong>{{ selectedZoneStructureLabel }}</strong>
-          </div>
-          <span class="quick-mode-structure-card__count">
-            {{ productCount }} {{ productCount === 1 ? 'item' : 'itens' }}
-          </span>
-        </div>
-
-        <div class="quick-mode-structure-card__summary">
-          <strong>{{ selectedZoneStructureDimensions }}</strong>
-          <span>{{ selectedZoneStructureDirection }}</span>
-        </div>
-
-        <label v-if="hasAlternativeZoneStructures" class="quick-mode-structure-card__select">
-          <span>Escolher outra estrutura para {{ productCount }} produtos</span>
+      <details
+        v-if="productsReviewed && selectedZone && hasAlternativeZoneStructures && (activeTab === 'mine' || mobileSection === 'tools')"
+        class="quick-mode-layout-options"
+      >
+        <summary>Alterar disposição dos produtos</summary>
+        <label class="quick-mode-structure-card__select">
+          <span>Disposições para {{ productCount }} produtos</span>
           <select
             :value="selectedZoneStructureVariant?.id || ''"
             :disabled="props.busy"
-            aria-label="Escolher outra estrutura para a quantidade atual de produtos"
+            aria-label="Disposição dos produtos no encarte"
             @change="handleZoneStructureChange"
           >
-            <option
-              v-for="variant in selectedZoneStructureVariants"
-              :key="variant.id"
-              :value="variant.id"
-            >
-              {{ variant.name }} · {{ getProductZoneStructureFormatLabel(variant.format) }} · {{ getStructureDimensionsLabel(variant) }}
+            <option v-for="variant in selectedZoneStructureVariants" :key="variant.id" :value="variant.id">
+              {{ variant.name }} · {{ getProductZoneStructureFormatLabel(variant.format) }} · {{ getStructureDimensionsLabel(variant) }}{{ variant.id === selectedZoneStructureVariant?.id ? ' (atual)' : '' }}
             </option>
           </select>
-          <small>A troca reorganiza somente esta zona e é salva automaticamente.</small>
+          <small>Escolha uma alternativa para reorganizar os produtos. A alteração é salva automaticamente.</small>
         </label>
-        <p v-else class="quick-mode-structure-card__hint">
-          A receita é ajustada automaticamente conforme a quantidade de produtos.
-        </p>
-        <button
-          v-if="selectedZoneStructureVariant && selectedZone"
-          type="button"
-          :disabled="props.busy"
-          class="mt-3 min-h-10 w-full rounded-lg border border-blue-400/30 bg-blue-500/10 px-3 text-xs font-semibold text-blue-200 disabled:opacity-50"
-          @click="emit('select-zone-structure', { zoneId: selectedZone.id, variantId: selectedZoneStructureVariant.id })"
-        >Aplicar grade configurada</button>
-        </div>
-      </section>
+      </details>
 
       <div class="quick-mode-tabs" role="tablist" aria-label="Produtos">
         <button
@@ -878,97 +862,30 @@ const useTemplateModel = (modelId: string) => {
       </div>
 
       <section v-if="activeTab === 'search'" class="quick-mode-search-card" role="tabpanel">
-        <form @submit.prevent="submitList('replace')">
-          <div class="quick-mobile-flow" aria-label="Etapas para adicionar produtos">
-            <span class="quick-mobile-flow__step is-active"><b>1</b>Lista</span>
-            <span class="quick-mobile-flow__line" aria-hidden="true"></span>
-            <span class="quick-mobile-flow__step"><b>2</b>Conferir</span>
-            <span class="quick-mobile-flow__line" aria-hidden="true"></span>
-            <span class="quick-mobile-flow__step"><b>3</b>Adicionar</span>
-          </div>
-          <h3>1. Envie sua lista de produtos</h3>
-          <p class="quick-mobile-import-copy">Na próxima tela você confere preço, nome e imagem de cada produto antes de colocar no encarte.</p>
-          <p class="quick-mode-example">
-            Exemplo:
-            <button type="button" @click="useExample">Picanha kg</button>
-          </p>
-
+        <form @submit.prevent="handlePrimaryProductAction">
+          <h3>Cole sua lista</h3>
+          <p class="quick-mobile-import-copy">Depois você confere os nomes, preços e imagens.</p>
+          <textarea
+            ref="productListInput"
+            v-model="listText"
+            :disabled="props.busy || !!listFile"
+            aria-label="Cole ou escreva uma lista de produtos"
+            placeholder="Ex.: Arroz 5 kg 24,90&#10;Feijão 1 kg 7,99"
+          ></textarea>
+          <p class="quick-list-or">ou</p>
           <input ref="listFileInput" type="file" class="hidden" accept=".xlsx,.xls,.csv,.tsv,.pdf,.txt" :disabled="props.busy" @change="selectListFile" />
-          <button type="button" class="quick-mode-append-button mb-3" :disabled="props.busy" @click="listFileInput?.click()">
-            Enviar planilha ou PDF
+          <button type="button" class="quick-list-file-button" :disabled="props.busy" @click="listFileInput?.click()">
+            Enviar arquivo
           </button>
           <p v-if="listFile" class="mb-3 text-sm text-violet-200">
             {{ listFile.name }}
             <button type="button" class="ml-2 underline" :disabled="props.busy" @click="listFile = null">Remover arquivo</button>
           </p>
           <p v-if="listFileError" role="alert" class="mb-3 text-sm text-red-300">{{ listFileError }}</p>
-          <p class="mb-3 text-xs text-zinc-400">XLSX, XLS, CSV, TSV ou PDF com texto · até 12 MB. Preços, embalagem e condição de atacado serão levados para conferência.</p>
+          <p class="mb-3 text-xs text-zinc-400">Planilha, PDF com texto ou TXT · até 12 MB.</p>
 
-          <textarea
-            ref="productListInput"
-            v-model="listText"
-            :disabled="props.busy || !!listFile"
-            aria-label="Cole ou escreva uma lista de produtos"
-            placeholder="Cole / Escreva a lista aqui. Ex: Picanha kg R$ 49,90"
-          ></textarea>
-
-          <details class="quick-mobile-advanced-options">
-            <summary>
-              <span>Mais opções</span>
-              <small>Layout e cor dos cards</small>
-            </summary>
-            <div class="quick-mobile-advanced-options__body">
-              <label class="quick-product-advanced-option flex items-start gap-3 rounded-lg border border-white/15 p-3 mb-3 text-white">
-                <input v-model="oneProductPerPage" type="checkbox" :disabled="props.busy" class="mt-1 accent-violet-500" />
-                <span><strong class="block text-sm">Um produto por página</strong><small class="block text-zinc-400">Coloca o primeiro produto nesta página e cria cópias para os demais, no mesmo formato.</small></span>
-              </label>
-              <div class="quick-product-advanced-option">
-                <ProductPaletteControls :styles="props.productPaletteStyles || {}" :busy="props.busy" @change="emit('product-palette', $event)" @reset="emit('product-palette', {})" />
-                <QuickCardColors :mode="props.cardColorMode || 'auto'" :color="props.cardColor || '#ffffff'" :busy="props.busy" @apply="emit('card-colors', $event)" />
-              </div>
-            </div>
-          </details>
-          <label class="quick-fill-option">
-            <span><strong>Organizar imagens automaticamente</strong><small>Ao aprovar as imagens na próxima etapa, elas já ficam encaixadas em cada produto.</small></span>
-            <input v-model="autoFillImages" type="checkbox" role="switch" :disabled="props.busy" aria-label="Preencher imagens automaticamente" />
-          </label>
-
-          <button
-            type="submit"
-            :class="[
-              'quick-mode-search-button',
-            ]"
-            :disabled="props.busy || !hasImportContent"
-          >
-            <span v-if="props.busy" class="quick-mode-spinner" aria-hidden="true"></span>
-            {{ props.busy ? 'Analisando...' : 'Continuar para conferir produtos' }}
-          </button>
         </form>
 
-        <button
-          v-if="productCount > 0"
-          type="button"
-          class="quick-mode-append-button"
-          :disabled="props.busy || !hasImportContent"
-          @click="submitList('append')"
-        >
-          Adicionar sem apagar os atuais
-        </button>
-
-        <div v-if="productCount > 0" class="quick-clear-row">
-          <span><strong>{{ productCount }} produtos na página</strong><small>Limpe para começar uma nova lista.</small></span>
-          <button type="button" class="quick-clear-action" :disabled="props.busy" :aria-expanded="clearProductsConfirmOpen" @click="requestClearProducts"><Trash2 :size="15" /> Limpar</button>
-        </div>
-        <div v-if="clearProductsConfirmOpen" class="quick-mode-library-confirm quick-mode-library-confirm--clear">
-          <span>Remover os produtos desta página? A arte e a zona serão mantidas.</span>
-          <div>
-            <button type="button" class="quick-mode-library-confirm__yes" :disabled="props.busy" @click="confirmClearProducts">Limpar produtos</button>
-            <button type="button" @click="clearProductsConfirmOpen = false">Cancelar</button>
-          </div>
-        </div>
-        <p class="quick-mode-search-hint">
-          Você verá cada produto antes de ele entrar no encarte.
-        </p>
       </section>
 
       <section v-if="activeTab === 'mine'" class="quick-mode-library-card" role="tabpanel">
@@ -991,7 +908,7 @@ const useTemplateModel = (modelId: string) => {
           </button>
         </div>
 
-        <div v-if="products.length" class="quick-mode-library-bulk-labels">
+        <div v-if="productsReviewed && products.length" class="quick-mode-library-bulk-labels">
           <button
             type="button"
             class="quick-mode-library-bulk-labels__toggle"
@@ -1113,7 +1030,14 @@ const useTemplateModel = (modelId: string) => {
         </button>
       </section>
 
-      <section class="quick-mode-data-panel">
+      <section v-if="productsReviewed && (activeTab === 'mine' || mobileSection === 'tools')" class="quick-mode-data-panel">
+        <details class="quick-mobile-advanced-options">
+          <summary>Aparência dos produtos</summary>
+          <div class="quick-mobile-advanced-options__body">
+            <ProductPaletteControls :styles="props.productPaletteStyles || {}" :busy="props.busy" @change="emit('product-palette', $event)" @reset="emit('product-palette', {})" />
+            <QuickCardColors :mode="props.cardColorMode || 'auto'" :color="props.cardColor || '#ffffff'" :busy="props.busy" @apply="emit('card-colors', $event)" />
+          </div>
+        </details>
         <button
           type="button"
           class="quick-mode-data-panel__toggle"
@@ -1235,13 +1159,12 @@ const useTemplateModel = (modelId: string) => {
       <button
         type="button"
         class="quick-mode-sidebar__footer-action"
-        :disabled="props.busy"
-        :aria-label="hasImportContent ? 'Continuar para conferir produtos' : productCount > 0 ? 'Conferir produtos do encarte' : 'Adicionar uma lista de produtos'"
+        :disabled="props.busy || (activeTab === 'search' ? !hasImportContent : productCount === 0)"
         @click="handlePrimaryProductAction"
       >
-        <ClipboardPaste v-if="!hasImportContent && productCount === 0" :size="18" aria-hidden="true" />
-        <CheckCircle2 v-else :size="18" aria-hidden="true" />
-        {{ hasImportContent ? 'Continuar para conferir' : productCount > 0 ? 'Conferir produtos do encarte' : 'Colar lista de produtos' }}
+        <span v-if="props.busy" class="quick-mode-spinner" aria-hidden="true"></span>
+        <ArrowRight v-else :size="18" aria-hidden="true" />
+        {{ props.busy ? 'Preparando produtos…' : activeTab === 'search' ? 'Conferir produtos' : 'Continuar com estes produtos' }}
       </button>
     </footer>
     </aside>
@@ -3949,6 +3872,7 @@ const useTemplateModel = (modelId: string) => {
     display: none;
   }
 }
+
 </style>
 
 <style scoped>
@@ -3966,12 +3890,14 @@ const useTemplateModel = (modelId: string) => {
  .quick-mode-controls-layout input:not([type=checkbox]), .quick-mode-controls-layout textarea, .quick-mode-controls-layout select { font-size:16px; }
  .quick-mode-controls-layout button { min-height:44px; }
 }
+
 </style>
 
 <style scoped>
 @media(max-width:767px) {
  .quick-mode-controls-layout { bottom:calc(116px + env(safe-area-inset-bottom, 0px)); }
 }
+
 </style>
 
 <style scoped>
@@ -3988,6 +3914,7 @@ const useTemplateModel = (modelId: string) => {
  .quick-mode-sidebar__footer {flex-shrink:0;padding:10px 12px;}
  .quick-mode-sidebar__footer-action {min-height:48px;font-size:14px;}
 }
+
 </style>
 
 <style scoped>
@@ -3998,9 +3925,10 @@ const useTemplateModel = (modelId: string) => {
  .quick-mode-controls-layout[data-mobile-section=preview] {position:fixed;top:auto;bottom:0;height:0;border:0;background:transparent;box-shadow:none;}
  .quick-mode-controls-layout[data-mobile-section=products],.quick-mode-controls-layout[data-mobile-section=pages],.quick-mode-controls-layout[data-mobile-section=tools] {bottom:calc(76px + var(--mobile-keyboard-inset,0px) + env(safe-area-inset-bottom,0px));height:calc(var(--mobile-visible-height,100dvh) - 132px - env(safe-area-inset-bottom,0px));}
  .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-pages-rail {display:none;}
- .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__zone-picker,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-structure-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-tabs,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-search-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-library-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__footer {display:none;}
+ .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__zone-picker,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-tabs,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-search-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-library-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__footer {display:none;}
  .quick-mode-sidebar__backmark {display:none;}
 }
+
 </style>
 
 <style scoped>
@@ -4062,4 +3990,34 @@ const useTemplateModel = (modelId: string) => {
  .quick-mobile-flow {gap:5px;font-size:9px;}
  .quick-mobile-flow__line {min-width:5px;}
 }
+
+
+/* A single, persistent action leads to product review on every screen size. */
+.quick-review-ready { display:flex; gap:12px; margin:16px 0; padding:16px; border:1px solid #60a5fa55; border-radius:14px; background:#2563eb14; }
+.quick-review-ready__icon { color:#93c5fd; flex-shrink:0; padding-top:2px; }
+.quick-review-ready strong { display:block; color:#f8fafc; font-size:15px; }
+.quick-review-ready p { margin:5px 0 0; color:#cbd5e1; font-size:13px; line-height:1.5; }
+.quick-import-mode { border:0; padding:0; margin:18px 0; min-width:0; }
+.quick-import-mode legend { color:#f1f5f9; font-size:13px; font-weight:700; margin-bottom:8px; }
+.quick-import-mode label { display:flex; gap:10px; padding:12px; margin:6px 0; border:1px solid #ffffff20; border-radius:10px; cursor:pointer; }
+.quick-import-mode label.is-selected { border-color:#60a5fa; background:#2563eb1a; }
+.quick-import-mode input { accent-color:#3b82f6; margin:3px 0 0; flex-shrink:0; }
+.quick-import-mode strong { display:block; font-size:13px; color:#f1f5f9; }
+.quick-import-mode small { display:block; font-size:12px; color:#b6bfce; margin-top:4px; line-height:1.4; }
+.quick-review-footer-hint { margin:0 0 9px; color:#cbd5e1; font-size:12px; line-height:1.4; text-align:center; }
+.quick-mode-sidebar__footer-action:focus-visible, .quick-import-mode label:focus-within { outline:3px solid #93c5fd; outline-offset:3px; }
+.quick-mode-search-card textarea { line-height:1.6; }
+</style>
+
+<style scoped>
+.quick-list-or { margin: 12px 0; text-align: center; color: #a1a1aa; font-size: 12px; }
+.quick-list-file-button { display: block; width: 100%; min-height: 44px; margin-bottom: 10px; border: 1px solid #52525b; border-radius: 12px; color: #f4f4f5; font-weight: 600; transition: background .15s; }
+.quick-list-file-button:hover:not(:disabled) { background: #3f3f46; }
+.quick-list-file-button:disabled { opacity: .5; }
+</style>
+
+<style scoped>
+.quick-mode-layout-options { margin-bottom: 16px; border: 1px solid #3f3f46; border-radius: 12px; padding: 0 14px; }
+.quick-mode-layout-options summary { padding: 14px 0; color: #f4f4f5; font-size: 13px; font-weight: 600; cursor: pointer; }
+.quick-mode-layout-options > label { margin: 0 0 14px; }
 </style>

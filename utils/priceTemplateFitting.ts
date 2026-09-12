@@ -1,3 +1,4 @@
+import { fitAuthoredPriceTier } from './manualPriceFitPolicy'
 type PriceTemplateFittingDeps = {
   shouldPreserveManualTemplateVisual: (object: any) => boolean
   collectObjectsDeep: (object: any) => any[]
@@ -34,6 +35,7 @@ export const createPriceTemplateFitting = (deps: PriceTemplateFittingDeps) => {
     const decimal = deps.findByName(all, 'price_decimal_text') || deps.findByName(all, 'priceDecimal') || deps.findByName(all, 'price_decimal')
     const unit = deps.findByName(all, 'price_unit_text') || deps.findByName(all, 'priceUnit') || deps.findByName(all, 'price_unit')
     if (!priceBg || (!richPrice && (!integer || !decimal))) return
+    if (priceGroup.__preserveManualLayout === true && fitAuthoredPriceTier(priceBg, [currency, richPrice, integer, decimal, unit])) return
 
     const anchors =
       deps.readSingleManualPriceAnchors(priceGroup) ||
@@ -508,6 +510,7 @@ export const createPriceTemplateFitting = (deps: PriceTemplateFittingDeps) => {
     }) => {
       const { bg, currency, integer, decimal, rich, unit, pack } = options
       if (!bg || (!rich && (!integer || !decimal))) return
+      if (preserveAuthoredChildTransforms && fitAuthoredPriceTier(bg, [currency, rich, integer, decimal, unit, pack])) return
 
       const valueText = rich || integer
       const variant = getMergedVariant(resolveVariantKey(getIntegerDigitsCount(valueText)))

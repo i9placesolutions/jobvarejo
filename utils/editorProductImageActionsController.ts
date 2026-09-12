@@ -23,7 +23,7 @@ export type EditorProductImageActionsContext = {
     insertAssetToCanvas: (asset: ProductImageAsset, opts?: { pos?: { x: number; y: number } }) => Promise<void>
     findProductCardByCustomId: (id: string) => any | null
     addImageToProductCardByUrl: (card: any, newUrl: string, opts?: { save?: boolean; setActive?: boolean }) => Promise<boolean>
-    uploadFile: (file: File) => Promise<{ success?: boolean; url?: string }>
+    uploadFile: (file: File, options?: { removeBackground?: boolean }) => Promise<{ success?: boolean; url?: string }>
     getCenterOfView: () => { x: number; y: number }
     makeCanvasObjectId: () => string
     makeId: () => string
@@ -138,7 +138,7 @@ export const handleFileUpload = async (
                 clearPendingProductImageOperation(ctx)
                 return
             }
-            const uploaded = await ctx.uploadFile(await trimImageFile(file))
+            const uploaded = await ctx.uploadFile(await trimImageFile(file), { removeBackground: true })
             if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou')
             if (!await ctx.replaceImageByCustomId(replaceTargetId, uploaded.url)) {
                 throw new Error('Não foi possível substituir a imagem do produto.')
@@ -151,7 +151,7 @@ export const handleFileUpload = async (
             if (!card) throw new Error('Card de produto não encontrado.')
 
             for (const file of files) {
-                const uploaded = await ctx.uploadFile(await trimImageFile(file))
+                const uploaded = await ctx.uploadFile(await trimImageFile(file), { removeBackground: true })
                 if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou')
                 const added = await ctx.addImageToProductCardByUrl(card, uploaded.url)
                 if (!added) throw new Error('Não foi possível adicionar imagem ao card.')

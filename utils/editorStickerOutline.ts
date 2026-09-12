@@ -46,7 +46,9 @@ export const createStickerOutlineRuntime = (deps: StickerOutlineRuntimeDeps) => 
     // Inclui a versao do algoritmo para descartar caches gerados pela mascara
     // antiga, que contornava cada parte separada da logo individualmente.
     const cacheKey = `v5|${enabled}|${mode}|${width}|${color}|${opacity}|${obj.width}|${obj.height}|${obj.cropX || 0}|${obj.cropY || 0}`
-    if (obj.__stickerCacheKey !== cacheKey) {
+    const sourceElement = obj._element || obj.getElement?.()
+    if (obj.__stickerCacheKey !== cacheKey || obj.__stickerSourceElement !== sourceElement) {
+      obj.__stickerSourceElement = sourceElement
       obj.__stickerOutlineCache = null
       obj.__stickerCacheKey = cacheKey
       obj.__stickerOutlineGeneration = (Number(obj.__stickerOutlineGeneration) || 0) + 1
@@ -187,6 +189,11 @@ export const createStickerOutlineRuntime = (deps: StickerOutlineRuntimeDeps) => 
         ) {
           obj.__stickerOutlineCache = outCanvas
           obj.dirty = true
+          let parent = obj.group
+          while (parent) {
+            parent.dirty = true
+            parent = parent.group
+          }
           deps.renderNow()
           return
         }
@@ -202,7 +209,8 @@ export const createStickerOutlineRuntime = (deps: StickerOutlineRuntimeDeps) => 
     }
 
     if (!obj.__stickerOutlineCache) {
-      setTimeout(() => tryGenerate(0), 30)
+      // loadFromJSON ja entrega imagens prontas; gere antes do primeiro render/export.
+      tryGenerate(0)
     }
   }
 
@@ -228,4 +236,17 @@ export const createStickerOutlineRuntime = (deps: StickerOutlineRuntimeDeps) => 
     applyStickerOutlinePatch,
     invalidateStickerOutlineCache
   }
+}
+
+/** Recria efeitos nao serializaveis em cada superficie, sem alterar a geometria. */
+export const restoreCanvasStickerOutlines = (canvas: any) => {
+  const runtime = createStickerOutlineRuntime({
+    getCanvas: () => canvas,
+    renderNow: () => {}
+  })
+  const visit = (object: any) => {
+    if (object?.__stickerOutlineEnabled) runtime.applyStickerOutlinePatch(object)
+    object?.getObjects?.().forEach(visit)
+  }
+  canvas?.getObjects?.().forEach(visit)
 }

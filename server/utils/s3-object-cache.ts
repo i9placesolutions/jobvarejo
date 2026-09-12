@@ -36,7 +36,7 @@ const listPrefixObjects = async (opts: {
             MaxKeys: 1000,
             ContinuationToken: continuationToken
         });
-        const response = await s3.send(command);
+        const response = await s3.send(command, { abortSignal: AbortSignal.timeout(20_000) });
         const contents = response.Contents || [];
 
         for (const item of contents) {
@@ -93,7 +93,7 @@ export const getCachedS3Objects = async (opts: {
     if (!forceRefresh && existing && existing.expiresAt > now && existing.data.length > 0) {
         return existing.data;
     }
-    if (!forceRefresh && existing?.inFlight) {
+    if (existing?.inFlight) {
         return existing.inFlight;
     }
 

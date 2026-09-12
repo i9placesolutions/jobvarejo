@@ -95,13 +95,14 @@ async function main(){
   if(!res.ok)throw Error(`${path} ${res.status}: ${await res.text()}`);return res.json()
  }
  let manifest;try{manifest=JSON.parse(await readFile(dir+'/manifest.json','utf8'))}catch{manifest={collection:'Dia do Consumidor • Especial',items:[]}}
+ if(manifest.deletedAt)throw Error('Esta coleção foi excluída a pedido do usuário. Não recriar automaticamente.')
  if(!manifest.heart){const form=new FormData();form.append('file',new Blob([await readFile(`${dir}/assets/selo-coracao.png`)],{type:'image/png'}),'selo-coracao.png');manifest.heart=await call('/assets',form);await writeFile(dir+'/manifest.json',JSON.stringify(manifest,null,2))}
  if(!manifest.basket){const form=new FormData();form.append('file',new Blob([await readFile(`${dir}/assets/cesta-3d.png`)],{type:'image/png'}),'cesta-3d.png');manifest.basket=await call('/assets',form);await writeFile(dir+'/manifest.json',JSON.stringify(manifest,null,2))}
  for(let i=0;i<6;i++){
   let item=manifest.items[i];if(!item){item={index:i,name:names[i]};manifest.items[i]=item}
   if(!item.src){const form=new FormData();form.append('file',new Blob([await readFile(`${dir}/assets/foto-${i+1}.png`)],{type:'image/png'}),`consumidor-${i+1}.png`);Object.assign(item,await call('/assets',form));await writeFile(dir+'/manifest.json',JSON.stringify(manifest,null,2))}
   const pages=formats.map(([id,w,h])=>refineConsumer(composition(i,item.src,w,h),i,manifest.heart.src,manifest.basket.src)),compositionDoc={...pages[0],alternates:pages.slice(1)}
-  const template={name:`Dia do Consumidor — ${names[i]}`,category:'Datas comemorativas',collection:manifest.collection,tags:['dia do consumidor','15 de março','cinco formatos','consumidor-especial-2026'],composition:compositionDoc,published:process.argv.includes('--publish')}
+  const template={name:`Dia do Consumidor — ${names[i]}`,category:'Datas comemorativas',collection:manifest.collection,tags:['dia do consumidor','15 de março','cinco formatos','consumidor-especial-2026'],composition:compositionDoc,published:process.argv.includes('--publish') ? true : process.argv.includes('--draft') ? false : Boolean(item.published)}
   if(!item.templateId){const saved=await call('/templates',template);item.templateId=saved.id;item.revision=saved.revision}
   else {const saved=await call('/templates/'+item.templateId,{...template,revision:item.revision},'PUT');item.revision=saved.revision}
   item.published=template.published

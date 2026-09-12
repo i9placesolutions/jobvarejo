@@ -1,3 +1,5 @@
+import { applyWholesaleReferenceCardLayout } from './wholesaleReferenceLayout'
+
 export const fitResponsiveProductName = (title: any, width: number, height: number, nameScale = 1) => {
   if (title && !title.__manualTypography && title.visible !== false) {
     const top = title.getPointByOrigin?.('center', 'top')
@@ -26,6 +28,7 @@ export const fitResponsiveProductName = (title: any, width: number, height: numb
 // Limites finais por card, independentes da célula de referência da zona.
 export const fitResponsiveProductTypography = (group: any, width: number, height: number, nameScale = 1) => {
   if (!(width > 0 && height > 0)) return
+  if (applyWholesaleReferenceCardLayout(group, width, height)) return
   const children = group.getObjects?.() || []
   const title = children.find((o: any) => o.name === 'smart_title')
   const price = children.find((o: any) => o.name === 'priceGroup' || o.isPriceGroup)
@@ -50,6 +53,7 @@ export const fitResponsiveProductTypography = (group: any, width: number, height
 export const harmonizeProductCardTypography = (cards: any[]) => {
   const groups = new Map<string, any[]>()
   for (const card of cards) {
+    if (applyWholesaleReferenceCardLayout(card, card.width, card.height)) continue
     const key = `${Math.round(card.width)}:${Math.round(card.height)}`
     const group = groups.get(key) || []
     group.push(card)

@@ -244,21 +244,42 @@ it('preserva quebra de nomes longos do Instagram ao configurar um objeto recarre
 })
 
 describe('limite de linhas da validade', () => {
-  it('mantém validade em uma linha e recupera a fonte base quando há espaço', () => {
+  it('mantém data e estoque em duas linhas e aumenta a fonte em modelos largos', () => {
     const object = textbox({ businessProfileField: 'validity', text: 'OFERTAS VÁLIDAS\nDE 01/04 A 07/04 ENQUANTO DURAREM OS ESTOQUES', width: 160, fontSize: 20 })
     object.initDimensions = () => {
-      const count = Math.ceil(object.text.length * object.fontSize * 0.5 / object.width)
+      const count = object.text.split('\n').reduce((total: number, line: string) => total + Math.ceil(line.length * object.fontSize * 0.5 / object.width), 0)
       object.textLines = Array(count).fill('line')
       object.height = count * object.fontSize
     }
     fitDynamicBusinessTextObject(object)
-    expect(object.textLines.length).toBe(1)
-    expect(object.text).not.toContain('\n')
+    expect(object.textLines.length).toBe(2)
+    expect(object.text).toBe('OFERTAS VÁLIDAS DE 01/04 A 07/04\nENQUANTO DURAREM OS ESTOQUES')
     expect(object.dynamicFieldBaseFontSize).toBe(20)
     expect(object.fontSize).toBeLessThan(20)
     object.width = 1000
     fitDynamicBusinessTextObject(object)
     expect(object.textLines.length).toBe(1)
-    expect(object.fontSize).toBe(20)
+    expect(object.fontSize).toBeGreaterThanOrEqual(32)
   })
+})
+
+it('divide a validade por extenso em duas linhas sem diminuir a fonte para uma linha', () => {
+  const object = textbox({ businessProfileField: 'validity', text: 'OFERTAS VÁLIDAS DE 13 A 14 DE SETEMBRO DE 2026 E ENQUANTO DURAREM OS ESTOQUES', width: 900, fontSize: 14 })
+  object.initDimensions = () => {
+    object.textLines = object.text.split('\n').flatMap((line: string) => Array(Math.ceil(line.length * object.fontSize * 0.5 / object.width)).fill(line))
+    object.height = object.textLines.length * object.fontSize
+  }
+  fitDynamicBusinessTextObject(object)
+  expect(object.textLines.length).toBe(2)
+  expect(object.text).toContain('2026\nENQUANTO')
+  expect(object.fontSize).toBeGreaterThanOrEqual(32)
+})
+
+it('preserva cor, alinhamento e linha da data no rodapé separado', () => {
+ const object = textbox({ quickDataField:'validity', quickValidityLayout:'split-footer', text:'14 A 19 DE SETEMBRO', width:382, fontSize:34, fill:'#FFE500', textAlign:'left' })
+ fitDynamicBusinessTextObject(object)
+ expect(object.text).toBe('14 A 19 DE SETEMBRO')
+ expect(object.fill).toBe('#FFE500')
+ expect(object.textAlign).toBe('left')
+ expect(object.fontSize).toBe(34)
 })

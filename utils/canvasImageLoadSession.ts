@@ -4,6 +4,7 @@ import { isTrackableImageSrc } from './canvasImageTracking'
 
 type Session = {
     timeoutMs: number
+    retryCount?: number
     onSettled: (src: string, failed: boolean) => void
 }
 const registries = new WeakMap<object, WeakMap<AbortSignal, Session>>()
@@ -27,35 +28,45 @@ export const registerCanvasImageLoadSession = (
             if (!active || !isTrackableImageSrc(src)) {
                 return original.call(this, object, options)
             }
-            const controller = new AbortController()
+            let controller = new AbortController()
             const abort = () => controller.abort()
             options.signal.addEventListener('abort', abort, { once: true })
             if (options.signal.aborted) controller.abort()
             let timer: ReturnType<typeof setTimeout> | undefined
             let failed = false
             try {
-                const timeout = new Promise<never>((_, reject) => {
-                    timer = setTimeout(() => {
-                        reject(new Error('Tempo limite da imagem excedido'))
+                const attempts = 1 + Math.min(1, Math.max(0, active.retryCount || 0))
+                for (let attempt = 0; attempt < attempts; attempt++) {
+                    controller = new AbortController()
+                    if (options.signal.aborted) controller.abort()
+                    const attemptController = controller
+                    const timeout = new Promise<never>((_, reject) => {
+                        timer = setTimeout(() => {
+                            reject(new Error('Tempo limite da imagem excedido'))
+                            attemptController.abort()
+                        }, active.timeoutMs)
+                    })
+                    try {
+                        return await Promise.race([
+                            original.call(this, object, { ...options, signal: controller.signal }),
+                            timeout
+                        ])
+                    } catch (error) {
+                        if (options.signal.aborted) throw error
+                        if (attempt + 1 < attempts) continue
+                    } finally {
+                        if (timer !== undefined) clearTimeout(timer)
                         controller.abort()
-                    }, active.timeoutMs)
-                })
-                try {
-                    return await Promise.race([
-                        original.call(this, object, { ...options, signal: controller.signal }),
-                        timeout
-                    ])
-                } catch (error) {
-                    if (options.signal.aborted) throw error
-                    failed = true
-                    // Mantém dimensões, filtros e URL persistente para recuperar
-                    // depois. Somente a imagem que falhou recebe placeholder.
-                    return await original.call(this, {
-                        ...object,
-                        __originalSrc: object.__originalSrc || src,
-                        src: CANVAS_IMAGE_PLACEHOLDER_DATA_URL
-                    }, options)
+                    }
                 }
+                failed = true
+                // Mantém dimensões, filtros e URL persistente para recuperar
+                // depois. Somente a imagem que falhou recebe placeholder.
+                return await original.call(this, {
+                    ...object,
+                    __originalSrc: object.__originalSrc || src,
+                    src: CANVAS_IMAGE_PLACEHOLDER_DATA_URL
+                }, options)
             } finally {
                 if (timer !== undefined) clearTimeout(timer)
                 options.signal.removeEventListener('abort', abort)

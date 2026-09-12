@@ -1,3 +1,5 @@
+import { createEditorThumbnailQueue } from './editorThumbnailQueue'
+import { getThumbnailMinIntervalMs, shouldSkipThumbnailForReason } from './editorSavePolicy'
 type SaveStateOptions = {
     allowEmptyOverwrite?: boolean;
     forceEmptyOverwrite?: boolean;
@@ -26,8 +28,18 @@ const setupHistory = () => {
             existingCancelPendingCoalescedSave()
             ctx.setCancelPendingCoalescedSave(null)
         }
-	    let lastThumbnailAt = 0;
-    let thumbnailTicket = 0;
+	    const thumbnailQueue = createEditorThumbnailQueue<any>(async (pageId, json) => {
+        const page = project.pages.find((item: any) => item.id === pageId)
+        if (!page || isCanvasDestroyed.value) return ''
+        return generateThumbnailFromCanvasJson({ sourceJson: json, staticCanvasCtor: fabric?.StaticCanvas,
+            pageWidth: page.width, pageHeight: page.height })
+    }, (pageId, dataURL, json) => {
+        const index = project.pages.findIndex((item: any) => item.id === pageId)
+        if (index < 0 || isCanvasDestroyed.value) return
+        if (computeCanvasFingerprint(project.pages[index]?.canvasData) !== computeCanvasFingerprint(json)) return
+        updatePageThumbnail(index, dataURL)
+        triggerAutoSave()
+    });
     let lastHotSaveSanitizeAt = 0;
     let pendingCoalescedSaveTimer: ReturnType<typeof setTimeout> | null = null;
     let pendingCoalescedSaveOpts: SaveStateOptions | null = null;
@@ -494,28 +506,8 @@ const setupHistory = () => {
         })
         if (!persistence.didUpdate || persistence.targetPageIndex < 0) return false
 
-        if (canGenerateThumbnailNow({
-            source,
-            reason,
-            lastThumbnailAt
-        })) {
-            const targetPageForThumb = persistence.targetPage
-            const myTicket = ++thumbnailTicket
-            const dataURL = await generateThumbnailFromCanvasJson({
-                sourceJson: json,
-                staticCanvasCtor: fabric?.StaticCanvas,
-                pageWidth: Number(targetPageForThumb?.width || 0),
-                pageHeight: Number(targetPageForThumb?.height || 0),
-                defaultWidth: Number(activePage.value?.width || canvas.value?.getWidth?.() || 1080),
-                defaultHeight: Number(activePage.value?.height || canvas.value?.getHeight?.() || 1920)
-            })
-            if (dataURL && myTicket === thumbnailTicket) {
-                const latestPageIndex = resolvePageIndexById(targetPageId)
-                if (latestPageIndex >= 0) {
-                    updatePageThumbnail(latestPageIndex, dataURL)
-                }
-                lastThumbnailAt = Date.now()
-            }
+        if (!shouldSkipThumbnailForReason(source, reason)) {
+            thumbnailQueue.schedule(targetPageId, json, getThumbnailMinIntervalMs(reason))
         }
         return true
     }
@@ -623,7 +615,7 @@ const setupHistory = () => {
         isLikelyProductZone,
         isLikelyProductCard
     })
-    ctx.setTeardownHistoryListeners(nextTeardownHistoryListeners)
+    ctx.setTeardownHistoryListeners(() => { thumbnailQueue.dispose(); nextTeardownHistoryListeners?.() })
 }
 
     return {

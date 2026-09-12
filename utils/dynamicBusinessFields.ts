@@ -1,3 +1,4 @@
+import { isSplitFooterValidity } from './splitFooterValidity'
 /**
  * Regras compartilhadas dos campos dinamicos de dados da loja.
  *
@@ -352,11 +353,27 @@ export const fitDynamicBusinessTextObject = (
     setObjectValues(object, { width, splitByGrapheme: true })
     object.initDimensions?.()
   }
-  if (getDynamicBusinessField(object) === 'validity' && width != null) {
-    object.set({ text: String(object.text || '').replace(/\s*\n\s*/g, ' '), splitByGrapheme: false, styles: {} })
+  if (getDynamicBusinessField(object) === 'validity' && !isSplitFooterValidity(object) && width != null) {
+    const flatText = String(object.text || '').replace(/\s+/g, ' ').trim()
+    // Preservar uma linha somente quando ela cabe com a fonte legível do modelo.
+    let text = flatText.replace(/\s+(?:e\s+)?(enquanto\s+durarem\s+os\s+estoques)/i, '\n$1')
+    if (!text.includes('\n') && text) {
+      const words = text.split(' ')
+      let split = 1
+      while (split < words.length - 1 && words.slice(0, split).join(' ').length < text.length / 2) split++
+      if (words.length > 1) text = words.slice(0, split).join(' ') + '\n' + words.slice(split).join(' ')
+    }
+    // A faixa larga pode manter uma linha: a decisão usa a largura medida,
+    // sem reduzir a fonte para forçar esse formato.
+    let size = Math.max(baseFontSize, 32)
+    object.set({ text: flatText, fontSize: size, splitByGrapheme: false, styles: {} })
     object.initDimensions?.()
-    let size = baseFontSize
-    while ((object.textLines?.length > 1 || getMeasuredLineWidth(object) > width + 0.5) && size > 1) {
+    const fitsSingleLine = object.textLines?.length === 1 && getMeasuredLineWidth(object) <= width + 0.5
+    if (fitsSingleLine) text = flatText
+    object.set({ text, fontSize: size, dynamicFieldAutoFitFontSize: size, splitByGrapheme: false, styles: {}, lineHeight: 1.08, textAlign: 'center', backgroundColor: '', fill: '#14223d' })
+    object.initDimensions?.()
+    // Reduz apenas até cada linha caber; nunca achata as duas linhas em uma.
+    while ((object.textLines?.length > 2 || getMeasuredLineWidth(object) > width + 0.5) && size > 1) {
       size = Math.max(1, size - 0.5)
       object.set({ fontSize: size, dynamicFieldAutoFitFontSize: size })
       object.initDimensions?.()
@@ -364,6 +381,16 @@ export const fitDynamicBusinessTextObject = (
     object.set({ dynamicFieldAutoHeight: true })
   }
   syncDynamicBusinessTextHeight(object)
+  if (getDynamicBusinessField(object) === 'validity' && !isSplitFooterValidity(object)) {
+    const siblings = (object.group || object.canvas)?.getObjects?.() || []
+    const icon = siblings.find((item: any) => item.quickDynamicIconFor === 'validity' && item.parentFrameId === object.parentFrameId)
+    if (icon?.set) {
+      const size = Number(object.fontSize || 32) * Math.abs(Number(object.scaleY || 1)) * 1.2
+      const sourceSize = Math.max(Number(icon.width || 1), Number(icon.height || 1))
+      icon.set({ scaleX: size / sourceSize, scaleY: size / sourceSize, visible: object.visible !== false, dirty: true })
+      icon.setCoords?.()
+    }
+  }
   if (topAnchor) object.setPositionByOrigin?.(topAnchor, 'center', 'top')
   object.setCoords?.()
   return changed || Math.abs(currentFontSize - baseFontSize) > 0.01

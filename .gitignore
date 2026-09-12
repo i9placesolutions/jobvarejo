@@ -69,3 +69,7 @@ tmp/
 # Vitest
 coverage/
 .vitest/
+
+# Generated local previews and project backups
+/output/
+/.art-studio-deletion-backups/

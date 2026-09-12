@@ -1,3 +1,4 @@
+import { applyWholesaleReferenceCardLayout } from './wholesaleReferenceLayout'
 import { fitResponsiveProductTypography } from './productCardResponsiveTypography'
 import { autoTrimFabricImage } from './fabricImageHelpers'
 import { planAutomaticProductImageFill } from './automaticProductImageFill'
@@ -261,6 +262,7 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
       ? styles.cardLayout
       : null
     if (!group) return
+    if (applyWholesaleReferenceCardLayout(group, w, h)) return
     if (!rawConfiguration) {
       fitResponsiveProductTypography(group, w, h, styles?.prodNameScale ?? 1)
       return

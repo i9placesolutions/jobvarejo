@@ -431,6 +431,9 @@ const matchHeaderToField = (header: string): FieldMapping | null => {
   const hasCx = /\b(CX|CAIXA|FARDO|FD|PACOTE|PCT|PACK|SIXPACK|POTE)\b/.test(norm)
   const hasUn = /\b(UN[D.]?|UNIDADE|UNITARIO)\b/.test(norm)
   const hasEspecial = /\b(ESPECIAL|ESP\.?|ACIMA|PROMO|ATACADO)\b/.test(norm)
+  // Cabecalhos descritivos podem conter EMBALAGEM/PRECO sem serem esses campos.
+  if (/\b(CONDICAO|OBSERVACAO|OBS)\b/.test(norm)) return 'specialCondition'
+  if (/\bQU?A?NT|\bQTD(?:E)?\b/.test(norm)) return 'packQuantity'
   // Preco + CX/UN + ESPECIAL → campo especial (DEVE vir antes do generico)
   if (hasPreco && hasCx && hasEspecial) return 'priceSpecial'
   if (hasPreco && hasUn && hasEspecial) return 'priceSpecialUnit'

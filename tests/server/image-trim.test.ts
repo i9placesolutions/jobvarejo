@@ -40,7 +40,7 @@ describe('trimRasterImageBuffer', () => {
     expect(metadata.height).toBe(height)
   })
 
-  it('continua removendo somente a margem transparente', async () => {
+  it.each(['png', 'webp'] as const)('remove margem transparente de upload %s antes de otimizar para Wasabi', async (format) => {
     const width = 64
     const height = 64
     const input = await rgbaPng(width, height, (pixels, x, y) => {
@@ -49,8 +49,13 @@ describe('trimRasterImageBuffer', () => {
       }
     })
 
-    const output = await trimRasterImageBuffer(input)
-    const metadata = await sharp(output).metadata()
+    const source = await sharp(input).toFormat(format).toBuffer()
+    const output = await trimRasterImageBuffer(source)
+    const stored = await sharp(output)
+      .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 88, effort: 4, alphaQuality: 100 })
+      .toBuffer()
+    const metadata = await sharp(stored).metadata()
 
     expect(metadata.width).toBe(24)
     expect(metadata.height).toBe(24)

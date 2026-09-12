@@ -8,6 +8,7 @@ import { buildProductIdentityKey, upsertProductImageRegistry } from "../utils/pr
 import { normalizeSearchTerm as normalizeSharedSearchTerm } from "../utils/product-image-matching";
 import { resolveStorageReadUrl } from "../utils/project-storage-refs";
 import { processImageWithOptions } from "../utils/image-processor";
+import { trimRasterImageBuffer } from "../utils/image-trim";
 
 const UNIT_MAP: Record<string, string> = {
     mililitros: 'ml', mililitro: 'ml', mls: 'ml',
@@ -125,13 +126,16 @@ export default defineEventHandler(async (event) => {
             }
         }
 
-        if (contentType !== 'image/webp') {
+        if (!['image/gif', 'image/svg+xml'].includes(mime)) {
             try {
                 const sharp = (await import('sharp')).default;
-                processedBuffer = await sharp(fileBuffer)
+                // Aplicar também a WebP e ao resultado da remoção de fundo.
+                // O arquivo persistido deve ter os mesmos limites do preview.
+                const trimmedBuffer = await trimRasterImageBuffer(processedBuffer);
+                processedBuffer = await sharp(trimmedBuffer)
                     .rotate()
                     .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
-                    .webp({ quality: 88, effort: 4 })
+                    .webp({ quality: 88, effort: 4, alphaQuality: 100 })
                     .toBuffer();
                 contentType = 'image/webp';
                 console.log('✅ [Manual Upload] Otimização rápida aplicada');

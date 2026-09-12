@@ -1,3 +1,5 @@
+import { layoutHeaderOfferValidity } from './headerOfferValidity'
+import { isSplitFooterValidity } from './splitFooterValidity'
 import { getDynamicBusinessField } from './dynamicBusinessFields'
 
 const bounds = (o: any) => o.getBoundingRect()
@@ -6,17 +8,43 @@ const bottom = (b: any) => b.top + b.height
 const right = (b: any) => b.left + b.width
 
 /** Repair confirmed page clipping without changing fonts, scales or product geometry. */
-export const repairDynamicTextLayoutBounds = (objects: any[]): { changed: boolean; unresolved: string[] } => {
+export const repairDynamicTextLayoutBounds = (objects: any[], createValidityBackdrop?: (props: Record<string, any>, index: number) => any): { changed: boolean; unresolved: string[] } => {
   let changed = false
   const unresolved: string[] = []
   for (const frame of objects.filter(o => o.isFrame && o.visible !== false && typeof o.getBoundingRect === 'function')) {
     const fb = bounds(frame), children = objects.filter(o => o.parentFrameId === frame._customId && o.visible !== false && !o.isFrame)
     const fields = children.filter(o => ['address', 'instagram', 'whatsapp', 'validity'].includes(getDynamicBusinessField(o)) && typeof o.getBoundingRect === 'function')
     // Reuse the whole validity band after replacing its sample with a real date.
-    for (const o of fields.filter(o => getDynamicBusinessField(o) === 'validity' && String(o.type).toLowerCase() === 'textbox' && !o.angle)) {
-      const band = children.find(b => b.name === 'validity-backdrop')
+    for (const o of fields.filter(o => getDynamicBusinessField(o) === 'validity' && String(o.type).toLowerCase() === 'textbox' && !o.angle && !isSplitFooterValidity(o))) {
+      const headerLayout = layoutHeaderOfferValidity(o, children)
+      if (headerLayout !== null) { changed = headerLayout || changed; continue }
+      let band = children.find(b => b.name === 'validity-backdrop')
       const icon = children.find(b => b.quickDynamicIconFor === 'validity')
-      if (!band || !icon) continue
+      if (!band && createValidityBackdrop) {
+        const tb = bounds(o), ib = icon ? bounds(icon) : tb
+        const left = Math.max(fb.left + 4, Math.min(tb.left, ib.left) - 12)
+        const top = Math.min(tb.top, ib.top) - 10
+        band = createValidityBackdrop({
+          name: 'validity-backdrop', parentFrameId: frame._customId,
+          left, top, width: Math.min(right(fb) - 4, Math.max(right(tb), right(ib)) + 12) - left,
+          height: Math.max(bottom(tb), bottom(ib)) - top + 10,
+          originX: 'left', originY: 'top', fill: '#ffffff', rx: 12, ry: 12,
+          strokeWidth: 0, selectable: false, evented: false
+        }, Math.min(objects.indexOf(o), icon ? objects.indexOf(icon) : objects.indexOf(o)))
+        if (band) { children.push(band); changed = true }
+      }
+      if (!band) continue
+      if (!icon) {
+        o.set({ backgroundColor: '', fill: '#14223d' })
+        continue
+      }
+      if (typeof band.set === 'function') {
+        const height = (bounds(o).height + 16) / Math.abs(band.scaleY || 1)
+        if (band.fill !== '#ffffff' || band.opacity !== 1 || Math.abs(Number(band.height) - height) > .5) changed = true
+        band.set({ fill: '#ffffff', opacity: 1, height, rx: 10, ry: 10, dirty: true })
+        band.setCoords?.()
+        move(band, 0, bounds(o).top - 8 - bounds(band).top)
+      }
       const bb = bounds(band), ib = bounds(icon)
       const inset = 8, gap = 10, available = bb.width - inset * 2 - ib.width - gap
       if (available < 40) continue

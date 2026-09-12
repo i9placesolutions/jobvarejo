@@ -407,8 +407,8 @@ export const createPriceGroupLayout = (deps: PriceGroupLayoutDeps) => {
 
             if (hasAtacarejo) {
                 if (!deep) deep = deps.collectObjectsDeep(priceGroup)
-                const isFardoSpecialVariant = (priceGroup as any).__atacarejoLabelVariant === 'fardo-special-v1'
-                if (!isFardoSpecialVariant && !forceCanonicalAtacarejoLayout && preferManualTemplateLayout) {
+                // A variante comercial nao autoriza redesenhar um modelo manual.
+                if (!forceCanonicalAtacarejoLayout && preferManualTemplateLayout) {
                     deps.fitManualAtacarejoValuesIntoTemplate(priceGroup)
                     const manual = deps.layoutManualTemplateGroup(priceGroup, cardW, cardH)
                     if (manual) {

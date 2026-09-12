@@ -1,5 +1,5 @@
 export const ART_FONTS = [
-  'Barlow',
+  'Barlow', 'Montserrat',
   'Barlow Condensed',
   'Oswald',
   'Roboto Slab', 'Audiowide', 'Bebas Neue', 'Caveat', 'Russo One', 'Consumidor Referencia', 'Patua One',

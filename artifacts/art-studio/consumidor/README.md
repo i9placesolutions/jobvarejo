@@ -22,3 +22,5 @@ Fontes oficiais: https://github.com/google/fonts/tree/main/apache/robotoslab, ht
 As imagens de fundo completas geradas durante a exploração NÃO foram usadas nos rascunhos: os efeitos são camadas editáveis, conforme a correção solicitada pelo usuário.
 
 `index.html` mostra a revisão com o Fabric real. `previews/` contém exportações do worker Pillow. A etiqueta SUA LOGO existe somente na galeria de revisão; o documento salvo contém o slot dinâmico.
+
+Visibilidade restaurada no catálogo a pedido do usuário. Estarem disponíveis não significa que a revisão de fidelidade esteja concluída. O script preserva o estado publicado; somente `--draft` explícito o retira do catálogo.

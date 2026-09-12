@@ -385,6 +385,7 @@ export const useProductProcessor = () => {
 
     const extractErrorMessage = (err: any, fallback: string): string => {
         const msg = String(
+            err?.data?.data?.message ||
             err?.data?.message ||
             err?.data?.statusMessage ||
             err?.statusMessage ||

@@ -134,3 +134,29 @@ describe('createPriceTemplateFitting', () => {
     expect(richPrice.scaleY).toBeCloseTo(2.612, 6)
   })
 })
+
+it('nao reposiciona valor, moeda e unidade autorados quando cabem no fundo', () => {
+  const background = makeObject({ name:'price_bg', width:400, height:160, originX:'center',originY:'center',left:0,top:0 })
+  const value = makeObject({ name:'price_value_text',width:110,height:45,left:-70,top:12,text:'33,78',fontSize:32 })
+  const currency = makeObject({ name:'price_currency_text',width:24,height:18,left:-130,top:24,text:'R$' })
+  const unit = makeObject({ name:'price_unit_text',width:28,height:18,left:75,top:28,text:'UN' })
+  const objects = [background,value,currency,unit]
+  const group = {__preserveManualLayout:true,getObjects:()=>objects}
+  const before = JSON.stringify(objects)
+  const fitting = makeFitting(objects)
+  for(let i=0;i<3;i++) fitting.fitManualSinglePriceValuesIntoTemplate(group)
+  expect(JSON.stringify(objects)).toBe(before)
+})
+
+it('nao recentraliza as duas faixas de uma etiqueta manual ja ajustada', () => {
+ const objects = ['retail','wholesale'].flatMap((tier,i)=>[
+  makeObject({name:`atac_${tier}_bg`,width:400,height:100,left:0,top:i*120}),
+  makeObject({name:`${tier}_price_text`,width:100,height:45,left:120,top:i*120+20,text:'33,78',fontSize:32}),
+  makeObject({name:`${tier}_currency_text`,width:24,height:18,left:70,top:i*120+30,text:'R$'})
+ ])
+ const group = {__preserveManualLayout:true,getObjects:()=>objects}
+ const before = JSON.stringify(objects)
+ const fitting = makeFitting(objects)
+ fitting.fitManualAtacarejoValuesIntoTemplate(group)
+ expect(JSON.stringify(objects)).toBe(before)
+})

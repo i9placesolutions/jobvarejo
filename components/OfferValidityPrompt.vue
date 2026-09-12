@@ -189,7 +189,7 @@ const confirm = () => {
         <span>Como exibir a validade</span>
         <select v-model="dateFormat" aria-label="Formato da validade" class="offer-validity-prompt__select">
           <option value="numeric">07/09/2026 — numérica</option>
-          <option value="long">07 de setembro de 2026 — por extenso</option>
+          <option value="long">07 de setembro — por extenso</option>
 
         </select>
       </label>

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { classifyProductImageError } from '../utils/product-image-error';
 import { searchChromiumImageCandidates } from '../utils/product-image-chromium';
 import { getS3Client, getPublicUrl } from "../utils/s3";
 import { requireAuthenticatedUser } from "../utils/auth";
@@ -1141,20 +1143,15 @@ export default defineEventHandler(async (event) => {
         if ([400, 401, 403, 404, 409, 422, 429].includes(statusCode)) {
             throw err;
         }
-        console.error('❌ [process-product-image] Unhandled error (returning 200):', err);
-        return {
-            found: false,
-            url: null,
-            source: 'error',
-            reason: 'internal_error',
-            provider: 'server',
-            candidateCount: 0,
-            attempts: 0,
-            confidence: 0,
-            reviewPending: true,
-            imageReviewReason: 'Falha interna durante o processamento da imagem.',
-            nextAction: 'Reprocessar em modo rápido ou aplicar imagem manualmente.',
-            message: String(err?.message || err || 'unknown')
-        };
+        const failure = classifyProductImageError(err);
+        const requestId = randomUUID();
+        console.error(`[process-product-image] ${requestId}:`, err);
+        if (failure.retryable) setResponseHeader(event, 'Retry-After', 3);
+        throw createError({
+            statusCode: failure.statusCode,
+            statusMessage: failure.retryable ? 'Image service temporarily unavailable' : 'Image processing failed',
+            message: failure.message,
+            data: { reason: failure.reason, retryable: failure.retryable, requestId, message: failure.message }
+        });
     }
 });

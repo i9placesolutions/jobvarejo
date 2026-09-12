@@ -146,7 +146,7 @@ export const formatOfferDate = (value: unknown, format: OfferDateFormat = 'numer
   if (format === 'numeric') return `${day}/${month}/${year}`
   const months = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
   const name = months[Number(month) - 1]
-  return name ? `${day} de ${name} de ${year}` : raw
+  return name ? `${day} de ${name}` : raw
 }
 
 /** Inclui o fundo/ícone quando pertencem ao mesmo grupo exclusivo da validade. */
@@ -167,14 +167,14 @@ export const getOfferValidityVisibilityTarget = (text: any): any => {
 
 /** Compacta datas por extenso já formatadas, mantendo intervalos numéricos legados. */
 export const formatOfferDateInterval = (start: string, end: string): string => {
-  const pattern = /^(\d{2}) de ([a-zç]+) de (\d{4})$/i
+  const pattern = /^(\d{2}) de ([a-zç]+)(?: de (\d{4}))?$/i
   const first = start.match(pattern)
   const last = end.match(pattern)
   if (!first || !last) return `${start} a ${end}`
   const [, startDay, startMonth, startYear] = first
   const [, endDay, endMonth, endYear] = last
   if (startYear !== endYear) return `${start} a ${end}`
-  if (startMonth === endMonth) return `${startDay} a ${endDay} de ${endMonth} de ${endYear}`
+  if (startMonth === endMonth) return `${startDay} a ${endDay} de ${endMonth}${endYear ? ` de ${endYear}` : ''}`
   const months = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
   const month = months.indexOf(startMonth!.toLowerCase()) + 1
   if (!month) return `${start} a ${end}`

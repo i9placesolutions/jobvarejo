@@ -1,3 +1,5 @@
+import { restoreCanvasStickerOutlines } from './editorStickerOutline'
+
 type GenerateThumbnailFromCanvasJsonOptions = {
   sourceJson: any
   staticCanvasCtor: any
@@ -253,6 +255,7 @@ export const generateThumbnailFromCanvasJson = async (
       -bounds.left * fitScale,
       -bounds.top * fitScale
     ]
+    restoreCanvasStickerOutlines(sc)
     sc.renderAll()
     return sc.toDataURL({
       format: 'png',

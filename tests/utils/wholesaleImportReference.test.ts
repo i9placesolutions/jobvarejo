@@ -135,3 +135,9 @@ it('não mostra preço zero criado pela conversão de um item somente com atacad
   const product = migrateProduct({ id: 'only-special', name: 'CERVEJA', offerFormat: 'wholesale-pack-v1', priceSpecial: '129,99', priceSpecialUnit: '5,41', packQuantity: 24, packageLabel: 'CX', specialCondition: 'QUALQUER QUANTIDADE' })
   expect(resolveWholesalePackPriceState(product).showRetail).toBe(false)
 })
+
+it('reconhece QUANT. EMBALAGEM e CONDIÇÃO DO PREÇO ESPECIAL sem confundir os campos', () => {
+  const [product] = parseProductsAuto('PRODUTO;EMBALAGEM;QUANT. EMBALAGEM;PREÇO CX. AVULSA;PREÇO UND. AVULSA;PREÇO ESPECIAL;PREÇO UND. ESPECIAL;CONDIÇÃO DO PREÇO ESPECIAL\nCERVEJA HEINEKEN 330 ML;SIXPACK;6;33.78;5.63;31.74;5.29;ACIMA DE 20 SIXPACK')
+  expect(product).toMatchObject({ offerFormat: 'wholesale-pack-v1', packageLabel: 'SIXPACK', packQuantity: 6, pricePack: '33,78', priceUnit: '5,63', priceSpecial: '31,74', priceSpecialUnit: '5,29', specialCondition: 'ACIMA DE 20 SIXPACK' })
+  expect(getAvailablePrices(product).prices).toHaveLength(4)
+})
