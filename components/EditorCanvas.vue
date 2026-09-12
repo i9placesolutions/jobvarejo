@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createIsolatedDynamicTextbox } from '~/utils/isolatedDynamicTextbox'
 import { applyDynamicBusinessTextColor } from '~/utils/dynamicBusinessFields'
 import { installGroupClipCacheGuard } from '~/utils/fabricGroupClipCache'
 import { getExplicitFlavorQueries } from '~/utils/productFlavorQueries'
@@ -18939,7 +18940,7 @@ const persistInactiveQuickBusinessFields = async () => {
             if (field === 'logo') return { quickFieldEnabled: enabled, visible: enabled && !!getQuickLogoSource(profile) }
             if (!['text', 'textbox', 'i-text'].includes(String(object.type || '').toLowerCase())) return null
             const text = field === 'validity' ? (isSplitFooterValidity(object) && validity ? resolveSplitFooterValidityText(object, pageObjects, validity) : String(validityText || '')) : getQuickBusinessProfileValue(profile, field)
-            const runtime = new fabric.Textbox(String(object.text || ''), { ...object })
+            const runtime = createIsolatedDynamicTextbox(fabric, object)
             configureDynamicBusinessTextObject(runtime, fabric)
             setQuickDynamicTextValue(runtime, text)
             const result: Record<string, any> = {
