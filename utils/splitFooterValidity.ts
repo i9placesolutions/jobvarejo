@@ -1,9 +1,9 @@
 /** A validade em três linhas mantém a composição do modelo ao trocar as datas. */
 export const isSplitFooterValidity = (object: any): boolean =>
-  object?.quickValidityLayout === 'split-footer' ||
+  ['split-footer', 'calendar-card'].includes(object?.quickValidityLayout) ||
   (object?.name === 'dynamic-validity' && object?.quickDataField === 'validity')
 
-export const splitFooterValidityText = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean }) => {
+export const splitFooterValidityText = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; layout?: string }) => {
   const parse = (raw?: string) => {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw || ''))
     if (!match) return null
@@ -22,6 +22,14 @@ export const splitFooterValidityText = (value: { startDate?: string; endDate?: s
       ? `${start.day} A ${full(end)}`
       : `${full(start, start.year !== end.year)} A ${full(end, start.year !== end.year)}`
   } else if (start || end) period = full((start || end)!)
+  if (value.layout === 'calendar-card') {
+    if (start && end && !stocksOnly && value.mode !== 'single_day' && start.year === end.year && start.month === end.month && value.startDate !== value.endDate) {
+      // E só representa dois dias quando são consecutivos; intervalos maiores usam A.
+      period = `${start.day} ${end.day === start.day + 1 ? 'E' : 'A'} ${end.day} DE\n${end.label}`
+    }
+    return { heading: stocksOnly ? 'OFERTAS VÁLIDAS' : 'OFERTAS VÁLIDAS DIAS', period,
+      stock: !stocksOnly && value.whileStocks !== false ? 'ENQUANTO DURAREM OS ESTOQUES' : '' }
+  }
   return { heading: stocksOnly ? 'OFERTA VÁLIDA' : 'OFERTA VÁLIDA DE', period,
     stock: !stocksOnly && value.whileStocks !== false ? 'OU ENQUANTO DURAREM OS ESTOQUES' : '' }
 }
@@ -37,7 +45,7 @@ export const resolveSplitFooterValidityText = (
   siblings: any[],
   value: Parameters<typeof splitFooterValidityText>[0]
 ): string => {
-  const copy = splitFooterValidityText(value)
+  const copy = splitFooterValidityText({ ...value, layout: object?.quickValidityLayout })
   if (!copy.period) return ''
   return hasSplitFooterValidityCompanions(object, siblings)
     ? copy.period

@@ -18925,8 +18925,8 @@ const persistInactiveQuickBusinessFields = async () => {
         const page = project.pages[index]
         if (!page?.canvasData) continue
         const pageObjects = page.canvasData.objects || []
-        const splitValidity = pageObjects.some((object: any) => isSplitFooterValidity(object) && hasSplitFooterValidityCompanions(object, pageObjects))
-        const splitText = validity ? splitFooterValidityText(validity) : null
+        const splitValidity = pageObjects.find((object: any) => isSplitFooterValidity(object) && hasSplitFooterValidityCompanions(object, pageObjects))
+        const splitText = validity ? splitFooterValidityText({ ...validity, layout: splitValidity?.quickValidityLayout }) : null
         let updated = updateIsolatedPageFields(page.canvasData, object => {
             if (splitValidity && splitText && ['validity-heading', 'stock-validity', 'validity-backdrop'].includes(object.name)) {
                 if (object.name === 'validity-backdrop') return { visible: false }
@@ -19109,12 +19109,12 @@ const handleQuickModeValidityUpdate = (payload: {
             visible: quickShowValidity.value && !!nextText
         })
         const split = isSplitFooterValidity(object)
-        const splitText = splitFooterValidityText({ startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value })
+        const splitText = splitFooterValidityText({ startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value, layout: object.quickValidityLayout })
         const siblings = canvas.value?.getObjects() || []
         const separateFields = split && hasSplitFooterValidityCompanions(object, siblings)
         setQuickDynamicTextValue(object, split ? resolveSplitFooterValidityText(object, siblings, { startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value }) : nextText)
         if (split) {
-            object.set({ quickValidityLayout: 'split-footer', visible: quickShowValidity.value && !!splitText.period })
+            object.set({ quickValidityLayout: object.quickValidityLayout === 'calendar-card' ? 'calendar-card' : 'split-footer', visible: quickShowValidity.value && !!splitText.period })
             for (const sibling of canvas.value?.getObjects() || []) {
                 if (sibling.parentFrameId !== object.parentFrameId) continue
                 if (separateFields && sibling.name === 'validity-backdrop') sibling.set({ visible: false })
