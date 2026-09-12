@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { applyDynamicBusinessTextColor } from '~/utils/dynamicBusinessFields'
+import { installGroupClipCacheGuard } from '~/utils/fabricGroupClipCache'
 import { getExplicitFlavorQueries } from '~/utils/productFlavorQueries'
 import { isSplitFooterValidity, splitFooterValidityText, hasSplitFooterValidityCompanions, resolveSplitFooterValidityText } from '~/utils/splitFooterValidity'
 import { createWholesaleReferenceTemplateJson, WHOLESALE_REFERENCE_TEMPLATE_ID, WHOLESALE_REFERENCE_MARKER } from '~/utils/wholesaleReferenceLayout'
@@ -187,7 +189,6 @@ import {
     stripAccents,
     normalizeLimitText,
     normalizeSpecialCondition,
-    normalizeImageSearch,
     normalizeImageSearchText,
     normalizeImageSearchKey,
     dedupeImageSearchTokens,
@@ -825,7 +826,6 @@ const refreshProductImagePickerAssets = async () => {
             query: {
                 ...(search ? { q: search } : {}),
                 limit: search ? 120 : 80,
-                fresh: '1',
                 ai: '0',
                 expand: '0',
                 includeCache: '0'
@@ -870,16 +870,10 @@ const searchProductImagePickerUploads = async () => {
     await refreshProductImagePickerAssets()
 }
 
-// normalizeImageSearch extraido para utils/productTextNormalize.ts.
-
 const filteredProductImageUploads = computed(() => {
-    const list = Array.isArray(productImagePickerAssets.value) ? productImagePickerAssets.value : [];
-    const q = normalizeImageSearch(productImagePickerSearch.value);
-    if (!q) return list;
-    return list.filter((item: any) => {
-        const hay = normalizeImageSearch(`${item?.name || ''} ${item?.id || ''} ${item?.url || ''}`);
-        return hay.includes(q);
-    });
+    // A API já busca por tokens e ordena por relevância. Refiltrar pela frase
+    // literal escondia arquivos como cerveja-original e cerveja-gf-original.
+    return Array.isArray(productImagePickerAssets.value) ? productImagePickerAssets.value : [];
 });
 
 watch(showProductImageUploadPicker, (open) => {
@@ -7269,6 +7263,7 @@ const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
 
     target.objects.forEach(({ object, property }) => {
         object.set?.({ [property]: color })
+        if (property === 'fill') applyDynamicBusinessTextColor(object, color)
         if (target.kind === 'product-card' && object.group) {
             object.group._cardStyleOverrides = { ...object.group._cardStyleOverrides, cardColor: color, isProdBgTransparent: false }
             syncProductNameColor(object.group, getZoneGlobalStyles(findProductZoneById(object.group.parentZoneId)))
@@ -7286,6 +7281,7 @@ const clearQuickModeColor = async (targetId: string) => {
 
     target.objects.forEach(({ object, property }) => {
         object.set?.({ [property]: 'transparent', ...(target.kind === 'product-card' ? { stroke: 'transparent' } : {}) })
+        if (property === 'fill') applyDynamicBusinessTextColor(object, 'transparent')
         if (target.kind === 'product-card' && object.group) {
             object.group._cardStyleOverrides = { ...object.group._cardStyleOverrides, isProdBgTransparent: true, cardBorderWidth: 0 }
         }
@@ -8435,7 +8431,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     const loadSessionId = ++activePageLoadSessionId;
     const isStaleLoad = () => loadSessionId !== activePageLoadSessionId || isCanvasDestroyed.value;
     scheduleCanvasDataPrefetch(nextPageId, 0)
-    if (!newPage.canvasData && nextPageId) {
+    if (nextPageId && (!newPage.canvasData || (newPage.canvasData.objects?.length > 0 && newPage.canvasData.objects.every((o: any) => o.quickDataField === 'validity' || o.name === 'validity-backdrop')))) {
         if (import.meta.dev) console.log('[activePageWatch] ⏳ Carregando canvasData do servidor para página:', nextPageId);
         await ensurePageCanvasDataLoaded(nextPageId)
         if (isStaleLoad()) {
@@ -9799,6 +9795,11 @@ onMounted(async () => {
     // A sincronização dos seeds inclui a rasterização de várias miniaturas.
     // Ela é agendada pelo watcher depois que o design inicial termina, para
     // não bloquear o primeiro paint nem a abertura do editor.
+
+    // Fabric 7 Group.shouldCache desativa o cache quando um filho tem sombra,
+    // mesmo se o grupo tem clipPath. A máscara destination-in então apaga o
+    // canvas principal. Grupos recortados precisam sempre de cache próprio.
+    installGroupClipCacheGuard(fabric.Group);
 
 	    // PATCH: Fabric v7 can call `drawObject(ctx, false, {})` (no cache path),
 	    // but `_drawClipPath` assumes a DrawContext with `parentClipPaths` and will crash.
@@ -19067,6 +19068,11 @@ const handleQuickModeValidityUpdate = (payload: {
             }
         }
     }
+    // A validade nunca deve criar/salvar um canvas parcial durante a troca de página.
+    if (!canvas.value || !isInitialDesignLoadDone.value || isDesignLoading.value ||
+        isCanvasJsonLoadInProgress ||
+        lastLoadedPageKey !== `${project.id}:${activePage.value?.id}` ||
+        completedPageLoadSessionId !== activePageLoadSessionId) return
     const nextText = formatQuickValidity(
         quickValidityStartDate.value,
         quickValidityEndDate.value,

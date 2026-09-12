@@ -41,6 +41,7 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     'dynamicFieldHeight',
     'dynamicFieldAutoHeight',
     'dynamicFieldBaseFontSize',
+    'dynamicFieldTextColor',
     'dynamicFieldAutoFitFontSize',
     'quickLogoSource',
     'quickLogoSlot',

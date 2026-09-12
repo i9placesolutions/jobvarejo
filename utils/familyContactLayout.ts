@@ -1,4 +1,4 @@
-/** Organização solicitada para a composição Família: telefone no topo, validade no rodapé. */
+/** Organização solicitada para a composição Família: contatos no topo, validade no rodapé. */
 export const layoutFamilyContacts = (objects: any[]): boolean => {
  let changed = false
  const set = (o: any, values: any) => {
@@ -15,12 +15,15 @@ export const layoutFamilyContacts = (objects: any[]): boolean => {
   const text = (o: any, left: number, top: number, width: number, size: number, fill: string) => set(o, {
    left, top, width, originX:'left', originY:'top', scaleX:1, scaleY:1, fontSize:size,
    dynamicFieldBaseFontSize:size, dynamicFieldAutoFitFontSize:size, dynamicFieldHeight:0,
-   dynamicFieldAutoHeight:true, textAlign:'left', lineHeight:1.02, backgroundColor:'', fill, clipPath:undefined
+   dynamicFieldAutoHeight:true, textAlign:'left', lineHeight:1.02, backgroundColor:'', fill:o?.dynamicFieldTextColor || fill, clipPath:undefined
   })
-  text(phone,x+350*s,zb.top-69*s,540*s,50*s,'#6b170c')
+  const instagram = a.find(o => o.businessProfileField === 'instagram')
+  const hasInstagram = !!instagram && instagram.visible !== false && !!String(instagram.text || '').trim()
+  const phoneLeft = x + (hasInstagram ? 110 : 350) * s
+  text(phone,phoneLeft,zb.top-69*s,(hasInstagram ? 440 : 540)*s,(hasInstagram ? 40 : 50)*s,'#6b170c')
   set(phone,{name:'header-whatsapp'})
   const title = a.find(o => o.text === 'WHATSAPP DE OFERTAS')
-  text(title,x+350*s,zb.top-89*s,540*s,16*s,'#6b170c')
+  text(title,phoneLeft,zb.top-89*s,440*s,16*s,'#6b170c')
   const moveIcon = (name: string, left: number, top: number, size: number, color: string, field: string) => {
    const icon = a.find(o => o.name === name)
    if (!icon) return
@@ -31,22 +34,23 @@ export const layoutFamilyContacts = (objects: any[]): boolean => {
    }
    paint(icon)
   }
-  moveIcon('icon-whatsapp',x+280*s,zb.top-65*s,54*s,'#197337','whatsapp')
+  moveIcon('icon-whatsapp',x+(hasInstagram ? 46 : 280)*s,zb.top-65*s,54*s,'#197337','whatsapp')
   const foot = zb.top + zb.height
   text(date,x+125*s,foot+8*s,900*s,22*s,'#ffffff')
   const styles: Record<number, Record<number, any>> = {}
   String(date.text || '').split('\n').forEach((line,row) => {
-   styles[row]={};for(let i=0;i<line.length;i++)styles[row]![i]={fontSize:(row===1?22:14)*s,fontWeight:row===1?700:400,fill:row===1?'#ffe11f':'#ffffff'}
+   styles[row]={};for(let i=0;i<line.length;i++)styles[row]![i]={fontSize:(row===1?22:14)*s,fontWeight:row===1?700:400,fill:date.dynamicFieldTextColor || (row===1?'#ffe11f':'#ffffff')}
   })
   set(date,{quickValidityLayout:'split-footer',styles})
   moveIcon('icon-validity',x+60*s,foot+10*s,48*s,'#ffe11f','validity')
   for(const name of ['validity-backdrop','footer-contact-whatsapp'])set(a.find(o=>o.name===name),{visible:false})
-  // O contato que permaneceu no rodapé ocupa a linha liberada pelo telefone.
-  const bottom=fb.top+fb.height
-  text(a.find(o=>o.businessProfileField==='instagram'),x+86*s,bottom-93*s,950*s,23*s,'#17232d')
-  text(a.find(o=>o.text==='SIGA NOSSO INSTAGRAM'),x+86*s,bottom-108*s,950*s,10*s,'#ef6500')
-  set(a.find(o=>o.name==='icon-instagram'),{top:bottom-97*s,clipPath:undefined})
-  set(a.find(o=>o.name==='footer-contact-instagram'),{width:1048*s,clipPath:undefined})
+  if (hasInstagram) {
+   text(instagram,x+630*s,zb.top-69*s,405*s,20*s,'#6b170c')
+   set(instagram,{name:'header-instagram'})
+   text(a.find(o=>o.text==='SIGA NOSSO INSTAGRAM'),x+630*s,zb.top-89*s,405*s,16*s,'#6b170c')
+   moveIcon('icon-instagram',x+566*s,zb.top-65*s,48*s,'#9b2352','instagram')
+   set(a.find(o=>o.name==='footer-contact-instagram'),{visible:false})
+  }
  }
  return changed
 }

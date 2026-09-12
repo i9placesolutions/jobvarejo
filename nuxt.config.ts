@@ -158,6 +158,9 @@ export default defineNuxtConfig({
     build: {
       rollupOptions: {
         output: {
+          // Dependências compartilhadas não devem arrastar ferramentas do editor
+          // para a entrada global (login/dashboard) por inclusão transitiva.
+          onlyExplicitManualChunks: true,
           manualChunks(id) {
             // Keep Vite preload helper out of feature chunks to avoid
             // accidentally turning a lazy chunk into a global dependency.

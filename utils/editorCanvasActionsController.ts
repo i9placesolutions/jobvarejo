@@ -1,3 +1,4 @@
+import { applyDynamicBusinessTextColor } from './dynamicBusinessFields'
 type ArrangeMode = any
 
 export type EditorCanvasActionsContext = Record<string, any>
@@ -1195,6 +1196,13 @@ const updateObjectProperty = (prop: string, value: any) => {
                     active = deepActive;
                 }
             }
+        }
+
+        if (prop === 'fill' && !getTextSelectionRange(active) && applyDynamicBusinessTextColor(active, value)) {
+            safeRequestRenderAll();
+            debouncedSaveCurrentState();
+            refreshSelectedRef();
+            return;
         }
 
         // Rich text: apply style to selected text range when available.

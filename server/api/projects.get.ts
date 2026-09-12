@@ -161,8 +161,26 @@ export default defineEventHandler(async (event) => {
       categoryClauses.push(`and lower(btrim(template_config ->> 'subcategory')) = lower($${params.push(templateSubcategory)})`)
     }
     const categoryClause = categoryClauses.length ? `\n        ${categoryClauses.join('\n        ')}` : ''
+    // A listagem só usa metadados das páginas. Remover o canvas inline no banco
+    // evita transferir desenhos legados inteiros; o GET por id mantém o conteúdo.
     const baseSql = `
-      select id, name, created_at, updated_at, preview_url, canvas_data, template_config, folder_id, last_viewed, is_shared, shared_with, is_starred, is_template
+      select id, name, created_at, updated_at, preview_url,
+        (
+          select coalesce(jsonb_agg(
+            case when jsonb_typeof(page.value) = 'object'
+              then page.value - 'canvasData'
+              else page.value
+            end order by page.ordinality
+          ), '[]'::jsonb)
+          from jsonb_array_elements(
+            case
+              when jsonb_typeof(canvas_data) = 'array' then canvas_data
+              when jsonb_typeof(canvas_data -> 'pages') = 'array' then canvas_data -> 'pages'
+              else '[]'::jsonb
+            end
+          ) with ordinality as page(value, ordinality)
+        ) as canvas_data,
+        template_config, folder_id, last_viewed, is_shared, shared_with, is_starred, is_template
       from public.projects
       where user_id = $1
         and coalesce(is_template, false) = $2

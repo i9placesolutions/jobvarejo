@@ -1,4 +1,16 @@
 import { isSplitFooterValidity } from './splitFooterValidity'
+
+/** Cor escolhida para o campo inteiro, incluindo os estilos por caractere. */
+export const applyDynamicBusinessTextColor = (object: any, color: unknown): boolean => {
+  if (!isDynamicBusinessFieldObject(object) || typeof color !== 'string') return false
+  const styles = Object.fromEntries(Object.entries(object.styles || {}).map(([row, chars]: [string, any]) => [
+    row, Object.fromEntries(Object.entries(chars || {}).map(([col, style]: [string, any]) => [col, { ...style, fill: color }]))
+  ]))
+  object.set({ fill: color, dynamicFieldTextColor: color, styles })
+  object.dirty = true
+  for (let parent = object.group; parent; parent = parent.group) parent.dirty = true
+  return true
+}
 /**
  * Regras compartilhadas dos campos dinamicos de dados da loja.
  *
@@ -370,7 +382,7 @@ export const fitDynamicBusinessTextObject = (
     object.initDimensions?.()
     const fitsSingleLine = object.textLines?.length === 1 && getMeasuredLineWidth(object) <= width + 0.5
     if (fitsSingleLine) text = flatText
-    object.set({ text, fontSize: size, dynamicFieldAutoFitFontSize: size, splitByGrapheme: false, styles: {}, lineHeight: 1.08, textAlign: 'center', backgroundColor: '', fill: '#14223d' })
+    object.set({ text, fontSize: size, dynamicFieldAutoFitFontSize: size, splitByGrapheme: false, styles: {}, lineHeight: 1.08, textAlign: 'center', backgroundColor: '', fill: object.dynamicFieldTextColor || '#14223d' })
     object.initDimensions?.()
     // Reduz apenas até cada linha caber; nunca achata as duas linhas em uma.
     while ((object.textLines?.length > 2 || getMeasuredLineWidth(object) > width + 0.5) && size > 1) {

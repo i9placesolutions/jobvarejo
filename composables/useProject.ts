@@ -562,6 +562,12 @@ const clearDraft = (projectId: string, pageId: string, savedAt?: number) => {
     }
 }
 
+const isValidityOnlyCanvas = (data: any): boolean => {
+    const objects = data?.objects
+    return Array.isArray(objects) && objects.length > 0 && objects.every((o: any) =>
+        o?.quickDataField === 'validity' || o?.name === 'validity-backdrop')
+}
+
 const resolveCanvasDataWithDraft = (opts: {
     projectId: string
     pageId: string
@@ -577,7 +583,7 @@ const resolveCanvasDataWithDraft = (opts: {
 
     const draftData = draft.canvasData
     const draftCount = getCanvasObjectCount(draftData)
-    const draftIsValid = draftCount > 0
+    const draftIsValid = draftCount > 0 && !(remoteCount > 2 && isValidityOnlyCanvas(draftData))
     const remoteTs = getCanvasSavedAt(remoteData)
     const draftJsonTs = getCanvasSavedAt(draftData)
     const draftLocalTs = Number(draft.updatedAt || 0)
@@ -1021,7 +1027,7 @@ export const useProject = () => {
         if (pageIndex < 0) return null
         const page = project.pages[pageIndex]
         if (!page) return null
-        if (page.canvasData || (!page.canvasDataPath && !readDraft(project.id, normalizedPageId)?.canvasData)) {
+        if ((page.canvasData && !isValidityOnlyCanvas(page.canvasData)) || (!page.canvasDataPath && !readDraft(project.id, normalizedPageId)?.canvasData)) {
             return page
         }
 
@@ -1662,7 +1668,8 @@ export const useProject = () => {
                     const persistedCount = Number(page?.lastPersistedObjectCount || 0)
                     // Só bloqueia vazio quando NÃO há edição pendente na página.
                     // Página dirty=true indica alteração intencional em canvasData (ex.: remover todos os objetos).
-                    return currentCount === 0 && persistedCount > 0 && !page?.dirty
+                    return (currentCount === 0 && persistedCount > 0 && !page?.dirty) ||
+                        (persistedCount > 2 && isValidityOnlyCanvas(page.canvasData))
                 }
 	            const unsafeEmptyPages = project.pages.filter((page) => {
 	                return isUnsafeEmptyOverwrite(page as Page)

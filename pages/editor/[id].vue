@@ -6,7 +6,8 @@ import { useApiAuth } from '~/composables/useApiAuth'
 import { useResponsive } from '~/composables/useResponsive'
 import { FLYER_TEMPLATE_FORMATS } from '~/utils/flyerTemplateApi'
 
-const EditorCanvas = defineAsyncComponent(() => import('~/components/EditorCanvas.vue'))
+const loadEditorCanvas = () => import('~/components/EditorCanvas.vue')
+const EditorCanvas = defineAsyncComponent(loadEditorCanvas)
 const { isMobile } = useResponsive()
 
 // Ref para chamar flushPersistenceNow do filho via defineExpose.
@@ -318,6 +319,9 @@ watch(
     const id = String(nextId || '').trim()
     if (!id) return
     const token = ++pageLoadToken
+    // Baixar o editor enquanto buscamos o projeto; a montagem continua
+    // aguardando isProjectLoaded para preservar a hidratação do canvas.
+    if (import.meta.client) void loadEditorCanvas().catch(() => {})
     const loaded = await loadProjectDB(id)
     if (token !== pageLoadToken) return
     if (loaded === 'superseded') return
