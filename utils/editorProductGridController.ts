@@ -1,3 +1,4 @@
+import { quickGridRows } from './quickGridPreset'
 import { isProductLabelTemplateCompatible } from './productLabelCompatibility'
 import { resolveProductNameColor, syncProductNameColor } from './productNameColors'
 type GlobalStyles = Record<string, any>
@@ -3214,7 +3215,26 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
         };
 
         // Highlight detection
-        const hl = getZoneHighlightPredicate(layoutZone, cards);
+        const explicitPreset = ['model', '2', '3'].includes(zone.quickGridPreset) ? zone.quickGridPreset : null;
+        const hl = explicitPreset ? { count: 0, mult: 1, isHighlighted: () => false } : getZoneHighlightPredicate(layoutZone, cards);
+        if (explicitPreset) {
+            layoutZone.cardAspectRatio = 'fill';
+            layoutZone.cardAspectRatios = {};
+            const rowCounts = quickGridRows(cards.length, explicitPreset);
+            const space = fitSpacing(Math.max(...rowCounts), rowCounts.length);
+            const height = (space.usableH - space.gapY * (rowCounts.length - 1)) / rowCounts.length;
+            let index = 0;
+            rowCounts.forEach((columns, row) => {
+                const width = (space.usableW - space.gapX * (columns - 1)) / columns;
+                for (let column = 0; column < columns; column++) {
+                    const card = cards[index];
+                    placeCard(card, space.startX + column * (width + space.gapX), space.startY + row * (height + space.gapY), width, height, index++);
+                }
+            });
+            if (shouldRender) safeRequestRenderAll();
+            if (shouldSave) saveCurrentState();
+            return;
+        }
 
         if (hl.count > 0 && hl.mult > 1) {
             // ══════════════ FEATURED LAYOUT ══════════════
@@ -4327,10 +4347,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
                             const allAtOrigin = zoneCards.length > 1 && zoneCards.every((c: any) => {
                                 return Math.abs(Number(c.left ?? 0)) < 2 && Math.abs(Number(c.top ?? 0)) < 2;
                             });
-                            const preserveTemplateLayout = isTemplateCompositionManagedZone(z)
-                            if (allHavePositions && !allAtOrigin && (
-                                preserveTemplateLayout || !productZoneStructuresState.isLoaded.value
-                            )) {
+                            if (allHavePositions && !allAtOrigin) {
                                 // O modelo já salvou a posição dos cards. Preservá-la
                                 // evita que a chegada da biblioteca global ou a troca
                                 // de página destrua a composição visual original.

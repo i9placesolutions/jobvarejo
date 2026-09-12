@@ -90,3 +90,23 @@ it('amplia uma foto nova sem herdar a caixa pequena e evita título/preço', () 
  expect(target.top-target.height*target.scaleY/2).toBeGreaterThan(-110);
  expect(target.top+target.height*target.scaleY/2).toBeLessThan(65);
 });
+
+it('troca somente a imagem escolhida mesmo que existam cópias iguais',()=>{
+ const first=image('one'),second=image('two');const card={width:300,height:300,getObjects:()=>[first,second]}
+ expect(replaceProductImageCopies(card,first,replacement,'/uva.png','single')).toEqual([first])
+ expect(second.src).not.toBe('/uva.png')
+})
+it('troca todas as imagens diferentes somente dentro do card escolhido',()=>{
+ const first=image('one'),second=image('two','/morango.png'),other=image('other','/uva.png');const card={width:300,height:300,getObjects:()=>[first,second]}
+ expect(replaceProductImageCopies(card,first,replacement,'/new.png','all')).toEqual([first,second])
+ expect(second.src).toBe('/new.png');expect(other.src).toBe('/uva.png')
+})
+
+it('a troca explícita preserva a posição manual e não desloca o outro sabor',()=>{
+ const first=image('one'),second=image('two','/morango.png');first.left=-77;first.top=43;second.left=81;
+ const before=JSON.stringify(second),card={width:300,height:300,getObjects:()=>[first,second]}
+ replaceProductImageCopies(card,first,replacement,'/uva.png','single')
+ expect(first.left).toBe(-77);expect(first.top).toBe(43);expect(JSON.stringify(second)).toBe(before)
+ expect(first.width*first.scaleX).toBeLessThanOrEqual(80)
+ expect(first.height*first.scaleY).toBeLessThanOrEqual(100)
+})

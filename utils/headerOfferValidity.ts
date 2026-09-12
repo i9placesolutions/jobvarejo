@@ -18,10 +18,11 @@ export const layoutHeaderOfferValidity = (text: any, children: any[]): boolean |
   if (!copy.period) return null
   const original = Object.fromEntries(['text', '__rawText', 'textAlign', 'styles', 'width', 'lineHeight', 'backgroundColor', 'fill', 'fontSize'].map(key => [key, text[key]]))
   const before = JSON.stringify([text.text, text.left, text.top, text.width, text.styles, text.textAlign])
-  const background = String(band?.fill || '')
+  const background = String(text.fill || '')
   const rgb = /^#([0-9a-f]{6})$/i.exec(background)?.[1]
   const luminance = rgb ? (.299 * parseInt(rgb.slice(0, 2), 16) + .587 * parseInt(rgb.slice(2, 4), 16) + .114 * parseInt(rgb.slice(4, 6), 16)) : 255
-  const ink = rgb ? (luminance < 145 ? '#ffffff' : '#241412') : text.fill
+  const ink = String(text.fill || '#ffffff')
+  const accent = rgb && luminance < 145 ? '#7d1d0c' : '#ffe11f'
   const fontSize = Math.min(Number(text.dynamicFieldBaseFontSize || text.fontSize || 20), (availableHeight - 12 * scale) / (2.8 * scale))
   const lines = [copy.heading, copy.period, copy.stock].filter(Boolean)
   const styles: Record<number, Record<number, any>> = {}
@@ -29,7 +30,7 @@ export const layoutHeaderOfferValidity = (text: any, children: any[]): boolean |
     styles[row] = {}
     for (let col = 0; col < line.length; col++) styles[row]![col] = {
       fontSize: row === 1 ? fontSize : fontSize * .65,
-      fontWeight: row === 1 ? 'bold' : 'normal', fill: ink
+      fontWeight: row === 1 ? 'bold' : 'normal', fill: row === 1 ? accent : ink
     }
   })
   const iconSize = fontSize * 2.6 * scale
@@ -50,13 +51,13 @@ export const layoutHeaderOfferValidity = (text: any, children: any[]): boolean |
   text.set({ left: text.left + left - current.left, top: text.top + top - current.top })
   text.setCoords?.()
   if (band) {
-    band.set({ height: (text.getBoundingRect().height + 12 * scale) / Math.abs(band.scaleY || 1) })
+    band.set({ visible: false })
     band.setCoords?.()
   }
   if (icon) {
     const recolor = (object: any) => {
       if (object.getObjects) object.getObjects().forEach(recolor)
-      else object.set({ ...(object.stroke && object.stroke !== 'none' ? { stroke: ink } : {}), ...(object.fill && object.fill !== 'none' ? { fill: ink } : {}) })
+      else object.set({ ...(object.stroke && object.stroke !== 'none' ? { stroke: accent } : {}), ...(object.fill && !['none', 'transparent'].includes(object.fill) ? { fill: accent } : { fill: null }) })
       object.dirty = true
     }
     recolor(icon)

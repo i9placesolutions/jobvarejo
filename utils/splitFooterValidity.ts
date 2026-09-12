@@ -25,3 +25,21 @@ export const splitFooterValidityText = (value: { startDate?: string; endDate?: s
   return { heading: stocksOnly ? 'OFERTA VÁLIDA' : 'OFERTA VÁLIDA DE', period,
     stock: !stocksOnly && value.whileStocks !== false ? 'OU ENQUANTO DURAREM OS ESTOQUES' : '' }
 }
+
+/** Modelos antigos podem ter só o período, sem os outros dois objetos. */
+export const hasSplitFooterValidityCompanions = (object: any, siblings: any[]): boolean =>
+  ['validity-heading', 'stock-validity'].every(name => siblings.some(sibling =>
+    sibling?.name === name && sibling.parentFrameId === object?.parentFrameId
+  ))
+
+export const resolveSplitFooterValidityText = (
+  object: any,
+  siblings: any[],
+  value: Parameters<typeof splitFooterValidityText>[0]
+): string => {
+  const copy = splitFooterValidityText(value)
+  if (!copy.period) return ''
+  return hasSplitFooterValidityCompanions(object, siblings)
+    ? copy.period
+    : [copy.heading, copy.period, copy.stock].filter(Boolean).join('\n')
+}

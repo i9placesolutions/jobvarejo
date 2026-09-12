@@ -1,5 +1,6 @@
+import { layoutFamilyContacts } from './familyContactLayout'
 import { layoutHeaderOfferValidity } from './headerOfferValidity'
-import { isSplitFooterValidity } from './splitFooterValidity'
+import { isSplitFooterValidity, hasSplitFooterValidityCompanions } from './splitFooterValidity'
 import { getDynamicBusinessField } from './dynamicBusinessFields'
 
 const bounds = (o: any) => o.getBoundingRect()
@@ -9,15 +10,16 @@ const right = (b: any) => b.left + b.width
 
 /** Repair confirmed page clipping without changing fonts, scales or product geometry. */
 export const repairDynamicTextLayoutBounds = (objects: any[], createValidityBackdrop?: (props: Record<string, any>, index: number) => any): { changed: boolean; unresolved: string[] } => {
-  let changed = false
+  let changed = layoutFamilyContacts(objects)
   const unresolved: string[] = []
   for (const frame of objects.filter(o => o.isFrame && o.visible !== false && typeof o.getBoundingRect === 'function')) {
     const fb = bounds(frame), children = objects.filter(o => o.parentFrameId === frame._customId && o.visible !== false && !o.isFrame)
     const fields = children.filter(o => ['address', 'instagram', 'whatsapp', 'validity'].includes(getDynamicBusinessField(o)) && typeof o.getBoundingRect === 'function')
     // Reuse the whole validity band after replacing its sample with a real date.
-    for (const o of fields.filter(o => getDynamicBusinessField(o) === 'validity' && String(o.type).toLowerCase() === 'textbox' && !o.angle && !isSplitFooterValidity(o))) {
-      const headerLayout = layoutHeaderOfferValidity(o, children)
+    for (const o of fields.filter(o => getDynamicBusinessField(o) === 'validity' && String(o.type).toLowerCase() === 'textbox' && !o.angle && (!isSplitFooterValidity(o) || !hasSplitFooterValidityCompanions(o, children)))) {
+      const headerLayout = layoutHeaderOfferValidity(o, objects.filter(child => child.parentFrameId === frame._customId && !child.isFrame))
       if (headerLayout !== null) { changed = headerLayout || changed; continue }
+      if (isSplitFooterValidity(o)) continue
       let band = children.find(b => b.name === 'validity-backdrop')
       const icon = children.find(b => b.quickDynamicIconFor === 'validity')
       if (!band && createValidityBackdrop) {

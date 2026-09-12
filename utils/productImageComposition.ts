@@ -161,10 +161,10 @@ export const collectDirectProductCardImages = (card: any): any[] => {
 }
 
 /** Reencaixa a nova textura proporcionalmente, preservando os objetos e o card. */
-export const replaceProductImageCopies = (card: any, target: any, replacement: any, source: string): any[] => {
+export const replaceProductImageCopies = (card: any, target: any, replacement: any, source: string, scope: 'single' | 'all' | 'copies' = 'copies'): any[] => {
   const originalSource = normalizeComparableSource(getProductImageObjectSource(target))
   const images = collectDirectProductCardImages(card).filter(image =>
-    image === target || (!!originalSource && normalizeComparableSource(getProductImageObjectSource(image)) === originalSource)
+    image === target || scope === 'all' || (scope === 'copies' && !!originalSource && normalizeComparableSource(getProductImageObjectSource(image)) === originalSource)
   )
   if (!images.includes(target) || !replacement?.getElement?.()) return []
   const width = Math.max(1, Number(replacement.width) || 1)
@@ -194,8 +194,14 @@ export const replaceProductImageCopies = (card: any, target: any, replacement: a
     const scaleY = scaleX
     const left = -cardWidth * .43 + cellWidth * (index % columns + .5)
     const top = areaTop + cellHeight * (Math.floor(index / columns) + .5)
+    const placement = scope === 'copies' ? null : {
+      left: image.left, top: image.top, originX: image.originX || 'center', originY: image.originY || 'center',
+      scaleX: Math.min(Math.abs(Number(image.width || 1) * Number(image.scaleX ?? 1)) / width, Math.abs(Number(image.height || 1) * Number(image.scaleY ?? 1)) / height),
+      scaleY: Math.min(Math.abs(Number(image.width || 1) * Number(image.scaleX ?? 1)) / width, Math.abs(Number(image.height || 1) * Number(image.scaleY ?? 1)) / height)
+    }
     image.setElement(replacement.getElement())
     image.set({ width, height, scaleX, scaleY, left, top, originX: 'center', originY: 'center',
+      ...(placement || {}),
       cropX: Number(replacement.cropX || 0), cropY: Number(replacement.cropY || 0),
       src: source, __originalSrc: source, dirty: true,
       __manualTransform: true,

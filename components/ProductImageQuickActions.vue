@@ -14,6 +14,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (e: 'add'): void
   (e: 'duplicate'): void
   (e: 'replace'): void
   (e: 'remove'): void
@@ -67,7 +68,7 @@ const toolbarStyle = computed(() => {
   <div v-if="visible" ref="root" class="image-actions-root pointer-events-none absolute inset-0 z-[116]" @keydown.esc.stop="expanded = false">
     <section ref="toolbar" class="image-actions pointer-events-auto" :style="toolbarStyle" aria-label="Imagem do produto" @pointerdown.stop @mousedown.stop @click.stop>
       <div class="image-actions-header">
-        <button type="button" class="image-action image-action-primary" title="Trocar a imagem e suas cópias neste produto" @click="emit('replace')"><ImagePlus /><span>Trocar</span></button>
+        <button type="button" class="image-action image-action-primary" title="Escolher quais imagens trocar neste produto" @click="emit('replace')"><ImagePlus /><span>Trocar</span></button>
         <button type="button" class="image-action" title="Duplicar imagem" @click="emit('duplicate')"><Copy /><span>Duplicar</span></button>
         <button type="button" class="image-action" aria-label="Reduzir imagem" title="Reduzir imagem" @click="emit('resize', 'smaller')"><Minus /><span>Diminuir</span></button>
         <button type="button" class="image-action" aria-label="Aumentar imagem" title="Aumentar imagem" @click="emit('resize', 'larger')"><Plus /><span>Aumentar</span></button>
@@ -75,6 +76,7 @@ const toolbarStyle = computed(() => {
         <button type="button" class="image-action image-action-remove" aria-label="Remover imagem" title="Remover imagem" @click="emit('remove')"><Trash2 /><span>Excluir</span></button>
       </div>
       <div class="image-actions-details" :class="{ 'is-expanded': expanded }">
+        <button type="button" class="image-action mb-2" @click="emit('add')"><ImagePlus /><span>Adicionar outra imagem ou sabor</span></button>
         <div class="image-actions-fields">
           <label>Quantidade<select aria-label="Preenchimento de imagens" :value="fillCount ?? 1" @change="emit('fill', Number(($event.target as HTMLSelectElement).value), fillDirection)">
             <option value="0">Automática</option><option value="1">1 imagem</option><option value="2">2 imagens</option><option value="3">3 imagens</option><option value="4">4 imagens</option>

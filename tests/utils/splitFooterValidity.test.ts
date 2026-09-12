@@ -7,3 +7,20 @@ it('mantém título, período e estoque separados', () => {
  expect(splitFooterValidityText({startDate:'2026-02-31'}).period).toBe('')
  expect(isSplitFooterValidity({quickDataField:'validity'})).toBe(false)
 })
+
+import { hasSplitFooterValidityCompanions, resolveSplitFooterValidityText } from '../../utils/splitFooterValidity'
+it('mantém chamada, período e estoque quando o modelo tem somente o campo da data', () => {
+  const field = { parentFrameId: 'frame-a', name: 'dynamic-validity', quickDataField: 'validity' }
+  expect(resolveSplitFooterValidityText(field, [field], { startDate: '2026-09-12', endDate: '2026-09-13', mode: 'date_range', whileStocks: true }))
+    .toBe('OFERTA VÁLIDA DE\n12 A 13 DE SETEMBRO\nOU ENQUANTO DURAREM OS ESTOQUES')
+  expect(hasSplitFooterValidityCompanions(field, [{ name: 'validity-heading', parentFrameId: 'frame-b' }, { name: 'stock-validity', parentFrameId: 'frame-b' }])).toBe(false)
+})
+it('mantém só o período quando os dois textos complementares existem no mesmo frame', () => {
+  const field = { parentFrameId: 'frame-a' }
+  const siblings = ['validity-heading', 'stock-validity'].map(name => ({ name, parentFrameId: 'frame-a' }))
+  expect(resolveSplitFooterValidityText(field, siblings, { startDate: '2026-09-12', endDate: '2026-09-13' })).toBe('12 A 13 DE SETEMBRO')
+})
+it('respeita estoque desativado e datas ausentes no campo completo', () => {
+  expect(resolveSplitFooterValidityText({}, [], { startDate: '2026-09-12', whileStocks: false })).toBe('OFERTA VÁLIDA DE\n12 DE SETEMBRO')
+  expect(resolveSplitFooterValidityText({}, [], {})).toBe('')
+})

@@ -145,6 +145,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (event: 'restore-grid', payload: { zoneId: string; preset: 'model' | '2' | '3' }): void
   (event: 'mobile-section', value: string): void
   (event: 'export'): void
   (event: 'product-palette', value: Partial<ProductPalette>): void
@@ -820,11 +821,17 @@ const useTemplateModel = (modelId: string) => {
       </div>
 
       <details
-        v-if="productsReviewed && selectedZone && hasAlternativeZoneStructures && (activeTab === 'mine' || mobileSection === 'tools')"
+        v-if="selectedZone && (activeTab === 'mine' || mobileSection === 'tools')"
         class="quick-mode-layout-options"
       >
-        <summary>Alterar disposição dos produtos</summary>
-        <label class="quick-mode-structure-card__select">
+        <summary>Organizar grid da página</summary>
+        <div class="flex flex-wrap gap-2 p-2">
+          <button type="button" :disabled="props.busy" class="rounded bg-violet-600 px-3 py-2 text-white disabled:opacity-50" @click="emit('restore-grid', { zoneId: props.selectedZoneId || '', preset: 'model' })">Restaurar grid padrão</button>
+          <button type="button" :disabled="props.busy" class="rounded border border-white/20 px-3 py-2" @click="emit('restore-grid', { zoneId: props.selectedZoneId || '', preset: '2' })">2 colunas</button>
+          <button type="button" :disabled="props.busy" class="rounded border border-white/20 px-3 py-2" @click="emit('restore-grid', { zoneId: props.selectedZoneId || '', preset: '3' })">3 colunas</button>
+        </div>
+        <p class="px-2 text-xs text-zinc-400">Altera somente a organização desta área de produtos. Você pode desfazer.</p>
+        <label v-if="hasAlternativeZoneStructures" class="quick-mode-structure-card__select">
           <span>Disposições para {{ productCount }} produtos</span>
           <select
             :value="selectedZoneStructureVariant?.id || ''"

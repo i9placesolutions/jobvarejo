@@ -24,3 +24,17 @@ it('preserva upload comum de arte sem remoção obrigatória', async()=>{
  await handleFileUpload(ctx as any,{target:{files:[file],value:''}})
  expect(ctx.uploadFile).toHaveBeenCalledWith(file)
 })
+
+it('processa a imagem escolhida da biblioteca antes de aplicá-la',async()=>{
+ const { applyProductImageFromUploadPicker }=await import('../../utils/editorProductImageActionsController')
+ const ctx={...fixture('replace'),productImagePickerMode:{value:'replace'},productImagePickerTargetImageId:{value:'image'},showProductImageUploadPicker:{value:true},prepareProductImageUrl:vi.fn().mockResolvedValue('sem-fundo.png')}
+ await applyProductImageFromUploadPicker(ctx as any,{url:'com-fundo.jpg'})
+ expect(ctx.prepareProductImageUrl).toHaveBeenCalledWith('com-fundo.jpg')
+ expect(ctx.replaceImageByCustomId).toHaveBeenCalledWith('image','sem-fundo.png',{scope:'single'})
+})
+it('mantém a imagem do card se a remoção da imagem da biblioteca falhar',async()=>{
+ const { applyProductImageFromUploadPicker }=await import('../../utils/editorProductImageActionsController')
+ const ctx={...fixture('replace'),productImagePickerMode:{value:'replace'},productImagePickerTargetImageId:{value:'image'},showProductImageUploadPicker:{value:true},prepareProductImageUrl:vi.fn().mockRejectedValue(new Error('Falha BiRefNet'))}
+ await applyProductImageFromUploadPicker(ctx as any,{url:'com-fundo.jpg'})
+ expect(ctx.replaceImageByCustomId).not.toHaveBeenCalled();expect(ctx.notifyEditorError).toHaveBeenCalled()
+})

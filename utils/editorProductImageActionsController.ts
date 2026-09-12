@@ -5,6 +5,8 @@ type ProductImageMode = 'replace' | 'add'
 type ProductImageAsset = { id?: string; name?: string; url: string }
 
 export type EditorProductImageActionsContext = {
+    productImagePickerLoading?: { value: boolean }
+    productImageReplaceScope?: { value: 'single' | 'all' }
     canvas: { value: any }
     fabric: any
     fileInput: { value: HTMLInputElement | null }
@@ -17,9 +19,10 @@ export type EditorProductImageActionsContext = {
     pendingImageAddCardId: { value: string | null }
     pendingLocalImageActionMode: { value: ProductImageMode | null }
     showProductImageUploadPicker: { value: boolean }
+    prepareProductImageUrl?: (url: string) => Promise<string>
     refreshAiStudioUploads: () => Promise<void>
     refreshProductImagePickerAssets?: () => Promise<void>
-    replaceImageByCustomId: (targetId: string, newUrl: string, opts?: { save?: boolean; setActive?: boolean }) => Promise<boolean>
+    replaceImageByCustomId: (targetId: string, newUrl: string, opts?: { save?: boolean; setActive?: boolean; scope?: 'single' | 'all' }) => Promise<boolean>
     insertAssetToCanvas: (asset: ProductImageAsset, opts?: { pos?: { x: number; y: number } }) => Promise<void>
     findProductCardByCustomId: (id: string) => any | null
     addImageToProductCardByUrl: (card: any, newUrl: string, opts?: { save?: boolean; setActive?: boolean }) => Promise<boolean>
@@ -94,11 +97,13 @@ export const applyProductImageFromUploadPicker = async (
     ctx: EditorProductImageActionsContext,
     asset: ProductImageAsset
 ) => {
-    if (!asset?.url) return
+    if (!asset?.url || ctx.productImagePickerLoading?.value) return
+    if (ctx.productImagePickerLoading) ctx.productImagePickerLoading.value = true
 
     try {
+        const imageUrl = ctx.prepareProductImageUrl ? await ctx.prepareProductImageUrl(asset.url) : asset.url;
         if (ctx.productImagePickerMode.value === 'replace' && ctx.productImagePickerTargetImageId.value) {
-            if (!await ctx.replaceImageByCustomId(ctx.productImagePickerTargetImageId.value, asset.url)) {
+            if (!await ctx.replaceImageByCustomId(ctx.productImagePickerTargetImageId.value, imageUrl, { scope: ctx.productImageReplaceScope?.value || 'single' })) {
                 ctx.notifyEditorError('Não foi possível substituir a imagem. Selecione novamente a imagem do produto.')
             }
         } else if (ctx.productImagePickerMode.value === 'add' && ctx.productImagePickerTargetCardId.value) {
@@ -107,9 +112,12 @@ export const applyProductImageFromUploadPicker = async (
                 ctx.notifyEditorError('Card de produto não encontrado.')
                 return
             }
-            await ctx.addImageToProductCardByUrl(targetCard, asset.url)
+            await ctx.addImageToProductCardByUrl(targetCard, imageUrl)
         }
+    } catch (error: any) {
+        ctx.notifyEditorError(error?.message || 'Não foi possível remover o fundo. A imagem anterior foi mantida.');
     } finally {
+        if (ctx.productImagePickerLoading) ctx.productImagePickerLoading.value = false
         ctx.showProductImageUploadPicker.value = false
         clearPendingProductImageOperation(ctx)
     }
@@ -140,7 +148,7 @@ export const handleFileUpload = async (
             }
             const uploaded = await ctx.uploadFile(await trimImageFile(file), { removeBackground: true })
             if (!uploaded?.success || !uploaded?.url) throw new Error('Upload falhou')
-            if (!await ctx.replaceImageByCustomId(replaceTargetId, uploaded.url)) {
+            if (!await ctx.replaceImageByCustomId(replaceTargetId, uploaded.url, { scope: ctx.productImageReplaceScope?.value || 'single' })) {
                 throw new Error('Não foi possível substituir a imagem do produto.')
             }
             return

@@ -38,8 +38,12 @@ export const applyWholesaleReferenceCardLayout = (card:any,w:number,h:number): b
   }
   const image=nodes.find((o:any)=>o.name==='smart_image')
   if(image){const scale=Math.min(w*.43/Math.max(1,image.width),h*.79/Math.max(1,image.height));set(image,{left:-w*.245,top:h*.08,originX:'center',originY:'center',scaleX:scale,scaleY:scale})}
-  const scale=Math.min(w*.49/Math.max(1,label.width),h*.80/Math.max(1,label.height))
-  set(label,{left:w*.235,top:h*.085,originX:'center',originY:'center',scaleX:scale,scaleY:scale})
+  // Ajustes explícitos da etiqueta prevalecem sobre o encaixe automático do card.
+  // __manualTransform também marca textos internos; somente esta flag indica o grupo inteiro.
+  if (label.__manualPricePosition !== true) {
+    const scale=Math.min(w*.49/Math.max(1,label.width),h*.80/Math.max(1,label.height))
+    set(label,{left:w*.235,top:h*.085,originX:'center',originY:'center',scaleX:scale,scaleY:scale})
+  }
   card.dirty=true
   return true
 }

@@ -22,6 +22,7 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     // Seed nativo da edicao rapida e campos comerciais editaveis no editor.
     'isQuickGenerated',
     'quickSeedId',
+    'quickGridPreset',
     'businessProfileField',
     'footerPaymentWidth',
     'footerPaymentHeight',

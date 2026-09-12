@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { isSplitFooterValidity, splitFooterValidityText } from '~/utils/splitFooterValidity'
+import { getExplicitFlavorQueries } from '~/utils/productFlavorQueries'
+import { isSplitFooterValidity, splitFooterValidityText, hasSplitFooterValidityCompanions, resolveSplitFooterValidityText } from '~/utils/splitFooterValidity'
 import { createWholesaleReferenceTemplateJson, WHOLESALE_REFERENCE_TEMPLATE_ID, WHOLESALE_REFERENCE_MARKER } from '~/utils/wholesaleReferenceLayout'
 import { updateIsolatedPageFields } from '~/utils/isolatedPageFields'
 import { registerCanvasImageLoadSession } from '~/utils/canvasImageLoadSession'
@@ -745,6 +746,8 @@ const closeQuickLogoActions = () => {
 }
 const productImagePickerAssets = ref<Array<{ id: string; name: string; url: string; key?: string }>>([])
 const showProductImageUploadPicker = ref(false)
+const productImageReplaceScope = ref<'single' | 'all'>('single')
+const productImageFlavorQueries = ref<Array<{ flavor: string; query: string }>>([])
 const productImagePickerMode = ref<'replace' | 'add'>('replace')
 const productImagePickerSearch = ref('')
 const productImagePickerLoading = ref(false)
@@ -837,6 +840,26 @@ const refreshProductImagePickerAssets = async () => {
         productImagePickerLoading.value = false
     }
 }
+
+const searchExplicitProductFlavors = async () => {
+    if (productImagePickerLoading.value || !productImageFlavorQueries.value.length) return;
+    const queries = [...productImageFlavorQueries.value];
+    productImagePickerLoading.value = true;
+    productImagePickerError.value = '';
+    try {
+        const headers = await getApiAuthHeaders();
+        const results = await Promise.allSettled(queries.map(async item => {
+            const data = await $fetch('/api/assets', { headers, query: { q: item.query, limit: 60, ai: '0', fresh: '1', includeCache: '0' } });
+            return normalizeProductImagePickerAssets(data);
+        }));
+        productImagePickerSearch.value = '';
+        const assets = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+        productImagePickerAssets.value = [...new Map(assets.map(asset => [asset.url, asset])).values()];
+        const missing = queries.filter((_, index) => results[index]?.status === 'rejected' || (results[index] as PromiseFulfilledResult<any[]>).value?.length === 0);
+        if (missing.length) productImagePickerError.value = `Sem imagens disponíveis para: ${missing.map(item => item.flavor).join(', ')}. Você pode enviar uma imagem desse sabor.`;
+    } catch { productImagePickerError.value = 'Não foi possível buscar os sabores. Tente novamente.'; }
+    finally { productImagePickerLoading.value = false; }
+};
 
 const searchProductImagePickerUploads = async () => {
     const query = String(productImagePickerSearch.value || '').trim()
@@ -11474,6 +11497,12 @@ const _handleObjectModifiedInner = (e: any) => {
                 return;
             }
 
+            if (isLikelyProductCard(member) && member.parentZoneId) {
+                member.__manualTransform = true;
+                member.dirty = true;
+                member.setCoords?.();
+                return;
+            }
             if (shouldApplyContainmentConstraints(member)) {
                 applyContainmentConstraints(member);
             }
@@ -11513,7 +11542,7 @@ const _handleObjectModifiedInner = (e: any) => {
 
     // 🔹 Normalizar scale de grupos que contêm retângulos
     // Smart objects, product cards, etc. são grupos com retângulos internos
-    if (obj.type === 'group') {
+    if (obj.type === 'group' && !isLikelyProductCard(obj)) {
         normalizeGroupRects(obj);
     }
 
@@ -11541,165 +11570,12 @@ const _handleObjectModifiedInner = (e: any) => {
         return;
     }
 
-    // Product zone: dragging a card reorders the grid (snap back into slots on drop).
-    if ((obj.isSmartObject || obj.isProductCard || String(obj.name || '').startsWith('product-card') || isLikelyProductCard(obj)) && (obj as any).parentZoneId && canvas.value) {
-        const zoneId = String((obj as any).parentZoneId || '').trim();
-        const zone = getContainmentZoneById(zoneId) || findProductZoneById(zoneId);
-        if (zone) {
-            ensureZoneSanity(zone);
-            const cards = getZoneChildren(zone);
-            if (cards.length > 0) {
-                const action = String(e?.transform?.action || '');
-                const didScale = action.includes('scale');
-                const rawHighlightCount = Number((zone as any)?.highlightCount ?? 0);
-                const highlightCount = Math.max(0, Math.min(cards.length, Math.round(Number.isFinite(rawHighlightCount) ? rawHighlightCount : 0)));
-                const rawHighlightHeight = Number((zone as any)?.highlightHeight ?? 1);
-                const highlightHeight = Math.max(1, Math.min(4, Number.isFinite(rawHighlightHeight) ? rawHighlightHeight : 1));
-                const hasFeaturedLayout = highlightCount > 0 && highlightHeight > 1;
-                const zoneFrameId = getResolvedZoneFrameId(zone);
-                const stylesToApply: Partial<GlobalStyles> = getZoneGlobalStyles(zone);
-
-                // Ensure a stable order index exists.
-                const hasAllOrders = cards.every((c: any) => Number.isFinite((c as any)._zoneOrder));
-                if (!hasAllOrders) {
-                    cards
-                        .slice()
-                        .sort((a: any, b: any) => {
-                            const rowDiff = (a.top ?? 0) - (b.top ?? 0);
-                            if (Math.abs(rowDiff) > 50) return rowDiff;
-                            return (a.left ?? 0) - (b.left ?? 0);
-                        })
-                        .forEach((c: any, i: number) => ((c as any)._zoneOrder = i));
-                }
-
-                const ordered = cards.slice().sort((a: any, b: any) => ((a as any)._zoneOrder ?? 0) - ((b as any)._zoneOrder ?? 0));
-                let fromIndex = Number((obj as any)._zoneOrder);
-                if (!Number.isFinite(fromIndex) || fromIndex < 0 || fromIndex >= ordered.length || ordered[fromIndex] !== obj) {
-                    fromIndex = ordered.indexOf(obj);
-                }
-
-                // Find nearest slot index for the drop position.
-                let toIndex = fromIndex;
-                const center = typeof obj.getCenterPoint === 'function' ? obj.getCenterPoint() : null;
-                if (center && ordered.length) {
-                    let best = Math.max(0, fromIndex);
-                    let bestD = Number.POSITIVE_INFINITY;
-                    for (let i = 0; i < ordered.length; i++) {
-                        const card = ordered[i];
-                        const slot = (card as any)?._zoneSlot;
-                        const cx = slot ? (slot.left + (slot.width / 2)) : Number(card?.left || 0);
-                        const cy = slot ? (slot.top + (slot.height / 2)) : Number(card?.top || 0);
-                        const dx = cx - center.x;
-                        const dy = cy - center.y;
-                        const d = (dx * dx) + (dy * dy);
-                        if (d < bestD) {
-                            bestD = d;
-                            best = i;
-                        }
-                    }
-                    toIndex = best;
-                }
-
-                const applyCardToSlot = (card: any, rawSlot: any, order: number) => {
-                    if (!card || !rawSlot) return false;
-                    const slotZoneId = String(rawSlot?.zoneId || '').trim();
-                    if (slotZoneId && slotZoneId !== zoneId) return false;
-                    const slotW = Math.max(2, Number(rawSlot?.width) || 0);
-                    const slotH = Math.max(2, Number(rawSlot?.height) || 0);
-                    const slotLeft = Number(rawSlot?.left);
-                    const slotTop = Number(rawSlot?.top);
-                    if (!Number.isFinite(slotLeft) || !Number.isFinite(slotTop) || !Number.isFinite(slotW) || !Number.isFinite(slotH)) return false;
-
-                    const cx = slotLeft + (slotW / 2);
-                    const cy = slotTop + (slotH / 2);
-
-                    card.parentZoneId = zone._customId;
-                    applyCardFrameBinding(card, zoneFrameId);
-                    card._zoneOrder = order;
-                    (card as any)._zoneSlot = { zoneId: zone._customId, left: slotLeft, top: slotTop, width: slotW, height: slotH };
-
-                    if (card.isSmartObject || card.name?.startsWith('product-card')) {
-                        const prevW = Number((card as any)._cardWidth) || card.width || 0;
-                        const prevH = Number((card as any)._cardHeight) || card.height || 0;
-                        const dimChanged = Math.abs(prevW - slotW) > 1 || Math.abs(prevH - slotH) > 1;
-                        if (dimChanged) {
-                            resizeSmartObject(card, slotW, slotH, stylesToApply);
-                        } else {
-                            // Fabric v7 can shift group internals when width/height are set
-                            // repeatedly. Same-size slot moves only need position/order updates.
-                            (card as any)._cardWidth = prevW || slotW;
-                            (card as any)._cardHeight = prevH || slotH;
-                            // Mesmo tamanho: mover o card não deve refazer a tipografia.
-
-                        }
-                        card.set({ left: cx, top: cy, originX: 'center', originY: 'center', scaleX: 1, scaleY: 1 });
-                    } else {
-                        card.set({
-                            left: cx,
-                            top: cy,
-                            originX: 'center',
-                            originY: 'center',
-                            scaleX: slotW / (card.width || 1),
-                            scaleY: slotH / (card.height || 1)
-                        });
-                    }
-                    card.setCoords?.();
-                    return true;
-                };
-
-                // Fast path: same slot index and no scaling => snap only this card back to its slot.
-                if (!didScale && fromIndex !== -1 && toIndex === fromIndex) {
-                    const slot = (obj as any)?._zoneSlot;
-                    const slotZoneId = String(slot?.zoneId || '').trim();
-                        if (slot && slotZoneId === zoneId) {
-                            const targetCx = slot.left + (slot.width / 2);
-                            const targetCy = slot.top + (slot.height / 2);
-                        const currentCenter = center || { x: Number(obj.left || 0), y: Number(obj.top || 0) };
-                        if (Math.abs(currentCenter.x - targetCx) > 0.25 || Math.abs(currentCenter.y - targetCy) > 0.25) {
-                            if (fabric?.Point && typeof obj.setPositionByOrigin === 'function') {
-                                obj.setPositionByOrigin(new fabric.Point(targetCx, targetCy), 'center', 'center');
-                            } else {
-                                obj.set({ left: targetCx, top: targetCy, originX: 'center', originY: 'center' });
-                            }
-                            obj.setCoords?.();
-                        }
-                        // Card voltou ao mesmo slot — não precisa recalcular toda a zona.
-                        safeRequestRenderAll();
-                        return;
-                    }
-                }
-
-                // Fast path: simple 2-card swap in standard grid (no featured layout) without full zone relayout.
-                // applyCardToSlot updates only the two affected cards; same-size slots become move-only.
-                if (!didScale && !hasFeaturedLayout && fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
-                    const fromCard = ordered[fromIndex];
-                    const toCard = ordered[toIndex];
-                    const fromSlot = (fromCard as any)?._zoneSlot;
-                    const toSlot = (toCard as any)?._zoneSlot;
-                    if (
-                        applyCardToSlot(fromCard, toSlot, toIndex) &&
-                        applyCardToSlot(toCard, fromSlot, fromIndex)
-                    ) {
-                        [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
-                        safeRequestRenderAll();
-                        return;
-                    }
-                }
-
-                if (fromIndex !== -1 && toIndex !== -1 && toIndex !== fromIndex) {
-                    // Swap: troca completa de posição — force relayout nos dois cards
-                    const fromCard = ordered[fromIndex];
-                    const toCard = ordered[toIndex];
-                    if (fromCard) (fromCard as any).__forceCardRelayout = true;
-                    if (toCard) (toCard as any).__forceCardRelayout = true;
-                    [ordered[fromIndex], ordered[toIndex]] = [ordered[toIndex], ordered[fromIndex]];
-                    ordered.forEach((c: any, i: number) => ((c as any)._zoneOrder = i));
-                }
-
-                // Snap everything back into the grid after drop.
-                recalculateZoneLayout(zone, ordered, { save: false, preserveStyles: true });
-            }
-        }
+    // Mover/redimensionar um card não é uma alteração da receita do grid.
+    // A ordem e os demais cards só mudam por ações explícitas de layout/conteúdo.
+    if (isLikelyProductCard(obj) && obj.parentZoneId) {
+        obj.__manualTransform = true;
+        obj.dirty = true;
+        obj.setCoords?.();
         return;
     }
 
@@ -16251,7 +16127,7 @@ const addImageToProductCardByUrl = async (
 const replaceImageByCustomId = async (
     targetId: string,
     newUrl: string,
-    opts: { save?: boolean; setActive?: boolean; fit?: 'contain' } = {}
+    opts: { save?: boolean; setActive?: boolean; fit?: 'contain'; scope?: 'single' | 'all' } = {}
 ): Promise<boolean> => {
     if (!canvas.value || !fabric || !targetId || !newUrl) return false;
     const shouldSave = opts.save !== false;
@@ -16271,11 +16147,15 @@ const replaceImageByCustomId = async (
             const source = toWasabiProxyUrl(newUrl) || newUrl;
             const replacement = await fabric.Image.fromURL(source, { crossOrigin: 'anonymous' });
             await autoTrimFabricImageAsync(replacement, { preserveVisualPosition: true });
-            const images = replaceProductImageCopies(card, target, replacement, source);
+            const images = replaceProductImageCopies(card, target, replacement, source, opts.scope);
             if (!images.length) return false;
             images.forEach(markProductImageTrimmed);
-            card.imageUrl = source;
-            card._productData = { ...card._productData, imageUrl: source, image: source };
+            const primary = collectDirectProductCardImages(card)[0];
+            const primarySource = String(primary?.__originalSrc || primary?.src || source);
+            card.imageUrl = primarySource;
+            card._productData = { ...card._productData, imageUrl: primarySource, image: primarySource,
+                images: collectDirectProductCardImages(card).map((image: any) => ({ x: 0, y: 0, scale: 1, ...(card._productData?.images || []).find((item: any) => item.id === image._customId), id: image._customId, src: image.__originalSrc || image.src || image.getSrc?.() })) };
+
             if (shouldSetActive) canvas.value.setActiveObject(card);
             refreshCanvasObjects({ immediate: true });
             updateSelection();
@@ -16425,6 +16305,8 @@ const scheduleMissingProductImageRecovery = (delayMs = 140, retries = 6, expecte
 };
 
 const getProductImageActionsContext = () => ({
+    productImagePickerLoading,
+    productImageReplaceScope,
     canvas,
     fabric,
     fileInput,
@@ -16437,6 +16319,14 @@ const getProductImageActionsContext = () => ({
     pendingImageAddCardId,
     pendingLocalImageActionMode,
     showProductImageUploadPicker,
+    prepareProductImageUrl: async (url: string): Promise<string> => {
+        const request = await buildRemoveBgRequest(url);
+        const result: any = await $fetch('/api/remove-image-bg', {
+            method: 'POST', headers: await getApiAuthHeaders(), ...request, timeout: 180_000, retry: 0
+        });
+        if (!result?.url) throw new Error('A remoção de fundo não retornou uma imagem. A imagem anterior foi mantida.');
+        return result.url;
+    },
     refreshAiStudioUploads,
     refreshProductImagePickerAssets,
     replaceImageByCustomId,
@@ -16472,7 +16362,8 @@ const clearPendingProductImageOperation = () => {
     productImagePickerTargetCardId.value = null
 };
 
-const openLocalProductImagePicker = async (mode: 'replace' | 'add', opts: { imageId?: string | null; cardId?: string | null } = {}) => {
+const openLocalProductImagePicker = async (mode: 'replace' | 'add', opts: { imageId?: string | null; cardId?: string | null; scope?: 'single' | 'all' } = {}) => {
+    productImageReplaceScope.value = opts.scope || 'single';
     const controller = await loadProductImageActionsController();
     controller.openLocalProductImagePicker(getProductImageActionsContext(), mode, opts);
 };
@@ -16482,7 +16373,12 @@ const openProductImageUploadPickerModal = async (
     opts: { imageId?: string | null; cardId?: string | null; search?: string | null } = {}
 ) => {
     const controller = await loadProductImageActionsController();
-    await controller.openProductImageUploadPickerModal(getProductImageActionsContext(), mode, opts);
+    productImageReplaceScope.value = 'single';
+    const found = opts.imageId ? findObjectByCustomId(opts.imageId) : null;
+    const card = opts.cardId ? findProductCardByCustomId(opts.cardId) : found?.parent;
+    const name = String(card?._productData?.name || card?._productData?.productName || '');
+    productImageFlavorQueries.value = getExplicitFlavorQueries(name);
+    await controller.openProductImageUploadPickerModal(getProductImageActionsContext(), mode, { ...opts, search: opts.search || name });
 };
 
 const applyProductImageFromUploadPicker = async (asset: { id?: string; name?: string; url: string }) => {
@@ -19026,7 +18922,8 @@ const persistInactiveQuickBusinessFields = async () => {
         const index = project.pages.findIndex((page: any) => page.id === pageId)
         const page = project.pages[index]
         if (!page?.canvasData) continue
-        const splitValidity = (page.canvasData.objects || []).some(isSplitFooterValidity)
+        const pageObjects = page.canvasData.objects || []
+        const splitValidity = pageObjects.some((object: any) => isSplitFooterValidity(object) && hasSplitFooterValidityCompanions(object, pageObjects))
         const splitText = validity ? splitFooterValidityText(validity) : null
         let updated = updateIsolatedPageFields(page.canvasData, object => {
             if (splitValidity && splitText && ['validity-heading', 'stock-validity', 'validity-backdrop'].includes(object.name)) {
@@ -19040,7 +18937,7 @@ const persistInactiveQuickBusinessFields = async () => {
             const enabled = field === 'validity' ? validity?.show !== false && validity?.dateFormat !== 'hidden' : overrides[field] ?? object.quickFieldEnabled !== false
             if (field === 'logo') return { quickFieldEnabled: enabled, visible: enabled && !!getQuickLogoSource(profile) }
             if (!['text', 'textbox', 'i-text'].includes(String(object.type || '').toLowerCase())) return null
-            const text = field === 'validity' ? (isSplitFooterValidity(object) && splitText ? splitText.period : String(validityText || '')) : getQuickBusinessProfileValue(profile, field)
+            const text = field === 'validity' ? (isSplitFooterValidity(object) && validity ? resolveSplitFooterValidityText(object, pageObjects, validity) : String(validityText || '')) : getQuickBusinessProfileValue(profile, field)
             const runtime = new fabric.Textbox(String(object.text || ''), { ...object })
             configureDynamicBusinessTextObject(runtime, fabric)
             setQuickDynamicTextValue(runtime, text)
@@ -19206,12 +19103,14 @@ const handleQuickModeValidityUpdate = (payload: {
         })
         const split = isSplitFooterValidity(object)
         const splitText = splitFooterValidityText({ startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value })
-        setQuickDynamicTextValue(object, split ? splitText.period : nextText)
+        const siblings = canvas.value?.getObjects() || []
+        const separateFields = split && hasSplitFooterValidityCompanions(object, siblings)
+        setQuickDynamicTextValue(object, split ? resolveSplitFooterValidityText(object, siblings, { startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value }) : nextText)
         if (split) {
             object.set({ quickValidityLayout: 'split-footer', visible: quickShowValidity.value && !!splitText.period })
             for (const sibling of canvas.value?.getObjects() || []) {
                 if (sibling.parentFrameId !== object.parentFrameId) continue
-                if (sibling.name === 'validity-backdrop') sibling.set({ visible: false })
+                if (separateFields && sibling.name === 'validity-backdrop') sibling.set({ visible: false })
                 if (sibling.name === 'validity-heading' || sibling.name === 'stock-validity') {
                     const text = sibling.name === 'validity-heading' ? splitText.heading : splitText.stock
                     setQuickDynamicTextValue(sibling, text)
@@ -19221,7 +19120,7 @@ const handleQuickModeValidityUpdate = (payload: {
             }
         }
         for (const sibling of canvas.value?.getObjects() || []) {
-            if (sibling.parentFrameId === object.parentFrameId && ((!split && sibling.name === 'validity-backdrop') || sibling.quickDynamicIconFor === 'validity')) {
+            if (sibling.parentFrameId === object.parentFrameId && ((!separateFields && sibling.name === 'validity-backdrop') || sibling.quickDynamicIconFor === 'validity')) {
                 sibling.set({ visible: quickShowValidity.value && !!nextText, dirty: true })
             }
         }
@@ -28208,6 +28107,22 @@ const getQuickModeZoneStructureForUi = (
     }
 }
 
+const handleQuickGridRestore = async (payload: { zoneId: string; preset: 'model' | '2' | '3' }) => {
+    const zone = findProductZoneById(payload.zoneId);
+    if (!zone || isProcessing.value || !['model', '2', '3'].includes(payload.preset)) return;
+    const cards = getZoneChildren(zone);
+    if (!cards.length) return;
+    await saveCurrentState({ reason: 'before-restore-grid', source: 'user', skipCoalesce: true });
+    zone.quickGridPreset = payload.preset;
+    zone.highlightCount = 0;
+    recalculateZoneLayout(zone, cards, { save: false, preserveStyles: true });
+    syncZoneDerivedMetadata(zone);
+    refreshCanvasObjects();
+    safeRequestRenderAll();
+    await saveCurrentState({ reason: 'restore-grid', source: 'user', skipCoalesce: true, skipIfUnchanged: false });
+    await flushPersistenceNow('restore-grid', { force: true });
+};
+
 const handleQuickModeZoneStructureChange = async (payload: { zoneId?: string; variantId?: string }) => {
     const zoneId = String(payload?.zoneId || '').trim()
     const variantId = String(payload?.variantId || '').trim()
@@ -28241,6 +28156,7 @@ const handleQuickModeZoneStructureChange = async (payload: { zoneId?: string; va
         [key]: variantId
     }
 
+    delete zone.quickGridPreset
     applyCurrentStructureRecipe(zone, count)
     setActiveProductZone(zone, { syncImportTarget: true })
     await handleUpdateZone({
@@ -29120,7 +29036,7 @@ const handleAutoOfferLayout = async () => {
             <div>
               <h3 class="text-sm font-semibold text-white">Escolher imagem do produto</h3>
               <p class="text-[11px] text-zinc-400">
-                {{ productImagePickerMode === 'replace' ? 'Troque a imagem e todas as suas cópias neste produto.' : 'Escolha uma imagem para este produto.' }}
+                {{ productImagePickerMode === 'replace' ? 'Escolha se deseja trocar somente esta imagem ou todas neste card.' : 'Escolha uma imagem para este produto.' }}
               </p>
             </div>
             <button
@@ -29133,6 +29049,17 @@ const handleAutoOfferLayout = async () => {
           </div>
 
           <div class="px-4 py-3 border-b border-white/10 space-y-2">
+            <label v-if="productImagePickerMode === 'replace'" class="block text-xs text-zinc-200">Aplicar a troca em
+              <select v-model="productImageReplaceScope" class="ml-2 rounded bg-zinc-900 p-2 border border-white/20">
+                <option value="single">Somente esta imagem</option>
+                <option value="all">Todas as imagens deste produto no card</option>
+              </select>
+            </label>
+            <div v-if="productImageFlavorQueries.length" class="flex flex-wrap gap-2 text-xs text-zinc-200">
+              <button type="button" :disabled="productImagePickerLoading" class="rounded border border-violet-400 px-3 py-2 disabled:opacity-50" @click="searchExplicitProductFlavors">Buscar imagens dos sabores</button>
+              <span>Ou buscar um sabor:</span>
+              <button v-for="item in productImageFlavorQueries" :key="item.flavor" type="button" class="rounded bg-violet-700 px-3 py-2" @click="productImagePickerSearch = item.query; searchProductImagePickerUploads()">{{ item.flavor }}</button>
+            </div>
             <div class="flex gap-2">
               <input
                 v-model="productImagePickerSearch"
@@ -29159,7 +29086,8 @@ const handleAutoOfferLayout = async () => {
                   showProductImageUploadPicker = false;
                   openLocalProductImagePicker(productImagePickerMode, {
                     imageId: productImagePickerTargetImageId,
-                    cardId: productImagePickerTargetCardId
+                    cardId: productImagePickerTargetCardId,
+                    scope: productImageReplaceScope
                   })
                 "
               >
@@ -29171,7 +29099,7 @@ const handleAutoOfferLayout = async () => {
 
           <div class="flex-1 overflow-y-auto p-4">
             <div v-if="productImagePickerLoading" class="text-xs text-zinc-500">
-              Buscando imagens internas...
+              Buscando ou preparando imagem sem fundo...
             </div>
             <div v-else-if="!filteredProductImageUploads.length" class="text-xs text-zinc-500">
               <p>Nenhuma imagem encontrada no Wasabi para esta busca.</p>
@@ -29191,7 +29119,8 @@ const handleAutoOfferLayout = async () => {
                     showProductImageUploadPicker = false;
                     openLocalProductImagePicker(productImagePickerMode, {
                       imageId: productImagePickerTargetImageId,
-                      cardId: productImagePickerTargetCardId
+                      cardId: productImagePickerTargetCardId,
+                    scope: productImageReplaceScope
                     })
                   "
                 >
@@ -29287,6 +29216,7 @@ const handleAutoOfferLayout = async () => {
             :offer-scope="quickOfferScope"
             @select-zone="selectQuickModeZone"
             @select-zone-structure="handleQuickModeZoneStructureChange"
+            @restore-grid="handleQuickGridRestore"
             @select-product="handleQuickModeSelectProduct"
             @open-product-image-picker="handleQuickModeOpenProductImagePicker"
             @clear-products="handleQuickModeClearProducts"
@@ -29401,6 +29331,7 @@ const handleAutoOfferLayout = async () => {
                      :fill-direction="selectedProductImageQuickActions.card._productData?.imageFillDirection || 'auto'"
                      @remove="handleProductImageRemove"
                      @replace="handleAction('replace-product-image-upload')"
+                     @add="handleAction('add-product-image-upload')"
                      @duplicate="handleProductImageDuplicate"
                      @fill="handleProductImageFill"
                      @resize="handleProductImageResize"
