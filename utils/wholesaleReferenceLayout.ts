@@ -20,7 +20,10 @@ const SPECIAL_NODES = [
 ]
 
 const BANNER_NODES = ['atac_banner_bg', 'wholesale_banner_text']
-const LABEL_VERTICAL_GAP = 12
+const LABEL_VERTICAL_GAP = 10
+const TIER_CONTENT_GAP = 5
+const TIER_CONTENT_PADDING = 6
+const CARD_LABEL_VERTICAL_INSET = 0.03
 
 const updateNode = (node: any, props: Record<string, any>) => {
   if (!node) return
@@ -42,6 +45,77 @@ const nodeHeight = (node: any, fallback: number) => {
 }
 
 const isVisible = (node: any) => node?.visible !== false
+const hasText = (node: any) => String(node?.text || '').trim().length > 0
+
+const nodeVerticalBounds = (node: any, fallbackHeight = 0) => {
+  const height = nodeHeight(node, fallbackHeight)
+  const top = nodeTop(node)
+  if (node?.originY === 'top') return { top, bottom: top + height }
+  if (node?.originY === 'bottom') return { top: top - height, bottom: top }
+  return { top: top - (height / 2), bottom: top + (height / 2) }
+}
+
+const layoutPriceTier = (args: {
+  background: any
+  heading: any
+  currency: any
+  price: any
+  packLine: any
+  minimumHeight: number
+  priceFallbackHeight: number
+}) => {
+  const {
+    background,
+    heading,
+    currency,
+    price,
+    packLine,
+    minimumHeight,
+    priceFallbackHeight
+  } = args
+  if (!background) return
+
+  const rows: Array<{ nodes: any[], height: number }> = []
+  if (isVisible(heading) && hasText(heading)) {
+    rows.push({ nodes: [heading], height: nodeHeight(heading, 20) })
+  }
+  if ((price && isVisible(price)) || (currency && isVisible(currency))) {
+    rows.push({
+      nodes: [price, currency].filter(Boolean),
+      height: Math.max(nodeHeight(price, priceFallbackHeight), nodeHeight(currency, 30))
+    })
+  }
+  if (isVisible(packLine) && hasText(packLine)) {
+    rows.push({ nodes: [packLine], height: nodeHeight(packLine, 24) })
+  }
+
+  const contentHeight = rows.reduce((total, row) => total + row.height, 0) +
+    Math.max(0, rows.length - 1) * TIER_CONTENT_GAP
+  const height = Math.max(minimumHeight, Math.ceil(contentHeight + (TIER_CONTENT_PADDING * 2)))
+  updateNode(background, { height })
+
+  let cursor = nodeTop(background) - (height / 2) + TIER_CONTENT_PADDING
+  rows.forEach((row, index) => {
+    const top = cursor + (row.height / 2)
+    row.nodes.forEach((node) => updateNode(node, { top }))
+    cursor += row.height + (index < rows.length - 1 ? TIER_CONTENT_GAP : 0)
+  })
+}
+
+const getVisibleLabelVerticalBounds = (label: any) => {
+  const objects = label?.getObjects?.() || []
+  const bounds = objects
+    .filter((node: any) => isVisible(node))
+    .map((node: any) => nodeVerticalBounds(node))
+  if (bounds.length === 0) {
+    const height = Number(label?.height) || 0
+    return { top: -(height / 2), bottom: height / 2 }
+  }
+  return {
+    top: Math.min(...bounds.map((bound: any) => bound.top)),
+    bottom: Math.max(...bounds.map((bound: any) => bound.bottom))
+  }
+}
 
 /**
  * A referência lateral pode ter somente uma das faixas de preço. Nesse caso
@@ -72,8 +146,29 @@ export const reflowWholesaleReferencePriceLabel = (label: any): boolean => {
   const packaging = byName(WHOLESALE_REFERENCE_MARKER)
   const censoredStamp = byName(CENSORED_STAMP_MARKER)
   const censoredHeading = byName(CENSORED_PROMOTIONAL_HEADING_MARKER)
-  const retailVisible = isVisible(retailBg)
-  const specialVisible = isVisible(specialBg)
+  const retailVisible = Boolean(retailBg) && isVisible(retailBg)
+  const specialVisible = Boolean(specialBg) && isVisible(specialBg)
+
+  // Título, valor e unitário são posicionados como três linhas internas da
+  // faixa. Sem isso, um valor grande invade o título "Preço avulso".
+  layoutPriceTier({
+    background: retailBg,
+    heading: byName('reference_retail_heading'),
+    currency: byName('retail_currency_text'),
+    price: byName('retail_price_text'),
+    packLine: byName('retail_pack_line_text'),
+    minimumHeight: 104,
+    priceFallbackHeight: 56
+  })
+  layoutPriceTier({
+    background: specialBg,
+    heading: byName('reference_special_heading'),
+    currency: byName('wholesale_currency_text'),
+    price: byName('wholesale_price_text'),
+    packLine: byName('wholesale_pack_line_text'),
+    minimumHeight: 126,
+    priceFallbackHeight: 70
+  })
 
   // O selo de preço censurado substitui, de propósito, a faixa especial e a
   // condição. Mantemos uma área exclusiva para ele, com folga acima e abaixo,
@@ -85,7 +180,7 @@ export const reflowWholesaleReferencePriceLabel = (label: any): boolean => {
 
     if (retailVisible) moveStack(RETAIL_NODES, -110)
 
-    const headingTop = retailVisible ? -28 : -70
+    const headingTop = retailVisible ? -18 : -70
     updateNode(censoredHeading, { top: headingTop, visible: true })
 
     const labelWidth = Number(label?.width) || 240
@@ -180,8 +275,26 @@ export const applyWholesaleReferenceCardLayout = (card:any,w:number,h:number): b
   // Ajustes explícitos da etiqueta prevalecem sobre o encaixe automático do card.
   // __manualTransform também marca textos internos; somente esta flag indica o grupo inteiro.
   if (label.__manualPricePosition !== true) {
-    const scale=Math.min(w*.49/Math.max(1,label.width),h*.80/Math.max(1,label.height))
-    set(label,{left:w*.235,top:h*.085,originX:'center',originY:'center',scaleX:scale,scaleY:scale})
+    const contentBounds = getVisibleLabelVerticalBounds(label)
+    const preferredTop = -h * 0.025
+    const safeTop = -h * 0.5 + h * CARD_LABEL_VERTICAL_INSET
+    const safeBottom = h * 0.5 - h * CARD_LABEL_VERTICAL_INSET
+    const maxScaleByTop = contentBounds.top < 0
+      ? (preferredTop - safeTop) / Math.abs(contentBounds.top)
+      : Number.POSITIVE_INFINITY
+    const maxScaleByBottom = contentBounds.bottom > 0
+      ? (safeBottom - preferredTop) / contentBounds.bottom
+      : Number.POSITIVE_INFINITY
+    const scale=Math.min(
+      w*.49/Math.max(1,label.width),
+      h*.80/Math.max(1,label.height),
+      maxScaleByTop,
+      maxScaleByBottom
+    )
+    const minTop = safeTop - (contentBounds.top * scale)
+    const maxTop = safeBottom - (contentBounds.bottom * scale)
+    const top = Math.min(Math.max(preferredTop, minTop), maxTop)
+    set(label,{left:w*.235,top,originX:'center',originY:'center',scaleX:scale,scaleY:scale})
   }
   card.dirty=true
   return true

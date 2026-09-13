@@ -58,8 +58,8 @@ it('restaura o empilhamento completo quando os dois preços voltam',()=>{
  find('atac_retail_bg').visible=true
  reflowWholesaleReferencePriceLabel(label)
  expect(find('atac_retail_bg').top).toBe(-55)
- expect(find('atac_wholesale_bg').top).toBe(57)
- expect(find('wholesale_banner_text').top).toBe(149)
+ expect(find('atac_wholesale_bg').top).toBe(84)
+ expect(find('wholesale_banner_text').top).toBe(183)
 })
 
 it('mantem folga entre embalagem, faixas de preço e condição',()=>{
@@ -75,9 +75,41 @@ it('mantem folga entre embalagem, faixas de preço e condição',()=>{
  const retail=bounds(find('atac_retail_bg'))
  const special=bounds(find('atac_wholesale_bg'))
  const banner=bounds(find('atac_banner_bg'))
- expect(retail.top-pack.bottom).toBeGreaterThanOrEqual(12)
- expect(special.top-retail.bottom).toBeGreaterThanOrEqual(12)
- expect(banner.top-special.bottom).toBeGreaterThanOrEqual(12)
+ expect(retail.top-pack.bottom).toBeGreaterThanOrEqual(10)
+ expect(special.top-retail.bottom).toBeGreaterThanOrEqual(10)
+ expect(banner.top-special.bottom).toBeGreaterThanOrEqual(10)
+})
+
+it('separa título, valor e unitário e encaixa a etiqueta automática no card',()=>{
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects},set(v:any){Object.assign(this,v)}}
+ const find=(name:string)=>label.objects.find((node:any)=>node.name===name)
+ Object.assign(find('wholesale_reference_packaging'),{height:51.26})
+ Object.assign(find('atac_retail_bg'),{height:104})
+ Object.assign(find('reference_retail_heading'),{height:20.34})
+ Object.assign(find('retail_currency_text'),{height:31.64})
+ Object.assign(find('retail_price_text'),{height:56.5})
+ Object.assign(find('retail_pack_line_text'),{height:28.25,scaleY:.9067})
+ Object.assign(find('atac_wholesale_bg'),{height:126})
+ Object.assign(find('reference_special_heading'),{height:20.34})
+ Object.assign(find('wholesale_currency_text'),{height:31.64})
+ Object.assign(find('wholesale_price_text'),{height:70.06})
+ Object.assign(find('wholesale_pack_line_text'),{height:28.25,scaleY:.9067})
+ Object.assign(find('atac_banner_bg'),{height:42})
+ const title:any={name:'smart_title',set(v:any){Object.assign(this,v)}}
+ const card:any={getObjects:()=>[label,title]}
+ expect(applyWholesaleReferenceCardLayout(card,498,402)).toBe(true)
+ const bounds=(node:any)=>({top:node.top-(node.height||0)*(node.scaleY||1)/2,bottom:node.top+(node.height||0)*(node.scaleY||1)/2})
+ const heading=bounds(find('reference_retail_heading'))
+ const price=bounds(find('retail_price_text'))
+ const pack=bounds(find('retail_pack_line_text'))
+ expect(price.top-heading.bottom).toBeGreaterThanOrEqual(5)
+ expect(pack.top-price.bottom).toBeGreaterThanOrEqual(5)
+ const visible=label.objects.filter((node:any)=>node.visible!==false).map(bounds)
+ const top=Math.min(...visible.map((bound:any)=>bound.top))*label.scaleY+label.top
+ const bottom=Math.max(...visible.map((bound:any)=>bound.bottom))*label.scaleY+label.top
+ expect(top).toBeGreaterThanOrEqual(-189)
+ expect(bottom).toBeLessThanOrEqual(189)
+ expect(label.top).toBeLessThan(0)
 })
 
 it('separa o selo censurado da faixa avulsa e oculta a faixa substituída',()=>{
