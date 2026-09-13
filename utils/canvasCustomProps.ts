@@ -23,6 +23,10 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     'isQuickGenerated',
     'quickSeedId',
     'quickGridPreset',
+    // Marcador de reparo de uma grade escolhida no modo rápido. Ele é
+    // consumido na próxima hidratação e removido depois que os cards forem
+    // refluídos, impedindo que slots antigos prevaleçam sobre a escolha.
+    '__forceQuickGridRestore',
     'businessProfileField',
     'footerPaymentWidth',
     'footerPaymentHeight',

@@ -34,6 +34,10 @@ describe('CANVAS_CUSTOM_PROPS', () => {
     expect(CANVAS_CUSTOM_PROPS).toContain('quickLogoCenterY')
   })
 
+  it('preserva o marcador de restauração pontual da grade rápida', () => {
+    expect(CANVAS_CUSTOM_PROPS).toContain('__forceQuickGridRestore')
+  })
+
   it('contem props de frame', () => {
     expect(CANVAS_CUSTOM_PROPS).toContain('isFrame')
     expect(CANVAS_CUSTOM_PROPS).toContain('clipContent')

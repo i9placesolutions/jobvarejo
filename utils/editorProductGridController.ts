@@ -3643,6 +3643,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
 
         const prevHistory = isHistoryProcessing.value;
         let repairedTemplateFrameBindings = 0;
+        let restoredQuickGridCount = 0;
         isHistoryProcessing.value = true;
         try {
             let objs = canvas.value.getObjects();
@@ -4330,11 +4331,17 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
                 if (zoneIdsWithCards.has(z._customId)) z.isProductZone = true;
             });
 
-            if (relayout) {
+            if (relayout || zones.some((z: any) => (
+                (z as any).__forceQuickGridRestore === true &&
+                ['model', '2', '3'].includes(String((z as any).quickGridPreset || ''))
+            ))) {
                 zones.forEach((z: any) => {
                     if (z.isProductZone || zoneIdsWithCards.has(z._customId)) {
                         try {
                             const zoneCards = cards.filter((c: any) => String((c as any).parentZoneId || '').trim() === String(z._customId || '').trim());
+                            const restoreQuickGrid =
+                                (z as any).__forceQuickGridRestore === true &&
+                                ['model', '2', '3'].includes(String((z as any).quickGridPreset || ''));
                             // CRITICAL FIX: Do NOT force relayout if cards already have valid
                             // saved positions from JSON. Relaying out overwrites saved left/top/width/height
                             // with grid-computed values, destroying the exact layout the user saved.
@@ -4347,15 +4354,25 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
                             const allAtOrigin = zoneCards.length > 1 && zoneCards.every((c: any) => {
                                 return Math.abs(Number(c.left ?? 0)) < 2 && Math.abs(Number(c.top ?? 0)) < 2;
                             });
-                            if (allHavePositions && !allAtOrigin) {
+                            if (allHavePositions && !allAtOrigin && !restoreQuickGrid) {
                                 // O modelo já salvou a posição dos cards. Preservá-la
                                 // evita que a chegada da biblioteca global ou a troca
                                 // de página destrua a composição visual original.
                                 zoneCards.forEach((c: any) => c.setCoords?.());
                             } else {
                                 // Só zonas comuns, ou cards sem posição válida, usam
-                                // a receita global para reconstruir o grid.
-                                recalculateZoneLayout(z, zoneCards, { skipResize: true });
+                                // a receita global para reconstruir o grid. Quando o
+                                // usuário pediu a restauração da grade rápida, não
+                                // usamos skipResize: cada cartão precisa adaptar sua
+                                // composição interna ao novo slot.
+                                recalculateZoneLayout(z, zoneCards, restoreQuickGrid
+                                    ? { save: false, preserveStyles: true }
+                                    : { skipResize: true });
+                                if (restoreQuickGrid && zoneCards.length > 0) {
+                                    delete (z as any).__forceQuickGridRestore;
+                                    z.dirty = true;
+                                    restoredQuickGridCount++;
+                                }
                             }
                         } catch (err) {
                             console.warn('[rehydrateCanvasZones] Failed to relayout zone', err);
@@ -4421,6 +4438,16 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
                         skipIfUnchanged: true
                     }, 240);
                 }
+            }
+            if (restoredQuickGridCount > 0) {
+                // A flag é propositalmente de uso único. Persistimos a geometria
+                // já reconstruída sem depender de uma nova edição do usuário.
+                scheduleIdleStatePersistence({
+                    reason: 'quick-grid-restore',
+                    source: 'system',
+                    markUnsaved: true,
+                    skipIfUnchanged: false
+                }, 240);
             }
             scheduleMissingProductImageRecovery();
 
