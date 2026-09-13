@@ -153,7 +153,7 @@ export const resolveStorageReadUrl = async (
   // A grade de imagens pode pedir muitas miniaturas ao mesmo tempo. Para os
   // prefixos que o produto já trata como públicos, uma URL assinada evita que
   // cada arquivo atravesse o proxy antes de chegar ao navegador.
-  if (options.direct || isPublicStorageKey(key)) {
+  if (options.direct === true || (options.direct !== false && isPublicStorageKey(key))) {
     return await getCachedSignedReadUrl(key, userId)
   }
 

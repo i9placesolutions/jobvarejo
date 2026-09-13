@@ -17,17 +17,18 @@ import {
 const TRANSPARENT_PIXEL_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 const TRANSPARENT_PIXEL_PNG = Buffer.from(TRANSPARENT_PIXEL_PNG_BASE64, 'base64')
-const PUBLIC_READ_REDIRECT_CACHE_TTL_MS = 55 * 60 * 1000
-const publicReadRedirectCache = new Map<string, { expiresAt: number; url: string }>()
+const DIRECT_READ_REDIRECT_CACHE_TTL_MS = 55 * 60 * 1000
+const directReadRedirectCache = new Map<string, { expiresAt: number; url: string }>()
+const IMAGE_OBJECT_KEY_RE = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i
 
-const getCachedPublicReadUrl = async (
+const getCachedDirectReadUrl = async (
   bucket: string,
   key: string,
   versionId?: string | null
 ): Promise<string> => {
   const cacheKey = `${bucket}\u0000${key}\u0000${versionId || ''}`
   const now = Date.now()
-  const cached = publicReadRedirectCache.get(cacheKey)
+  const cached = directReadRedirectCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.url
 
   const url = await getSignedUrl(
@@ -40,13 +41,13 @@ const getCachedPublicReadUrl = async (
     { expiresIn: 3600 }
   )
 
-  publicReadRedirectCache.set(cacheKey, {
+  directReadRedirectCache.set(cacheKey, {
     url,
-    expiresAt: now + PUBLIC_READ_REDIRECT_CACHE_TTL_MS
+    expiresAt: now + DIRECT_READ_REDIRECT_CACHE_TTL_MS
   })
-  if (publicReadRedirectCache.size > 2048) {
-    const oldestKey = publicReadRedirectCache.keys().next().value
-    if (oldestKey) publicReadRedirectCache.delete(oldestKey)
+  if (directReadRedirectCache.size > 2048) {
+    const oldestKey = directReadRedirectCache.keys().next().value
+    if (oldestKey) directReadRedirectCache.delete(oldestKey)
   }
   return url
 }
@@ -172,6 +173,32 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // As miniaturas privadas do projeto já tiveram a propriedade validada
+    // acima. Redirecionar a imagem para uma URL assinada evita que cada card
+    // passe pelo servidor depois de entrar na tela. A autorização continua
+    // acontecendo a cada pedido ao proxy e JSON nunca é redirecionado.
+    const privateProjectImageKey = keyCandidates.find((candidate) => (
+      IMAGE_OBJECT_KEY_RE.test(candidate) &&
+      (isProjectsKey(candidate) || isLegacyProjectPageKey(candidate))
+    ))
+    if (privateProjectImageKey && !requestTargetsJson) {
+      try {
+        const directReadRedirectUrl = await getCachedDirectReadUrl(bucket, privateProjectImageKey, version)
+        setResponseHeaders(event, {
+          'Cache-Control': 'private, max-age=300, must-revalidate',
+          'X-Storage-Direct': '1'
+        })
+        return sendRedirect(event, directReadRedirectUrl, 302)
+      } catch (signError: any) {
+        // A leitura em stream abaixo continua como fallback caso o S3 esteja
+        // indisponível para assinatura naquele instante.
+        console.warn('⚠️ [storage-proxy] Falha ao assinar miniatura privada; mantendo stream pelo proxy', {
+          key: privateProjectImageKey,
+          message: signError?.message || String(signError)
+        })
+      }
+    }
+
     // Imagens da biblioteca já pertencem a prefixos públicos. Não leia o
     // objeto no servidor só para então gerar uma URL assinada: numa página
     // com vários cards isso cria uma fila Wasabi → app → navegador antes do
@@ -180,7 +207,7 @@ export default defineEventHandler(async (event) => {
     // abaixo, que ainda descobre o prefixo correto e preserva o fallback.
     if (isPublicStorageKey(key)) {
       try {
-        const publicReadRedirectUrl = await getCachedPublicReadUrl(bucket, key, version)
+        const publicReadRedirectUrl = await getCachedDirectReadUrl(bucket, key, version)
         setResponseHeaders(event, {
           'Cache-Control': 'public, max-age=300, must-revalidate',
           'Access-Control-Allow-Origin': '*',
@@ -347,7 +374,7 @@ export default defineEventHandler(async (event) => {
         // stream pelo proxy como fallback confiável.
         if (isPublicStorageKey(wasabiObject.key)) {
           try {
-            publicReadRedirectUrl = await getCachedPublicReadUrl(
+            publicReadRedirectUrl = await getCachedDirectReadUrl(
               wasabiObject.bucket,
               wasabiObject.key,
               recoveredVersion

@@ -258,7 +258,11 @@ export const generateThumbnailFromCanvasJson = async (
     restoreCanvasStickerOutlines(sc)
     sc.renderAll()
     return sc.toDataURL({
-      format: 'png',
+      // A miniatura aparece em cards e no navegador de páginas, não na
+      // exportação. WebP mantém a leitura visual em uma fração do PNG e evita
+      // megabytes de download antes que o editor abra.
+      format: 'webp',
+      quality: 0.76,
       multiplier: 1
     })
   } catch (err) {

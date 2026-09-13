@@ -118,7 +118,7 @@ const recordWasabiFailure = () => {
  *
  * Estrutura de arquivos no bucket jobvarejo:
  * - projects/{userId}/{projectId}/page_{pageId}.json  → Canvas JSON
- * - projects/{userId}/{projectId}/thumb_{pageId}.png   → Thumbnail
+ * - projects/{userId}/{projectId}/thumb_{pageId}.webp  → Thumbnail
  * - imagens/{filename} → Uploads de imagens
  * - logo/{filename} → Logos de marcas
  */
@@ -971,13 +971,28 @@ const saveCanvasData = async (
     }
 
     try {
-      const key = `projects/${userId}/${projectId}/thumb_${pageId}_${Date.now()}.png`
       const authHeaders = await tryGetApiAuthHeaders()
       if (!authHeaders) return null
 
       // Converter DataURL para Blob
       const response = await fetch(dataUrl)
       const blob = await response.blob()
+      const normalizedContentType = String(blob.type || '').toLowerCase()
+      const contentType = normalizedContentType === 'image/webp'
+        ? 'image/webp'
+        : normalizedContentType === 'image/jpeg'
+          ? 'image/jpeg'
+          : normalizedContentType === 'image/avif'
+            ? 'image/avif'
+            : 'image/png'
+      const extension = contentType === 'image/webp'
+        ? 'webp'
+        : contentType === 'image/jpeg'
+          ? 'jpg'
+          : contentType === 'image/avif'
+            ? 'avif'
+            : 'png'
+      const key = `projects/${userId}/${projectId}/thumb_${pageId}_${Date.now()}.${extension}`
 
       // Upload via servidor (evita CORS) usando RAW BODY — FormData/multipart
       // forca o servidor a rodar readMultipartFormData, o que em ambientes de
@@ -986,10 +1001,10 @@ const saveCanvasData = async (
         try {
           const result = await $fetch<{ key: string }>('/api/storage/upload', {
             method: 'POST',
-            query: { key, contentType: 'image/png' },
+            query: { key, contentType },
             headers: {
               ...authHeaders,
-              'Content-Type': 'image/png'
+              'Content-Type': contentType
             },
             body: blob,
           })

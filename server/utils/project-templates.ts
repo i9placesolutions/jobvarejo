@@ -1,6 +1,7 @@
 import { pgQuery } from './postgres'
 
 let ensurePromise: Promise<void> | null = null
+const REQUIRED_TEMPLATE_COLUMNS = ['is_template', 'template_config']
 
 export const isMissingTemplateColumnError = (error: any): boolean => {
   const code = String(error?.code || '')
@@ -12,6 +13,23 @@ export const ensureProjectTemplateColumn = async (): Promise<void> => {
   if (ensurePromise) return ensurePromise
 
   ensurePromise = (async () => {
+    // As migrações são aplicadas fora do caminho de requisição. Executar
+    // ALTER TABLE e CREATE INDEX IF NOT EXISTS ao abrir o primeiro projeto
+    // fazia a galeria esperar por DDL e locks do catálogo em todo restart.
+    // Consulte primeiro o esquema leve; mantenha o reparo legado apenas para
+    // instalações antigas que ainda não receberam a migração.
+    const { rows } = await pgQuery<{ column_name: string }>(`
+      select column_name
+        from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'projects'
+         and column_name = any($1::text[])
+    `, [REQUIRED_TEMPLATE_COLUMNS])
+    const existingColumns = new Set(rows.map((row) => String(row.column_name || '').trim()))
+    if (REQUIRED_TEMPLATE_COLUMNS.every((column) => existingColumns.has(column))) {
+      return
+    }
+
     await pgQuery(`
       alter table public.projects
         add column if not exists is_template boolean not null default false

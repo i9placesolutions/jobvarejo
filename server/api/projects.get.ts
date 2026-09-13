@@ -84,22 +84,28 @@ const getProjectTemplateCounts = (canvasData: any, templateConfig?: any): {
   }
 }
 
-const resolveProjectPreviewUrl = async (project: any, userId: string): Promise<string | null> => {
+const resolveProjectPreviewUrl = async (
+  project: any,
+  userId: string,
+  options: { direct?: boolean } = {}
+): Promise<string | null> => {
   // Prefer the current first-page thumbnail. Older projects may still have a
   // stale `preview_url` generated before thumbnail scaling/panning fixes.
-  // O acesso já foi autorizado acima. Uma URL assinada deixa o navegador ler a
-  // miniatura direto do Wasabi, sem fazer uma requisição proxy para cada card.
+  // A listagem resumida devolve um proxy autenticado: assim a resposta dos
+  // cards não espera nenhuma assinatura S3. Cada <img> assina e lê direto do
+  // Wasabi somente quando o navegador realmente precisar dela.
+  const direct = options.direct ?? true
   const primaryThumb = await resolveStorageReadUrl(
     getPageThumbnailRef(getPrimaryPageMeta(project?.canvas_data)),
     userId,
-    { direct: true }
+    { direct }
   )
   if (primaryThumb) return primaryThumb
 
-  const explicitPreview = await resolveStorageReadUrl(project?.preview_url, userId, { direct: true })
+  const explicitPreview = await resolveStorageReadUrl(project?.preview_url, userId, { direct })
   if (explicitPreview) return explicitPreview
 
-  return await resolveStorageReadUrl(getFallbackPageThumbnailRef(project?.canvas_data), userId, { direct: true })
+  return await resolveStorageReadUrl(getFallbackPageThumbnailRef(project?.canvas_data), userId, { direct })
 }
 
 export default defineEventHandler(async (event) => {
@@ -168,9 +174,10 @@ export default defineEventHandler(async (event) => {
       categoryClauses.push(`and lower(btrim(template_config ->> 'subcategory')) = lower($${params.push(templateSubcategory)})`)
     }
     const categoryClause = categoryClauses.length ? `\n        ${categoryClauses.join('\n        ')}` : ''
-    // A listagem só usa metadados das páginas. Remover o canvas inline no banco
-    // evita transferir desenhos legados inteiros; o GET por id mantém o conteúdo.
-    const baseSql = `
+    // A listagem normal usa apenas metadados das páginas. Remover o canvas
+    // inline evita transferir desenhos legados inteiros; o GET por id mantém
+    // o conteúdo completo para o editor.
+    const fullListSql = `
       select id, name, created_at, updated_at, preview_url,
         (
           select coalesce(jsonb_agg(
@@ -194,6 +201,102 @@ export default defineEventHandler(async (event) => {
         ${categoryClause}
       order by updated_at desc
     `
+    // A galeria de modelos não precisa carregar todas as composições e
+    // blueprints para montar cada card. Em contas com muitos temas, a query
+    // anterior agregava cada página e transferia centenas de KB antes de o
+    // navegador receber a primeira miniatura.
+    const summaryListSql = `
+      select
+        project.id,
+        project.name,
+        project.created_at,
+        project.updated_at,
+        project.preview_url,
+        project.is_template,
+        jsonb_build_object(
+          'category', project.template_config -> 'category',
+          'subcategory', project.template_config -> 'subcategory'
+        ) as template_config,
+        nullif(btrim(coalesce(
+          first_page.value ->> 'thumbnailUrl',
+          first_page.value ->> 'thumbnail_url',
+          ''
+        )), '') as primary_thumbnail_url,
+        nullif(btrim(coalesce(fallback_page.thumbnail_url, '')), '') as fallback_thumbnail_url,
+        first_page.value ->> 'width' as preview_width,
+        first_page.value ->> 'height' as preview_height,
+        page_counts.page_count as template_page_count,
+        coalesce(
+          nullif(jsonb_array_length(
+            case
+              when jsonb_typeof(project.template_config -> 'models') = 'array'
+                then project.template_config -> 'models'
+              else '[]'::jsonb
+            end
+          ), 0),
+          page_counts.model_count
+        ) as template_model_count,
+        coalesce(
+          nullif(jsonb_array_length(
+            case
+              when jsonb_typeof(project.template_config -> 'formatIds') = 'array'
+                then project.template_config -> 'formatIds'
+              else '[]'::jsonb
+            end
+          ), 0),
+          page_counts.format_count
+        ) as template_format_count
+      from public.projects project
+      cross join lateral (
+        select case
+          when jsonb_typeof(project.canvas_data) = 'array' then project.canvas_data
+          when jsonb_typeof(project.canvas_data -> 'pages') = 'array' then project.canvas_data -> 'pages'
+          else '[]'::jsonb
+        end as items
+      ) as page_list
+      left join lateral (
+        select page.value
+          from jsonb_array_elements(page_list.items) with ordinality as page(value, ordinality)
+         order by page.ordinality
+         limit 1
+      ) as first_page on true
+      left join lateral (
+        select nullif(btrim(coalesce(
+          page.value ->> 'thumbnailUrl',
+          page.value ->> 'thumbnail_url',
+          ''
+        )), '') as thumbnail_url
+          from jsonb_array_elements(page_list.items) as page(value)
+         where nullif(btrim(coalesce(
+           page.value ->> 'thumbnailUrl',
+           page.value ->> 'thumbnail_url',
+           ''
+         )), '') is not null
+         limit 1
+      ) as fallback_page on true
+      cross join lateral (
+        select
+          count(*)::int as page_count,
+          count(distinct coalesce(
+            nullif(btrim(page.value ->> 'templateModelId'), ''),
+            nullif(btrim(page.value ->> 'templateModelName'), ''),
+            nullif(btrim(split_part(coalesce(page.value ->> 'name', ''), ' · ', 1)), ''),
+            'legacy-model'
+          ))::int as model_count,
+          count(distinct coalesce(
+            nullif(btrim(page.value ->> 'templateFormatId'), ''),
+            nullif(btrim(page.value ->> 'templateFormatLabel'), ''),
+            nullif(concat_ws('x', page.value ->> 'width', page.value ->> 'height'), ''),
+            'legacy-format'
+          ))::int as format_count
+          from jsonb_array_elements(page_list.items) as page(value)
+      ) as page_counts
+      where project.user_id = $1
+        and coalesce(project.is_template, false) = $2
+        ${categoryClause}
+      order by project.updated_at desc
+    `
+    const baseSql = summaryOnly ? summaryListSql : fullListSql
     if (safeLimit !== null) params.push(safeLimit)
     const sql = safeLimit !== null ? `${baseSql} limit $${params.length}` : baseSql
 
@@ -201,7 +304,42 @@ export default defineEventHandler(async (event) => {
 
     return await Promise.all(
       (rows || []).map(async (p: any) => {
-        const { canvas_data: _canvasData, ...rest } = p || {}
+        const summaryPageMeta = summaryOnly
+          ? [
+              {
+                thumbnailUrl: p?.primary_thumbnail_url || undefined,
+                width: p?.preview_width,
+                height: p?.preview_height
+              },
+              ...(p?.fallback_thumbnail_url && p?.fallback_thumbnail_url !== p?.primary_thumbnail_url
+                ? [{ thumbnailUrl: p.fallback_thumbnail_url }]
+                : [])
+            ]
+          : null
+        const previewProject = summaryOnly
+          ? { canvas_data: summaryPageMeta, preview_url: p?.preview_url }
+          : p
+        const previewSize = summaryOnly
+          ? getProjectPreviewSize(summaryPageMeta)
+          : getProjectPreviewSize(p?.canvas_data)
+        const templateCounts = summaryOnly
+          ? {
+              template_page_count: Math.max(0, Number(p?.template_page_count || 0)),
+              template_model_count: Math.max(0, Number(p?.template_model_count || 0)),
+              template_format_count: Math.max(0, Number(p?.template_format_count || 0))
+            }
+          : getProjectTemplateCounts(p?.canvas_data, p?.template_config)
+        const {
+          canvas_data: _canvasData,
+          primary_thumbnail_url: _primaryThumbnailUrl,
+          fallback_thumbnail_url: _fallbackThumbnailUrl,
+          preview_width: _previewWidth,
+          preview_height: _previewHeight,
+          template_page_count: _templatePageCount,
+          template_model_count: _templateModelCount,
+          template_format_count: _templateFormatCount,
+          ...rest
+        } = p || {}
         // A composição do modelo pode ter várias páginas e URLs. A grade de
         // escolha só usa título, categoria, tamanho e thumbnail; não envie a
         // biblioteca inteira até que o usuário abra um modelo.
@@ -219,9 +357,11 @@ export default defineEventHandler(async (event) => {
           template_category: getFlyerTemplateCategory(p?.template_config),
           template_subcategory: getFlyerTemplateSubcategory(p?.template_config),
           template_category_label: getFlyerTemplateCategoryLabel(p?.template_config),
-          preview_url: await resolveProjectPreviewUrl(p, user.id),
-          ...getProjectPreviewSize(p?.canvas_data),
-          ...getProjectTemplateCounts(p?.canvas_data, p?.template_config)
+          preview_url: await resolveProjectPreviewUrl(previewProject, user.id, {
+            direct: !summaryOnly
+          }),
+          ...previewSize,
+          ...templateCounts
         }
       })
     )
