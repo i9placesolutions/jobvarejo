@@ -42,6 +42,64 @@ const stringifyForNoopCompare = (value: unknown): string | null => {
   }
 }
 
+const normalizeCanvasRevision = (value: unknown): string | null => {
+  const revision = String(value || '').trim()
+  return revision ? revision.slice(0, 160) : null
+}
+
+const getProjectPages = (value: unknown): any[] | null => {
+  if (Array.isArray(value)) return value
+  if (value && typeof value === 'object' && Array.isArray((value as any).pages)) {
+    return (value as any).pages
+  }
+  return null
+}
+
+const withProjectPages = (source: unknown, pages: any[]): unknown => {
+  if (Array.isArray(source)) return pages
+  if (source && typeof source === 'object') return { ...(source as Record<string, any>), pages }
+  return source
+}
+
+/**
+ * A remote repair can point a page at a new, known-good canvas object. An
+ * editor tab opened before that repair may still upload its old path. Keep the
+ * repaired reference until that tab reloads and sends the same revision.
+ */
+const preserveForcedRemoteCanvasPages = (storedValue: unknown, incomingValue: unknown): unknown => {
+  const storedPages = getProjectPages(storedValue)
+  const incomingPages = getProjectPages(incomingValue)
+  if (!storedPages?.length || !incomingPages?.length) return incomingValue
+
+  const storedById = new Map<string, any>()
+  storedPages.forEach((page) => {
+    const pageId = String(page?.id || '').trim()
+    if (pageId) storedById.set(pageId, page)
+  })
+
+  let changed = false
+  const protectedPages = incomingPages.map((incomingPage) => {
+    if (!incomingPage || typeof incomingPage !== 'object') return incomingPage
+    const storedPage = storedById.get(String(incomingPage.id || '').trim())
+    const forcedRevision = normalizeCanvasRevision(storedPage?.canvasRevision)
+    if (!storedPage || !forcedRevision || normalizeCanvasRevision(incomingPage.canvasRevision) === forcedRevision) {
+      return incomingPage
+    }
+
+    changed = true
+    return {
+      ...incomingPage,
+      canvasDataPath: storedPage.canvasDataPath,
+      canvasSavedAt: storedPage.canvasSavedAt,
+      canvasRevision: forcedRevision,
+      thumbnailUrl: storedPage.thumbnailUrl,
+      lastPersistedObjectCount: storedPage.lastPersistedObjectCount
+    }
+  })
+
+  return changed ? withProjectPages(incomingValue, protectedPages) : incomingValue
+}
+
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   await enforceRateLimit(event, `projects-post:${user.id}`, 90, 60_000)
@@ -59,7 +117,7 @@ export default defineEventHandler(async (event) => {
   const normalizedCanvasData = stripInlineCanvasDataFromProjectCanvasData(
     normalizeProjectCanvasDataStorageRefs(payload.canvas_data)
   )
-  const canvasDataJson = parseAndStringifyJsonbParam(normalizedCanvasData, 'canvas_data')
+  let canvasDataJson = parseAndStringifyJsonbParam(normalizedCanvasData, 'canvas_data')
   const hasTemplateConfig = Object.prototype.hasOwnProperty.call(payload, 'template_config')
   const normalizedTemplateConfig = hasTemplateConfig && payload.template_config != null
     ? normalizeFlyerTemplateConfigCategory(payload.template_config)
@@ -110,21 +168,19 @@ export default defineEventHandler(async (event) => {
   try {
     await ensureProjectTemplateColumn()
     if (projectId) {
-      const nextCanvasComparable = canvasDataJson.length <= MAX_NOOP_COMPARE_BYTES ? canvasDataJson : null
       const existing = await pgOneOrNull<any>(
-        nextCanvasComparable
-          ? `select *
-               from public.projects
-              where id = $1
-                and user_id = $2`
-          : `select id
-               from public.projects
-              where id = $1
-                and user_id = $2`,
+        `select *
+           from public.projects
+          where id = $1
+            and user_id = $2`,
         [projectId, user.id]
       )
 
       if (!existing) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+
+      const protectedCanvasData = preserveForcedRemoteCanvasPages(existing.canvas_data, normalizedCanvasData)
+      canvasDataJson = parseAndStringifyJsonbParam(protectedCanvasData, 'canvas_data')
+      const nextCanvasComparable = canvasDataJson.length <= MAX_NOOP_COMPARE_BYTES ? canvasDataJson : null
 
       const existingCanvasComparable = nextCanvasComparable ? stringifyForNoopCompare(existing.canvas_data) : null
       const isNoopUpdate = !!nextCanvasComparable

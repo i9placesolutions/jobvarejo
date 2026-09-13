@@ -434,6 +434,10 @@ const setupHistory = () => {
         const saveStamp = Date.now()
         if (json && typeof json === 'object') {
             (json as any).__savedAt = saveStamp
+            const pageRevision = String(project.pages?.[targetPageIndexStart]?.canvasRevision || '').trim()
+            if (pageRevision) {
+                ;(json as any).__canvasRevision = pageRevision
+            }
         }
         let jsonStr: string;
         try {

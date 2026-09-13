@@ -21,6 +21,8 @@ export interface Page {
     canvasData: any; // JSON do FabricJS (em memória apenas)
     canvasDataPath?: string; // Caminho no Storage (salvo no banco)
     canvasSavedAt?: number; // Timestamp do JSON confirmado no Storage
+    /** Revisão do conteúdo para impedir que um rascunho antigo sobrescreva uma restauração remota. */
+    canvasRevision?: string;
     thumbnail?: string; // DataURL da miniatura (em memória)
     thumbnailUrl?: string; // URL pública no Storage
     thumbnailDirty?: boolean;
@@ -194,6 +196,11 @@ const getCanvasSavedAt = (canvasData: any): number => {
     const metaTs = Number((canvasData as any)?.meta?.savedAt)
     if (Number.isFinite(metaTs) && metaTs > 0) return metaTs
     return 0
+}
+
+const normalizeCanvasRevision = (value: unknown): string | undefined => {
+    const revision = String(value || '').trim()
+    return revision ? revision.slice(0, 160) : undefined
 }
 
 const getCanvasObjectCount = (canvasData: any): number => {
@@ -580,6 +587,7 @@ const resolveCanvasDataWithDraft = (opts: {
     pageId: string
     remoteCanvasData: any
     draft: DraftPayload | null
+    remoteCanvasRevision?: string
 }) => {
     const remoteData = opts.remoteCanvasData || null
     const remoteCount = getCanvasObjectCount(remoteData)
@@ -596,6 +604,8 @@ const resolveCanvasDataWithDraft = (opts: {
     const draftLocalTs = Number(draft.updatedAt || 0)
     const draftTs = Math.max(draftJsonTs, draftLocalTs)
     const sameFingerprint = computeCanvasFingerprint(remoteData) === computeCanvasFingerprint(draftData)
+    const remoteCanvasRevision = normalizeCanvasRevision(opts.remoteCanvasRevision)
+    const draftCanvasRevision = normalizeCanvasRevision((draftData as any)?.__canvasRevision)
 
     if (!draftIsValid) {
         if (remoteCount > 0) {
@@ -606,6 +616,14 @@ const resolveCanvasDataWithDraft = (opts: {
 
     if (remoteCount === 0) {
         return { canvasData: draftData, source: 'draft-remote-empty', needsRemoteSync: true as const }
+    }
+
+    // Uma restauração explícita do servidor recebe uma revisão própria. Rascunhos
+    // criados antes dela não podem vencer apenas porque um autosave local ocorreu
+    // depois: eles ainda carregam a revisão anterior (ou nenhuma revisão).
+    if (remoteCanvasRevision && draftCanvasRevision !== remoteCanvasRevision) {
+        clearDraft(opts.projectId, opts.pageId)
+        return { canvasData: remoteData, source: 'remote-revision-overrides-stale-draft', needsRemoteSync: false as const }
     }
 
     if (sameFingerprint) {
@@ -660,6 +678,7 @@ const serializeProjectDraftPages = (pages: Page[]): ProjectDraftPagePayload[] =>
         canvasSavedAt: Number.isFinite(Number(page?.canvasSavedAt))
             ? Number(page.canvasSavedAt)
             : undefined,
+        canvasRevision: normalizeCanvasRevision(page?.canvasRevision),
         // NOTE: thumbnail (base64 data URL) is intentionally excluded from
         // localStorage drafts to avoid blowing the ~5 MB quota.  The
         // thumbnailUrl (S3 URL) is preserved for restoration.
@@ -733,6 +752,7 @@ const hydratePagesFromProjectDraft = (projectId: string, pages: ProjectDraftPage
             canvasSavedAt: Number.isFinite(Number(page?.canvasSavedAt))
                 ? Number(page.canvasSavedAt)
                 : undefined,
+            canvasRevision: normalizeCanvasRevision(page?.canvasRevision),
             thumbnail: typeof page?.thumbnail === 'string' ? page.thumbnail : undefined,
             thumbnailUrl: typeof page?.thumbnailUrl === 'string'
                 ? (page.thumbnailUrl.trim() || undefined)
@@ -818,6 +838,7 @@ type ResolvedPageCanvasState = {
     canvasData: any
     canvasDataPath?: string
     canvasSavedAt?: number
+    canvasRevision?: string
     finalObjectCount: number
     finalFingerprint: string
     needsRemoteSync: boolean
@@ -894,6 +915,7 @@ export const useProject = () => {
         // que este timestamp, significa que um save posterior falhou no upload Wasabi
         // mas conseguiu gravar os metadados no DB.
         const expectedCanvasSavedAt = Number(opts.pageMeta?.canvasSavedAt || 0)
+        const canvasRevision = normalizeCanvasRevision(opts.pageMeta?.canvasRevision)
 
         if (preferredPath) {
             console.log('📥 Buscando canvasData do Storage:', preferredPath)
@@ -986,12 +1008,16 @@ export const useProject = () => {
             projectId: opts.projectId,
             pageId: opts.pageId,
             remoteCanvasData: serverCanvasData,
-            draft
+            draft,
+            remoteCanvasRevision: canvasRevision
         })
         const canvasData = normalizeCanvasAssetUrls(draftDecision.canvasData, {
             clone: false,
             silent: true
         }).data
+        if (canvasRevision && canvasData && typeof canvasData === 'object') {
+            ;(canvasData as any).__canvasRevision = canvasRevision
+        }
 
         console.log(`📦 Fonte final da página ${opts.pageId}: ${draftDecision.source}`)
         if (canvasData) {
@@ -1008,6 +1034,7 @@ export const useProject = () => {
             canvasData,
             canvasDataPath: resolvedCanvasPath,
             canvasSavedAt: getCanvasSavedAt(canvasData) || Number(opts.pageMeta?.canvasSavedAt || 0) || undefined,
+            canvasRevision,
             finalObjectCount,
             finalFingerprint,
             needsRemoteSync: draftDecision.needsRemoteSync,
@@ -1019,6 +1046,7 @@ export const useProject = () => {
         page.canvasData = resolved.canvasData
         page.canvasDataPath = resolved.canvasDataPath || page.canvasDataPath
         page.canvasSavedAt = resolved.canvasSavedAt || page.canvasSavedAt
+        page.canvasRevision = resolved.canvasRevision || page.canvasRevision
         page.lastLoadedFingerprint = resolved.finalFingerprint
         page.lastSavedFingerprint = resolved.finalFingerprint
         // Não deixe uma leitura parcial reduzir a referência usada para
@@ -1282,8 +1310,13 @@ export const useProject = () => {
                 (json as any)?.updatedAt ||
                 0
             )
+            const canvasRevision = normalizeCanvasRevision(project.pages[index].canvasRevision)
             const stampedJson = (json && typeof json === 'object')
-                ? { ...json, __savedAt: existingSavedAt > 0 ? existingSavedAt : Date.now() }
+                ? {
+                    ...json,
+                    __savedAt: existingSavedAt > 0 ? existingSavedAt : Date.now(),
+                    ...(canvasRevision ? { __canvasRevision: canvasRevision } : {})
+                }
                 : json
             const fingerprint = computeCanvasFingerprint(stampedJson)
             if (opts.skipIfSameFingerprint && project.pages[index].lastSavedFingerprint === fingerprint) {
@@ -1546,6 +1579,8 @@ export const useProject = () => {
         // precisa ganhar um caminho próprio no próximo upload.
         page.canvasDataPath = undefined
         page.canvasSavedAt = undefined
+        page.canvasRevision = undefined
+        if (clonedJson && typeof clonedJson === 'object') delete (clonedJson as any).__canvasRevision
         page.thumbnail = undefined
         page.thumbnailUrl = String(source.thumbnailUrl || '').trim() || undefined
         page.thumbnailDirty = false
@@ -2012,6 +2047,7 @@ export const useProject = () => {
                 if (page.templateCompositionManaged) metadata.templateCompositionManaged = true
                 if (page.templateSourcePageId) metadata.templateSourcePageId = page.templateSourcePageId
                 if (confirmedCanvasSavedAt) metadata.canvasSavedAt = confirmedCanvasSavedAt
+                if (page.canvasRevision) metadata.canvasRevision = page.canvasRevision
 
 	                return metadata
 	            })
@@ -2491,6 +2527,7 @@ export const useProject = () => {
 	                    canvasSavedAt: Number.isFinite(Number(pageMeta.canvasSavedAt))
                             ? Number(pageMeta.canvasSavedAt)
                             : undefined,
+	                    canvasRevision: normalizeCanvasRevision(pageMeta.canvasRevision),
 	                    thumbnailUrl: typeof pageMeta.thumbnailUrl === 'string'
                         ? (pageMeta.thumbnailUrl.trim() || undefined)
                         : undefined,
