@@ -816,23 +816,48 @@ const normalizeProductImagePickerAssets = (payload: any): Array<{ id: string; na
         .filter((asset: { id: string; name: string; url: string; key?: string }) => !!asset.url)
 }
 
+const loadProductImagePickerAssets = async (
+    headers: Record<string, string>,
+    search: string,
+    limit: number,
+    opts: { fresh?: boolean } = {}
+): Promise<Array<{ id: string; name: string; url: string; key?: string }>> => {
+    // Produtos já catalogados são devolvidos pelo índice interno sem listar o
+    // bucket inteiro. Quando não há índice, mantém a busca manual no Wasabi.
+    if (search) {
+        const indexed: any = await $fetch('/api/assets', {
+            headers,
+            query: { q: search, limit, source: 'cache', ai: '0', expand: '0' }
+        })
+        const indexedAssets = normalizeProductImagePickerAssets(indexed)
+        if (indexedAssets.length > 0) return indexedAssets
+    }
+
+    const data: any = await $fetch('/api/assets', {
+        headers,
+        query: {
+            ...(search ? { q: search } : {}),
+            limit,
+            ai: '0',
+            expand: '0',
+            includeCache: '0',
+            ...(opts.fresh ? { fresh: '1' } : {})
+        }
+    })
+    return normalizeProductImagePickerAssets(data)
+}
+
 const refreshProductImagePickerAssets = async () => {
     productImagePickerLoading.value = true
     productImagePickerError.value = ''
     try {
         const headers = await getApiAuthHeaders()
         const search = String(productImagePickerSearch.value || '').trim()
-        const data: any = await $fetch('/api/assets', {
+        productImagePickerAssets.value = await loadProductImagePickerAssets(
             headers,
-            query: {
-                ...(search ? { q: search } : {}),
-                limit: search ? 120 : 80,
-                ai: '0',
-                expand: '0',
-                includeCache: '0'
-            }
-        })
-        productImagePickerAssets.value = normalizeProductImagePickerAssets(data)
+            search,
+            search ? 120 : 80
+        )
     } catch (e: any) {
         productImagePickerAssets.value = []
         productImagePickerError.value = String(e?.data?.statusMessage || e?.message || 'Falha ao carregar imagens do Wasabi.')
@@ -850,8 +875,7 @@ const searchExplicitProductFlavors = async () => {
     try {
         const headers = await getApiAuthHeaders();
         const results = await Promise.allSettled(queries.map(async item => {
-            const data = await $fetch('/api/assets', { headers, query: { q: item.query, limit: 60, ai: '0', fresh: '1', includeCache: '0' } });
-            return normalizeProductImagePickerAssets(data);
+            return await loadProductImagePickerAssets(headers, item.query, 60, { fresh: true });
         }));
         productImagePickerSearch.value = '';
         const assets = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);

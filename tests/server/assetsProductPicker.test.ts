@@ -33,6 +33,9 @@ describe('busca manual de imagens salvas', () => {
     expect(results).toHaveLength(3)
     expect(results[0].key).toBe(originalKeys[0])
     expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({ forceRefresh: false }))
+    expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({
+      prefixes: expect.not.arrayContaining(['projects/user-1/'])
+    }))
     expect(results.every((asset: any) => asset.source === 's3')).toBe(true)
   })
 
@@ -40,5 +43,33 @@ describe('busca manual de imagens salvas', () => {
     mocks.query.mockReturnValue({ q: 'CERVEJA ORIGINAL', ai: '0', includeCache: '0', fresh: '1' })
     await handler({} as any)
     expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({ forceRefresh: true }))
+  })
+
+  it('consulta o índice sem esperar a listagem inteira do Wasabi', async () => {
+    mocks.query.mockReturnValue({ q: 'CERVEJA ORIGINAL', limit: 120, source: 'cache', ai: '0', expand: '0' })
+    mocks.db.mockImplementation(async (sql: string) => {
+      if (sql.includes('product_image_cache')) {
+        return {
+          rows: [{
+            id: 'cached-1',
+            product_name: 'CERVEJA ORIGINAL 269ML',
+            s3_key: originalKeys[0],
+            image_url: `https://storage.test/${originalKeys[0]}`,
+            usage_count: 3
+          }]
+        }
+      }
+      return { rows: [] }
+    })
+
+    const results: any = await handler({} as any)
+
+    expect(mocks.list).not.toHaveBeenCalled()
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({
+      key: originalKeys[0],
+      source: 'cache',
+      name: 'CERVEJA ORIGINAL 269ML'
+    })
   })
 })

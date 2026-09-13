@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
-import { isUserProjectKey, isValidStoragePath } from '../../utils/storage-scope'
+import { isLegacyUserProjectKey, isUserProjectKey, isValidStoragePath } from '../../utils/storage-scope'
 import { getOwnedProjectStorageRow, updateOwnedProjectCanvasData } from '../../utils/project-repository'
 import { getS3Client } from '../../utils/s3'
 import { isValidityOnlyCanvas } from '~/utils/canvasIntegrity'
@@ -262,7 +262,7 @@ export default defineEventHandler(async (event) => {
     `projects/${projectRow.user_id}/${projectId}/page_${pageId}.json`
   if (
     !isValidStoragePath(targetKey) ||
-    !isUserProjectKey(targetKey, user.id) ||
+    !(isUserProjectKey(targetKey, user.id) || isLegacyUserProjectKey(targetKey, user.id)) ||
     !(targetKey.endsWith('.json') || targetKey.endsWith('.json.gz'))
   ) {
     throw createError({
@@ -273,6 +273,7 @@ export default defineEventHandler(async (event) => {
 
   const projectPrefix = `projects/${projectRow.user_id}/${projectId}/page_`
   const pageDirectoryPrefix = `projects/${projectRow.user_id}/${projectId}/pages/${pageId}/`
+  const legacyPageDirectoryPrefix = `${projectRow.user_id}/${projectId}/pages/${pageId}/`
   const historyPrefix = `projects/${projectRow.user_id}/${projectId}/history/page_${pageId}/`
 
   const s3 = getS3Client()
@@ -283,6 +284,9 @@ export default defineEventHandler(async (event) => {
   }
   if (!recovered) {
     recovered = await findLatestNonEmptyByPageDirectory(s3, bucket, pageDirectoryPrefix)
+  }
+  if (!recovered) {
+    recovered = await findLatestNonEmptyByPageDirectory(s3, bucket, legacyPageDirectoryPrefix)
   }
   if (!recovered) {
     recovered = await findLatestNonEmptyByHistoryPrefix(s3, bucket, historyPrefix)

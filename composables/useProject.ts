@@ -307,6 +307,18 @@ const pickBestRemoteCanvasData = (storageCanvasData: any, dbCanvasData: any) => 
     if (storageCount === 0 && dbCount > 0) return { data: dbCanvasData, source: 'db(non-empty-safer)' as const }
     if (dbCount === 0 && storageCount > 0) return { data: storageCanvasData, source: 'storage(non-empty-safer)' as const }
 
+    // A validade isolada é um shell transitório da edição rápida. Quando uma
+    // fonte traz a arte completa, ela sempre vence esse estado parcial mesmo
+    // que o timestamp do shell seja mais recente.
+    const storageHasOnlyValidity = isValidityOnlyCanvas(storageCanvasData)
+    const dbHasOnlyValidity = isValidityOnlyCanvas(dbCanvasData)
+    if (storageHasOnlyValidity && dbCount > 2 && !dbHasOnlyValidity) {
+        return { data: dbCanvasData, source: 'db(full-over-validity)' as const }
+    }
+    if (dbHasOnlyValidity && storageCount > 2 && !storageHasOnlyValidity) {
+        return { data: storageCanvasData, source: 'storage(full-over-validity)' as const }
+    }
+
     const storageTs = getCanvasSavedAt(storageCanvasData)
     const dbTs = getCanvasSavedAt(dbCanvasData)
     if (storageTs > 0 || dbTs > 0) {
@@ -1688,6 +1700,14 @@ export const useProject = () => {
 	            const unsafeEmptyPages = project.pages.filter((page) => {
 	                return isUnsafeEmptyOverwrite(page as Page)
 	            })
+	            // Uma página transitória pode ter sido serializada só com a
+	            // validade. Ela não deve alterar nem o caminho nem a contagem
+	            // confirmada no metadata do projeto.
+	            const protectedCanvasPageIds = new Set<string>(
+	                opts.forceEmptyOverwrite
+	                    ? []
+	                    : unsafeEmptyPages.map((page) => page.id)
+	            )
 	            if (unsafeEmptyPages.length > 0 && !opts.forceEmptyOverwrite) {
                     // Não bloquear o save inteiro — apenas logar aviso. As páginas problemáticas
                     // serão ignoradas no upload individual (veja guarda abaixo), enquanto páginas
@@ -1788,7 +1808,8 @@ export const useProject = () => {
                     try {
                         const currentCount = getCanvasObjectCount(page.canvasData)
                         const persistedCount = Number(page?.lastPersistedObjectCount || 0)
-                        if (isUnsafeEmptyOverwrite(page) && !opts.forceEmptyOverwrite) {
+                        if ((protectedCanvasPageIds.has(page.id) || isUnsafeEmptyOverwrite(page)) && !opts.forceEmptyOverwrite) {
+	                            protectedCanvasPageIds.add(page.id)
                             console.warn(`🛡️ Skip upload vazio para página ${page.id} (persistido=${persistedCount}, atual=${currentCount})`)
                         } else {
                             // log de call removido — ruidoso e ja coberto por ✅/❌ logs abaixo
@@ -1976,7 +1997,11 @@ export const useProject = () => {
 		                    // Timestamp do canvas confirmado no Storage. Não renovar para
                     // páginas que apenas preservaram o canvasDataPath anterior.
                 }
-                const persistedObjectCount = Number(page.lastPersistedObjectCount || getCanvasObjectCount(page.canvasData) || 0)
+                const persistedObjectCount = Number(
+                    protectedCanvasPageIds.has(page.id)
+                        ? page.lastPersistedObjectCount
+                        : (page.lastPersistedObjectCount || getCanvasObjectCount(page.canvasData) || 0)
+                )
                 if (persistedObjectCount > 0) metadata.lastPersistedObjectCount = persistedObjectCount
                 if (page.templateModelId) metadata.templateModelId = page.templateModelId
                 if (page.templateModelName) metadata.templateModelName = page.templateModelName
@@ -2095,6 +2120,13 @@ export const useProject = () => {
 	                const allPagesFullySynced = unsyncedPageIds.size === 0
 
 	                project.pages.forEach((page) => {
+	                    if (protectedCanvasPageIds.has(page.id)) {
+	                        // Descarta o estado local parcial. A próxima carga usa
+	                        // a versão íntegra já confirmada no Wasabi.
+	                        page.dirty = false
+	                        delete (page as any).__needsCanvasUpload
+	                        return
+	                    }
 	                    if (!unsyncedPageIds.has(page.id)) {
 	                        page.dirty = false
                             if (!failedThumbnailSyncPageIds.has(page.id)) {

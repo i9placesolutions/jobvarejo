@@ -303,14 +303,23 @@ export default defineEventHandler(async (event) => {
     const libraryCategory = getAssetLibraryCategory(query.category)
     if (query.category && !libraryCategory) throw createError({ statusCode: 400, statusMessage: 'Categoria inválida' })
     const source = typeof query.source === "string" ? query.source.trim().toLowerCase() : "";
+    const cacheOnlyMode = source === "cache";
     const uploadsOnlyMode = source === "uploads";
     const disableAiExpand =
         uploadsOnlyMode ||
+        cacheOnlyMode ||
         String(query.ai ?? "").toLowerCase() === "0" ||
         String(query.expand ?? "").toLowerCase() === "0";
-    const skipCacheRows =
+    const skipCacheRows = !cacheOnlyMode && (
         uploadsOnlyMode ||
-        String(query.includeCache ?? "").toLowerCase() === "0";
+        String(query.includeCache ?? "").toLowerCase() === "0"
+    );
+    // A listagem de um projeto contém canvas, histórico e miniaturas. Ela não
+    // pertence à biblioteca de imagens e pode ter milhares de objetos; só a
+    // inclua quando uma tela realmente pedir esse escopo.
+    const includeProjectAssets =
+        String(query.includeProjects ?? "").toLowerCase() === "1" ||
+        String(query.includeProjects ?? "").toLowerCase() === "true";
 
     const rawSearch = typeof query.q === "string" ? query.q.trim() : "";
     if (rawSearch.length > 120) {
@@ -389,8 +398,7 @@ export default defineEventHandler(async (event) => {
             }
         }
 
-        const [s3Items, cacheRows] = await Promise.all([
-            (async () => {
+        const loadS3Items = async (): Promise<AssetItem[]> => {
                 if (!bucketName) return [] as AssetItem[];
                 const s3 = getS3Client();
                 const listedObjects = await getCachedS3Objects({
@@ -399,7 +407,8 @@ export default defineEventHandler(async (event) => {
                     prefixes: [...new Set([
                         ...(libraryCategory ? [libraryCategory.prefix] : []),
                         'imagens/', 'uploads/', 'logo/',
-                        getBuilderTenantPrefix(user.id), getUserProjectsPrefix(user.id)
+                        getBuilderTenantPrefix(user.id),
+                        ...(includeProjectAssets ? [getUserProjectsPrefix(user.id)] : [])
                     ])],
                     ttlMs: 90_000,
                     forceRefresh: forceFresh
@@ -426,8 +435,8 @@ export default defineEventHandler(async (event) => {
                         return { ...asset, score: tokenScore + substringBoost };
                     })
                     .filter((asset) => Number(asset.score || 0) > 0);
-            })(),
-            (async () => {
+        };
+        const loadCacheRows = async (): Promise<CacheRow[]> => {
                 if (skipCacheRows) return [] as CacheRow[];
                 try {
                     const { rows } = await pgQuery<CacheRow>(
@@ -440,8 +449,14 @@ export default defineEventHandler(async (event) => {
                 } catch {
                     return [] as CacheRow[];
                 }
-            })()
-        ]);
+        };
+
+        // A seleção de imagem de produto consulta primeiro o índice interno.
+        // Esse caminho não deve ficar preso aguardando uma varredura completa
+        // do bucket, que é usada somente como fallback para arquivos sem índice.
+        const [s3Items, cacheRows] = cacheOnlyMode
+            ? [[], await loadCacheRows()]
+            : await Promise.all([loadS3Items(), loadCacheRows()]);
 
         const cacheItems: AssetItem[] = [];
         for (const row of cacheRows) {

@@ -444,7 +444,11 @@ const resolveProxyGetUrl = (keyOrUrl: string): string | null => {
     trimmed.startsWith('projects/') ||
     trimmed.startsWith('imagens/') ||
     trimmed.startsWith('uploads/') ||
-    trimmed.startsWith('logo/')
+    trimmed.startsWith('logo/') ||
+    // Encartes criados antes da padronização usavam
+    // {userId}/{projectId}/pages/{pageId}/arquivo.json.gz. A rota de proxy
+    // valida o dono autenticado antes de entregar este conteúdo privado.
+    /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/pages\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\//i.test(trimmed)
   ) {
     return `/api/storage/p?key=${encodeURIComponent(trimmed.replace(/^\/+/, ''))}`
   }

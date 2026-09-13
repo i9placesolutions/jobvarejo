@@ -1,6 +1,11 @@
 const PUBLIC_STORAGE_PREFIXES = ['imagens/', 'uploads/', 'logo/'] as const
 const BUILDER_STORAGE_PREFIX = 'builder/'
 const MAX_STORAGE_PATH_LENGTH = 1024
+const UUID_SEGMENT = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
+const LEGACY_PROJECT_PAGE_KEY_RE = new RegExp(
+  `^${UUID_SEGMENT}/${UUID_SEGMENT}/pages/${UUID_SEGMENT}/`,
+  'i'
+)
 
 export const normalizeStoragePath = (value: unknown): string =>
   String(value || '').trim().replace(/^\/+/, '')
@@ -32,6 +37,18 @@ export const getUserProjectsPrefix = (userId: string): string =>
 export const isUserProjectKey = (key: string, userId: string): boolean =>
   key.startsWith(getUserProjectsPrefix(userId))
 
+// Chaves gravadas por versões anteriores do editor não tinham o prefixo
+// `projects/`. Elas continuam privadas pelo UUID do usuário no primeiro nível
+// e precisam ser lidas para que encartes já existentes não abram em branco.
+export const getLegacyUserProjectPrefix = (userId: string): string =>
+  `${String(userId || '').trim()}/`
+
+export const isLegacyProjectPageKey = (key: string): boolean =>
+  LEGACY_PROJECT_PAGE_KEY_RE.test(normalizeStoragePath(key))
+
+export const isLegacyUserProjectKey = (key: string, userId: string): boolean =>
+  isLegacyProjectPageKey(key) && key.startsWith(getLegacyUserProjectPrefix(userId))
+
 export const isProjectsKey = (key: string): boolean =>
   key.startsWith('projects/')
 
@@ -46,6 +63,7 @@ export const getProjectOwnerIdFromKey = (key: string): string | null => {
 export const isStorageKeyAllowedForUser = (key: string, userId: string): boolean => {
   if (!key) return false
   if (isUserProjectKey(key, userId)) return true
+  if (isLegacyUserProjectKey(key, userId)) return true
   if (isBuilderTenantKey(key, userId)) return true
   return isPublicStorageKey(key)
 }

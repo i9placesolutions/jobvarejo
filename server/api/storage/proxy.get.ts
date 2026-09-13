@@ -1,10 +1,14 @@
 import { GetObjectCommand, ListObjectVersionsCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { Readable } from 'stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { getS3Client, resetS3Client } from '../../utils/s3'
 import {
   getProjectOwnerIdFromKey,
+  isLegacyProjectPageKey,
+  isLegacyUserProjectKey,
+  isPublicStorageKey,
   isProjectsKey,
   isValidStoragePath,
   normalizeStoragePath
@@ -13,6 +17,39 @@ import {
 const TRANSPARENT_PIXEL_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 const TRANSPARENT_PIXEL_PNG = Buffer.from(TRANSPARENT_PIXEL_PNG_BASE64, 'base64')
+const PUBLIC_READ_REDIRECT_CACHE_TTL_MS = 55 * 60 * 1000
+const publicReadRedirectCache = new Map<string, { expiresAt: number; url: string }>()
+
+const getCachedPublicReadUrl = async (
+  bucket: string,
+  key: string,
+  versionId?: string | null
+): Promise<string> => {
+  const cacheKey = `${bucket}\u0000${key}\u0000${versionId || ''}`
+  const now = Date.now()
+  const cached = publicReadRedirectCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.url
+
+  const url = await getSignedUrl(
+    getS3Client(),
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ...(versionId ? { VersionId: versionId } : {})
+    }),
+    { expiresIn: 3600 }
+  )
+
+  publicReadRedirectCache.set(cacheKey, {
+    url,
+    expiresAt: now + PUBLIC_READ_REDIRECT_CACHE_TTL_MS
+  })
+  if (publicReadRedirectCache.size > 2048) {
+    const oldestKey = publicReadRedirectCache.keys().next().value
+    if (oldestKey) publicReadRedirectCache.delete(oldestKey)
+  }
+  return url
+}
 
 /**
  * API Route para servir imagens da Wasabi via proxy
@@ -112,8 +149,9 @@ export default defineEventHandler(async (event) => {
     ].filter(Boolean)))
 
     const hasProjectsKeyTarget = keyCandidates.some((candidate) => isProjectsKey(String(candidate)))
+    const hasLegacyProjectKeyTarget = keyCandidates.some((candidate) => isLegacyProjectPageKey(String(candidate)))
     const requestTargetsJson = keyCandidates.some((candidate) => String(candidate).toLowerCase().endsWith('.json'))
-    if (requestTargetsJson || hasProjectsKeyTarget) {
+    if (requestTargetsJson || hasProjectsKeyTarget || hasLegacyProjectKeyTarget) {
       const user = await requireAuthenticatedUser(event)
       const ownerId = keyCandidates
         .map((candidate) => getProjectOwnerIdFromKey(String(candidate)))
@@ -122,6 +160,14 @@ export default defineEventHandler(async (event) => {
         throw createError({
           statusCode: 403,
           statusMessage: 'Forbidden key scope'
+        })
+      }
+      if (hasLegacyProjectKeyTarget && keyCandidates.some((candidate) => (
+        isLegacyProjectPageKey(String(candidate)) && !isLegacyUserProjectKey(String(candidate), user.id)
+      ))) {
+        throw createError({
+          statusCode: 403,
+          statusMessage: 'Forbidden legacy key scope'
         })
       }
     }
@@ -247,7 +293,8 @@ export default defineEventHandler(async (event) => {
       key.startsWith('uploads/') ||
       String(getHeader(event, 'accept') || '').includes('image/')
 
-    let sourceBody: Buffer | null = null
+    let sourceStream: Readable | null = null
+    let publicReadRedirectUrl: string | null = null
     let resolvedContentType = contentTypes[ext || ''] || 'application/octet-stream'
     let resolvedLength: number | null = null
     let recoveredVersion: string | null = null
@@ -266,13 +313,33 @@ export default defineEventHandler(async (event) => {
       }
       if (wasabiObject?.response?.Body) {
         const stream = wasabiObject.response.Body as Readable
-        const chunks: Buffer[] = []
-        for await (const chunk of stream) {
-          chunks.push(Buffer.from(chunk))
-        }
-        sourceBody = Buffer.concat(chunks)
         resolvedContentType = wasabiObject.response.ContentType || resolvedContentType
-        resolvedLength = Number(wasabiObject.response.ContentLength || 0) || sourceBody.length
+        resolvedLength = Number(wasabiObject.response.ContentLength || 0) || null
+
+        // Arquivos nestes prefixos já são tratados como públicos pelo produto.
+        // Entregar a URL assinada diretamente evita atravessar o Coolify duas
+        // vezes (Wasabi → app → navegador), que era o principal atraso dos
+        // previews com imagens grandes. Se a assinatura falhar, mantemos o
+        // stream pelo proxy como fallback confiável.
+        if (isPublicStorageKey(wasabiObject.key)) {
+          try {
+            publicReadRedirectUrl = await getCachedPublicReadUrl(
+              wasabiObject.bucket,
+              wasabiObject.key,
+              recoveredVersion
+            )
+            if (typeof (stream as any).destroy === 'function') {
+              ;(stream as any).destroy()
+            }
+          } catch (signError: any) {
+            console.warn('⚠️ [storage-proxy] Falha ao gerar URL direta; mantendo stream pelo proxy', {
+              key: wasabiObject.key,
+              message: signError?.message || String(signError)
+            })
+          }
+        }
+
+        if (!publicReadRedirectUrl) sourceStream = stream
       }
     } catch (err: any) {
       if (!(err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404)) {
@@ -280,7 +347,18 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    if (!sourceBody) {
+    if (publicReadRedirectUrl) {
+      // A assinatura vale uma hora; cache curto para que o navegador não
+      // guarde um redirecionamento já expirado entre sessões longas.
+      setResponseHeaders(event, {
+        'Cache-Control': 'public, max-age=300, must-revalidate',
+        'Access-Control-Allow-Origin': '*',
+        'X-Storage-Direct': '1'
+      })
+      return sendRedirect(event, publicReadRedirectUrl, 302)
+    }
+
+    if (!sourceStream) {
       // Missing images should not crash canvas loading. Return a transparent pixel
       // and keep 404 behavior for non-image assets (e.g. JSON payloads).
       if (looksLikeImage) {
@@ -321,7 +399,10 @@ export default defineEventHandler(async (event) => {
     if (recoveredVersion) {
       setResponseHeader(event, 'X-Storage-Recovered-Version', '1')
     }
-    return sourceBody
+    // Não acumular a imagem inteira em memória antes de responder. Em arquivos
+    // grandes isso fazia o preview esperar o download Wasabi + um segundo envio
+    // completo pelo servidor antes de receber o primeiro byte.
+    return await sendStream(event, sourceStream)
 
   } catch (error: any) {
     console.error('❌ Erro no proxy de storage Wasabi:', error)
