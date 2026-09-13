@@ -1,6 +1,76 @@
 export const WHOLESALE_REFERENCE_TEMPLATE_ID = 'tpl_wholesale_reference_v1'
 export const WHOLESALE_REFERENCE_MARKER = 'wholesale_reference_packaging'
 
+const updateNode = (node: any, props: Record<string, any>) => {
+  if (!node) return
+  if (typeof node.set === 'function') node.set(props)
+  else Object.assign(node, props)
+  node.setCoords?.()
+  node.dirty = true
+}
+
+/**
+ * A referência lateral pode ter somente uma das faixas de preço. Nesse caso
+ * a faixa remanescente sobe para junto da embalagem, sem deixar o vão da
+ * faixa oculta. As coordenadas canônicas também são restauradas quando o
+ * produto voltar a ter os dois preços.
+ */
+export const reflowWholesaleReferencePriceLabel = (label: any): boolean => {
+  const objects = label?.getObjects?.() || []
+  const byName = (name: string) => objects.find((node: any) => node?.name === name)
+  if (!byName(WHOLESALE_REFERENCE_MARKER)) return false
+
+  const positions: Record<string, number> = {
+    [WHOLESALE_REFERENCE_MARKER]: -130,
+    atac_retail_bg: -55,
+    reference_retail_heading: -78,
+    retail_currency_text: -54,
+    retail_price_text: -54,
+    retail_pack_line_text: -27,
+    atac_wholesale_bg: 53,
+    reference_special_heading: 12,
+    wholesale_currency_text: 54,
+    wholesale_price_text: 54,
+    wholesale_pack_line_text: 93,
+    atac_banner_bg: 139,
+    wholesale_banner_text: 139
+  }
+
+  const retailVisible = byName('atac_retail_bg')?.visible !== false
+  const specialVisible = byName('atac_wholesale_bg')?.visible !== false
+
+  if (!retailVisible && specialVisible) {
+    // Faz a faixa especial ocupar o lugar da avulsa. A descrição da
+    // embalagem desce levemente para não ficar por trás do título do card.
+    Object.assign(positions, {
+      [WHOLESALE_REFERENCE_MARKER]: -127,
+      atac_wholesale_bg: -33,
+      reference_special_heading: -74,
+      wholesale_currency_text: -32,
+      wholesale_price_text: -32,
+      wholesale_pack_line_text: 7,
+      atac_banner_bg: 53,
+      wholesale_banner_text: 53
+    })
+  } else if (retailVisible && !specialVisible) {
+    Object.assign(positions, {
+      [WHOLESALE_REFERENCE_MARKER]: -127,
+      atac_retail_bg: -46,
+      reference_retail_heading: -69,
+      retail_currency_text: -45,
+      retail_price_text: -45,
+      retail_pack_line_text: -18,
+      atac_banner_bg: 57,
+      wholesale_banner_text: 57
+    })
+  }
+
+  Object.entries(positions).forEach(([name, top]) => updateNode(byName(name), { top }))
+  label.setCoords?.()
+  label.dirty = true
+  return true
+}
+
 export const createWholesaleReferenceTemplateJson = () => {
   const text = (name:string,value:string,left:number,top:number,size:number,fill='#111111',width=220) => ({type:'Textbox',name,text:value,left,top,width,fontSize:size,fontFamily:'Barlow',fontWeight:400,fill,originX:'center',originY:'center',textAlign:'center',scaleX:1,scaleY:1})
   const price = (name:string,value:string,top:number,fill:string,size=36) => ({...text(name,value,16,top,size,fill,168),fontWeight:700,__priceRichText:true,__priceRichIntegerStyle:{fontSize:size,fill,fontFamily:'Barlow',fontWeight:700},__priceRichDecimalStyle:{fontSize:size,fill,fontFamily:'Barlow',fontWeight:700}})
@@ -26,6 +96,7 @@ export const applyWholesaleReferenceCardLayout = (card:any,w:number,h:number): b
   const nodes=card?.getObjects?.() || []
   const label=nodes.find((o:any)=>o.name==='priceGroup')
   if (!label?.getObjects?.().some((o:any)=>o.name===WHOLESALE_REFERENCE_MARKER)) return false
+  reflowWholesaleReferencePriceLabel(label)
   const set=(o:any,p:any)=>{o?.set?.(p);o?.setCoords?.();if(o)o.dirty=true}
   const bg=nodes.find((o:any)=>o.name==='offerBackground')
   set(bg,{fill:'#FFFFFF',rx:w*.035,ry:w*.035})

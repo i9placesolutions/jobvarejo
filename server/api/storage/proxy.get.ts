@@ -172,6 +172,30 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // Imagens da biblioteca já pertencem a prefixos públicos. Não leia o
+    // objeto no servidor só para então gerar uma URL assinada: numa página
+    // com vários cards isso cria uma fila Wasabi → app → navegador antes do
+    // download real. A assinatura é suficiente para o navegador buscar o
+    // arquivo diretamente. Chaves antigas sem prefixo continuam no fluxo
+    // abaixo, que ainda descobre o prefixo correto e preserva o fallback.
+    if (isPublicStorageKey(key)) {
+      try {
+        const publicReadRedirectUrl = await getCachedPublicReadUrl(bucket, key, version)
+        setResponseHeaders(event, {
+          'Cache-Control': 'public, max-age=300, must-revalidate',
+          'Access-Control-Allow-Origin': '*',
+          'X-Storage-Direct': '1'
+        })
+        return sendRedirect(event, publicReadRedirectUrl, 302)
+      } catch (signError: any) {
+        // Manter o proxy como fallback se a assinatura não estiver disponível.
+        console.warn('⚠️ [storage-proxy] Falha ao antecipar URL direta; mantendo stream pelo proxy', {
+          key,
+          message: signError?.message || String(signError)
+        })
+      }
+    }
+
     const sendGetObject = async (bucketCandidate: string, keyCandidate: string, versionId?: string) => {
       const s3Client = getS3Client()
       return s3Client.send(new GetObjectCommand({

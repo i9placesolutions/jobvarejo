@@ -4,7 +4,7 @@ import { applyDynamicBusinessTextColor } from '~/utils/dynamicBusinessFields'
 import { installGroupClipCacheGuard } from '~/utils/fabricGroupClipCache'
 import { getExplicitFlavorQueries } from '~/utils/productFlavorQueries'
 import { isSplitFooterValidity, splitFooterValidityText, hasSplitFooterValidityCompanions, resolveSplitFooterValidityText } from '~/utils/splitFooterValidity'
-import { createWholesaleReferenceTemplateJson, WHOLESALE_REFERENCE_TEMPLATE_ID, WHOLESALE_REFERENCE_MARKER } from '~/utils/wholesaleReferenceLayout'
+import { createWholesaleReferenceTemplateJson, reflowWholesaleReferencePriceLabel, WHOLESALE_REFERENCE_TEMPLATE_ID, WHOLESALE_REFERENCE_MARKER } from '~/utils/wholesaleReferenceLayout'
 import { updateIsolatedPageFields } from '~/utils/isolatedPageFields'
 import { registerCanvasImageLoadSession } from '~/utils/canvasImageLoadSession'
 import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
@@ -754,6 +754,11 @@ const productImagePickerMode = ref<'replace' | 'add'>('replace')
 const productImagePickerSearch = ref('')
 const productImagePickerLoading = ref(false)
 const productImagePickerError = ref('')
+// Limitar o primeiro lote evita abrir dezenas de conexões com o Wasabi junto
+// com as imagens já presentes no canvas. O restante continua disponível em
+// "Mostrar mais".
+const PRODUCT_IMAGE_PICKER_BATCH_SIZE = 12
+const productImagePickerVisibleCount = ref(PRODUCT_IMAGE_PICKER_BATCH_SIZE)
 const productImagePickerTargetImageId = ref<string | null>(null)
 const productImagePickerTargetCardId = ref<string | null>(null)
 
@@ -804,8 +809,14 @@ const normalizeProductImagePickerAssets = (payload: any): Array<{ id: string; na
     return items
         .map((asset: any, index: number) => {
             const key = String(asset?.key || '').trim()
-            const rawUrl = String(key || asset?.url || '').trim()
-            const url = toWasabiProxyUrl(rawUrl) || String(asset?.url || rawUrl).trim()
+            const suppliedUrl = String(asset?.url || '').trim()
+            // A API pode devolver uma URL assinada diretamente do Wasabi.
+            // Não a converta novamente para o proxy a cada miniatura.
+            const isSignedWasabiUrl = /[?&]X-Amz-(?:Algorithm|Signature|Credential)=/i.test(suppliedUrl)
+            const rawUrl = isSignedWasabiUrl ? suppliedUrl : String(key || suppliedUrl).trim()
+            const url = isSignedWasabiUrl
+                ? suppliedUrl
+                : (toWasabiProxyUrl(rawUrl) || suppliedUrl || rawUrl)
             return {
                 id: String(asset?.id || key || `product-image-${index + 1}`).trim(),
                 name: String(asset?.name || key || 'Imagem do Wasabi').trim(),
@@ -858,6 +869,7 @@ const refreshProductImagePickerAssets = async () => {
             search,
             search ? 120 : 80
         )
+        productImagePickerVisibleCount.value = PRODUCT_IMAGE_PICKER_BATCH_SIZE
     } catch (e: any) {
         productImagePickerAssets.value = []
         productImagePickerError.value = String(e?.data?.statusMessage || e?.message || 'Falha ao carregar imagens do Wasabi.')
@@ -880,6 +892,7 @@ const searchExplicitProductFlavors = async () => {
         productImagePickerSearch.value = '';
         const assets = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
         productImagePickerAssets.value = [...new Map(assets.map(asset => [asset.url, asset])).values()];
+        productImagePickerVisibleCount.value = PRODUCT_IMAGE_PICKER_BATCH_SIZE
         const missing = queries.filter((_, index) => results[index]?.status === 'rejected' || (results[index] as PromiseFulfilledResult<any[]>).value?.length === 0);
         if (missing.length) productImagePickerError.value = `Sem imagens disponíveis para: ${missing.map(item => item.flavor).join(', ')}. Você pode enviar uma imagem desse sabor.`;
     } catch { productImagePickerError.value = 'Não foi possível buscar os sabores. Tente novamente.'; }
@@ -898,13 +911,24 @@ const searchProductImagePickerUploads = async () => {
 const filteredProductImageUploads = computed(() => {
     // A API já busca por tokens e ordena por relevância. Refiltrar pela frase
     // literal escondia arquivos como cerveja-original e cerveja-gf-original.
-    return Array.isArray(productImagePickerAssets.value) ? productImagePickerAssets.value : [];
+    const assets = Array.isArray(productImagePickerAssets.value) ? productImagePickerAssets.value : [];
+    return assets.slice(0, productImagePickerVisibleCount.value);
 });
+
+const hasMoreProductImagePickerAssets = computed(() => (
+    productImagePickerAssets.value.length > productImagePickerVisibleCount.value
+))
+
+const remainingProductImagePickerAssets = computed(() => Math.max(
+    0,
+    productImagePickerAssets.value.length - productImagePickerVisibleCount.value
+))
 
 watch(showProductImageUploadPicker, (open) => {
     if (open) {
         productImagePickerError.value = ''
         productImagePickerLoading.value = false
+        productImagePickerVisibleCount.value = PRODUCT_IMAGE_PICKER_BATCH_SIZE
     }
 })
 
@@ -14684,7 +14708,7 @@ const updateSmartGroup = (keyOrUpdates: any, value?: any) => {
     saveCurrentState();
 }
 
-const buildRemoveBgRequest = async (imageUrl: string) => {
+const buildRemoveBgRequest = async (imageUrl: string, preferredSourceKey?: string | null) => {
     if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
         const blob = await (await fetch(imageUrl)).blob();
         const formData = new FormData();
@@ -14707,11 +14731,13 @@ const buildRemoveBgRequest = async (imageUrl: string) => {
         normalizedUrl = new URL(imageUrl, window.location.origin).toString();
     }
 
-    let sourceKey: string | null = null;
+    let sourceKey = String(preferredSourceKey || '').trim().replace(/^\/+/, '') || null;
     try {
-        const parsed = new URL(normalizedUrl);
-        if (/\/api\/storage\/(?:proxy|p)\/?$/i.test(String(parsed.pathname || ''))) {
-            sourceKey = parsed.searchParams.get('key');
+        if (!sourceKey) {
+            const parsed = new URL(normalizedUrl);
+            if (/\/api\/storage\/(?:proxy|p)\/?$/i.test(String(parsed.pathname || ''))) {
+                sourceKey = parsed.searchParams.get('key');
+            }
         }
     } catch {
         // ignore
@@ -16345,8 +16371,8 @@ const getProductImageActionsContext = () => ({
     pendingImageAddCardId,
     pendingLocalImageActionMode,
     showProductImageUploadPicker,
-    prepareProductImageUrl: async (url: string): Promise<string> => {
-        const request = await buildRemoveBgRequest(url);
+    prepareProductImageUrl: async (url: string, sourceKey?: string): Promise<string> => {
+        const request = await buildRemoveBgRequest(url, sourceKey);
         const result: any = await $fetch('/api/remove-image-bg', {
             method: 'POST', headers: await getApiAuthHeaders(), ...request, timeout: 180_000, retry: 0
         });
@@ -20749,6 +20775,34 @@ const handleProductImageRemove = () => {
     deleteActiveSelectionFromCanvas();
 };
 
+// A barra contextual só aparece depois que uma imagem interna foi escolhida.
+// Usar esse contexto, em vez do card ativo, preserva a imagem exata escolhida
+// quando o produto possui mais de um sabor/foto.
+const handleProductImageReplace = async () => {
+    const context = resolveSelectedProductImageActionContext();
+    if (!context?.card || !context.image) {
+        notifyEditorError('Selecione a imagem do produto que deseja trocar.');
+        return;
+    }
+
+    if (!(context.image as any)._customId) {
+        (context.image as any)._customId = makeCanvasObjectId();
+    }
+    if (!(context.card as any)._customId) {
+        (context.card as any)._customId = makeCanvasObjectId();
+    }
+
+    const product = (context.card as any)?._productData && typeof (context.card as any)._productData === 'object'
+        ? (context.card as any)._productData
+        : context.card;
+    const search = String(product?.name || (context.card as any)?.productName || '').trim();
+    await openProductImageUploadPickerModal('replace', {
+        imageId: String((context.image as any)._customId),
+        cardId: String((context.card as any)._customId),
+        search
+    });
+};
+
 const handleProductImageDuplicate = async () => {
     if (!canvas.value) return
     const context = resolveSelectedProductImageActionContext()
@@ -23193,6 +23247,10 @@ const applyFardoSpecialPricingToPriceGroup = (pg: any, data: any) => {
         setText(wholesalePack, data?.priceSpecial && data?.priceSpecialUnit ? `UNID R$ ${formatPriceValue(data.priceSpecialUnit)}` : '')
         setVisible(find('reference_retail_heading'), state.showRetail)
         setVisible(find('reference_special_heading'), state.showSpecial)
+        // Quando a referência lateral tiver apenas uma faixa, recolhe a área
+        // da faixa ausente antes de medir o conteúdo. Assim a embalagem não
+        // fica cortada e o preço especial não deixa um vão em branco.
+        reflowWholesaleReferencePriceLabel(pg)
     }
     const forceCanonicalAtac = (pg as any).__forceAtacarejoCanonical === true
     if (preserveTemplateVisual && !forceCanonicalAtac) {
@@ -29161,18 +29219,34 @@ const handleAutoOfferLayout = async () => {
             </div>
             <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               <button
-                v-for="asset in filteredProductImageUploads"
+                v-for="(asset, assetIndex) in filteredProductImageUploads"
                 :key="asset.id"
                 type="button"
                 class="bg-zinc-900 border border-white/10 rounded-lg overflow-hidden text-left hover:border-violet-500/50 transition-colors"
                 @click="applyProductImageFromUploadPicker(asset)"
               >
                 <div class="aspect-square">
-                  <img :src="toWasabiProxyUrl(asset.url) || toWasabiDirectUrl(asset.url) || asset.url" :alt="asset.name || 'Imagem do produto'" class="w-full h-full object-contain bg-zinc-950" />
+                  <img
+                    :src="asset.url"
+                    :alt="asset.name || 'Imagem do produto'"
+                    :loading="assetIndex < 6 ? 'eager' : 'lazy'"
+                    :fetchpriority="assetIndex < 3 ? 'high' : 'low'"
+                    decoding="async"
+                    class="w-full h-full object-contain bg-zinc-950"
+                  />
                 </div>
                 <div class="px-2 py-1.5 border-t border-white/10">
                   <p class="text-[10px] text-zinc-200 truncate">{{ asset.name || 'Sem nome' }}</p>
                 </div>
+              </button>
+            </div>
+            <div v-if="hasMoreProductImagePickerAssets" class="pt-4 text-center">
+              <button
+                type="button"
+                class="rounded border border-violet-400/50 bg-violet-500/10 px-4 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-500/20"
+                @click="productImagePickerVisibleCount += PRODUCT_IMAGE_PICKER_BATCH_SIZE"
+              >
+                Mostrar mais {{ Math.min(PRODUCT_IMAGE_PICKER_BATCH_SIZE, remainingProductImagePickerAssets) }} imagens
               </button>
             </div>
           </div>
@@ -29332,7 +29406,7 @@ const handleAutoOfferLayout = async () => {
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
                    <label
-                     v-if="quickSelectedCardConfiguration && quickCardConfigurationOptions.length > 1 && selectedObjectPos.visible && !isDesignLoading && !figmaCrop.isCropActive.value"
+                     v-if="quickSelectedCardConfiguration && quickCardConfigurationOptions.length > 1 && selectedObjectPos.visible && !showProductImageQuickActions && !isDesignLoading && !figmaCrop.isCropActive.value"
                      class="absolute z-[118] flex max-w-[calc(100%-16px)] items-center gap-2 rounded-lg border border-violet-400/30 bg-[#18181b]/95 px-2 py-1.5 text-xs text-white shadow-xl"
                      :style="{ top: `${Math.max(8, selectedObjectPos.top - 76)}px`, left: `${Math.max(8, Math.min(selectedObjectPos.left, (wrapperEl?.clientWidth || 300) - 260))}px` }"
                      @pointerdown.stop
@@ -29360,12 +29434,15 @@ const handleAutoOfferLayout = async () => {
                      :height="selectedProductImageQuickActionsPos.height"
                      :fill-count="selectedProductImageQuickActions.card._productData?.autoFillImages ? (selectedProductImageQuickActions.card._productData.imageFillCount || 0) : 1"
                      :fill-direction="selectedProductImageQuickActions.card._productData?.imageFillDirection || 'auto'"
+                     :card-model-options="quickSelectedCardConfiguration ? quickCardConfigurationOptions : []"
+                     :card-model-profile="quickSelectedCardConfiguration?.profile || ''"
                      @remove="handleProductImageRemove"
-                     @replace="handleAction('replace-product-image-upload')"
+                     @replace="handleProductImageReplace"
                      @add="handleAction('add-product-image-upload')"
                      @duplicate="handleProductImageDuplicate"
                      @fill="handleProductImageFill"
                      @resize="handleProductImageResize"
+                     @update-card-model="handleUpdateCardConfigurationProfile($event, quickSelectedCardConfiguration?.id)"
                    />
 
                   <!-- A cópia do editor permanece disponível ao trocar de página, mesmo sem seleção. -->

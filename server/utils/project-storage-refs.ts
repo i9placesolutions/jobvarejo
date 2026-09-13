@@ -4,6 +4,7 @@ import { extractStorageKeyFromRef } from '~/utils/storageRef'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
 import { getS3Client } from './s3'
 import {
+  isPublicStorageKey,
   isStorageKeyAllowedForUser,
   normalizeStoragePath
 } from './storage-scope'
@@ -135,6 +136,13 @@ export const resolveStorageReadUrl = async (value: unknown, userId: string): Pro
 
   if (!isStorageKeyAllowedForUser(key, userId)) {
     return null
+  }
+
+  // A grade de imagens pode pedir muitas miniaturas ao mesmo tempo. Para os
+  // prefixos que o produto já trata como públicos, uma URL assinada evita que
+  // cada arquivo atravesse o proxy antes de chegar ao navegador.
+  if (isPublicStorageKey(key)) {
+    return await getCachedSignedReadUrl(key, userId)
   }
 
   const proxiedUrl = toWasabiProxyUrl(key, { bucket })

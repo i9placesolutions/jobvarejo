@@ -11,6 +11,8 @@ const props = defineProps<{
   height: number
   fillCount?: number
   fillDirection?: string
+  cardModelOptions?: Array<{ id: string; name: string }>
+  cardModelProfile?: string
 }>()
 
 const emit = defineEmits<{
@@ -20,6 +22,7 @@ const emit = defineEmits<{
   (e: 'remove'): void
   (e: 'fill', count: number, direction?: string): void
   (e: 'resize', direction: 'smaller' | 'larger'): void
+  (e: 'update-card-model', profile: string): void
 }>()
 
 
@@ -85,6 +88,12 @@ const toolbarStyle = computed(() => {
             <option value="auto">Automática</option><option value="horizontal">Lado a lado</option><option value="vertical">Empilhadas</option>
           </select></label>
         </div>
+        <label v-if="cardModelOptions?.length" class="image-actions-card-model">Modelo do card
+          <select aria-label="Modelo deste card" :value="cardModelProfile || ''" @change="emit('update-card-model', ($event.target as HTMLSelectElement).value)">
+            <option value="">Automático</option>
+            <option v-for="option in cardModelOptions" :key="option.id" :value="option.id">{{ option.name }}</option>
+          </select>
+        </label>
       </div>
     </section>
   </div>
@@ -106,6 +115,8 @@ const toolbarStyle = computed(() => {
 .image-actions-fields {display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .image-actions-fields label {min-width:0;color:#a1a1aa;font-size:11px;}
 .image-actions-fields select {display:block;width:100%;min-height:40px;margin-top:4px;padding:0 8px;background:#303036;border:1px solid #ffffff12;border-radius:8px;color:#fafafa;font-size:13px;}
+.image-actions-card-model {display:block;margin-top:10px;color:#a1a1aa;font-size:11px;}
+.image-actions-card-model select {display:block;width:100%;min-height:40px;margin-top:4px;padding:0 8px;background:#303036;border:1px solid #ffffff12;border-radius:8px;color:#fafafa;font-size:13px;}
 /* Floating controls never participate in the canvas layout. */
 .image-actions-root {position:absolute;inset:0;pointer-events:none;z-index:116;}
 .image-actions {box-sizing:border-box;pointer-events:auto;padding:6px;border-radius:14px;max-height:calc(100% - 16px);overflow:auto;}

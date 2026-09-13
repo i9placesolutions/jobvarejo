@@ -23,7 +23,10 @@ export const PREPARED_CANVAS_LOAD_CACHE_LIMIT = 24
  * imediatamente e adia o resto. Evita stress de IO/memoria em projetos
  * com muitas paginas/produtos.
  */
-export const DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD = 24
+// O canvas precisa ficar utilizável antes de terminar a grade inteira. Em
+// encartes comuns, oito imagens já representam cards suficientes para travar
+// o primeiro paint enquanto todas são desserializadas pelo Fabric.
+export const DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD = 8
 
 /**
  * Numero maximo de imagens de produto a carregar imediatamente em modo
@@ -90,7 +93,10 @@ export const getJsonGroupChildren = (obj: any): any[] =>
  */
 export const isStandalonePriceGroupJson = (obj: any): boolean => {
     if (!obj) return false
-    if (obj.type !== 'group') return false
+    // Projetos antigos serializados pelo Fabric podem conservar `Group`
+    // com G maiúsculo. A heurística precisa reconhecer ambos para não
+    // classificar a etiqueta de preço como um card de produto.
+    if (String(obj.type || '').toLowerCase() !== 'group') return false
     if (String(obj.name || '') !== 'priceGroup') return false
     if (obj.isSmartObject || obj.isProductCard) return false
     if (String((obj as any).parentZoneId || '').trim()) return false
@@ -114,7 +120,7 @@ export const isStandalonePriceGroupJson = (obj: any): boolean => {
 export const isLikelyProductCardJson = (obj: any): boolean => {
     if (!obj) return false
     if (obj.excludeFromExport || obj.isFrame) return false
-    if (obj.type !== 'group') return false
+    if (String(obj.type || '').toLowerCase() !== 'group') return false
     if (isStandalonePriceGroupJson(obj)) return false
 
     const parentZoneId = String((obj as any).parentZoneId || '').trim()

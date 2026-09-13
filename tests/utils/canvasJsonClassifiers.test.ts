@@ -55,8 +55,8 @@ describe('PREPARED_CANVAS_LOAD_CACHE_LIMIT', () => {
 })
 
 describe('DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD / MAX', () => {
-  it('threshold = 24, max = 72 (max maior que threshold)', () => {
-    expect(DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD).toBe(24)
+  it('threshold = 8, max = 72 (max maior que threshold)', () => {
+    expect(DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD).toBe(8)
     expect(DEFERRED_PRODUCT_IMAGE_LOAD_MAX).toBe(72)
     expect(DEFERRED_PRODUCT_IMAGE_LOAD_MAX).toBeGreaterThanOrEqual(DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD)
   })
@@ -216,6 +216,14 @@ describe('isLikelyProductCardJson', () => {
     expect(isLikelyProductCardJson(node({ priceMode: 'unit' }, []))).toBe(true)
     expect(isLikelyProductCardJson(node({ isSmartObject: true }, []))).toBe(true)
     expect(isLikelyProductCardJson(node({ isProductCard: true }, []))).toBe(true)
+  })
+
+  it('aceita Group legado do Fabric com G maiúsculo', () => {
+    expect(isLikelyProductCardJson({
+      type: 'Group',
+      isProductCard: true,
+      objects: [{ type: 'Image', name: 'product_image', src: 'http://example.com/produto.jpg' }]
+    })).toBe(true)
   })
 
   it('aceita por offerBackground (sinal forte)', () => {
@@ -1831,6 +1839,25 @@ describe('buildProgressiveProductCardImageLoadPayload', () => {
     const result = buildProgressiveProductCardImageLoadPayload(json, { totalImageCount: 30 })
     expect(result.deferredCount).toBeGreaterThan(0)
     expect(result.totalImageCount).toBe(30)
+  })
+
+  it('adia imagens de cards Group legados do Fabric', () => {
+    const cards = Array.from({ length: DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD }, (_, index) => ({
+      type: 'Group',
+      isProductCard: true,
+      _customId: `legacy-card-${index}`,
+      objects: [
+        { type: 'Image', name: 'product_image', src: `http://example.com/legacy-${index}.jpg` }
+      ]
+    }))
+    const result = buildProgressiveProductCardImageLoadPayload(
+      { objects: cards },
+      { totalImageCount: DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD }
+    )
+
+    expect(result.deferredCount).toBe(DEFERRED_PRODUCT_IMAGE_LOAD_THRESHOLD)
+    expect(result.data.objects[0].objects[0].src).toBe(CANVAS_IMAGE_PLACEHOLDER_DATA_URL)
+    expect(result.data.objects[0].objects[0].__originalSrc).toBe('http://example.com/legacy-0.jpg')
   })
 
   it('opts.clone=false: usa o mesmo input (mutates)', () => {

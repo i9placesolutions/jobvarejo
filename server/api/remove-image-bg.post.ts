@@ -1,6 +1,6 @@
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { processImageWithOptions, preserveExistingTransparency, downloadImage } from "~/server/utils/image-processor";
-import { getS3Client } from "~/server/utils/s3";
+import { getS3Client, resetS3Client } from "~/server/utils/s3";
 import { requireAuthenticatedUser } from "../utils/auth";
 import { enforceRateLimit } from "../utils/rate-limit";
 import { assertSafeExternalHttpUrl } from "../utils/url-safety";
@@ -65,6 +65,19 @@ const isLikelyTimeout = (err: any): boolean => {
         msg.includes("abort") ||
         msg.includes("econnreset") ||
         msg.includes("etimedout")
+    );
+};
+
+const isRetryableStorageReadError = (err: any): boolean => {
+    const status = getNumericStatus(err);
+    if ([400, 401, 403, 404].includes(Number(status))) return false;
+    if ([408, 429, 500, 502, 503, 504].includes(Number(status))) return true;
+    const code = String(err?.code || err?.name || '').toLowerCase();
+    const message = getErrorMessage(err).toLowerCase();
+    return (
+        !status ||
+        /econnreset|econnrefused|etimedout|eai_again|enetwork|timeout|abort/.test(code) ||
+        /socket hang up|connection terminated|connection reset|timeout|network/i.test(message)
     );
 };
 
@@ -184,13 +197,34 @@ const isSameOriginStorageProxyUrl = (rawUrl: string, event: any): boolean => {
 };
 
 const downloadFromS3Key = async (s3: any, bucketName: string, key: string): Promise<Buffer> => {
-    try {
-        const res = await s3.send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
-        if (!res?.Body) throw new Error(`S3 object has no body: ${key}`);
-        return streamToBuffer(res.Body);
-    } catch (err) {
-        throw mapRemoveBgError(err) || err;
+    const MAX_ATTEMPTS = 2;
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+            // A primeira leitura reaproveita o cliente da rota; em uma falha
+            // transitória, a segunda cria uma conexão nova com o Wasabi.
+            const client = attempt === 1 ? s3 : getS3Client();
+            const res = await client.send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
+            if (!res?.Body) throw new Error(`S3 object has no body: ${key}`);
+            return await streamToBuffer(res.Body);
+        } catch (err: any) {
+            lastError = err;
+            if (attempt < MAX_ATTEMPTS && isRetryableStorageReadError(err)) {
+                console.warn('⚠️ [Remove BG] leitura do Wasabi falhou; repetindo com novo cliente.', {
+                    attempt,
+                    key,
+                    name: err?.name,
+                    message: err?.message
+                });
+                resetS3Client();
+                continue;
+            }
+            break;
+        }
     }
+
+    throw mapRemoveBgError(lastError) || lastError;
 };
 
 const hasMeaningfulTransparency = async (buffer: Buffer): Promise<boolean> => {

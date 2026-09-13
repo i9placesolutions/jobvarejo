@@ -2,7 +2,7 @@ import { autoTrimFabricImage, trimImageFile } from './fabricImageHelpers'
 
 type ProductImageMode = 'replace' | 'add'
 
-type ProductImageAsset = { id?: string; name?: string; url: string }
+type ProductImageAsset = { id?: string; name?: string; url: string; key?: string }
 
 export type EditorProductImageActionsContext = {
     productImagePickerLoading?: { value: boolean }
@@ -19,7 +19,7 @@ export type EditorProductImageActionsContext = {
     pendingImageAddCardId: { value: string | null }
     pendingLocalImageActionMode: { value: ProductImageMode | null }
     showProductImageUploadPicker: { value: boolean }
-    prepareProductImageUrl?: (url: string) => Promise<string>
+    prepareProductImageUrl?: (url: string, sourceKey?: string) => Promise<string>
     refreshAiStudioUploads: () => Promise<void>
     refreshProductImagePickerAssets?: () => Promise<void>
     replaceImageByCustomId: (targetId: string, newUrl: string, opts?: { save?: boolean; setActive?: boolean; scope?: 'single' | 'all' }) => Promise<boolean>
@@ -101,7 +101,14 @@ export const applyProductImageFromUploadPicker = async (
     if (ctx.productImagePickerLoading) ctx.productImagePickerLoading.value = true
 
     try {
-        const imageUrl = ctx.prepareProductImageUrl ? await ctx.prepareProductImageUrl(asset.url) : asset.url;
+        // A chave vem do índice do Wasabi. Passá-la adiante evita tentar
+        // baixar uma URL assinada temporária quando o processamento de fundo
+        // começa, o que deixava a troca aguardando sem aplicar a seleção.
+        const imageUrl = ctx.prepareProductImageUrl
+            ? await (asset.key
+                ? ctx.prepareProductImageUrl(asset.url, asset.key)
+                : ctx.prepareProductImageUrl(asset.url))
+            : asset.url;
         if (ctx.productImagePickerMode.value === 'replace' && ctx.productImagePickerTargetImageId.value) {
             if (!await ctx.replaceImageByCustomId(ctx.productImagePickerTargetImageId.value, imageUrl, { scope: ctx.productImageReplaceScope?.value || 'single' })) {
                 ctx.notifyEditorError('Não foi possível substituir a imagem. Selecione novamente a imagem do produto.')

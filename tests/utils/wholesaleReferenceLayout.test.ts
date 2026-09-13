@@ -1,5 +1,5 @@
 import { expect,it } from 'vitest'
-import {createWholesaleReferenceTemplateJson,applyWholesaleReferenceCardLayout} from '~/utils/wholesaleReferenceLayout'
+import {createWholesaleReferenceTemplateJson,applyWholesaleReferenceCardLayout,reflowWholesaleReferencePriceLabel} from '~/utils/wholesaleReferenceLayout'
 import {isProductLabelTemplateCompatible} from '~/utils/productLabelCompatibility'
 it('mantem condicao abaixo das duas faixas e suporta os quatro precos',()=>{
  const group=createWholesaleReferenceTemplateJson()
@@ -32,4 +32,32 @@ it('preserva tamanho e posição manual da etiqueta em renderizações seguintes
  label.__manualTransform=true
  applyWholesaleReferenceCardLayout(card,500,400)
  expect(label.scaleX).not.toBe(1.2)
+})
+
+it('recolhe a faixa avulsa ausente sem cortar a embalagem da referência',()=>{
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects}}
+ const find=(name:string)=>label.objects.find((node:any)=>node.name===name)
+ find('atac_retail_bg').visible=false
+ find('reference_retail_heading').visible=false
+ find('retail_currency_text').visible=false
+ find('retail_price_text').visible=false
+ find('retail_pack_line_text').visible=false
+ expect(reflowWholesaleReferencePriceLabel(label)).toBe(true)
+ expect(find('atac_wholesale_bg').top).toBeLessThan(53)
+ expect(find('wholesale_banner_text').top).toBeLessThan(139)
+ expect(find('wholesale_pack_line_text').top).toBeLessThan(93)
+ expect(find('wholesale_pack_line_text').top).toBeGreaterThan(find('atac_wholesale_bg').top)
+ expect(find('wholesale_banner_text').top).toBeGreaterThan(find('wholesale_pack_line_text').top)
+})
+
+it('restaura o empilhamento completo quando os dois preços voltam',()=>{
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects}}
+ const find=(name:string)=>label.objects.find((node:any)=>node.name===name)
+ find('atac_retail_bg').visible=false
+ reflowWholesaleReferencePriceLabel(label)
+ find('atac_retail_bg').visible=true
+ reflowWholesaleReferencePriceLabel(label)
+ expect(find('atac_retail_bg').top).toBe(-55)
+ expect(find('atac_wholesale_bg').top).toBe(53)
+ expect(find('wholesale_banner_text').top).toBe(139)
 })
