@@ -6,6 +6,7 @@ import { enforceRateLimit } from '../../utils/rate-limit'
 import { isUserProjectKey, isValidStoragePath } from '../../utils/storage-scope'
 import { getOwnedProjectStorageRow, updateOwnedProjectCanvasData } from '../../utils/project-repository'
 import { getS3Client } from '../../utils/s3'
+import { isValidityOnlyCanvas } from '~/utils/canvasIntegrity'
 
 type RecoverBody = {
   projectId?: string
@@ -64,7 +65,9 @@ const tryReadObject = async (
     const buf = await streamToBuffer(object.Body)
     const json = parseCanvasBody(buf)
     const objectCount = getCanvasObjectCount(json)
-    if (objectCount <= 0) return null
+    // A edição rápida pode ter gravado apenas o campo de validade antes de
+    // carregar a composição. Essa versão não pode ser usada para recuperação.
+    if (objectCount <= 0 || isValidityOnlyCanvas(json)) return null
 
     return {
       key,
@@ -130,7 +133,7 @@ const findLatestNonEmptyByProjectPrefix = async (
   const versions = (versionsResult.Versions || [])
     .filter((v) => {
       const key = String(v.Key || '')
-      return key.endsWith(expectedSuffix) && !!v.VersionId
+      return (key.endsWith(expectedSuffix) || key.endsWith(`${expectedSuffix}.gz`)) && !!v.VersionId
     })
     .sort((a, b) => {
       const ta = new Date(a.LastModified || 0).getTime()
@@ -149,6 +152,40 @@ const findLatestNonEmptyByProjectPrefix = async (
   return null
 }
 
+const findLatestNonEmptyByPageDirectory = async (
+  s3: S3Client,
+  bucket: string,
+  pageDirectoryPrefix: string
+): Promise<VersionCandidate | null> => {
+  const versionsResult = await s3.send(
+    new ListObjectVersionsCommand({
+      Bucket: bucket,
+      Prefix: pageDirectoryPrefix,
+      MaxKeys: 200
+    })
+  )
+
+  const versions = (versionsResult.Versions || [])
+    .filter((version) => {
+      const key = String(version.Key || '')
+      return (key.endsWith('.json') || key.endsWith('.json.gz')) && !!version.VersionId
+    })
+    .sort((a, b) => {
+      const ta = new Date(a.LastModified || 0).getTime()
+      const tb = new Date(b.LastModified || 0).getTime()
+      return tb - ta
+    })
+
+  for (const version of versions) {
+    const key = String(version.Key || '')
+    const versionId = String(version.VersionId || '')
+    if (!key || !versionId) continue
+    const candidate = await tryReadObject(s3, bucket, key, { versionId })
+    if (candidate) return candidate
+  }
+  return null
+}
+
 const findLatestNonEmptyByHistoryPrefix = async (
   s3: S3Client,
   bucket: string,
@@ -163,7 +200,7 @@ const findLatestNonEmptyByHistoryPrefix = async (
   )
 
   const objects = (listResult.Contents || [])
-    .filter((obj) => !!obj.Key && String(obj.Key).endsWith('.json'))
+    .filter((obj) => !!obj.Key && (String(obj.Key).endsWith('.json') || String(obj.Key).endsWith('.json.gz')))
     .sort((a, b) => {
       const ta = new Date(a.LastModified || 0).getTime()
       const tb = new Date(b.LastModified || 0).getTime()
@@ -226,7 +263,7 @@ export default defineEventHandler(async (event) => {
   if (
     !isValidStoragePath(targetKey) ||
     !isUserProjectKey(targetKey, user.id) ||
-    !targetKey.endsWith('.json')
+    !(targetKey.endsWith('.json') || targetKey.endsWith('.json.gz'))
   ) {
     throw createError({
       statusCode: 400,
@@ -235,6 +272,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const projectPrefix = `projects/${projectRow.user_id}/${projectId}/page_`
+  const pageDirectoryPrefix = `projects/${projectRow.user_id}/${projectId}/pages/${pageId}/`
   const historyPrefix = `projects/${projectRow.user_id}/${projectId}/history/page_${pageId}/`
 
   const s3 = getS3Client()
@@ -242,6 +280,9 @@ export default defineEventHandler(async (event) => {
   let recovered = await findLatestNonEmptyByExactKey(s3, bucket, targetKey)
   if (!recovered) {
     recovered = await findLatestNonEmptyByProjectPrefix(s3, bucket, projectPrefix, pageId)
+  }
+  if (!recovered) {
+    recovered = await findLatestNonEmptyByPageDirectory(s3, bucket, pageDirectoryPrefix)
   }
   if (!recovered) {
     recovered = await findLatestNonEmptyByHistoryPrefix(s3, bucket, historyPrefix)
@@ -278,6 +319,7 @@ export default defineEventHandler(async (event) => {
   const nextPageMeta = {
     ...(pageMeta || { id: pageId, name: 'Página', width: 1080, height: 1920, type: 'RETAIL_OFFER' }),
     canvasDataPath: targetKey,
+    lastPersistedObjectCount: recovered.objectCount,
     canvasSavedAt: Number((recovered.json as any)?.__savedAt || (recovered.json as any)?.savedAt || Date.now())
   }
 

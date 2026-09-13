@@ -10,6 +10,7 @@ import {
     renameFlyerTemplateModelInPlace
 } from '~/utils/flyerTemplateNaming'
 import { clonePageCanvasDataWithFreshIds } from '~/utils/projectCanvasDuplication'
+import { isValidityOnlyCanvas } from '~/utils/canvasIntegrity'
 
 export interface Page {
     id: string;
@@ -562,12 +563,6 @@ const clearDraft = (projectId: string, pageId: string, savedAt?: number) => {
     }
 }
 
-const isValidityOnlyCanvas = (data: any): boolean => {
-    const objects = data?.objects
-    return Array.isArray(objects) && objects.length > 0 && objects.every((o: any) =>
-        o?.quickDataField === 'validity' || o?.name === 'validity-backdrop')
-}
-
 const resolveCanvasDataWithDraft = (opts: {
     projectId: string
     pageId: string
@@ -936,7 +931,16 @@ export const useProject = () => {
         const dbCountBeforeRecovery = getCanvasObjectCount(dbCanvasData)
         let resolvedCanvasPath = preferredPath || undefined
 
-        if (preferredPath && serverCountBeforeRecovery === 0 && dbCountBeforeRecovery === 0) {
+        const remoteHasOnlyValidity = isValidityOnlyCanvas(serverCanvasData)
+        const dbHasOnlyValidity = isValidityOnlyCanvas(dbCanvasData)
+        // Uma página que contém apenas a validade é um shell transitório da
+        // edição rápida, não uma arte completa. Trate-o como ausência de dados
+        // para recuperar a última versão íntegra do próprio pageId.
+        if (
+            preferredPath &&
+            (serverCountBeforeRecovery === 0 || remoteHasOnlyValidity) &&
+            (dbCountBeforeRecovery === 0 || dbHasOnlyValidity)
+        ) {
             const recovered = await recoverLatestNonEmptyCanvasData({
                 projectId: opts.projectId,
                 pageId: opts.pageId,
@@ -1005,7 +1009,13 @@ export const useProject = () => {
         page.canvasSavedAt = resolved.canvasSavedAt || page.canvasSavedAt
         page.lastLoadedFingerprint = resolved.finalFingerprint
         page.lastSavedFingerprint = resolved.finalFingerprint
-        page.lastPersistedObjectCount = resolved.finalObjectCount
+        // Não deixe uma leitura parcial reduzir a referência usada para
+        // bloquear sobrescritas inseguras. Um save confirmado atualiza esse
+        // número para a contagem real mais adiante em saveProjectDB().
+        page.lastPersistedObjectCount = Math.max(
+            Number(page.lastPersistedObjectCount || 0),
+            resolved.finalObjectCount
+        )
         if (resolved.needsRemoteSync) {
             page.dirty = true
             // Keep an explicit marker across the canvas hydration pipeline.
@@ -1660,16 +1670,20 @@ export const useProject = () => {
                 return
             }
 	            if (abortIfStaleSaveContext()) return
-	                const isUnsafeEmptyOverwrite = (page: Page): boolean => {
+                const isUnsafeEmptyOverwrite = (page: Page): boolean => {
                     // Se canvasData é null/undefined, a página ainda não foi carregada do Wasabi.
                     // NÃO bloquear: apenas pular o upload desta página e manter o path existente.
                     if (page?.canvasData == null) return false
                     const currentCount = getCanvasObjectCount(page?.canvasData)
                     const persistedCount = Number(page?.lastPersistedObjectCount || 0)
+                    const hasStoredCanvas = Boolean(String(page?.canvasDataPath || '').trim())
                     // Só bloqueia vazio quando NÃO há edição pendente na página.
                     // Página dirty=true indica alteração intencional em canvasData (ex.: remover todos os objetos).
                     return (currentCount === 0 && persistedCount > 0 && !page?.dirty) ||
-                        (persistedCount > 2 && isValidityOnlyCanvas(page.canvasData))
+                        // Um canvas já armazenado nunca deve ser substituído por
+                        // apenas o campo de validade, mesmo antes do metadado de
+                        // contagem ser retropreenchido em projetos antigos.
+                        (isValidityOnlyCanvas(page.canvasData) && (persistedCount > 2 || hasStoredCanvas))
                 }
 	            const unsafeEmptyPages = project.pages.filter((page) => {
 	                return isUnsafeEmptyOverwrite(page as Page)
@@ -1960,8 +1974,10 @@ export const useProject = () => {
 		                    canvasDataPath, // Caminho no Storage
                     thumbnailUrl: thumbnailUrlsById.get(page.id) || page.thumbnailUrl, // URL do thumbnail
 		                    // Timestamp do canvas confirmado no Storage. Não renovar para
-		                    // páginas que apenas preservaram o canvasDataPath anterior.
+                    // páginas que apenas preservaram o canvasDataPath anterior.
                 }
+                const persistedObjectCount = Number(page.lastPersistedObjectCount || getCanvasObjectCount(page.canvasData) || 0)
+                if (persistedObjectCount > 0) metadata.lastPersistedObjectCount = persistedObjectCount
                 if (page.templateModelId) metadata.templateModelId = page.templateModelId
                 if (page.templateModelName) metadata.templateModelName = page.templateModelName
                 if (page.templateFormatId) metadata.templateFormatId = page.templateFormatId
@@ -2448,7 +2464,9 @@ export const useProject = () => {
                         : undefined,
                     lastLoadedFingerprint: 'deferred',
                     lastSavedFingerprint: 'deferred',
-                    lastPersistedObjectCount: 0,
+                    lastPersistedObjectCount: Number.isFinite(Number(pageMeta.lastPersistedObjectCount))
+                        ? Math.max(0, Number(pageMeta.lastPersistedObjectCount))
+                        : 0,
                     templateModelId: typeof pageMeta.templateModelId === 'string'
                         ? (pageMeta.templateModelId.trim() || undefined)
                         : undefined,
