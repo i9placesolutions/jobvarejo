@@ -20,9 +20,15 @@ const route = useRoute()
 const router = useRouter()
 const { getApiAuthHeaders } = useApiAuth()
 
+const isProjectsLoading = ref(false)
+const hasLoadedProjects = ref(false)
+const projectsLoadError = ref('')
 const activeTab = ref<'models' | 'projects'>('models')
 const selectEntryTab = (tab: 'models' | 'projects', event?: KeyboardEvent) => {
   activeTab.value = tab
+  if (tab === 'projects' && !hasLoadedProjects.value && !isProjectsLoading.value) {
+    void loadSavedProjects()
+  }
   if (event) {
     event.preventDefault()
     document.getElementById(`quick-tab-${tab}`)?.focus()
@@ -132,15 +138,39 @@ const openFromTemplate = async (templateId: string, name?: string) => {
   await router.replace(`/editor/${projectId}?quick=1`)
 }
 
+const loadSavedProjects = async () => {
+  if (isProjectsLoading.value || hasLoadedProjects.value) return
+  isProjectsLoading.value = true
+  projectsLoadError.value = ''
+  try {
+    const headers = await getApiAuthHeaders()
+    const saved = await $fetch<ProjectListRow[]>('/api/projects', {
+      headers,
+      query: { summary: '1' }
+    })
+    existingProjects.value = Array.isArray(saved) ? saved : []
+    hasLoadedProjects.value = true
+  } catch (error: any) {
+    projectsLoadError.value = String(
+      error?.data?.statusMessage ||
+      error?.message ||
+      'Não foi possível carregar seus trabalhos. Tente novamente.'
+    )
+  } finally {
+    isProjectsLoading.value = false
+  }
+}
+
 const loadPicker = async () => {
   isPicking.value = true
   isOpening.value = true
   errorMessage.value = ''
   try {
     const headers = await getApiAuthHeaders()
-    const [models, saved] = await Promise.all([listFlyerTemplates(headers), $fetch<ProjectListRow[]>('/api/projects', { headers })])
+    // A aba inicial é a de modelos. Carregar todos os trabalhos em paralelo
+    // bloqueava a primeira prévia quando a conta tinha muitos encartes.
+    const models = await listFlyerTemplates(headers)
     templates.value = models
-    existingProjects.value = Array.isArray(saved) ? saved : []
   } catch (error: any) {
     errorMessage.value = String(
       error?.data?.statusMessage ||
@@ -247,7 +277,11 @@ onMounted(() => {
       </div>
 
       <section v-show="activeTab === 'projects'" id="quick-panel-projects" role="tabpanel" aria-labelledby="quick-tab-projects" tabindex="0" class="mt-8">
-        <p v-if="isOpening" class="text-sm text-slate-500" role="status">Carregando seus trabalhos...</p>
+        <p v-if="isProjectsLoading" class="text-sm text-slate-500" role="status">Carregando seus trabalhos...</p>
+        <div v-else-if="projectsLoadError" class="rounded-2xl border border-red-200 bg-red-50 px-5 py-6 text-sm text-red-700">
+          <p>{{ projectsLoadError }}</p>
+          <button type="button" class="mt-3 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-500" @click="loadSavedProjects">Tentar novamente</button>
+        </div>
         <div v-else-if="!existingProjects.length" class="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
           <h2 class="text-lg font-bold text-slate-800">Você ainda não tem trabalhos salvos</h2>
           <p class="mt-2 text-sm text-slate-500">Escolha um modelo para criar seu primeiro encarte.</p>
@@ -285,8 +319,9 @@ onMounted(() => {
                 :src="getProjectPreviewSource(saved) || undefined"
                 :alt="`Prévia do encarte ${saved.name || 'sem título'}`"
                 class="absolute inset-0 h-full w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]"
-                loading="lazy"
+                :loading="index < 6 ? 'eager' : 'lazy'"
                 decoding="async"
+                :fetchpriority="index < 3 ? 'high' : (index < 6 ? 'auto' : 'low')"
               />
               <LayoutTemplate v-else class="h-10 w-10 text-indigo-300" />
               <span v-if="index === 0 && !projectSearch" class="absolute left-3 top-3 rounded-full bg-slate-900/85 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm">Mais recente</span>
@@ -385,7 +420,7 @@ onMounted(() => {
         <p v-if="errorMessage" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{{ errorMessage }}</p>
         <div v-if="filteredTemplates.length" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <article
-            v-for="template in filteredTemplates"
+            v-for="(template, index) in filteredTemplates"
             :key="template.id"
             class="group overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-900/5"
           >
@@ -395,8 +430,9 @@ onMounted(() => {
                 :src="getProjectPreviewSource(template) || undefined"
                 :alt="template.name"
                 class="absolute inset-0 h-full w-full object-cover object-top"
-                loading="lazy"
+                :loading="index < 6 ? 'eager' : 'lazy'"
                 decoding="async"
+                :fetchpriority="index < 3 ? 'high' : (index < 6 ? 'auto' : 'low')"
               />
               <LayoutTemplate v-else class="h-10 w-10 text-indigo-300" />
               <span class="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-indigo-600 shadow-sm">Modelo</span>

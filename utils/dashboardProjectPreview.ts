@@ -11,6 +11,7 @@ const DASHBOARD_IMAGE_FALLBACK_GRADIENTS = [
 
 const STORAGE_KEY_PREFIX_RE = /^(projects|imagens|uploads|logo)\//i
 const IMAGE_FILE_RE = /\.(png|jpe?g|webp|gif|svg|avif)(?:[?#].*)?$/i
+const SIGNED_STORAGE_URL_RE = /[?&]x-amz-(?:algorithm|signature|credential)=/i
 
 export const hashDashboardPreviewText = (input: string): number => {
   let hash = 0
@@ -69,6 +70,11 @@ export const normalizeDashboardImageSource = (value: unknown): string => {
   if (lower.startsWith('data:') && !lower.startsWith('data:image/')) return ''
 
   if (lower.startsWith('data:image/') || lower.startsWith('blob:')) return raw
+
+  // A API já autorizou a miniatura e devolveu uma URL assinada. Repassá-la ao
+  // proxy faria cada card baixar a mesma imagem duas vezes (Wasabi → app →
+  // navegador), atrasando especialmente a grade de modelos.
+  if (SIGNED_STORAGE_URL_RE.test(raw)) return raw
 
   const proxied = toWasabiProxyUrl(raw)
   if (proxied && proxied !== raw) return proxied

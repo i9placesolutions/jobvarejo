@@ -300,7 +300,10 @@ export const getFlyerTemplateFormat = (id: string) => {
 export const listFlyerTemplates = async (headers: Record<string, string>): Promise<FlyerTemplateSummary[]> => {
   const rows = await $fetch<any>('/api/projects', {
     headers,
-    query: { templates: '1' }
+    // A grade só precisa dos metadados de cada modelo. As composições completas
+    // ficam grandes quando um tema tem vários formatos e são carregadas pelo
+    // editor apenas ao abrir o modelo escolhido.
+    query: { templates: '1', summary: '1' }
   })
   return Array.isArray(rows) ? rows : []
 }

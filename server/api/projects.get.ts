@@ -87,13 +87,19 @@ const getProjectTemplateCounts = (canvasData: any, templateConfig?: any): {
 const resolveProjectPreviewUrl = async (project: any, userId: string): Promise<string | null> => {
   // Prefer the current first-page thumbnail. Older projects may still have a
   // stale `preview_url` generated before thumbnail scaling/panning fixes.
-  const primaryThumb = await resolveStorageReadUrl(getPageThumbnailRef(getPrimaryPageMeta(project?.canvas_data)), userId)
+  // O acesso já foi autorizado acima. Uma URL assinada deixa o navegador ler a
+  // miniatura direto do Wasabi, sem fazer uma requisição proxy para cada card.
+  const primaryThumb = await resolveStorageReadUrl(
+    getPageThumbnailRef(getPrimaryPageMeta(project?.canvas_data)),
+    userId,
+    { direct: true }
+  )
   if (primaryThumb) return primaryThumb
 
-  const explicitPreview = await resolveStorageReadUrl(project?.preview_url, userId)
+  const explicitPreview = await resolveStorageReadUrl(project?.preview_url, userId, { direct: true })
   if (explicitPreview) return explicitPreview
 
-  return await resolveStorageReadUrl(getFallbackPageThumbnailRef(project?.canvas_data), userId)
+  return await resolveStorageReadUrl(getFallbackPageThumbnailRef(project?.canvas_data), userId, { direct: true })
 }
 
 export default defineEventHandler(async (event) => {
@@ -103,6 +109,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const id = String(query.id || '').trim()
   const templatesOnly = String(query.templates || '').trim() === '1'
+  const summaryOnly = String(query.summary || '').trim() === '1'
   const rawTemplateCategory = Array.isArray(query.category) ? query.category[0] : query.category
   const rawTemplateSubcategory = Array.isArray(query.subcategory) ? query.subcategory[0] : query.subcategory
   const templateCategory = templatesOnly
@@ -195,8 +202,20 @@ export default defineEventHandler(async (event) => {
     return await Promise.all(
       (rows || []).map(async (p: any) => {
         const { canvas_data: _canvasData, ...rest } = p || {}
+        // A composição do modelo pode ter várias páginas e URLs. A grade de
+        // escolha só usa título, categoria, tamanho e thumbnail; não envie a
+        // biblioteca inteira até que o usuário abra um modelo.
+        const {
+          template_config: _templateConfig,
+          folder_id: _folderId,
+          last_viewed: _lastViewed,
+          is_shared: _isShared,
+          shared_with: _sharedWith,
+          is_starred: _isStarred,
+          ...summaryRest
+        } = rest
         return {
-          ...rest,
+          ...(summaryOnly ? summaryRest : rest),
           template_category: getFlyerTemplateCategory(p?.template_config),
           template_subcategory: getFlyerTemplateSubcategory(p?.template_config),
           template_category_label: getFlyerTemplateCategoryLabel(p?.template_config),

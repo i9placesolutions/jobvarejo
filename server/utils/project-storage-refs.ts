@@ -13,6 +13,14 @@ const SIGNED_GET_EXPIRES_IN_SECONDS = 3600
 const SIGNED_GET_CACHE_TTL_MS = 55 * 60 * 1000
 const signedReadUrlCache = new Map<string, { expiresAt: number; url: string }>()
 
+type ResolveStorageReadUrlOptions = {
+  /**
+   * A imagem já foi autorizada pelo endpoint e será exibida pelo navegador.
+   * Buscar diretamente no Wasabi evita uma segunda passagem pelo servidor.
+   */
+  direct?: boolean
+}
+
 const getStorageResolveOptions = () => {
   const config = useRuntimeConfig()
   return {
@@ -121,7 +129,11 @@ export const stripInlineCanvasDataFromProjectCanvasData = (value: unknown): unkn
   return value
 }
 
-export const resolveStorageReadUrl = async (value: unknown, userId: string): Promise<string | null> => {
+export const resolveStorageReadUrl = async (
+  value: unknown,
+  userId: string,
+  options: ResolveStorageReadUrlOptions = {}
+): Promise<string | null> => {
   if (value == null) return null
   const raw = String(value || '').trim()
   if (!raw) return null
@@ -141,7 +153,7 @@ export const resolveStorageReadUrl = async (value: unknown, userId: string): Pro
   // A grade de imagens pode pedir muitas miniaturas ao mesmo tempo. Para os
   // prefixos que o produto já trata como públicos, uma URL assinada evita que
   // cada arquivo atravesse o proxy antes de chegar ao navegador.
-  if (isPublicStorageKey(key)) {
+  if (options.direct || isPublicStorageKey(key)) {
     return await getCachedSignedReadUrl(key, userId)
   }
 
@@ -153,7 +165,9 @@ export const resolveStorageReadUrl = async (value: unknown, userId: string): Pro
 
 const resolvePageMetaStorageUrls = async (pageMeta: any, userId: string): Promise<any> => {
   if (!pageMeta || typeof pageMeta !== 'object') return pageMeta
-  const thumbnailUrl = await resolveStorageReadUrl(pageMeta.thumbnailUrl, userId)
+  // Miniaturas são apenas renderizadas em <img>. Depois da autorização da
+  // página, uma URL assinada elimina o proxy por arquivo na navegação lateral.
+  const thumbnailUrl = await resolveStorageReadUrl(pageMeta.thumbnailUrl, userId, { direct: true })
   return {
     ...pageMeta,
     thumbnailUrl

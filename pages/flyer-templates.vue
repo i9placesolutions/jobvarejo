@@ -607,15 +607,16 @@ onUnmounted(() => {
         </div>
 
         <div v-else class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <article v-for="template in filteredTemplates" :key="template.id" class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-900/5">
+          <article v-for="(template, index) in filteredTemplates" :key="template.id" class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-900/5">
             <div class="relative flex aspect-[3/1] items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc]">
               <img
                 v-if="getProjectPreviewSource(template)"
                 :src="getProjectPreviewSource(template) || undefined"
                 :alt="template.name"
                 class="absolute inset-0 h-full w-full object-cover object-top"
-                loading="lazy"
+                :loading="index < 8 ? 'eager' : 'lazy'"
                 decoding="async"
+                :fetchpriority="index < 4 ? 'high' : (index < 8 ? 'auto' : 'low')"
               />
               <div v-else class="flex h-24 w-24 items-center justify-center rounded-2xl border-2 border-dashed border-indigo-200 bg-white/70 text-indigo-300">
                 <LayoutTemplate class="h-8 w-8" />
