@@ -11,6 +11,7 @@ import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } fro
 import { confirmInSystem } from '~/utils/systemMessages'
 import { harmonizeProductCardTypography } from '~/utils/productCardResponsiveTypography'
 import { reconcileQuickPageFormatGeometry } from '~/utils/quickPageFormatGeometry'
+import { resolveProductCardDropSwapTarget } from '~/utils/productCardDropSwap'
 import { repairDynamicTextLayoutBounds } from '~/utils/dynamicTextLayoutBounds'
 import { compactBusinessFooter } from '~/utils/compactBusinessFooter'
 import { normalizeQuickBusinessFooter } from '~/utils/quickBusinessFooterTypography'
@@ -9580,7 +9581,8 @@ const ensureCardZoneBinding = (card: any, opts: { allowNearest?: boolean } = {})
         (card as any)._zoneSlot = undefined;
     }
 
-    if (previousZoneId && previousZoneId !== zoneId) {
+    const didChangeZone = previousZoneId !== zoneId;
+    if (previousZoneId && didChangeZone) {
         const previousZone = findContainmentZoneById(previousZoneId);
         if (previousZone) markZoneForDropRelayout(previousZone);
     }
@@ -9592,8 +9594,94 @@ const ensureCardZoneBinding = (card: any, opts: { allowNearest?: boolean } = {})
         // keep binding even if frame sync fails
     }
 
-    markZoneForDropRelayout(zone);
+    // Manter o grid intacto quando o usuário apenas arrasta um card dentro da
+    // mesma zona. A fila de relayout é exclusiva para entrada/saída de zona,
+    // pois reconstruí-la em todo mouse-up troca a receita e embaralha cards.
+    if (didChangeZone) markZoneForDropRelayout(zone);
     return zone;
+};
+
+const getProductCardDropBounds = (card: any) => {
+    if (!card) return null;
+    try {
+        const bounds = card.getBoundingRect?.(true);
+        const left = Number(bounds?.left);
+        const top = Number(bounds?.top);
+        const width = Number(bounds?.width);
+        const height = Number(bounds?.height);
+        if ([left, top, width, height].every(Number.isFinite) && width > 0 && height > 0) {
+            return { left, top, width, height };
+        }
+    } catch {
+        // Fallback abaixo para objetos Fabric parcialmente reidratados.
+    }
+
+    const width = Math.abs(Number((card as any)?._cardWidth ?? card?.width ?? 0) * Number(card?.scaleX ?? 1));
+    const height = Math.abs(Number((card as any)?._cardHeight ?? card?.height ?? 0) * Number(card?.scaleY ?? 1));
+    const center = typeof card.getCenterPoint === 'function'
+        ? card.getCenterPoint()
+        : { x: Number(card?.left || 0), y: Number(card?.top || 0) };
+    if (![center?.x, center?.y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+    return {
+        left: center.x - width / 2,
+        top: center.y - height / 2,
+        width,
+        height
+    };
+};
+
+const swapProductCardsAtDrop = (card: any): boolean => {
+    if (!canvas.value || !card || !isLikelyProductCard(card)) return false;
+    const zoneId = String((card as any)?.parentZoneId || (card as any)?._zoneSlot?.zoneId || '').trim();
+    if (!zoneId) return false;
+
+    const zone = findContainmentZoneById(zoneId);
+    if (!zone) return false;
+    const cards = getZoneChildren(zone);
+    if (cards.length < 2) return false;
+
+    const target = resolveProductCardDropSwapTarget({
+        draggedCard: card,
+        cards,
+        zoneId,
+        getBounds: getProductCardDropBounds
+    });
+    if (!target) return false;
+
+    const orderedCards = cards.slice().sort((first: any, second: any) => {
+        const firstOrder = Number(first?._zoneOrder);
+        const secondOrder = Number(second?._zoneOrder);
+        if (Number.isFinite(firstOrder) && Number.isFinite(secondOrder)) return firstOrder - secondOrder;
+        const firstSlot = first?._zoneSlot || {};
+        const secondSlot = second?._zoneSlot || {};
+        const topDiff = Number(firstSlot.top || 0) - Number(secondSlot.top || 0);
+        return Math.abs(topDiff) > 2 ? topDiff : Number(firstSlot.left || 0) - Number(secondSlot.left || 0);
+    });
+    const sourceIndex = orderedCards.indexOf(card);
+    const targetIndex = orderedCards.indexOf(target);
+    if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return false;
+
+    // Restabelece uma ordem determinística antes de trocar somente os dois
+    // slots. Os demais cards preservam a própria posição na receita do grid.
+    orderedCards.forEach((entry: any, index: number) => { entry._zoneOrder = index; });
+    card._zoneOrder = targetIndex;
+    target._zoneOrder = sourceIndex;
+    card.__manualTransform = false;
+    target.__manualTransform = false;
+    card.dirty = true;
+    target.dirty = true;
+
+    ensureZoneSanity(zone);
+    recalculateZoneLayout(zone, orderedCards, {
+        save: false,
+        requestRender: false,
+        trustCachedChildren: true,
+        preserveStyles: true
+    });
+    syncZoneDerivedMetadata(zone);
+    pendingZoneRelayoutOnDrop.delete(zoneId);
+    safeRequestRenderAll();
+    return true;
 };
 
 // getCardBaseSizeForContainment extraido para utils/fabricMeasure.ts.
@@ -11623,7 +11711,9 @@ const _handleObjectModifiedInner = (e: any) => {
     // Mover/redimensionar um card não é uma alteração da receita do grid.
     // A ordem e os demais cards só mudam por ações explícitas de layout/conteúdo.
     if (isLikelyProductCard(obj) && obj.parentZoneId) {
-        obj.__manualTransform = true;
+        const isCardMove = transformAction.includes('drag') || transformAction.includes('move');
+        const didSwap = isCardMove && swapProductCardsAtDrop(obj);
+        obj.__manualTransform = !didSwap;
         obj.dirty = true;
         obj.setCoords?.();
         return;
