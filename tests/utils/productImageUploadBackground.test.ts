@@ -4,6 +4,7 @@ import { handleFileUpload } from '../../utils/editorProductImageActionsControlle
 const fixture = (mode: string | null) => ({
  pendingLocalImageActionMode: {value:mode}, pendingImageReplaceTargetId:{value:'image'}, pendingImageAddCardId:{value:'card'},
  productImagePickerTargetImageId:{value:null}, productImagePickerTargetCardId:{value:null},
+ productImagePickerError:{value:''},
  uploadFile:vi.fn().mockResolvedValue({success:true,url:'processed.webp'}), replaceImageByCustomId:vi.fn().mockResolvedValue(true),
  findProductCardByCustomId:()=>({}), addImageToProductCardByUrl:vi.fn().mockResolvedValue(true), notifyEditorError:vi.fn(),
  getCenterOfView:()=>({x:0,y:0}), makeCanvasObjectId:()=> 'id', insertAssetToCanvas:vi.fn()
@@ -39,9 +40,21 @@ it('passa a chave do Wasabi para processar a imagem temporariamente assinada',as
  expect(ctx.prepareProductImageUrl).toHaveBeenCalledWith('https://s3.wasabisys.com/jobvarejo/imagens/cerveja.jpg?X-Amz-Signature=temp','imagens/cerveja.jpg')
  expect(ctx.replaceImageByCustomId).toHaveBeenCalledWith('image','sem-fundo.png',{scope:'single'})
 })
+it('repete a preparação após falha transitória e aplica a seleção',async()=>{
+ const { applyProductImageFromUploadPicker }=await import('../../utils/editorProductImageActionsController')
+ const transient=Object.assign(new Error('socket hang up'),{statusCode:504})
+ const ctx={...fixture('replace'),productImagePickerMode:{value:'replace'},productImagePickerTargetImageId:{value:'image'},showProductImageUploadPicker:{value:true},prepareProductImageUrl:vi.fn().mockRejectedValueOnce(transient).mockResolvedValueOnce('sem-fundo.png')}
+ await applyProductImageFromUploadPicker(ctx as any,{url:'com-fundo.jpg',key:'imagens/cerveja.jpg'})
+ expect(ctx.prepareProductImageUrl).toHaveBeenCalledTimes(2)
+ expect(ctx.prepareProductImageUrl).toHaveBeenLastCalledWith('com-fundo.jpg','imagens/cerveja.jpg')
+ expect(ctx.replaceImageByCustomId).toHaveBeenCalledWith('image','sem-fundo.png',{scope:'single'})
+ expect(ctx.showProductImageUploadPicker.value).toBe(false)
+})
 it('mantém a imagem do card se a remoção da imagem da biblioteca falhar',async()=>{
  const { applyProductImageFromUploadPicker }=await import('../../utils/editorProductImageActionsController')
  const ctx={...fixture('replace'),productImagePickerMode:{value:'replace'},productImagePickerTargetImageId:{value:'image'},showProductImageUploadPicker:{value:true},prepareProductImageUrl:vi.fn().mockRejectedValue(new Error('Falha BiRefNet'))}
  await applyProductImageFromUploadPicker(ctx as any,{url:'com-fundo.jpg'})
  expect(ctx.replaceImageByCustomId).not.toHaveBeenCalled();expect(ctx.notifyEditorError).toHaveBeenCalled()
+ expect(ctx.showProductImageUploadPicker.value).toBe(true)
+ expect(ctx.productImagePickerError.value).toContain('Falha BiRefNet')
 })

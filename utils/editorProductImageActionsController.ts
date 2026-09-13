@@ -6,6 +6,7 @@ type ProductImageAsset = { id?: string; name?: string; url: string; key?: string
 
 export type EditorProductImageActionsContext = {
     productImagePickerLoading?: { value: boolean }
+    productImagePickerError?: { value: string }
     productImageReplaceScope?: { value: 'single' | 'all' }
     canvas: { value: any }
     fabric: any
@@ -38,6 +39,46 @@ export type EditorProductImageActionsContext = {
     refreshCanvasObjects: () => void
     saveCurrentState: (...args: any[]) => void
     notifyEditorError: (message: string) => void
+}
+
+const shouldRetryImagePreparation = (error: any): boolean => {
+    const status = Number(
+        error?.statusCode
+        || error?.status
+        || error?.response?.status
+        || error?.data?.statusCode
+        || 0
+    )
+    if (Number.isFinite(status) && status > 0) {
+        return status === 408 || status === 429 || status >= 500
+    }
+
+    const code = String(error?.code || error?.name || '').toLowerCase()
+    const message = String(error?.message || error?.statusMessage || '').toLowerCase()
+    return !status
+        || /econnreset|econnrefused|etimedout|eai_again|timeout|network|abort/.test(code)
+        || /socket hang up|connection (?:reset|terminated)|timeout|network/i.test(message)
+}
+
+const preparePickerImage = async (
+    ctx: EditorProductImageActionsContext,
+    asset: ProductImageAsset
+): Promise<string> => {
+    if (!ctx.prepareProductImageUrl) return asset.url
+
+    let lastError: any = null
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            return asset.key
+                ? await ctx.prepareProductImageUrl(asset.url, asset.key)
+                : await ctx.prepareProductImageUrl(asset.url)
+        } catch (error: any) {
+            lastError = error
+            if (attempt >= 2 || !shouldRetryImagePreparation(error)) break
+        }
+    }
+
+    throw lastError || new Error('Não foi possível preparar a imagem selecionada.')
 }
 
 export const clearPendingProductImageOperation = (ctx: EditorProductImageActionsContext) => {
@@ -99,34 +140,43 @@ export const applyProductImageFromUploadPicker = async (
 ) => {
     if (!asset?.url || ctx.productImagePickerLoading?.value) return
     if (ctx.productImagePickerLoading) ctx.productImagePickerLoading.value = true
+    if (ctx.productImagePickerError) ctx.productImagePickerError.value = ''
+    let applied = false
 
     try {
         // A chave vem do índice do Wasabi. Passá-la adiante evita tentar
         // baixar uma URL assinada temporária quando o processamento de fundo
         // começa, o que deixava a troca aguardando sem aplicar a seleção.
-        const imageUrl = ctx.prepareProductImageUrl
-            ? await (asset.key
-                ? ctx.prepareProductImageUrl(asset.url, asset.key)
-                : ctx.prepareProductImageUrl(asset.url))
-            : asset.url;
+        const imageUrl = await preparePickerImage(ctx, asset)
         if (ctx.productImagePickerMode.value === 'replace' && ctx.productImagePickerTargetImageId.value) {
             if (!await ctx.replaceImageByCustomId(ctx.productImagePickerTargetImageId.value, imageUrl, { scope: ctx.productImageReplaceScope?.value || 'single' })) {
-                ctx.notifyEditorError('Não foi possível substituir a imagem. Selecione novamente a imagem do produto.')
+                throw new Error('Não foi possível substituir a imagem. Selecione novamente a imagem do produto.')
             }
+            applied = true
         } else if (ctx.productImagePickerMode.value === 'add' && ctx.productImagePickerTargetCardId.value) {
             const targetCard = ctx.findProductCardByCustomId(ctx.productImagePickerTargetCardId.value)
             if (!targetCard) {
-                ctx.notifyEditorError('Card de produto não encontrado.')
-                return
+                throw new Error('Card de produto não encontrado.')
             }
-            await ctx.addImageToProductCardByUrl(targetCard, imageUrl)
+            if (!await ctx.addImageToProductCardByUrl(targetCard, imageUrl)) {
+                throw new Error('Não foi possível adicionar a imagem ao card.')
+            }
+            applied = true
+        } else {
+            throw new Error('Selecione novamente a imagem do produto antes de trocar.')
         }
     } catch (error: any) {
-        ctx.notifyEditorError(error?.message || 'Não foi possível remover o fundo. A imagem anterior foi mantida.');
+        const message = error?.message || 'Não foi possível remover o fundo. A imagem anterior foi mantida.'
+        if (ctx.productImagePickerError) ctx.productImagePickerError.value = message
+        ctx.notifyEditorError(message)
     } finally {
         if (ctx.productImagePickerLoading) ctx.productImagePickerLoading.value = false
-        ctx.showProductImageUploadPicker.value = false
-        clearPendingProductImageOperation(ctx)
+        // Em caso de falha a biblioteca continua aberta, com o erro visível e
+        // o alvo preservado. Assim o clique não parece ter sido ignorado.
+        if (applied) {
+            ctx.showProductImageUploadPicker.value = false
+            clearPendingProductImageOperation(ctx)
+        }
     }
 }
 

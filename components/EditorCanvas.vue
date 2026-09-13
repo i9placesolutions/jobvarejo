@@ -16358,6 +16358,7 @@ const scheduleMissingProductImageRecovery = (delayMs = 140, retries = 6, expecte
 
 const getProductImageActionsContext = () => ({
     productImagePickerLoading,
+    productImagePickerError,
     productImageReplaceScope,
     canvas,
     fabric,
