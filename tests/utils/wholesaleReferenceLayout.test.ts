@@ -1,5 +1,5 @@
 import { expect,it } from 'vitest'
-import {createWholesaleReferenceTemplateJson,applyWholesaleReferenceCardLayout,reflowWholesaleReferencePriceLabel} from '~/utils/wholesaleReferenceLayout'
+import {CENSORED_PROMOTIONAL_HEADING_MARKER,CENSORED_STAMP_MARKER,createWholesaleReferenceTemplateJson,applyWholesaleReferenceCardLayout,reflowWholesaleReferencePriceLabel} from '~/utils/wholesaleReferenceLayout'
 import {isProductLabelTemplateCompatible} from '~/utils/productLabelCompatibility'
 it('mantem condicao abaixo das duas faixas e suporta os quatro precos',()=>{
  const group=createWholesaleReferenceTemplateJson()
@@ -58,6 +58,46 @@ it('restaura o empilhamento completo quando os dois preços voltam',()=>{
  find('atac_retail_bg').visible=true
  reflowWholesaleReferencePriceLabel(label)
  expect(find('atac_retail_bg').top).toBe(-55)
- expect(find('atac_wholesale_bg').top).toBe(53)
- expect(find('wholesale_banner_text').top).toBe(139)
+ expect(find('atac_wholesale_bg').top).toBe(57)
+ expect(find('wholesale_banner_text').top).toBe(149)
+})
+
+it('mantem folga entre embalagem, faixas de preço e condição',()=>{
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects}}
+ const find=(name:string)=>label.objects.find((node:any)=>node.name===name)
+ find('atac_retail_bg').height=104
+ find('atac_wholesale_bg').height=126
+ find('atac_banner_bg').height=42
+ find('wholesale_reference_packaging').height=51
+ reflowWholesaleReferencePriceLabel(label)
+ const bounds=(node:any)=>({top:node.top-(node.height||0)*(node.scaleY||1)/2,bottom:node.top+(node.height||0)*(node.scaleY||1)/2})
+ const pack=bounds(find('wholesale_reference_packaging'))
+ const retail=bounds(find('atac_retail_bg'))
+ const special=bounds(find('atac_wholesale_bg'))
+ const banner=bounds(find('atac_banner_bg'))
+ expect(retail.top-pack.bottom).toBeGreaterThanOrEqual(12)
+ expect(special.top-retail.bottom).toBeGreaterThanOrEqual(12)
+ expect(banner.top-special.bottom).toBeGreaterThanOrEqual(12)
+})
+
+it('separa o selo censurado da faixa avulsa e oculta a faixa substituída',()=>{
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects}}
+ const find=(name:string)=>label.objects.find((node:any)=>node.name===name)
+ find('atac_retail_bg').height=96
+ find('atac_wholesale_bg').height=118
+ find('atac_banner_bg').height=42
+ label.objects.push(
+  {type:'Textbox',name:CENSORED_PROMOTIONAL_HEADING_MARKER,text:'PREÇO PROMOCIONAL',top:4,height:23,originY:'center',visible:true},
+  {type:'Image',name:CENSORED_STAMP_MARKER,top:84,width:294,height:196,scaleX:.836,scaleY:.836,originY:'center',visible:true}
+ )
+ expect(reflowWholesaleReferencePriceLabel(label)).toBe(true)
+ expect(find('atac_wholesale_bg').visible).toBe(false)
+ expect(find('atac_banner_bg').visible).toBe(false)
+ expect(find('wholesale_reference_packaging').visible).toBe(false)
+ const heading=find(CENSORED_PROMOTIONAL_HEADING_MARKER)
+ const stamp=find(CENSORED_STAMP_MARKER)
+ const stampTop=stamp.top-(stamp.height*(stamp.scaleY ?? 1))/2
+ const headingBottom=heading.top+(heading.height*(heading.scaleY ?? 1))/2
+ expect(stampTop-headingBottom).toBeGreaterThanOrEqual(18)
+ expect(stamp.scaleX).toBeLessThanOrEqual(.8)
 })
