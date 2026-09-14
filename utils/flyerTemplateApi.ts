@@ -297,6 +297,81 @@ export const getFlyerTemplateFormat = (id: string) => {
   return FLYER_TEMPLATE_FORMATS.find(item => item.id === id) || FLYER_TEMPLATE_FORMATS[0]
 }
 
+type FlyerTemplatePageModelReference = {
+  templateModelId?: unknown
+  templateModelName?: unknown
+  templateSourcePageId?: unknown
+}
+
+type FlyerTemplateModelResolutionConfig = Pick<
+  FlyerTemplateConfig,
+  'models' | 'defaultModelId' | 'pageBlueprints'
+>
+
+const normalizeTemplateModelName = (value: unknown): string => String(value || '')
+  .trim()
+  .toLocaleLowerCase('pt-BR')
+  // Uma página duplicada é uma nova página do cliente, não um novo modelo.
+  // Ignorar o sufixo visual permite recuperar a composição original ao trocar
+  // o formato depois de uma duplicação.
+  .replace(/(?:\s*\(cópia\))+$/iu, '')
+  .trim()
+
+/**
+ * Resolve o modelo de origem de uma página materializada.
+ *
+ * Cópias antigas da edição rápida recebiam um `templateModelId` novo, embora
+ * `template_config.pageBlueprints` continuasse apontando só para o modelo
+ * original. O vínculo da página-fonte é determinístico e permite voltar ao
+ * blueprint correto sem escalar a arte ou a grade do formato anterior.
+ */
+export const resolveFlyerTemplateModelIdForPage = (
+  page: FlyerTemplatePageModelReference | null | undefined,
+  templateConfig: FlyerTemplateModelResolutionConfig | null | undefined
+): string => {
+  const explicitModelId = String(page?.templateModelId || '').trim()
+  const models = Array.isArray(templateConfig?.models) ? templateConfig.models : []
+  const blueprints = Array.isArray(templateConfig?.pageBlueprints) ? templateConfig.pageBlueprints : []
+  const blueprintModelIds = new Set(
+    blueprints
+      .map((blueprint) => String(blueprint?.templateModelId || '').trim())
+      .filter(Boolean)
+  )
+
+  if (explicitModelId && blueprintModelIds.has(explicitModelId)) return explicitModelId
+
+  const sourcePageId = String(page?.templateSourcePageId || '').trim()
+  if (sourcePageId) {
+    const sourceBlueprint = blueprints.find((blueprint) => (
+      String(blueprint?.sourcePageId || '').trim() === sourcePageId
+    ))
+    const sourceModelId = String(sourceBlueprint?.templateModelId || '').trim()
+    if (sourceModelId) return sourceModelId
+  }
+
+  const normalizedPageName = normalizeTemplateModelName(page?.templateModelName)
+  if (normalizedPageName) {
+    const matchingModel = models.find((model) => (
+      normalizeTemplateModelName(model?.name) === normalizedPageName &&
+      blueprintModelIds.has(String(model?.id || '').trim())
+    ))
+    const matchingModelId = String(matchingModel?.id || '').trim()
+    if (matchingModelId) return matchingModelId
+
+    const matchingBlueprint = blueprints.find((blueprint) => (
+      normalizeTemplateModelName(blueprint?.templateModelName) === normalizedPageName
+    ))
+    const matchingBlueprintModelId = String(matchingBlueprint?.templateModelId || '').trim()
+    if (matchingBlueprintModelId) return matchingBlueprintModelId
+  }
+
+  if (blueprintModelIds.size === 1) return [...blueprintModelIds][0] || explicitModelId
+
+  const defaultModelId = String(templateConfig?.defaultModelId || '').trim()
+  if (defaultModelId && blueprintModelIds.has(defaultModelId)) return defaultModelId
+  return explicitModelId
+}
+
 export const listFlyerTemplates = async (headers: Record<string, string>): Promise<FlyerTemplateSummary[]> => {
   const rows = await $fetch<any>('/api/projects', {
     headers,

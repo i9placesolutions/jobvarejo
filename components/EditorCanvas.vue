@@ -4192,6 +4192,7 @@ import {
     FLYER_TEMPLATE_FORMATS,
     buildFlyerTemplateConfigFromPages,
     getFlyerTemplateFormat,
+    resolveFlyerTemplateModelIdForPage,
     type FlyerTemplateFormatId
 } from '~/utils/flyerTemplateApi'
 import {
@@ -4520,6 +4521,11 @@ const quickModeCurrentModelId = computed(() => String(activePage.value?.template
 const quickModeTemplateBlueprints = computed(() => {
     const blueprints = (project as any).templateConfig?.pageBlueprints
     return Array.isArray(blueprints) ? blueprints : []
+})
+const resolveQuickModeTemplateModelId = (page: any): string => resolveFlyerTemplateModelIdForPage(page, {
+    models: quickModeTemplateModels.value,
+    defaultModelId: String((project as any).templateConfig?.defaultModelId || '').trim(),
+    pageBlueprints: quickModeTemplateBlueprints.value
 })
 
 // A página materializada de um Modelo de encarte já contém a composição
@@ -4892,7 +4898,7 @@ const repairQuickModeLegacyTemplatePages = async (): Promise<boolean> => {
         const page = project.pages.find((item: any) => String(item?.id || '').trim() === pageId)
         if (!page) continue
         const expectedFormat = getQuickPageFormat(page)
-        const modelId = String(page.templateModelId || '').trim()
+        const modelId = resolveQuickModeTemplateModelId(page)
         const source = getQuickModeTemplateSource(modelId, expectedFormat.id)
         if (!source) continue
 
@@ -5078,7 +5084,7 @@ const addQuickModePage = (formatId: FlyerTemplateFormatId) => {
         }
         const sourceModelName = getQuickPageModelName(sourcePage)
         const sourceModelId = String(
-            sourcePage?.templateModelId ||
+            resolveQuickModeTemplateModelId(sourcePage) ||
             quickModeCurrentModelId.value ||
             quickModeTemplateModels.value[0]?.id ||
             'model-1'
@@ -5140,7 +5146,7 @@ const duplicateQuickModePage = (pageId: string) => {
                 duplicatedPage,
                 getQuickPageFormat(sourcePage),
                 copyModelName,
-                `model-${makeId()}`
+                resolveQuickModeTemplateModelId(sourcePage) || String(sourcePage?.templateModelId || '').trim() || `model-${makeId()}`
             )
             if (!await waitForTemplatePageReady(duplicatedPage.id)) return
         }
@@ -5379,7 +5385,7 @@ const resizeQuickModePage = (formatId: string) => {
 
             const currentFormat = getQuickPageFormat(page)
             const modelId = String(
-                page.templateModelId ||
+                resolveQuickModeTemplateModelId(page) ||
                 quickModeCurrentModelId.value ||
                 quickModeTemplateModels.value[0]?.id ||
                 ''
@@ -5391,7 +5397,13 @@ const resizeQuickModePage = (formatId: string) => {
             // O comportamento principal da edição rápida é trocar para a arte
             // desenhada para o formato escolhido (Feed, Story, Post etc.), não
             // aplicar uma escala proporcional no layout de outro formato.
-            if (templateSource && currentFormat.id !== format.id) {
+            const currentSourcePageId = String(page.templateSourcePageId || '').trim()
+            const targetSourcePageId = String(templateSource?.sourcePageId || '').trim()
+            const needsTemplateReplacement = !!templateSource && (
+                currentFormat.id !== format.id ||
+                (targetSourcePageId !== '' && currentSourcePageId !== targetSourcePageId)
+            )
+            if (needsTemplateReplacement && templateSource) {
                 await Promise.resolve(saveCurrentState({
                     allowEmptyOverwrite: true,
                     reason: 'quick-page-resize-template-snapshot',

@@ -4,7 +4,8 @@ import {
   buildFlyerTemplatePageBlueprints,
   FLYER_TEMPLATE_FORMATS,
   getFlyerTemplateFormat,
-  orderFlyerTemplatePages
+  orderFlyerTemplatePages,
+  resolveFlyerTemplateModelIdForPage
 } from '~/utils/flyerTemplateApi'
 
 describe('FLYER_TEMPLATE_FORMATS', () => {
@@ -137,5 +138,42 @@ describe('orderFlyerTemplatePages', () => {
       'm2-feed',
       'm2-story'
     ])
+  })
+})
+
+describe('resolveFlyerTemplateModelIdForPage', () => {
+  const config: any = {
+    defaultModelId: 'hora-oferta-azul',
+    models: [
+      { id: 'hora-oferta-azul', name: 'Hora da Oferta — Azul' },
+      { id: 'hora-oferta-vermelho', name: 'Hora da Oferta — Vermelho' }
+    ],
+    pageBlueprints: [
+      { sourcePageId: 'azul-story', templateModelId: 'hora-oferta-azul', templateModelName: 'Hora da Oferta — Azul' },
+      { sourcePageId: 'azul-square', templateModelId: 'hora-oferta-azul', templateModelName: 'Hora da Oferta — Azul' },
+      { sourcePageId: 'vermelho-story', templateModelId: 'hora-oferta-vermelho', templateModelName: 'Hora da Oferta — Vermelho' }
+    ]
+  }
+
+  it('mantém o modelo quando a página já aponta para um blueprint válido', () => {
+    expect(resolveFlyerTemplateModelIdForPage({
+      templateModelId: 'hora-oferta-vermelho',
+      templateSourcePageId: 'azul-story'
+    }, config)).toBe('hora-oferta-vermelho')
+  })
+
+  it('recupera o modelo do blueprint quando uma página duplicada ganhou id próprio', () => {
+    expect(resolveFlyerTemplateModelIdForPage({
+      templateModelId: 'model-8d2ec6984bcf',
+      templateModelName: 'Hora da Oferta — Azul (cópia)',
+      templateSourcePageId: 'azul-story'
+    }, config)).toBe('hora-oferta-azul')
+  })
+
+  it('usa o nome original sem os sufixos de cópia quando a fonte não foi persistida', () => {
+    expect(resolveFlyerTemplateModelIdForPage({
+      templateModelId: 'model-antigo',
+      templateModelName: 'Hora da Oferta — Azul (cópia) (cópia)'
+    }, config)).toBe('hora-oferta-azul')
   })
 })
