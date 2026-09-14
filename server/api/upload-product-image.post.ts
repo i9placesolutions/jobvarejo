@@ -1,3 +1,4 @@
+import { recordUploadedS3Object } from '../utils/s3-object-cache'
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, getPublicUrl } from "../utils/s3";
 import { createHash } from "crypto";
@@ -182,6 +183,7 @@ export default defineEventHandler(async (event) => {
         if (abortSignal) await s3.send(putCommand, { abortSignal });
         else await s3.send(putCommand);
 
+        recordUploadedS3Object(bucketName, { key, size: processedBuffer.length, lastModified: new Date() });
         const canonicalUrl = getPublicUrl(key);
         const readUrl = await resolveStorageReadUrl(key, user.id);
 

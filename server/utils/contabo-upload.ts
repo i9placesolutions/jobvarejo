@@ -1,3 +1,4 @@
+import { recordUploadedS3Object } from './s3-object-cache'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { getS3Client } from '~/server/utils/s3'
 
@@ -40,6 +41,7 @@ export const uploadBufferToStorage = async (opts: {
     ACL: 'public-read'
   }))
 
+  recordUploadedS3Object(bucketName, { key, size: opts.buffer.length, lastModified: new Date() })
   const canonicalUrl = `https://${endpoint}/${bucketName}/${key}`
   const url = `${canonicalUrl}?v=${timestamp}`
 

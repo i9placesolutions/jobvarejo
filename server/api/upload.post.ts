@@ -1,3 +1,4 @@
+import { recordUploadedS3Object } from '../utils/s3-object-cache'
 import { getAssetLibraryCategory } from '~/utils/assetLibraryCategories'
 import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "crypto";
@@ -170,6 +171,7 @@ export default defineEventHandler(async (event) => {
     // Se já existe, evita duplicar.
     try {
       await getS3Client().send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
+      recordUploadedS3Object(bucketName, { key, size: bodyBuffer.length, lastModified: new Date() });
       const canonicalUrl = getPublicUrl(key)
       const readUrl = await resolveStorageReadUrl(key, user.id)
       return {
@@ -220,6 +222,7 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    recordUploadedS3Object(bucketName, { key, size: bodyBuffer.length, lastModified: new Date() });
     console.log('✅ File uploaded to Wasabi:', key);
     const canonicalUrl = getPublicUrl(key)
     const readUrl = await resolveStorageReadUrl(key, user.id)

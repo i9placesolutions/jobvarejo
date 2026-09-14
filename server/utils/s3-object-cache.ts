@@ -7,12 +7,27 @@ type CachedS3Object = {
 };
 
 type CacheEntry = {
+    bucket: string;
+    prefixes: string[];
+    exclude: string[];
+    uploaded: Map<string, CachedS3Object>;
     expiresAt: number;
     data: CachedS3Object[];
     inFlight: Promise<CachedS3Object[]> | null;
 };
 
 const s3ObjectCache = new Map<string, CacheEntry>();
+
+// Atualiza também leituras em andamento: uma listagem iniciada antes do PUT
+// não pode apagar o arquivo recém-confirmado ao terminar.
+export const recordUploadedS3Object = (bucket: string, item: CachedS3Object) => {
+    for (const entry of s3ObjectCache.values()) {
+        if (entry.bucket !== bucket || !entry.prefixes.some(prefix => item.key.startsWith(prefix)) ||
+            entry.exclude.some(prefix => item.key.startsWith(prefix))) continue;
+        entry.uploaded.set(item.key, item);
+        entry.data = [...entry.data.filter(previous => previous.key !== item.key), item];
+    }
+};
 
 const buildCacheKey = (bucket: string, prefixes: string[], maxKeysPerPrefix: number, exclude: string[]) =>
     `${bucket}::${prefixes.join("|")}::${maxKeysPerPrefix}::${exclude.join("|")}`;
@@ -126,15 +141,21 @@ export const getCachedS3Objects = async (opts: {
         return Array.from(dedup.values());
     })();
 
+    const uploaded = new Map<string, CachedS3Object>();
     s3ObjectCache.set(cacheKey, {
+        bucket, prefixes: normalizedPrefixes, exclude: normalizedExclude, uploaded,
         expiresAt: now + ttlMs,
         data: existing?.data || [],
         inFlight: loader
     });
 
     try {
-        const data = await loader;
+        const listed = await loader;
+        const merged = new Map(listed.map(item => [item.key, item]));
+        for (const item of uploaded.values()) merged.set(item.key, item);
+        const data = [...merged.values()];
         s3ObjectCache.set(cacheKey, {
+            bucket, prefixes: normalizedPrefixes, exclude: normalizedExclude, uploaded,
             expiresAt: Date.now() + ttlMs,
             data,
             inFlight: null

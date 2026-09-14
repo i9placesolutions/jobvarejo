@@ -1,3 +1,4 @@
+import { recordUploadedS3Object } from '../../utils/s3-object-cache'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
@@ -211,5 +212,6 @@ export default defineEventHandler(async (event) => {
   const elapsedMs = Date.now() - startMs
   const totalMs = Date.now() - routeStartMs
   console.log(`✅ Upload OK: key=${key.substring(0, 80)} size=${bodyBuffer.length} s3Elapsed=${elapsedMs}ms totalRouteMs=${totalMs}ms`)
+  recordUploadedS3Object(bucket, { key, size: bodyBuffer.length, lastModified: new Date() })
   return { key, size: bodyBuffer.length }
 })
