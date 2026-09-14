@@ -24640,6 +24640,14 @@ function markPriceGroupAsManuallyCustomized(
 const stabilizeSinglePriceGroupForPersistence = (group: any) => {
     if (!group || typeof group.getObjects !== 'function') return { fixed: false, captured: false };
     if (!isLikelyPriceGroupObject(group)) return { fixed: false, captured: false };
+    // As faixas da referência podem estar ocultas por configuração comercial.
+    // O reparo genérico de fundos antes de salvar não pode revelá-las novamente.
+    const referenceParts = group.getObjects();
+    if (referenceParts.some((part: any) => part.name === WHOLESALE_REFERENCE_MARKER || part.name === 'censored_stamp')) {
+        const stamp = referenceParts.find((part: any) => part.name === 'censored_stamp');
+        reflowWholesaleReferencePriceLabel(group, { showCensored: !!stamp && stamp.visible !== false });
+        return { fixed: false, captured: false };
+    }
     if (String(group?.name || '').trim() !== 'priceGroup') group.set?.('name', 'priceGroup');
     ensureRedBurstPriceGroupVisibility(group);
 

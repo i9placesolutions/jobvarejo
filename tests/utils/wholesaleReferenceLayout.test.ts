@@ -206,3 +206,38 @@ it('troca o selo censurado somente quando o card tem preço promocional',()=>{
  expect(stamp.visible).toBe(false)
  expect(find('wholesale_reference_packaging').visible).toBe(true)
 })
+
+it('oculta faixas duplicadas e ajusta seleção ao conteúdo censurado após recarregar', () => {
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects}}
+ label.objects.push({...label.objects.find((o:any)=>o.name==='atac_banner_bg')},
+  {name:CENSORED_STAMP_MARKER,width:300,height:196,left:0,top:50,originX:'center',originY:'center'},
+  {name:CENSORED_PROMOTIONAL_HEADING_MARKER,text:'PREÇO PROMOCIONAL',width:210,height:23,left:0,top:0,originX:'center',originY:'center'})
+ const product={showCensored:true}
+ applyWholesaleReferenceProductData(label,product)
+ const first={width:label.width,height:label.height}
+ for(let i=0;i<5;i++) applyWholesaleReferenceProductData(label,product)
+ expect({width:label.width,height:label.height}).toEqual(first)
+ expect(label.objects.filter((o:any)=>o.name==='atac_banner_bg').every((o:any)=>o.visible===false)).toBe(true)
+ const visible=label.objects.filter((o:any)=>o.visible!==false && (typeof o.text!=='string'||o.text.trim()))
+ const top=Math.min(...visible.map((o:any)=>o.top-o.height*(o.scaleY??1)/2))
+ const bottom=Math.max(...visible.map((o:any)=>o.top+o.height*(o.scaleY??1)/2))
+ expect(top).toBeCloseTo(-label.height/2)
+ expect(bottom).toBeCloseTo(label.height/2)
+ const restored=JSON.parse(JSON.stringify(label));restored.getObjects=()=>restored.objects
+ applyWholesaleReferenceProductData(restored,product)
+ expect(restored.height).toBeCloseTo(first.height)
+})
+
+it('remove fundo azul órfão e duplicado atrás do selo sem ocultar preço avulso válido', () => {
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects}}
+ const find=(name:string)=>label.objects.find((o:any)=>o.name===name)
+ label.objects.push({...find('atac_retail_bg')},
+  {name:CENSORED_STAMP_MARKER,width:300,height:196,originY:'center'},
+  {name:CENSORED_PROMOTIONAL_HEADING_MARKER,text:'PREÇO PROMOCIONAL',width:210,height:23,originY:'center'})
+ find('retail_price_text').visible=false
+ reflowWholesaleReferencePriceLabel(label,{showCensored:true})
+ expect(label.objects.filter((o:any)=>o.name==='atac_retail_bg').every((o:any)=>o.visible===false)).toBe(true)
+ applyWholesaleReferenceProductData(label,{pricePack:'39,90',showCensored:true})
+ expect(find('atac_retail_bg').visible).toBe(true)
+ expect(find('retail_price_text').visible).toBe(true)
+})

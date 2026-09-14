@@ -133,7 +133,23 @@ const getVisibleLabelVerticalBounds = (label: any) => {
 
 // A referência usa coordenadas locais centradas. Atualizar a caixa do grupo
 // também atualiza o cache e os controles, sem mover os filhos ou o card.
-const refreshReferenceBounds = (label: any) => {
+const refreshReferenceBounds = (label: any, tight = false) => {
+  if (tight) {
+    const objects = label.getObjects?.() || []
+    const visible = objects.filter((node: any) => isVisible(node) && Number(node.opacity ?? 1) > 0 && (typeof node.text !== 'string' || hasText(node)))
+    if (visible.length) {
+      const bounds = visible.map((node: any) => {
+        const width = Number(node.width || 0) * Math.abs(Number(node.scaleX ?? 1))
+        const left = Number(node.left || 0) - (node.originX === 'left' ? 0 : node.originX === 'right' ? width : width / 2)
+        return { left, right: left + width, ...nodeVerticalBounds(node) }
+      })
+      const left = Math.min(...bounds.map((b: any) => b.left)), right = Math.max(...bounds.map((b: any) => b.right))
+      const top = Math.min(...bounds.map((b: any) => b.top)), bottom = Math.max(...bounds.map((b: any) => b.bottom))
+      objects.forEach((node: any) => updateNode(node, { left: Number(node.left || 0) - (left + right) / 2, top: nodeTop(node) - (top + bottom) / 2 }))
+      updateNode(label, { width: Math.max(1, right - left), height: Math.max(1, bottom - top) })
+      return
+    }
+  }
   const nodes = (label.getObjects?.() || []).filter((node: any) => isVisible(node))
   let halfWidth = 0
   let halfHeight = 0
@@ -159,7 +175,7 @@ export const reflowWholesaleReferencePriceLabel = (
 ): boolean => {
   const objects = label?.getObjects?.() || []
   const byName = (name: string) => objects.find((node: any) => node?.name === name)
-  if (!byName(WHOLESALE_REFERENCE_MARKER)) return false
+  if (!byName(WHOLESALE_REFERENCE_MARKER) && !(byName(CENSORED_STAMP_MARKER) && byName(CENSORED_PROMOTIONAL_HEADING_MARKER))) return false
   const backgroundNames = ['atac_retail_bg', 'atac_wholesale_bg', 'atac_banner_bg']
   const referenceWidth = Math.max(0, ...backgroundNames.map(name => Number(byName(name)?.width) || 0)) || 210
   for (const name of backgroundNames) {
@@ -200,7 +216,8 @@ export const reflowWholesaleReferencePriceLabel = (
   const packaging = byName(WHOLESALE_REFERENCE_MARKER)
   const censoredStamp = byName(CENSORED_STAMP_MARKER)
   const censoredHeading = byName(CENSORED_PROMOTIONAL_HEADING_MARKER)
-  const retailVisible = Boolean(retailBg) && isVisible(retailBg)
+  const retailValue = objects.find((node: any) => ['retail_price_text', 'retail_integer_text'].includes(node.name) && isVisible(node) && hasText(node))
+  const retailVisible = Boolean(retailBg) && isVisible(retailBg) && Boolean(retailValue)
   const specialVisible = Boolean(specialBg) && isVisible(specialBg)
   // The template may contain the censored artwork as its default visual.
   // Runtime product data can opt out for one card only when a promotional
@@ -233,8 +250,8 @@ export const reflowWholesaleReferencePriceLabel = (
   // em vez de deixá-lo cobrir a faixa vermelha que estava no grupo original.
   if (showCensored && censoredStamp && censoredHeading) {
     updateNode(packaging, { visible: hasText(packaging) })
-    const nodesToHide = [...SPECIAL_NODES, ...BANNER_NODES]
-    nodesToHide.forEach((name) => updateNode(byName(name), { visible: false }))
+    const nodesToHide = [...SPECIAL_NODES, ...BANNER_NODES, ...(!retailVisible ? RETAIL_NODES : [])]
+    objects.filter((node: any) => nodesToHide.includes(node.name)).forEach((node: any) => updateNode(node, { visible: false }))
 
     if (retailVisible) moveStack(RETAIL_NODES, -110)
     updateNode(packaging, { top: (retailVisible ? nodeTop(retailBg) - nodeHeight(retailBg, 104) / 2 : -110) - 10 - nodeHeight(packaging, 48) / 2 })
@@ -242,7 +259,7 @@ export const reflowWholesaleReferencePriceLabel = (
     const headingTop = retailVisible ? -18 : -70
     updateNode(censoredHeading, { top: headingTop, visible: true })
 
-    const labelWidth = Number(label?.width) || 240
+    const labelWidth = referenceWidth
     const stampWidth = Number(censoredStamp.width) || labelWidth
     const scale = Math.min(0.8, (labelWidth * 0.96) / Math.max(1, stampWidth))
     const stampHeight = nodeHeight(censoredStamp, 196) * scale / Math.max(0.0001, Math.abs(Number(censoredStamp.scaleY ?? 1)))
@@ -250,7 +267,7 @@ export const reflowWholesaleReferencePriceLabel = (
     const stampTop = headingTop + (headingHeight / 2) + 18 + (stampHeight / 2)
     updateNode(censoredStamp, { top: stampTop, scaleX: scale, scaleY: scale, visible: true })
 
-    refreshReferenceBounds(label)
+    refreshReferenceBounds(label, true)
     label.setCoords?.()
     label.dirty = true
     return true

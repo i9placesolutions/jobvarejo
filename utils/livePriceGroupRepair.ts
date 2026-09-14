@@ -65,8 +65,8 @@ export const repairLivePriceGroupBackgrounds = (
         const pgChildren = collectObjectsDeep(pg)
         // Nestes modelos, invisibilidade representa a configuração comercial
         // (censurado ou faixa sem preço), não um fundo corrompido.
-        if (pgChildren.some((node: any) => node?.name === WHOLESALE_REFERENCE_MARKER)) {
-            if (card._productData) applyWholesaleReferenceProductData(pg, card._productData)
+        if (pgChildren.some((node: any) => node?.name === WHOLESALE_REFERENCE_MARKER || node?.name === 'censored_stamp')) {
+            if (card._productData && pgChildren.some((node: any) => node?.name === WHOLESALE_REFERENCE_MARKER)) applyWholesaleReferenceProductData(pg, card._productData)
             else reflowWholesaleReferencePriceLabel(pg)
             continue
         }

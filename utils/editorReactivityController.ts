@@ -1952,7 +1952,11 @@ const setupReactivity = () => {
                 const transformAction = String(e?.transform?.action || '').trim().toLowerCase();
                 markPriceGroupTransformAsManual(obj);
                 const cardSize = getCardSizeForPriceGroup(obj);
-                if (cardSize) {
+                // Arrastar já fornece a posição final escolhida pelo usuário.
+                // O encaixe automático pode mudar a origem e prender a etiqueta
+                // ao limite superior do card; reserve-o ao redimensionamento.
+                const isManualMove = transformAction === 'drag' || transformAction === 'move';
+                if (cardSize && !isManualMove) {
                     normalizePriceGroupPlacementInCard(
                         obj,
                         cardSize.width,

@@ -1015,7 +1015,7 @@ export const repairHiddenPriceGroupTexts = (json: any): number => {
 
         // A visibilidade das faixas desta etiqueta é controlada pelos preços
         // e pelo estado censurado do produto, reaplicados após hidratação.
-        if (allDeep.some((node: any) => node?.name === 'wholesale_reference_packaging')) return
+        if (allDeep.some((node: any) => node?.name === 'wholesale_reference_packaging' || node?.name === 'censored_stamp')) return
 
         const pgName = String(pg.name || '')
         const isPriceGroupByName = pgName === 'priceGroup'

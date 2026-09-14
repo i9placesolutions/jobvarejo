@@ -210,3 +210,15 @@ describe('repairLivePriceGroupBackgrounds', () => {
     expect(typeof result).toBe('number')
   })
 })
+
+it('não ressuscita faixa amarela de montagem censurada sem embalagem legada', () => {
+ const banner=mkChild({name:'atac_banner_bg',type:'rect',width:210,height:42,top:150})
+ const stamp=mkChild({name:'censored_stamp',type:'image',width:300,height:196,originY:'center'})
+ const heading=mkChild({name:'censored_promotional_heading',type:'textbox',text:'PREÇO PROMOCIONAL',width:210,height:23,originY:'center'})
+ const pg=mkGroup([banner,stamp,heading],{name:'priceGroup'})
+ const canvas=mkGroup([mkGroup([pg],{isProductCard:true})])
+ repairLivePriceGroupBackgrounds(canvas)
+ expect(banner.visible).toBe(false)
+ repairLivePriceGroupBackgrounds(canvas)
+ expect(banner.visible).toBe(false)
+})
