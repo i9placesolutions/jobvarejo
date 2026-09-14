@@ -4522,6 +4522,14 @@ const quickModeTemplateBlueprints = computed(() => {
     const blueprints = (project as any).templateConfig?.pageBlueprints
     return Array.isArray(blueprints) ? blueprints : []
 })
+// A correção de páginas legadas roda em segundo plano. Uma ação explícita de
+// redimensionar precisa sempre ganhar dessa manutenção para não abrir duas
+// recargas do mesmo canvas em sequência.
+const isQuickModePageResizeInFlight = ref(false)
+let quickTemplateMaintenanceVersion = 0
+const cancelQuickTemplateMaintenance = (): void => {
+    quickTemplateMaintenanceVersion += 1
+}
 const resolveQuickModeTemplateModelId = (page: any): string => resolveFlyerTemplateModelIdForPage(page, {
     models: quickModeTemplateModels.value,
     defaultModelId: String((project as any).templateConfig?.defaultModelId || '').trim(),
@@ -4887,14 +4895,24 @@ const recoverQuickModeTemplateLibrary = async (): Promise<boolean> => {
  * Só troca uma página sem produtos do cliente; depois grava um marcador para
  * que a correção não volte a substituir a página em todo reload.
  */
-const repairQuickModeLegacyTemplatePages = async (): Promise<boolean> => {
+const repairQuickModeLegacyTemplatePages = async (
+    expectedMaintenanceVersion = quickTemplateMaintenanceVersion
+): Promise<boolean> => {
     if (!isQuickMode.value || project.isTemplate) return false
+    const maintenanceVersion = expectedMaintenanceVersion
+    const canRepair = () => (
+        maintenanceVersion === quickTemplateMaintenanceVersion &&
+        !isQuickModePageResizeInFlight.value &&
+        !isCanvasDestroyed.value
+    )
+    if (!canRepair()) return false
     const hasLibrary = await recoverQuickModeTemplateLibrary()
-    if (!hasLibrary || !quickModeTemplateBlueprints.value.length) return false
+    if (!canRepair() || !hasLibrary || !quickModeTemplateBlueprints.value.length) return false
 
     let replacedAny = false
     const pageIds = project.pages.map((page: any) => String(page?.id || '').trim()).filter(Boolean)
     for (const pageId of pageIds) {
+        if (!canRepair()) break
         const page = project.pages.find((item: any) => String(item?.id || '').trim() === pageId)
         if (!page) continue
         const expectedFormat = getQuickPageFormat(page)
@@ -4908,6 +4926,7 @@ const repairQuickModeLegacyTemplatePages = async (): Promise<boolean> => {
             console.warn('[quick-editor] Falha ao carregar página para verificar composição legada:', page.id, error)
             continue
         }
+        if (!canRepair()) break
 
         const livePage = project.pages.find((item: any) => String(item?.id || '').trim() === pageId)
         if (!livePage?.canvasData) continue
@@ -4948,9 +4967,13 @@ const repairQuickModeLegacyTemplatePages = async (): Promise<boolean> => {
         }
         const repairedPage = await replacePageFromTemplateSource(pageId, source, {
             name: `${metadata.templateModelName || 'Modelo 1'} · ${expectedFormat.label}`,
-            metadata
+            metadata,
+            canApply: canRepair
         })
-        if (!repairedPage) continue
+        if (!repairedPage) {
+            if (!canRepair()) break
+            continue
+        }
 
         replacedAny = true
         console.info('[quick-editor] Página legada alinhada à composição do modelo:', {
@@ -4961,12 +4984,14 @@ const repairQuickModeLegacyTemplatePages = async (): Promise<boolean> => {
         })
 
         if (String(activePage.value?.id || '').trim() === pageId) {
+            if (!canRepair()) break
             pageReloadToken.value += 1
             await waitForTemplatePageReady(pageId)
+            if (!canRepair()) break
         }
     }
 
-    if (replacedAny) {
+    if (replacedAny && canRepair()) {
         await flushPersistenceNow('quick-template-legacy-page-repair', { force: true })
     }
     return replacedAny
@@ -5203,8 +5228,6 @@ const useQuickModeTemplateModel = (modelId: string) => {
     })()
 }
 
-const isQuickModePageResizeInFlight = ref(false)
-
 /**
  * O redimensionamento por formato substitui a composição visual da página,
  * mas nunca pode descartar a lista que o cliente já montou. Capturamos a
@@ -5371,6 +5394,7 @@ const reflowQuickModeProductsForSelectedFormat = async (): Promise<boolean> => {
 const resizeQuickModePage = (formatId: string) => {
     return (async () => {
         if (isQuickModePageResizeInFlight.value) return
+        cancelQuickTemplateMaintenance()
         isQuickModePageResizeInFlight.value = true
         try {
             const format = getFlyerTemplateFormat(String(formatId || ''))
@@ -19613,6 +19637,7 @@ const getEditorQuickModeSeedContext = () => ({
     quickValidityMode,
     quickValidityStartDate,
     quickValidityWhileStocks,
+    getQuickTemplateMaintenanceVersion: () => quickTemplateMaintenanceVersion,
     refreshCanvasObjects,
     repairQuickModeLegacyTemplatePages,
     safeRequestRenderAll,

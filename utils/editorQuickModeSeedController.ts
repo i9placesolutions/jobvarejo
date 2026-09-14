@@ -1163,7 +1163,26 @@ export const createEditorQuickModeSeedController = (ctx: EditorQuickModeSeedCont
                 // sabem qual composição pertence a cada formato. Recuperar isso
                 // antes do seed também permite reparar páginas já existentes, sem
                 // transformar a página atual na fonte de outro formato.
-                await repairQuickModeLegacyTemplatePages()
+                const rawSeed = getQuickSeedStorageValue(projectId)
+                if (rawSeed) {
+                    // Um encarte que acabou de nascer ainda depende da biblioteca
+                    // antes de materializar o seed inicial.
+                    await repairQuickModeLegacyTemplatePages()
+                } else {
+                    // Em projetos já abertos, essa manutenção não pode competir
+                    // com o primeiro clique do cliente (especialmente trocar o
+                    // formato). Ela continua existindo para arquivos antigos,
+                    // mas só começa depois da primeira pintura e pode ser
+                    // cancelada pela ação explícita no editor.
+                    const maintenanceVersion = Number(ctx.getQuickTemplateMaintenanceVersion?.() || 0)
+                    void (async () => {
+                        await new Promise<void>(resolve => window.setTimeout(resolve, 700))
+                        if (isCanvasDestroyed.value || !canvas.value) return
+                        await repairQuickModeLegacyTemplatePages(maintenanceVersion)
+                    })().catch((error) => {
+                        console.warn('[quick-editor] Falha na manutenção automática de páginas legadas:', error)
+                    })
+                }
 
                 // Páginas rápidas antigas podem ainda apontar para a miniatura do
                 // modelo. Gere a miniatura da cópia ativa para que o rail mostre
@@ -1175,7 +1194,6 @@ export const createEditorQuickModeSeedController = (ctx: EditorQuickModeSeedCont
 
                 if (quickSeedAppliedForProjectId === projectId) return
                 hydrateQuickModeDataFromCanvas()
-                const rawSeed = getQuickSeedStorageValue(projectId)
                 if (!rawSeed) return
 
                 let seed: QuickEditorSeed

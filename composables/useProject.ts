@@ -1528,6 +1528,8 @@ export const useProject = () => {
     type ReplacePageFromTemplateSourceOptions = {
         name?: string
         metadata?: Partial<Pick<Page, 'templateModelId' | 'templateModelName' | 'templateFormatId' | 'templateFormatLabel' | 'templateThemeId' | 'templateThemeName' | 'templateCompositionManaged' | 'templateSourcePageId'>>
+        /** Cancela uma manutenção automática antes de trocar o canvas ativo. */
+        canApply?: () => boolean
     }
 
     /**
@@ -1545,6 +1547,7 @@ export const useProject = () => {
     ): Promise<Page | null> => {
         const normalizedPageId = String(pageId || '').trim()
         if (!normalizedPageId || !source) return null
+        if (options.canApply && !options.canApply()) return null
 
         const pageIndex = getProjectPageIndexById(normalizedPageId)
         if (pageIndex < 0) return null
@@ -1557,8 +1560,13 @@ export const useProject = () => {
             sourceCanvasData = await loadCanvasDataFromPath(sourceCanvasPath, { forceRefresh: true })
         }
         if (!sourceCanvasData || typeof sourceCanvasData !== 'object') return null
+        // A fonte pode chegar do storage depois que o cliente já iniciou uma
+        // ação explícita. Nesse caso, não sobrescrevemos a página ativa com
+        // uma manutenção que ficou obsoleta.
+        if (options.canApply && !options.canApply()) return null
 
         const clonedJson = clonePageCanvasDataWithFreshIds(sourceCanvasData)
+        if (options.canApply && !options.canApply()) return null
         const metadata = options.metadata || {}
         const modelId = String(metadata.templateModelId ?? source.templateModelId ?? page.templateModelId ?? '').trim()
         const modelName = String(metadata.templateModelName ?? source.templateModelName ?? page.templateModelName ?? '').trim()
