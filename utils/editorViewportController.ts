@@ -1,3 +1,5 @@
+import { resolveFabricTarget } from './fabricTarget'
+
 export type EditorViewportContext = Record<string, any>
 
 export const createEditorViewportController = (ctx: EditorViewportContext) => {
@@ -246,7 +248,7 @@ const setupZoomPan = () => {
         } catch {
             info = null;
         }
-        const target = info?.target ?? info ?? null;
+        const target = resolveFabricTarget(info);
         try {
             c.fire?.('mouse:dblclick', { e: syntheticMouseEvent, originalEvent: evt, target });
         } catch {

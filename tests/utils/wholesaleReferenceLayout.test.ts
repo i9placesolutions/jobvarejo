@@ -1,6 +1,62 @@
 import { expect,it } from 'vitest'
-import {CENSORED_PROMOTIONAL_HEADING_MARKER,CENSORED_STAMP_MARKER,createWholesaleReferenceTemplateJson,applyWholesaleReferenceCardLayout,reflowWholesaleReferencePriceLabel} from '~/utils/wholesaleReferenceLayout'
+import {applyWholesaleReferenceProductData,CENSORED_PROMOTIONAL_HEADING_MARKER,CENSORED_STAMP_MARKER,createWholesaleReferenceTemplateJson,applyWholesaleReferenceCardLayout,reflowWholesaleReferencePriceLabel} from '~/utils/wholesaleReferenceLayout'
 import {isProductLabelTemplateCompatible} from '~/utils/productLabelCompatibility'
+it('usa as formas, degradês e tipografia da referência do coquetel', () => {
+ const template=createWholesaleReferenceTemplateJson()
+ const find=(name:string):any=>template.objects.find(o=>o.name===name)
+ expect(find('atac_retail_bg').width).toBe(210)
+ expect(find('atac_retail_bg').fill.colorStops).toEqual([{offset:0,color:'#0756D2'},{offset:1,color:'#042580'}])
+ expect(find('atac_wholesale_bg').fill.colorStops).toEqual([{offset:0,color:'#FF0B00'},{offset:1,color:'#D90000'}])
+ expect(find('retail_price_text').fontSize).toBe(50)
+ expect(find('wholesale_price_text').fontSize).toBe(62)
+ expect(find('retail_price_text').fontFamily).toBe('Barlow')
+ expect(find('wholesale_banner_text').fontSize).toBe(18)
+})
+it('restaura fundo, valores e embalagem de uma etiqueta editada previamente censurada', () => {
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects}}
+ const find=(name:string)=>label.objects.find((o:any)=>o.name===name)
+ find('atac_wholesale_bg').visible=false
+ Object.assign(find('atac_wholesale_bg'), {width:1,scaleX:0,scaleY:0,__visibleScaleX:1,__visibleScaleY:1})
+ find('wholesale_price_text').visible=false
+ find('wholesale_reference_packaging').text=''
+ applyWholesaleReferenceProductData(label,{pricePack:'18,99',priceUnit:'18,99',priceSpecial:'16,99',priceSpecialUnit:'16,99',packageLabel:'UNIDADE',packQuantity:1,showCensored:false})
+ expect(find('atac_wholesale_bg').visible).toBe(true)
+ expect(find('atac_wholesale_bg').scaleX).toBe(1)
+ expect(find('atac_wholesale_bg').scaleY).toBe(1)
+ expect(find('atac_wholesale_bg').width).toBe(find('atac_retail_bg').width)
+ expect(find('wholesale_price_text').text).toBe('16,99')
+ expect(find('wholesale_pack_line_text').visible).toBe(true)
+ expect(find('wholesale_reference_packaging').text).toBe('UNIDADE')
+ expect(find('atac_wholesale_bg').top).toBeGreaterThan(find('atac_retail_bg').top)
+ const restored=JSON.parse(JSON.stringify(label)); restored.getObjects=()=>restored.objects
+ applyWholesaleReferenceProductData(restored,{pricePack:'18,99',priceSpecial:'16,99',packageLabel:'UNIDADE',showCensored:false})
+ expect(restored.objects.find((o:any)=>o.name==='atac_wholesale_bg').visible).toBe(true)
+})
+it('mantém preço revelado após relayout e serialização sem alterar outro card censurado', () => {
+ const make = (showCensored:boolean) => {
+  const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects},set(v:any){Object.assign(this,v)}}
+  label.objects.push({name:CENSORED_STAMP_MARKER,width:220,height:80,top:90,originY:'center'}, {name:CENSORED_PROMOTIONAL_HEADING_MARKER,text:'PREÇO PROMOCIONAL',width:220,height:22,top:0,originY:'center'})
+  return {_productData:{pricePack:'34,38',priceUnit:'5,73',priceSpecial:'31,74',priceSpecialUnit:'5,29',packageLabel:'CX',packQuantity:6,showCensored}, getObjects:()=>[label]}
+ }
+ const edited=make(false), other=make(true)
+ for(let i=0;i<5;i++) { applyWholesaleReferenceCardLayout(edited,500,600); applyWholesaleReferenceCardLayout(other,500,600) }
+ const label=edited.getObjects()[0]
+ expect(label.objects.find((o:any)=>o.name===CENSORED_STAMP_MARKER).visible).toBe(false)
+ expect(label.objects.find((o:any)=>o.name==='wholesale_price_text').visible).not.toBe(false)
+ expect(other.getObjects()[0].objects.find((o:any)=>o.name===CENSORED_STAMP_MARKER).visible).toBe(true)
+ expect(JSON.parse(JSON.stringify(edited._productData)).showCensored).toBe(false)
+ expect(label.width).toBeGreaterThanOrEqual(210)
+})
+
+it('recupera escala ilegível sem encolher o preço a cada edição', () => {
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects}}
+ const price:any=label.objects.find((o:any)=>o.name==='retail_price_text')
+ Object.assign(price,{scaleX:0.001,scaleY:0.001})
+ for(let i=0;i<10;i++) reflowWholesaleReferencePriceLabel(label,{showCensored:false})
+ expect(price.scaleX).toBe(1)
+ expect(price.scaleY).toBe(1)
+ expect(label.width).toBeGreaterThanOrEqual(210)
+})
 it('mantem condicao abaixo das duas faixas e suporta os quatro precos',()=>{
  const group=createWholesaleReferenceTemplateJson()
  expect(group.objects.filter(o => 'fontFamily' in o).every(o => o.fontFamily === 'Barlow')).toBe(true)
@@ -125,11 +181,28 @@ it('separa o selo censurado da faixa avulsa e oculta a faixa substituída',()=>{
  expect(reflowWholesaleReferencePriceLabel(label)).toBe(true)
  expect(find('atac_wholesale_bg').visible).toBe(false)
  expect(find('atac_banner_bg').visible).toBe(false)
- expect(find('wholesale_reference_packaging').visible).toBe(false)
+ expect(find('wholesale_reference_packaging').visible).toBe(true)
  const heading=find(CENSORED_PROMOTIONAL_HEADING_MARKER)
  const stamp=find(CENSORED_STAMP_MARKER)
  const stampTop=stamp.top-(stamp.height*(stamp.scaleY ?? 1))/2
  const headingBottom=heading.top+(heading.height*(heading.scaleY ?? 1))/2
  expect(stampTop-headingBottom).toBeGreaterThanOrEqual(18)
  expect(stamp.scaleX).toBeLessThanOrEqual(.8)
+})
+
+it('troca o selo censurado somente quando o card tem preço promocional',()=>{
+ const label:any={...createWholesaleReferenceTemplateJson(),getObjects(){return this.objects}}
+ const find=(name:string)=>label.objects.find((node:any)=>node.name===name)
+ const heading={type:'Textbox',name:CENSORED_PROMOTIONAL_HEADING_MARKER,text:'PREÇO PROMOCIONAL',top:4,height:23,originY:'center',visible:true}
+ const stamp={type:'Image',name:CENSORED_STAMP_MARKER,top:84,width:294,height:196,scaleX:.836,scaleY:.836,originY:'center',visible:true}
+ label.objects.push(heading, stamp)
+ find('atac_wholesale_bg').visible=true
+ find('wholesale_currency_text').visible=true
+ find('wholesale_price_text').visible=true
+ expect(reflowWholesaleReferencePriceLabel(label,{showCensored:false})).toBe(true)
+ expect(find('atac_wholesale_bg').visible).toBe(true)
+ expect(find('wholesale_price_text').visible).toBe(true)
+ expect(heading.visible).toBe(false)
+ expect(stamp.visible).toBe(false)
+ expect(find('wholesale_reference_packaging').visible).toBe(true)
 })

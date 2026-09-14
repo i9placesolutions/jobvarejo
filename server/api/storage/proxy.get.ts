@@ -24,9 +24,10 @@ const IMAGE_OBJECT_KEY_RE = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i
 const getCachedDirectReadUrl = async (
   bucket: string,
   key: string,
-  versionId?: string | null
+  versionId?: string | null,
+  cacheVersion?: string | null
 ): Promise<string> => {
-  const cacheKey = `${bucket}\u0000${key}\u0000${versionId || ''}`
+  const cacheKey = `${bucket}\u0000${key}\u0000${versionId || ''}\u0000${cacheVersion || ''}`
   const now = Date.now()
   const cached = directReadRedirectCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.url
@@ -183,7 +184,8 @@ export default defineEventHandler(async (event) => {
     ))
     if (privateProjectImageKey && !requestTargetsJson) {
       try {
-        const directReadRedirectUrl = await getCachedDirectReadUrl(bucket, privateProjectImageKey, version)
+        // `v` invalida o cache da aplicação, não identifica uma versão S3.
+        const directReadRedirectUrl = await getCachedDirectReadUrl(bucket, privateProjectImageKey, null, version)
         setResponseHeaders(event, {
           'Cache-Control': 'private, max-age=300, must-revalidate',
           'X-Storage-Direct': '1'
@@ -207,7 +209,7 @@ export default defineEventHandler(async (event) => {
     // abaixo, que ainda descobre o prefixo correto e preserva o fallback.
     if (isPublicStorageKey(key)) {
       try {
-        const publicReadRedirectUrl = await getCachedDirectReadUrl(bucket, key, version)
+        const publicReadRedirectUrl = await getCachedDirectReadUrl(bucket, key, null, version)
         setResponseHeaders(event, {
           'Cache-Control': 'public, max-age=300, must-revalidate',
           'Access-Control-Allow-Origin': '*',

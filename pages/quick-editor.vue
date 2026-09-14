@@ -313,11 +313,11 @@ onMounted(() => {
             :title="`${saved.name || 'Sem título'} — ${getLastEditedTitle(saved)}`"
             @click="openExistingProject(saved.id)"
           >
-            <div class="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc]">
+            <div class="relative flex aspect-[3/1] items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc]">
               <img
                 v-if="getProjectPreviewSource(saved)"
                 :src="getProjectPreviewSource(saved) || undefined"
-                :alt="`Prévia do encarte ${saved.name || 'sem título'}`"
+                :alt="`Cabeçalho do encarte ${saved.name || 'sem título'}`"
                 class="absolute inset-0 h-full w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]"
                 :loading="index < 6 ? 'eager' : 'lazy'"
                 decoding="async"

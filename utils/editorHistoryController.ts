@@ -92,11 +92,12 @@ const setupHistory = () => {
 
 	    const saveState = async (opts: SaveStateOptions = {}) => {
 	        if (isHistoryProcessing.value) return; // Prevent loop
-            // Um canvas carregado com falhas não representa o documento salvo.
-            // Impede que ações posteriores persistam a versão sem as imagens.
+            // Falhas isoladas de imagem não podem bloquear a persistência do documento.
+            // O loader mantém a geometria e o __originalSrc da imagem que falhou,
+            // enquanto o recovery tenta substituí-la depois. Bloquear todo save aqui
+            // fazia o usuário perder texto/layout ao sair antes da recuperação.
             if (storageDegraded.value) {
-                storageDegradedHint.value = 'Salvamento pausado: recupere as imagens antes de salvar para não perder conteúdo.'
-                return
+                storageDegradedHint.value = 'Algumas imagens não carregaram; o conteúdo continua sendo salvo.'
             }
 	        const canvasInstance = canvas.value as any;
 	        if (!canvasInstance || isCanvasDestroyed.value) return;

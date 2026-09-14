@@ -4,7 +4,7 @@ import { applyDynamicBusinessTextColor } from '~/utils/dynamicBusinessFields'
 import { installGroupClipCacheGuard } from '~/utils/fabricGroupClipCache'
 import { getExplicitFlavorQueries } from '~/utils/productFlavorQueries'
 import { isSplitFooterValidity, splitFooterValidityText, hasSplitFooterValidityCompanions, resolveSplitFooterValidityText } from '~/utils/splitFooterValidity'
-import { createWholesaleReferenceTemplateJson, reflowWholesaleReferencePriceLabel, WHOLESALE_REFERENCE_TEMPLATE_ID, WHOLESALE_REFERENCE_MARKER } from '~/utils/wholesaleReferenceLayout'
+import { applyWholesaleReferenceProductData, createWholesaleReferenceTemplateJson, reflowWholesaleReferencePriceLabel, WHOLESALE_REFERENCE_TEMPLATE_ID, WHOLESALE_REFERENCE_MARKER } from '~/utils/wholesaleReferenceLayout'
 import { updateIsolatedPageFields } from '~/utils/isolatedPageFields'
 import { registerCanvasImageLoadSession } from '~/utils/canvasImageLoadSession'
 import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
@@ -495,6 +495,7 @@ import { layoutCustomPriceGroup as layoutCustomPriceGroupHelper } from '~/utils/
 import { createPriceGroupLayout } from '~/utils/priceGroupLayout'
 import { createPriceGroupBuilders } from '~/utils/priceGroupBuilders'
 import { createPriceGroupPricing } from '~/utils/priceGroupPricing'
+import { syncPriceTemplateStyle } from '~/utils/priceTemplateStyleSync'
 import { createPriceTemplateFitting } from '~/utils/priceTemplateFitting'
 import { createResizeSmartObject } from '~/utils/editorResizeSmartObject'
 import { createProductCardConfigurationLayout } from '~/utils/editorProductCardConfiguration'
@@ -597,6 +598,7 @@ const EditorPageHistoryModal = defineAsyncComponent(() => import('./EditorPageHi
 const ZoneQuickActions = defineAsyncComponent(() => import('./ZoneQuickActions.vue'))
 const ProductImageQuickActions = defineAsyncComponent(() => import('./ProductImageQuickActions.vue'))
 const ProductLabelQuickActions = defineAsyncComponent(() => import('./ProductLabelQuickActions.vue'))
+const ProductPriceQuickEditor = defineAsyncComponent(() => import('./ProductPriceQuickEditor.vue'))
 const QuickLogoQuickActions = defineAsyncComponent(() => import('./QuickLogoQuickActions.vue'))
 const PageNavigator = defineAsyncComponent(() => import('./PageNavigator.vue'))
 const ContextMenu = defineAsyncComponent(() => import('./ui/ContextMenu.vue'))
@@ -762,6 +764,15 @@ const PRODUCT_IMAGE_PICKER_BATCH_SIZE = 12
 const productImagePickerVisibleCount = ref(PRODUCT_IMAGE_PICKER_BATCH_SIZE)
 const productImagePickerTargetImageId = ref<string | null>(null)
 const productImagePickerTargetCardId = ref<string | null>(null)
+// Mantém uma referência ao alvo enquanto o modal aguarda processamento da
+// imagem. O ID continua sendo a fonte primária, mas essa referência evita que
+// uma reatividade/reload intermediário faça o clique perder o alvo original.
+const productImagePickerTargetImageRef = shallowRef<any | null>(null)
+// Editor de preço do card selecionado. O estado é separado da etiqueta para
+// permitir alterar ou limpar o promocional a qualquer momento sem afetar os
+// demais produtos da página.
+const showProductPriceEditor = ref(false)
+const productPriceEditorCard = shallowRef<any | null>(null)
 
 // === Figma-style Crop Overlay ===
 const figmaCrop = useFigmaCrop()
@@ -8778,7 +8789,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                     storageDegraded.value = degradedNewPage
                     storageDegradedFailedCount.value = degradedFailedCount
                     storageDegradedHint.value = degradedNewPage
-                        ? (degradedFailedCount ? `Algumas imagens nao carregaram (${degradedFailedCount}).` : 'Algumas imagens nao carregaram.')
+                        ? (degradedFailedCount
+                            ? `Algumas imagens não carregaram (${degradedFailedCount}); o conteúdo continua sendo salvo.`
+                            : 'Algumas imagens não carregaram; o conteúdo continua sendo salvo.')
                         : ''
                     shouldScheduleMissingProductImageRecovery = deferredProductImageCount > 0 || degradedNewPage
                     shouldPersistNormalizedAssetUrls = !degradedNewPage && !!(
@@ -8961,7 +8974,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
         console.error("Error loading page data:", err);
             storageDegraded.value = true
             storageDegradedFailedCount.value = null
-            storageDegradedHint.value = 'Falha ao carregar imagens do storage.'
+            storageDegradedHint.value = 'Não foi possível carregar algumas imagens; o conteúdo continua sendo salvo.'
 	    } finally {
 	        if (!isStaleLoad()) isHistoryProcessing.value = false;
 	    }
@@ -9086,7 +9099,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
         if (isQuickMode.value && reconcileQuickPageFormatGeometry(pageToLoad, canvas.value.getObjects())) {
             repairedQuickPageGeometry = true
         }
-        if (isQuickMode.value && !storageDegraded.value) {
+        if (isQuickMode.value) {
             void ensureQuickPageThumbnail(pageToLoad, true)
         }
         completedPageLoadSessionId = loadSessionId
@@ -9117,7 +9130,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             // with placeholders would schedule a no-op and stay stuck forever.
             scheduleMissingProductImageRecovery(180, 10, nextPageId)
         }
-        if (!isStaleLoad() && loadedOk && repairedQuickPageGeometry && !storageDegraded.value) {
+        if (!isStaleLoad() && loadedOk && repairedQuickPageGeometry) {
             scheduleIdleStatePersistence({
                 reason: 'quick-page-format-geometry', source: 'system', expectedPageId: nextPageId,
                 markUnsaved: true, skipIfUnchanged: false
@@ -10330,7 +10343,7 @@ onMounted(async () => {
                   } catch (e) {
                       info = null;
                   }
-                  const target = info?.target ?? info ?? null;
+                  const target = typeof info?.set === 'function' ? info : (info?.target ?? null);
                   try {
                       c.fire?.('mouse:dblclick', { e: evt, originalEvent: evt, target });
                   } catch (e) {
@@ -16209,6 +16222,19 @@ const addStoreDynamicField = async (data: Record<string, any>) => {
 const findObjectByCustomId = (id: string): { obj: any; parent: any | null } | null =>
     findObjectByCustomIdHelper(canvas.value, id)
 
+const findProductImageReplacementTarget = (id: string): { obj: any; parent: any | null } | null => {
+    const found = findObjectByCustomId(id)
+    if (found) return found
+
+    const candidate = productImagePickerTargetImageRef.value
+    if (!candidate || String(candidate?.type || '').toLowerCase() !== 'image') return null
+    if (String(candidate?._customId || '').trim() !== String(id || '').trim()) return null
+
+    const parent = findProductCardParentGroup(candidate)
+    const isTopLevel = !!canvas.value?.getObjects?.()?.includes(candidate)
+    return parent || isTopLevel ? { obj: candidate, parent } : null
+}
+
 // findProductCardByCustomId extraido para utils/canvasValidation.ts.
 const findProductCardByCustomId = (id: string): any | null =>
     findProductCardByCustomIdHelper(canvas.value, id, isProductCardContainer, isLikelyProductCard)
@@ -16311,7 +16337,7 @@ const replaceImageByCustomId = async (
     const shouldSave = opts.save !== false;
     const shouldSetActive = opts.setActive !== false;
 
-    const found = findObjectByCustomId(targetId);
+    const found = findProductImageReplacementTarget(targetId);
     if (!found) return false;
 
     const target = found.obj;
@@ -16539,6 +16565,7 @@ const clearPendingProductImageOperation = () => {
     pendingImageAddCardId.value = null
     productImagePickerTargetImageId.value = null
     productImagePickerTargetCardId.value = null
+    productImagePickerTargetImageRef.value = null
 };
 
 const openLocalProductImagePicker = async (mode: 'replace' | 'add', opts: { imageId?: string | null; cardId?: string | null; scope?: 'single' | 'all' } = {}) => {
@@ -16554,6 +16581,7 @@ const openProductImageUploadPickerModal = async (
     const controller = await loadProductImageActionsController();
     productImageReplaceScope.value = 'single';
     const found = opts.imageId ? findObjectByCustomId(opts.imageId) : null;
+    productImagePickerTargetImageRef.value = mode === 'replace' ? (found?.obj || null) : null
     const card = opts.cardId ? findProductCardByCustomId(opts.cardId) : found?.parent;
     const name = String(card?._productData?.name || card?._productData?.productName || '');
     productImageFlavorQueries.value = getExplicitFlavorQueries(name);
@@ -19134,7 +19162,7 @@ const persistInactiveQuickBusinessFields = async () => {
             }
             return result
         })
-        const paymentData = updated || structuredClone(page.canvasData)
+        const paymentData = updated || cloneCanvasDataForLoad(page.canvasData)
         for (const [slotIndex, slot] of (paymentData.objects || []).entries()) {
             if (slot.businessProfileField !== 'footerPaymentImages') continue
             const group = await createFooterPaymentGroup(fabric, slot, profile.footerPaymentImages)
@@ -20724,6 +20752,26 @@ const resolveSelectedProductLabelActionContext = (active?: any): ProductLabelAct
     }
 }
 
+const productPriceEditorProduct = computed(() => {
+    const card = productPriceEditorCard.value
+    const product = (card?._productData && typeof card._productData === 'object')
+        ? card._productData
+        : card
+    return {
+        name: String(product?.name || card?.productName || 'Produto selecionado').trim() || 'Produto selecionado',
+        pricePack: product?.pricePack ?? product?.price ?? '',
+        priceUnit: product?.priceUnit ?? '',
+        packageLabel: product?.packageLabel ?? '',
+        packQuantity: product?.packQuantity ?? '',
+        priceCount: product?.priceCount,
+        showCensored: product?.showCensored ?? !!collectObjectsDeep(card).find((o: any) => o.name === 'censored_stamp' && o.visible !== false),
+        alcoholBadgeEnabled: product?.alcoholBadgeEnabled ?? !!collectObjectsDeep(card).find((o: any) => o.name === 'smart_alcohol_badge' && o.visible !== false),
+        priceSpecial: product?.priceSpecial ?? '',
+        priceSpecialUnit: product?.priceSpecialUnit ?? '',
+        specialCondition: product?.specialCondition ?? ''
+    }
+})
+
 const getPriceGroupFloatingPos = (priceGroup: any) => {
     if (!priceGroup || !canvas.value) return { top: 0, left: 0, width: 0, height: 0, visible: false }
     try {
@@ -21136,6 +21184,127 @@ const handleProductLabelSelectAll = () => {
     refreshSelectedRef()
     updateSelection()
     safeRequestRenderAll()
+}
+
+const handleProductLabelEditPrice = () => {
+    const context = resolveSelectedProductLabelActionContext()
+    if (!context?.card) {
+        notifyEditorError('Selecione a etiqueta do produto que deseja editar.')
+        return
+    }
+
+    productPriceEditorCard.value = context.card
+    showProductPriceEditor.value = true
+}
+
+const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
+    const card = productPriceEditorCard.value
+    if (!card || !canvas.value) {
+        showProductPriceEditor.value = false
+        return
+    }
+
+    const currentProduct = (card._productData && typeof card._productData === 'object')
+        ? card._productData
+        : card
+    const normalizeOptionalValue = (value: unknown): string | null => {
+        const normalized = String(value ?? '').trim()
+        return normalized || null
+    }
+    const nextProduct = {
+        ...currentProduct,
+        pricePack: normalizeOptionalValue(payload.pricePack),
+        priceUnit: normalizeOptionalValue(payload.priceUnit),
+        price: normalizeOptionalValue(payload.pricePack || payload.priceUnit),
+        priceWholesale: null,
+        packageLabel: normalizeOptionalValue(payload.packageLabel),
+        packQuantity: payload.packQuantity ? Number(payload.packQuantity) : null,
+        priceCount: payload.priceCount,
+        showCensored: payload.showCensored === true,
+        alcoholBadgeEnabled: payload.alcoholBadgeEnabled === true,
+        // `priceSpecial` is the value shown in the promotional tier of the
+        // reference card. Empty values intentionally restore the censored
+        // artwork for this card only.
+        priceSpecial: normalizeOptionalValue(payload?.priceSpecial),
+        priceSpecialUnit: normalizeOptionalValue(payload?.priceSpecialUnit),
+        specialCondition: normalizeOptionalValue(payload?.specialCondition)
+    }
+    card._productData = nextProduct
+
+    let priceGroup = getPriceGroupFromAny(card)
+    const priceNodes = collectObjectsDeep(priceGroup)
+    const requiresExpandedLabel = (nextProduct.priceCount > 1 && !priceNodes.some((o: any) => o.name === 'atac_retail_bg')) || (nextProduct.showCensored && !priceNodes.some((o: any) => o.name === WHOLESALE_REFERENCE_MARKER))
+    if (requiresExpandedLabel) {
+        await applyLabelTemplateToCard(card, WHOLESALE_REFERENCE_TEMPLATE_ID)
+        setCardLabelTemplateMetadata(card, WHOLESALE_REFERENCE_TEMPLATE_ID, true)
+        priceGroup = getPriceGroupFromAny(card)
+    } else {
+        // Usa o mesmo caminho da escolha manual: instancia o estilo atual da
+        // biblioteca antes de preencher os valores, descartando métricas antigas.
+        const zoneId = String(card.parentZoneId || card._zoneSlot?.zoneId || '').trim()
+        const zone = zoneId ? findProductZoneById(zoneId) : null
+        const templateId = String(card.__cardLabelTemplateId || zone?._zoneGlobalStyles?.splashTemplateId || '').trim()
+        if (templateId) {
+            await applyLabelTemplateToCard(card, templateId)
+            priceGroup = getPriceGroupFromAny(card)
+        }
+    }
+    if (priceGroup) {
+        if (nextProduct.showCensored && !collectObjectsDeep(priceGroup).some((o: any) => o.name === 'censored_stamp')) {
+            const stamp = new fabric.Textbox('CENSURADO', { name: 'censored_stamp', width: 220, fontSize: 30, fontWeight: 'bold', fill: '#FFFFFF', backgroundColor: '#111111', textAlign: 'center', originX: 'center', originY: 'center', selectable: false })
+            const heading = new fabric.Textbox('PREÇO PROMOCIONAL', { name: 'censored_promotional_heading', width: 220, fontSize: 18, fill: '#111111', textAlign: 'center', originX: 'center', originY: 'center', selectable: false })
+            priceGroup.add(stamp, heading)
+        }
+        applyAtacarejoPricingToPriceGroup(priceGroup, nextProduct)
+        if (!collectObjectsDeep(priceGroup).some((o: any) => o.name === 'atac_retail_bg')) {
+            const value = collectObjectsDeep(priceGroup).find((o: any) => o.__priceRichText || o.name === 'price_value_text' || o.name === 'smart_price')
+            if (value) applyRichPriceTextValue(value, nextProduct.price)
+        }
+        priceGroup.set?.({ dirty: true })
+        priceGroup.setCoords?.()
+    }
+    let alcoholBadge = card.getObjects?.().find((o: any) => o.name === 'smart_alcohol_badge')
+    if (nextProduct.alcoholBadgeEnabled && !alcoholBadge) {
+        alcoholBadge = await productCardConfiguration.createProductAlcoholBadgeObject('+18', 48)
+        if (alcoholBadge) {
+            const width = Number(card._cardWidth || card.width)
+            const height = Number(card._cardHeight || card.height)
+            const scale = Math.min(width * 0.16 / Math.max(1, alcoholBadge.width), height * 0.13 / Math.max(1, alcoholBadge.height))
+            alcoholBadge.set({ left: width * 0.38, top: -height * 0.36, scaleX: scale, scaleY: scale })
+            card.add(alcoholBadge)
+        }
+    }
+    alcoholBadge?.set?.({ visible: nextProduct.alcoholBadgeEnabled, dirty: true })
+    alcoholBadge?.setCoords?.()
+    reapplyProductCardConfigurationLayout(card)
+    if (priceGroup) {
+        setPriceGroupInteractionMode(priceGroup, 'move')
+        selectedPriceGroupSubTarget.value = null
+        selectedPriceGroupSelectionKind.value = 'label'
+        canvas.value.discardActiveObject?.()
+        canvas.value.setActiveObject?.(priceGroup)
+    }
+    card.set?.({ dirty: true })
+    card.setCoords?.()
+
+    showProductPriceEditor.value = false
+    productPriceEditorCard.value = null
+    refreshSelectedRef()
+    updateSelection()
+    refreshCanvasObjects({ immediate: true })
+    safeRequestRenderAll()
+
+    try {
+        if (isQuickMode.value) {
+            await persistQuickModeDataChange('quick-product-price')
+        } else {
+            await saveCurrentState({ reason: 'product-price-edit', skipIfUnchanged: false })
+        }
+        notifyEditorInfo('Preços, embalagem e selos aplicados neste produto.')
+    } catch (error) {
+        console.warn('[product-price-editor] Falha ao salvar preço do produto', error)
+        notifyEditorError('O preço foi aplicado na tela, mas não foi possível salvar. Tente salvar novamente.')
+    }
 }
 
 const handleProductLabelTemplateChange = async (templateId: string) => {
@@ -23260,6 +23429,10 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
 
 const applyFardoSpecialPricingToPriceGroup = (pg: any, data: any) => {
     if (!pg || typeof pg.getObjects !== 'function') return
+    if (pg.getObjects().some((node: any) => node.name === WHOLESALE_REFERENCE_MARKER)) {
+        applyWholesaleReferenceProductData(pg, data)
+        return
+    }
     const all = collectObjectsDeep(pg)
     repairAtacarejoTextNames(all)
     const byName = (name: string) => all.filter((o: any) => o?.name === name)
@@ -23373,21 +23546,26 @@ const applyFardoSpecialPricingToPriceGroup = (pg: any, data: any) => {
         setText(referencePackaging, [aliases[raw] || raw, quantity > 1 ? `C/ ${quantity} UNIDADES` : ''].filter(Boolean).join('\n'))
         setText(retailPack, data?.pricePack && data?.priceUnit ? `UNID R$ ${formatPriceValue(data.priceUnit)}` : '')
         setText(wholesalePack, data?.priceSpecial && data?.priceSpecialUnit ? `UNID R$ ${formatPriceValue(data.priceSpecialUnit)}` : '')
+        setVisible(retailPack, state.showRetail && !!data?.pricePack && !!data?.priceUnit)
+        setVisible(wholesalePack, state.showSpecial && !!data?.priceSpecial && !!data?.priceSpecialUnit)
         setVisible(find('reference_retail_heading'), state.showRetail)
         setVisible(find('reference_special_heading'), state.showSpecial)
         // Quando a referência lateral tiver apenas uma faixa, recolhe a área
         // da faixa ausente antes de medir o conteúdo. Assim a embalagem não
         // fica cortada e o preço especial não deixa um vão em branco.
-        reflowWholesaleReferencePriceLabel(pg)
+        // Cada card decide individualmente se ainda precisa do selo
+        // "CENSURADO". Ao preencher o preço promocional deste produto, a
+        // faixa real aparece sem alterar os demais cards da página.
+        reflowWholesaleReferencePriceLabel(pg, { showCensored: data?.showCensored ?? !state.special.hasValue })
     }
     const forceCanonicalAtac = (pg as any).__forceAtacarejoCanonical === true
-    if (preserveTemplateVisual && !forceCanonicalAtac) {
+    if (preserveTemplateVisual && !forceCanonicalAtac && !referencePackaging) {
         fitManualAtacarejoValuesIntoTemplate(pg)
     }
     all.forEach((obj: any) => obj?.setCoords?.())
     pg.dirty = true
     pg.setCoords?.()
-    safeAddWithUpdate(pg)
+    if (!referencePackaging) safeAddWithUpdate(pg)
 }
 
 if (false) {
@@ -24097,7 +24275,27 @@ const priceTemplateFitting = createPriceTemplateFitting({
 const fitManualSinglePriceValuesIntoTemplate = priceTemplateFitting.fitManualSinglePriceValuesIntoTemplate
 const fitManualAtacarejoValuesIntoTemplate = priceTemplateFitting.fitManualAtacarejoValuesIntoTemplate
 
+const syncCurrentPriceTemplateStyle = (group: any) => {
+    if (!group) return
+    const card = getCardHostForPriceGroup(group) || getCardGroupFromAny(group)
+    if (!card) return
+    const zoneId = String(card.parentZoneId || card._zoneSlot?.zoneId || '').trim()
+    const zone = zoneId ? findProductZoneById(zoneId) : null
+    const id = String(card.__cardLabelTemplateId || zone?._zoneGlobalStyles?.splashTemplateId || '').trim()
+    const template = (id === WHOLESALE_REFERENCE_TEMPLATE_ID ? createWholesaleReferenceTemplateJson() : labelTemplates.value.find((item: any) => item.id === id)?.group)
+        || (id && id === zone?._zoneTemplateSnapshotId ? zone?._zoneTemplateSnapshot : null)
+    if (!template) return
+    syncPriceTemplateStyle(group, template, (paint: any) => {
+        if (paint && typeof paint === 'object' && paint.colorStops && fabric?.Gradient) {
+            return new fabric.Gradient(cloneCanvasDataForLoad(paint))
+        }
+        // Patterns dependem de imagens já carregadas; conserva o objeto vivo.
+        return typeof paint === 'object' && paint !== null ? undefined : paint
+    })
+}
+
 const priceGroupPricing = createPriceGroupPricing({
+    syncTemplateStyle: syncCurrentPriceTemplateStyle,
     applyFardoSpecialPricingToPriceGroup,
     migratePriceGroupToRichText: (group: any) => {
         migratePriceGroupToRichText(group, fabric)
@@ -24917,6 +25115,7 @@ function legacyLayoutPriceGroup(priceGroup: any, cardW: number, cardH: number) {
 }
 
 const priceGroupLayout = createPriceGroupLayout({
+    syncTemplateStyle: syncCurrentPriceTemplateStyle,
     getFabric: () => fabric,
     migratePriceGroupToRichText: (group: any) => {
         migratePriceGroupToRichText(group, fabric)
@@ -25760,11 +25959,13 @@ async function ensureBuiltInAtacarejoLabelTemplate() {
 }
 
 async function ensureWholesaleReferenceLabelTemplate() {
-    if (!fabric || labelTemplates.value.some(t => t.id === WHOLESALE_REFERENCE_TEMPLATE_ID)) return;
+    if (!fabric) return;
+    const existing = labelTemplates.value.find(t => t.id === WHOLESALE_REFERENCE_TEMPLATE_ID);
+    if ((existing?.group as any)?.__referenceStyleVersion === 2) return;
     const now = new Date().toISOString();
     const tpl: LabelTemplate = { id: WHOLESALE_REFERENCE_TEMPLATE_ID, name: 'Atacado — referência lateral (4 preços)', kind: 'priceGroup-v1', group: createWholesaleReferenceTemplateJson(), isBuiltIn: true, createdAt: now, updatedAt: now };
     tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
-    labelTemplates.value = [tpl, ...labelTemplates.value];
+    labelTemplates.value = [tpl, ...labelTemplates.value.filter(t => t.id !== WHOLESALE_REFERENCE_TEMPLATE_ID)];
 }
 
 async function ensureBuiltInFardoSpecialLabelTemplate() {
@@ -26518,6 +26719,7 @@ const enableCardElementRotationControl = (object: any, enabled = true) => {
 };
 
 const productCardConfiguration = createProductCardConfigurationLayout({
+    syncTemplateStyle: syncCurrentPriceTemplateStyle,
     fabric: () => fabric,
     enableCardElementRotationControl,
     safeRequestRenderAll,
@@ -29713,12 +29915,21 @@ const handleAutoOfferLayout = async () => {
                       :selected-template-id="selectedProductLabelQuickActions.selectedTemplateId"
                       @mode="handleProductLabelModeChange"
                       @select-all="handleProductLabelSelectAll"
+                      @edit-price="handleProductLabelEditPrice"
                       @template="handleProductLabelTemplateChange"
                       @manage-templates="openGlobalLabelTemplates"
                     />
 
 
 
+
+                    <ProductPriceQuickEditor
+                      v-if="productPriceEditorCard"
+                      :model-value="showProductPriceEditor"
+                      :product="productPriceEditorProduct"
+                      @update:model-value="(value) => { showProductPriceEditor = value; if (!value) productPriceEditorCard = null }"
+                      @save="handleProductPriceEditorSave"
+                    />
 
                    <ZoneQuickActions
                     v-if="selectedZoneQuickActions && !isQuickMode"

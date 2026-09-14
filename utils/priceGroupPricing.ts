@@ -1,4 +1,5 @@
 type PriceGroupPricingDeps = {
+  syncTemplateStyle?: (group: any) => void
   applyFardoSpecialPricingToPriceGroup: (group: any, data: any) => void
   migratePriceGroupToRichText?: (group: any) => void
   applyRichPriceTextValue: (object: any, rawPrice: unknown) => string | null
@@ -23,6 +24,7 @@ type PriceGroupPricingDeps = {
 export const createPriceGroupPricing = (deps: PriceGroupPricingDeps) => {
   const applyAtacarejoPricingToPriceGroup = (priceGroup: any, data: any) => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return
+    deps.syncTemplateStyle?.(priceGroup)
     deps.migratePriceGroupToRichText?.(priceGroup)
     if (data?.offerFormat === 'wholesale-pack-v1' || (priceGroup as any).__atacarejoLabelVariant === 'fardo-special-v1') {
       deps.applyFardoSpecialPricingToPriceGroup(priceGroup, data)

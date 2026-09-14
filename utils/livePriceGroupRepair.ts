@@ -14,6 +14,7 @@ import {
     isLikelyProductCard,
     isTextLikeObject
 } from './fabricObjectClassifiers'
+import { applyWholesaleReferenceProductData, reflowWholesaleReferencePriceLabel, WHOLESALE_REFERENCE_MARKER } from './wholesaleReferenceLayout'
 import {
     getPriceGroupFromAny,
     getSinglePriceBackgroundImageCandidate
@@ -62,6 +63,13 @@ export const repairLivePriceGroupBackgrounds = (
         if (!pg || typeof pg.getObjects !== 'function') continue
 
         const pgChildren = collectObjectsDeep(pg)
+        // Nestes modelos, invisibilidade representa a configuração comercial
+        // (censurado ou faixa sem preço), não um fundo corrompido.
+        if (pgChildren.some((node: any) => node?.name === WHOLESALE_REFERENCE_MARKER)) {
+            if (card._productData) applyWholesaleReferenceProductData(pg, card._productData)
+            else reflowWholesaleReferencePriceLabel(pg)
+            continue
+        }
         const hasVisibleText = pgChildren.some((o: any) =>
             isTextLikeObject(o) && o.visible !== false
         )

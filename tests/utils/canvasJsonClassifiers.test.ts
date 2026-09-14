@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { reactive } from 'vue'
 import {
   walkCanvasObjects,
   getJsonGroupChildren,
@@ -895,6 +896,16 @@ describe('cloneCanvasDataForLoad', () => {
     expect(cloneCanvasDataForLoad(null)).toBeNull()
     expect(cloneCanvasDataForLoad('str')).toBe('str')
     expect(cloneCanvasDataForLoad(42)).toBe(42)
+  })
+
+  it('faz fallback para clone JSON quando recebe estado reativo do Vue', () => {
+    const original = reactive({ objects: [{ id: 'a' }], version: '1' })
+    const cloned = cloneCanvasDataForLoad(original)
+
+    expect(cloned).toEqual({ objects: [{ id: 'a' }], version: '1' })
+    expect(cloned).not.toBe(original)
+    cloned.objects[0].id = 'modified'
+    expect(original.objects[0]!.id).toBe('a')
   })
 })
 

@@ -2,6 +2,7 @@ import { detectImageTrimBounds } from './fabricImageHelpers'
 import { DEFAULT_EDITOR_FONT_FAMILY } from './font-catalog'
 
 type PriceGroupLayoutDeps = {
+    syncTemplateStyle?: (group: any) => void
     getFabric: () => any
     migratePriceGroupToRichText?: (object: any) => void
     collectObjectsDeep: (object: any) => any[]
@@ -384,6 +385,7 @@ export const createPriceGroupLayout = (deps: PriceGroupLayoutDeps) => {
     }
 
     const layoutPriceGroup = (priceGroup: any, cardW: number, cardH: number) => {
+        deps.syncTemplateStyle?.(priceGroup)
         if (!priceGroup || !priceGroup.getObjects) return null
         deps.migratePriceGroupToRichText?.(priceGroup)
         const fabric = deps.getFabric()

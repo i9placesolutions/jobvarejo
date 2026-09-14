@@ -376,6 +376,9 @@ export const createPriceTemplateFitting = (deps: PriceTemplateFittingDeps) => {
     if (!deps.shouldPreserveManualTemplateVisual(priceGroup)) return
 
     const all = deps.collectObjectsDeep(priceGroup)
+    // A referência organiza título, preço e unitário em linhas próprias.
+    // O encaixe genérico sobre esse resultado reduz os textos repetidamente.
+    if (all.some((object: any) => object?.name === 'wholesale_reference_packaging')) return
     const retailBg = deps.findByName(all, 'atac_retail_bg')
     const wholesaleBg = deps.findByName(all, 'atac_wholesale_bg')
     const bannerBg = deps.findByName(all, 'atac_banner_bg')

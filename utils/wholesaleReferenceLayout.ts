@@ -1,3 +1,6 @@
+import { resolveWholesalePackPriceState } from './wholesalePackOffer'
+import { applyRichPriceTextValue } from './priceRichText'
+import { formatPriceValue } from './priceTagText'
 export const WHOLESALE_REFERENCE_TEMPLATE_ID = 'tpl_wholesale_reference_v1'
 export const WHOLESALE_REFERENCE_MARKER = 'wholesale_reference_packaging'
 export const CENSORED_PROMOTIONAL_HEADING_MARKER = 'censored_promotional_heading'
@@ -27,6 +30,17 @@ const CARD_LABEL_VERTICAL_INSET = 0.03
 
 const updateNode = (node: any, props: Record<string, any>) => {
   if (!node) return
+  // O ocultamento legado grava escala zero além de visible=false.
+  // Revelar a faixa exige restaurar também essa escala persistida.
+  if (props.visible === true) {
+    for (const axis of ['X', 'Y']) {
+      const key = `scale${axis}`
+      if (Math.abs(Number(node[key] ?? 1)) < 0.15) {
+        const original = Number(node[`__visibleScale${axis}`] ?? node[`__originalScale${axis}`] ?? 1)
+        props[key] = Math.abs(original) >= 0.15 ? original : 1
+      }
+    }
+  }
   if (typeof node.set === 'function') node.set(props)
   else Object.assign(node, props)
   node.setCoords?.()
@@ -117,16 +131,56 @@ const getVisibleLabelVerticalBounds = (label: any) => {
   }
 }
 
+// A referência usa coordenadas locais centradas. Atualizar a caixa do grupo
+// também atualiza o cache e os controles, sem mover os filhos ou o card.
+const refreshReferenceBounds = (label: any) => {
+  const nodes = (label.getObjects?.() || []).filter((node: any) => isVisible(node))
+  let halfWidth = 0
+  let halfHeight = 0
+  for (const node of nodes) {
+    const width = Number(node.width || 0) * Math.abs(Number(node.scaleX ?? 1))
+    const left = Number(node.left || 0) - (node.originX === 'left' ? 0 : node.originX === 'right' ? width : width / 2)
+    halfWidth = Math.max(halfWidth, Math.abs(left), Math.abs(left + width))
+    const bounds = nodeVerticalBounds(node)
+    halfHeight = Math.max(halfHeight, Math.abs(bounds.top), Math.abs(bounds.bottom))
+  }
+  updateNode(label, { width: Math.max(1, halfWidth * 2), height: Math.max(1, halfHeight * 2) })
+}
+
 /**
  * A referência lateral pode ter somente uma das faixas de preço. Nesse caso
  * a faixa remanescente sobe para junto da embalagem, sem deixar o vão da
  * faixa oculta. As coordenadas canônicas também são restauradas quando o
  * produto voltar a ter os dois preços.
  */
-export const reflowWholesaleReferencePriceLabel = (label: any): boolean => {
+export const reflowWholesaleReferencePriceLabel = (
+  label: any,
+  options: { showCensored?: boolean } = {}
+): boolean => {
   const objects = label?.getObjects?.() || []
   const byName = (name: string) => objects.find((node: any) => node?.name === name)
   if (!byName(WHOLESALE_REFERENCE_MARKER)) return false
+  const backgroundNames = ['atac_retail_bg', 'atac_wholesale_bg', 'atac_banner_bg']
+  const referenceWidth = Math.max(0, ...backgroundNames.map(name => Number(byName(name)?.width) || 0)) || 210
+  for (const name of backgroundNames) {
+    const background = byName(name)
+    // Antigos normalizadores incorporavam a escala zero à largura (1 px).
+    // As três faixas da referência compartilham a mesma largura autorada.
+    if (background && Number(background.width) < referenceWidth * 0.25) updateNode(background, { width: referenceWidth })
+  }
+  const anchor = byName('atac_retail_bg') || byName('atac_wholesale_bg')
+  const anchorWidth = Number(anchor?.width || 0) * Math.abs(Number(anchor?.scaleX ?? 1))
+  const centerX = Number(anchor?.left || 0) + (anchor?.originX === 'left' ? anchorWidth / 2 : anchor?.originX === 'right' ? -anchorWidth / 2 : 0)
+  if (Math.abs(centerX) > 0.001) objects.forEach((node: any) => updateNode(node, { left: Number(node.left || 0) - centerX }))
+
+  // Recupera textos reduzidos a pontos por passes antigos de encaixe.
+  objects.forEach((node: any) => {
+    if (typeof node.text !== 'string') return
+    if (Math.abs(Number(node.scaleX ?? 1)) < 0.15 || Math.abs(Number(node.scaleY ?? 1)) < 0.15) {
+      updateNode(node, { scaleX: 1, scaleY: 1 })
+      node.initDimensions?.()
+    }
+  })
 
   const moveStack = (names: string[], top: number) => {
     const anchorName = names[0]
@@ -148,6 +202,10 @@ export const reflowWholesaleReferencePriceLabel = (label: any): boolean => {
   const censoredHeading = byName(CENSORED_PROMOTIONAL_HEADING_MARKER)
   const retailVisible = Boolean(retailBg) && isVisible(retailBg)
   const specialVisible = Boolean(specialBg) && isVisible(specialBg)
+  // The template may contain the censored artwork as its default visual.
+  // Runtime product data can opt out for one card only when a promotional
+  // value is available; other cards keep the original censored treatment.
+  const showCensored = options.showCensored !== false
 
   // Título, valor e unitário são posicionados como três linhas internas da
   // faixa. Sem isso, um valor grande invade o título "Preço avulso".
@@ -173,12 +231,13 @@ export const reflowWholesaleReferencePriceLabel = (label: any): boolean => {
   // O selo de preço censurado substitui, de propósito, a faixa especial e a
   // condição. Mantemos uma área exclusiva para ele, com folga acima e abaixo,
   // em vez de deixá-lo cobrir a faixa vermelha que estava no grupo original.
-  if (censoredStamp && censoredHeading) {
-    updateNode(packaging, { visible: false })
+  if (showCensored && censoredStamp && censoredHeading) {
+    updateNode(packaging, { visible: hasText(packaging) })
     const nodesToHide = [...SPECIAL_NODES, ...BANNER_NODES]
     nodesToHide.forEach((name) => updateNode(byName(name), { visible: false }))
 
     if (retailVisible) moveStack(RETAIL_NODES, -110)
+    updateNode(packaging, { top: (retailVisible ? nodeTop(retailBg) - nodeHeight(retailBg, 104) / 2 : -110) - 10 - nodeHeight(packaging, 48) / 2 })
 
     const headingTop = retailVisible ? -18 : -70
     updateNode(censoredHeading, { top: headingTop, visible: true })
@@ -191,13 +250,18 @@ export const reflowWholesaleReferencePriceLabel = (label: any): boolean => {
     const stampTop = headingTop + (headingHeight / 2) + 18 + (stampHeight / 2)
     updateNode(censoredStamp, { top: stampTop, scaleX: scale, scaleY: scale, visible: true })
 
+    refreshReferenceBounds(label)
     label.setCoords?.()
     label.dirty = true
     return true
   }
 
-  // Um selo pode ter sido removido manualmente depois de ter ocultado a
-  // embalagem. Sem ele, volta-se ao fluxo normal da etiqueta.
+  // Um selo pode ter sido removido manualmente ou substituído por um preço
+  // real. Sem ele, volta-se ao fluxo normal da etiqueta. Esconder também o
+  // título evita que a arte de "PREÇO PROMOCIONAL" permaneça solta quando o
+  // preço é preenchido depois.
+  updateNode(censoredStamp, { visible: false })
+  updateNode(censoredHeading, { visible: false })
   updateNode(packaging, { visible: true })
 
   const packagingHeight = nodeHeight(packaging, 48)
@@ -229,37 +293,75 @@ export const reflowWholesaleReferencePriceLabel = (label: any): boolean => {
     moveStack(BANNER_NODES, bannerTop)
   }
 
+  refreshReferenceBounds(label)
   label.setCoords?.()
   label.dirty = true
   return true
 }
 
 export const createWholesaleReferenceTemplateJson = () => {
-  const text = (name:string,value:string,left:number,top:number,size:number,fill='#111111',width=220) => ({type:'Textbox',name,text:value,left,top,width,fontSize:size,fontFamily:'Barlow',fontWeight:400,fill,originX:'center',originY:'center',textAlign:'center',scaleX:1,scaleY:1})
-  const price = (name:string,value:string,top:number,fill:string,size=36) => ({...text(name,value,16,top,size,fill,168),fontWeight:700,__priceRichText:true,__priceRichIntegerStyle:{fontSize:size,fill,fontFamily:'Barlow',fontWeight:700},__priceRichDecimalStyle:{fontSize:size,fill,fontFamily:'Barlow',fontWeight:700}})
-  const box = (name:string,top:number,height:number,fill:string) => ({type:'Rect',name,left:0,top,width:240,height,rx:8,ry:8,fill,strokeWidth:0,originX:'center',originY:'center'})
-  return {type:'Group',name:'priceGroup',width:240,height:320,__preserveManualLayout:true,__isCustomTemplate:true,__forceAtacarejoCanonical:false,__atacarejoLabelVariant:'fardo-special-v1',objects:[
+  const text = (name:string,value:string,left:number,top:number,size:number,fill='#111111',width=194) => ({type:'Textbox',name,text:value,left,top,width,fontSize:size,fontFamily:'Barlow',fontWeight:400,fill,originX:'center',originY:'center',textAlign:'center',scaleX:1,scaleY:1})
+  const price = (name:string,value:string,top:number,fill:string,size=50) => ({...text(name,value,20,top,size,fill,146),fontWeight:700,__priceRichText:true,__priceRichIntegerStyle:{fontSize:size,fill,fontFamily:'Barlow',fontWeight:700},__priceRichDecimalStyle:{fontSize:size,fill,fontFamily:'Barlow',fontWeight:700}})
+  const gradient = (start:string,end:string,height:number) => ({type:'linear',gradientUnits:'pixels',coords:{x1:0,y1:0,x2:0,y2:height},colorStops:[{offset:0,color:start},{offset:1,color:end}],offsetX:0,offsetY:0})
+  const box = (name:string,top:number,height:number,fill:any) => ({type:'Rect',name,left:0,top,width:210,height,rx:8,ry:8,fill,strokeWidth:0,originX:'center',originY:'center'})
+  return {type:'Group',name:'priceGroup',width:210,height:370,__referenceStyleVersion:2,__preserveManualLayout:true,__isCustomTemplate:true,__forceAtacarejoCanonical:false,__atacarejoLabelVariant:'fardo-special-v1',objects:[
     text(WHOLESALE_REFERENCE_MARKER,'SIXPACK\nC/ 6 UNIDADES',0,-132,21),
-    box('atac_retail_bg',-55,82,'#0752BE'),
+    box('atac_retail_bg',-55,104,gradient('#0756D2','#042580',96)),
     text('reference_retail_heading','CAIXA AVULSA',0,-78,18,'#FFFFFF'),
-    text('retail_currency_text','R$',-90,-54,28,'#FFEB00',40),
-    price('retail_price_text','34,38',-54,'#FFEB00'),
+    text('retail_currency_text','R$',-77,-54,28,'#FFE500',32.788),
+    price('retail_price_text','34,38',-54,'#FFE500'),
     text('retail_pack_line_text','UNID R$ 5,73',0,-27,20,'#FFFFFF'),
-    box('atac_wholesale_bg',57,118,'#F00000'),
+    box('atac_wholesale_bg',57,126,gradient('#FF0B00','#D90000',118)),
     text('reference_special_heading','PREÇO ESPECIAL',0,16,18,'#FFFFFF'),
-    text('wholesale_currency_text','R$',-95,58,28,'#FFFFFF',40),
-    price('wholesale_price_text','32,76',58,'#FFFFFF',46),
+    text('wholesale_currency_text','R$',-77,58,28,'#FFFFFF',32.788),
+    price('wholesale_price_text','32,76',58,'#FFFFFF',62),
     text('wholesale_pack_line_text','UNID R$ 5,46',0,97,20,'#FFFFFF'),
     box('atac_banner_bg',149,42,'#FFE500'),
-    {...text('wholesale_banner_text','ACIMA DE 4 PACKS',0,149,20),fontWeight:700}
+    {...text('wholesale_banner_text','ACIMA DE 4 PACKS',0,149,18),fontWeight:700}
   ]}
+}
+
+export const applyWholesaleReferenceProductData = (label: any, product: any) => {
+  const objects = label?.getObjects?.() || []
+  const find = (name: string) => objects.find((node: any) => node.name === name)
+  if (!find(WHOLESALE_REFERENCE_MARKER) || !product) return
+  const state = resolveWholesalePackPriceState(product)
+  const text = (name: string, value: string) => {
+    const node = find(name)
+    if (!node) return
+    updateNode(node, { text: value })
+    node.initDimensions?.()
+  }
+  const aliases: Record<string,string> = { CX: 'CAIXA', FD: 'FARDO', PCT: 'PACOTE', UN: 'UNIDADE', UND: 'UNIDADE' }
+  const packaging = String(product.packageLabel || '').trim().toUpperCase()
+  if (['UN', 'UND', 'UNIDADE'].includes(packaging)) text('reference_retail_heading', 'PREÇO AVULSO')
+  text(WHOLESALE_REFERENCE_MARKER, [aliases[packaging] || packaging, Number(product.packQuantity) > 1 ? `C/ ${product.packQuantity} UNIDADES` : ''].filter(Boolean).join('\n'))
+  for (const [prefix, tier, nodes, pack, unit] of [
+    ['retail', state.retail, RETAIL_NODES, product.pricePack, product.priceUnit],
+    ['wholesale', state.special, SPECIAL_NODES, product.priceSpecial, product.priceSpecialUnit]
+  ] as const) {
+    nodes.forEach(name => updateNode(find(name), { visible: tier.hasValue }))
+    const price = find(`${prefix}_price_text`)
+    if (price && tier.hasValue) { applyRichPriceTextValue(price, tier.price); price.dirty = true }
+    text(`${prefix}_currency_text`, 'R$')
+    text(`${prefix}_pack_line_text`, pack && unit ? `UNID R$ ${formatPriceValue(unit)}` : '')
+    updateNode(find(`${prefix}_pack_line_text`), { visible: !!pack && !!unit && tier.hasValue })
+  }
+  BANNER_NODES.forEach(name => updateNode(find(name), { visible: state.showBanner }))
+  text('wholesale_banner_text', state.conditionText || '')
+  reflowWholesaleReferencePriceLabel(label, { showCensored: product.showCensored ?? !state.special.hasValue })
 }
 
 export const applyWholesaleReferenceCardLayout = (card:any,w:number,h:number): boolean => {
   const nodes=card?.getObjects?.() || []
   const label=nodes.find((o:any)=>o.name==='priceGroup')
   if (!label?.getObjects?.().some((o:any)=>o.name===WHOLESALE_REFERENCE_MARKER)) return false
-  reflowWholesaleReferencePriceLabel(label)
+  const product = card?._productData
+  if (product) applyWholesaleReferenceProductData(label, product)
+  const showCensored = product
+    ? product.showCensored ?? !resolveWholesalePackPriceState(product).special.hasValue
+    : undefined
+  reflowWholesaleReferencePriceLabel(label, { showCensored })
   const set=(o:any,p:any)=>{o?.set?.(p);o?.setCoords?.();if(o)o.dirty=true}
   const bg=nodes.find((o:any)=>o.name==='offerBackground')
   set(bg,{fill:'#FFFFFF',rx:w*.035,ry:w*.035})

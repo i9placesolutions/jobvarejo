@@ -81,6 +81,15 @@ const preparePickerImage = async (
     throw lastError || new Error('Não foi possível preparar a imagem selecionada.')
 }
 
+const getDirectPickerImageUrl = (
+    ctx: EditorProductImageActionsContext,
+    asset: ProductImageAsset
+): string => {
+    const source = String(asset.key || asset.url || '').trim()
+    if (!source) return ''
+    return ctx.toWasabiProxyUrl?.(source) || String(asset.url || source).trim()
+}
+
 export const clearPendingProductImageOperation = (ctx: EditorProductImageActionsContext) => {
     ctx.pendingLocalImageActionMode.value = null
     ctx.pendingImageReplaceTargetId.value = null
@@ -147,9 +156,25 @@ export const applyProductImageFromUploadPicker = async (
         // A chave vem do índice do Wasabi. Passá-la adiante evita tentar
         // baixar uma URL assinada temporária quando o processamento de fundo
         // começa, o que deixava a troca aguardando sem aplicar a seleção.
-        const imageUrl = await preparePickerImage(ctx, asset)
+        // A biblioteca já entrega arquivos persistidos no storage. O processamento
+        // de fundo é uma melhoria, não pode impedir a troca quando ele falhar ou
+        // devolver uma URL temporária/inacessível.
+        const directImageUrl = getDirectPickerImageUrl(ctx, asset)
+        let imageUrl = directImageUrl
+        try {
+            imageUrl = await preparePickerImage(ctx, asset)
+        } catch (prepareError) {
+            console.warn('[product-image-picker] Falha ao preparar imagem; usando o arquivo original da biblioteca.', prepareError)
+        }
+        const candidateUrls = [...new Set([imageUrl, directImageUrl, asset.url].map((url) => String(url || '').trim()).filter(Boolean))]
         if (ctx.productImagePickerMode.value === 'replace' && ctx.productImagePickerTargetImageId.value) {
-            if (!await ctx.replaceImageByCustomId(ctx.productImagePickerTargetImageId.value, imageUrl, { scope: ctx.productImageReplaceScope?.value || 'single' })) {
+            const targetId = ctx.productImagePickerTargetImageId.value
+            let replaced = false
+            for (const candidateUrl of candidateUrls) {
+                replaced = await ctx.replaceImageByCustomId(targetId, candidateUrl, { scope: ctx.productImageReplaceScope?.value || 'single' })
+                if (replaced) break
+            }
+            if (!replaced) {
                 throw new Error('Não foi possível substituir a imagem. Selecione novamente a imagem do produto.')
             }
             applied = true
@@ -158,7 +183,12 @@ export const applyProductImageFromUploadPicker = async (
             if (!targetCard) {
                 throw new Error('Card de produto não encontrado.')
             }
-            if (!await ctx.addImageToProductCardByUrl(targetCard, imageUrl)) {
+            let added = false
+            for (const candidateUrl of candidateUrls) {
+                added = await ctx.addImageToProductCardByUrl(targetCard, candidateUrl)
+                if (added) break
+            }
+            if (!added) {
                 throw new Error('Não foi possível adicionar a imagem ao card.')
             }
             applied = true

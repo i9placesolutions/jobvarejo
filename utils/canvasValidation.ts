@@ -168,10 +168,11 @@ export const findObjectByCustomId = (
     canvasInstance: any,
     id: string
 ): { obj: any; parent: any | null } | null => {
-    if (!canvasInstance || !id) return null
+    const requestedId = String(id || '').trim()
+    if (!canvasInstance || !requestedId) return null
     const walk = (node: any, parent: any | null): { obj: any; parent: any | null } | null => {
         if (!node) return null
-        if ((node as any)._customId === id) return { obj: node, parent }
+        if (String((node as any)._customId || '').trim() === requestedId) return { obj: node, parent }
         const t = String(node.type || '').toLowerCase()
         if (t === 'group' || t === 'activeselection') {
             const list = typeof node.getObjects === 'function' ? node.getObjects() : []

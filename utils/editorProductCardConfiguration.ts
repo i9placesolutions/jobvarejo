@@ -67,6 +67,7 @@ const clampAutomaticElementToCard = (object: any, cardWidth: number, cardHeight:
 }
 
 type ProductCardConfigurationDeps = {
+  syncTemplateStyle?: (group: any) => void
   fabric: () => any
   enableCardElementRotationControl: (object: any, enabled?: boolean) => void
   safeRequestRenderAll: () => void
@@ -262,6 +263,10 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
       ? styles.cardLayout
       : null
     if (!group) return
+    deps.syncTemplateStyle?.(deps.getPriceGroupFromAny(group))
+    const badgeOverride = group?._productData?.alcoholBadgeEnabled
+    const currentBadge = group.getObjects?.().find((obj: any) => obj.name === 'smart_alcohol_badge')
+    if (typeof badgeOverride === 'boolean') currentBadge?.set?.({ visible: badgeOverride })
     if (applyWholesaleReferenceCardLayout(group, w, h)) return
     if (!rawConfiguration) {
       fitResponsiveProductTypography(group, w, h, styles?.prodNameScale ?? 1)
@@ -307,7 +312,7 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
     // Desligar a receita deixa o card no comportamento automatico legado, mas
     // nunca permite que um selo criado anteriormente fique visivel por engano.
     if (!configuration.enabled) {
-      alcoholBadge?.set?.({ visible: false })
+      alcoholBadge?.set?.({ visible: badgeOverride === true })
       fitResponsiveProductTypography(group, w, h, styles?.prodNameScale ?? 1)
       return
     }
@@ -497,7 +502,7 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
     applyElement(price, 'price')
     applyElement(limit, 'limit', { textLike: true })
     applyElement(alcoholBadge, 'alcoholBadge', {
-      forceVisible: configuration.alcoholBadgeEnabled && cardElements.alcoholBadge.visible && alcoholic
+      forceVisible: typeof badgeOverride === 'boolean' ? badgeOverride : configuration.alcoholBadgeEnabled && cardElements.alcoholBadge.visible && alcoholic
     })
 
     // O selo fica acima da imagem. Nome e limite ficam no topo da pilha para

@@ -5,6 +5,7 @@ const fixture = (mode: string | null) => ({
  pendingLocalImageActionMode: {value:mode}, pendingImageReplaceTargetId:{value:'image'}, pendingImageAddCardId:{value:'card'},
  productImagePickerTargetImageId:{value:null}, productImagePickerTargetCardId:{value:null},
  productImagePickerError:{value:''},
+ toWasabiProxyUrl:(url:string)=>`proxy:${url}`,
  uploadFile:vi.fn().mockResolvedValue({success:true,url:'processed.webp'}), replaceImageByCustomId:vi.fn().mockResolvedValue(true),
  findProductCardByCustomId:()=>({}), addImageToProductCardByUrl:vi.fn().mockResolvedValue(true), notifyEditorError:vi.fn(),
  getCenterOfView:()=>({x:0,y:0}), makeCanvasObjectId:()=> 'id', insertAssetToCanvas:vi.fn()
@@ -50,11 +51,20 @@ it('repete a preparação após falha transitória e aplica a seleção',async()
  expect(ctx.replaceImageByCustomId).toHaveBeenCalledWith('image','sem-fundo.png',{scope:'single'})
  expect(ctx.showProductImageUploadPicker.value).toBe(false)
 })
-it('mantém a imagem do card se a remoção da imagem da biblioteca falhar',async()=>{
+it('aplica diretamente a imagem da biblioteca se a remoção de fundo falhar',async()=>{
  const { applyProductImageFromUploadPicker }=await import('../../utils/editorProductImageActionsController')
  const ctx={...fixture('replace'),productImagePickerMode:{value:'replace'},productImagePickerTargetImageId:{value:'image'},showProductImageUploadPicker:{value:true},prepareProductImageUrl:vi.fn().mockRejectedValue(new Error('Falha BiRefNet'))}
  await applyProductImageFromUploadPicker(ctx as any,{url:'com-fundo.jpg'})
- expect(ctx.replaceImageByCustomId).not.toHaveBeenCalled();expect(ctx.notifyEditorError).toHaveBeenCalled()
- expect(ctx.showProductImageUploadPicker.value).toBe(true)
- expect(ctx.productImagePickerError.value).toContain('Falha BiRefNet')
+ expect(ctx.replaceImageByCustomId).toHaveBeenCalledWith('image','proxy:com-fundo.jpg',{scope:'single'})
+ expect(ctx.notifyEditorError).not.toHaveBeenCalled()
+ expect(ctx.showProductImageUploadPicker.value).toBe(false)
+})
+
+it('usa a URL persistida da biblioteca quando a preparação ou o resultado processado falha', async () => {
+ const { applyProductImageFromUploadPicker }=await import('../../utils/editorProductImageActionsController')
+ const ctx={...fixture('replace'),productImagePickerMode:{value:'replace'},productImagePickerTargetImageId:{value:'image'},showProductImageUploadPicker:{value:true},prepareProductImageUrl:vi.fn().mockResolvedValue('url-processada-invalida.png'),replaceImageByCustomId:vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)}
+ await applyProductImageFromUploadPicker(ctx as any,{url:'url-original.png',key:'imagens/produto.png'})
+ expect(ctx.replaceImageByCustomId).toHaveBeenNthCalledWith(1,'image','url-processada-invalida.png',{scope:'single'})
+ expect(ctx.replaceImageByCustomId).toHaveBeenNthCalledWith(2,'image','proxy:imagens/produto.png',{scope:'single'})
+ expect(ctx.showProductImageUploadPicker.value).toBe(false)
 })

@@ -1,3 +1,6 @@
+import { resolveFabricTarget } from './fabricTarget'
+import { syncProductPriceFromText } from './productPriceTextSync'
+
 type GlobalStyles = Record<string, any>
 
 export type EditorReactivityContext = Record<string, any>
@@ -45,7 +48,7 @@ const setupReactivity = () => {
         const zones: any[] = [];
         const visited = new Set<any>();
         const visit = (candidate: any) => {
-            if (!candidate || typeof candidate !== 'object' || visited.has(candidate)) return;
+            if (!candidate || typeof candidate.set !== 'function' || visited.has(candidate)) return;
             visited.add(candidate);
             if (isActiveSelectionObject(candidate) && typeof candidate.getObjects === 'function') {
                 (candidate.getObjects() || []).forEach((member: any) => visit(member));
@@ -62,7 +65,7 @@ const setupReactivity = () => {
         return zones;
     };
     const rememberQuickModeLockedTransform = (zone: any) => {
-        if (!zone || !isQuickMode.value || !isQuickModeLockedObject(zone) || quickModeLockedTransforms.has(zone)) return;
+        if (!zone || typeof zone.set !== 'function' || !isQuickMode.value || !isQuickModeLockedObject(zone) || quickModeLockedTransforms.has(zone)) return;
         const numberOr = (value: any, fallback: number) => (
             typeof value === 'number' && Number.isFinite(value) ? value : fallback
         );
@@ -79,7 +82,7 @@ const setupReactivity = () => {
         });
     };
     const restoreQuickModeLockedTransform = (zone: any): boolean => {
-        if (!zone || !isQuickMode.value || !isQuickModeLockedObject(zone)) return false;
+        if (!zone || typeof zone.set !== 'function' || !isQuickMode.value || !isQuickModeLockedObject(zone)) return false;
         const initial = quickModeLockedTransforms.get(zone);
         if (!initial) return false;
         zone.set(initial);
@@ -434,7 +437,7 @@ const setupReactivity = () => {
             }
             if (typeof canvasAny.findTarget === 'function') {
                 const info = canvasAny.findTarget(nativeEvt);
-                const target = info?.target ?? info ?? null;
+                const target = resolveFabricTarget(info);
                 const subTargets = Array.isArray(info?.subTargets) ? info.subTargets.filter(Boolean) : [];
                 if (target || subTargets.length) return { target, subTargets };
             }
@@ -1889,6 +1892,7 @@ const setupReactivity = () => {
     // 🔒 Apply containment after modification (drag end)
     trackOn('object:modified', (e: any) => {
         const obj = e.target;
+        syncProductPriceFromText(obj);
         if (isQuickModeLockedObject(obj)) {
             const lockedZones = getQuickModeLockedObjects(obj);
             lockedZones.forEach((zone: any) => {
@@ -2033,6 +2037,7 @@ const setupReactivity = () => {
         safeRequestRenderAll();
     };
     const handleTextChanged = (e: any) => {
+        syncProductPriceFromText(e?.target);
         syncTextSelectionSnapshot(e);
         const target = e?.target;
         if (isDynamicBusinessFieldObject(target)) {
@@ -2054,6 +2059,7 @@ const setupReactivity = () => {
     };
 
     const handleTextEditingExited = (e: any) => {
+        syncProductPriceFromText(e?.target);
         syncTextSelectionSnapshot(e);
         const target = e?.target;
         if (isDynamicBusinessFieldObject(target)) {
@@ -2258,7 +2264,7 @@ const setupReactivity = () => {
         // Fabric nem sempre fornece opt.target no dblclick após loadFromJSON.
         // Tenta resolver via findTarget/hit-test manual.
         if (!rawTarget && evt && typeof c.findTarget === 'function') {
-            try { rawTarget = c.findTarget(evt); } catch (e) { /* ignore */ }
+            try { rawTarget = resolveFabricTarget(c.findTarget(evt)); } catch (e) { /* ignore */ }
         }
         if (!rawTarget) {
             rawTarget = findTopCardAtPointer();

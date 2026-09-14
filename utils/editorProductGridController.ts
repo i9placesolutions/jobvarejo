@@ -2377,7 +2377,10 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             packQuantity: (card as any).packQuantity ?? null,
             packUnit: (card as any).packUnit ?? null,
             packageLabel: (card as any).packageLabel ?? null,
-            weight: typeof inferredUnit === 'string' ? inferredUnit : null
+            weight: typeof inferredUnit === 'string' ? inferredUnit : null,
+            // A edição mantém os dados atuais em _productData. Campos diretos
+            // do card podem ainda conter os valores anteriores à edição.
+            ...((card as any)._productData || {})
         });
 
         // A troca de modelo deve voltar a usar a posição/área definidas em Cards.

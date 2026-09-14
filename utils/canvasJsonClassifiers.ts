@@ -443,8 +443,15 @@ export const cloneCanvasDataForLoad = (canvasData: any): any => {
         if (typeof structuredClone === 'function') {
             return structuredClone(canvasData)
         }
+    } catch {
+        // Vue reactive proxies cannot be cloned by structuredClone.
+        // Continue with the JSON-safe canvas representation below.
+    }
+
+    try {
         return JSON.parse(JSON.stringify(canvasData))
     } catch {
+        // Preserve the previous best-effort behavior for non-JSON values.
         return canvasData
     }
 }
@@ -1005,6 +1012,10 @@ export const repairHiddenPriceGroupTexts = (json: any): number => {
         if (!children.length) return
 
         const allDeep = collectAllDeep(children)
+
+        // A visibilidade das faixas desta etiqueta é controlada pelos preços
+        // e pelo estado censurado do produto, reaplicados após hidratação.
+        if (allDeep.some((node: any) => node?.name === 'wholesale_reference_packaging')) return
 
         const pgName = String(pg.name || '')
         const isPriceGroupByName = pgName === 'priceGroup'

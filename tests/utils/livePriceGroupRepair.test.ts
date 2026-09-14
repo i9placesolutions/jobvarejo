@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { repairLivePriceGroupBackgrounds } from '~/utils/livePriceGroupRepair'
+import { createWholesaleReferenceTemplateJson, applyWholesaleReferenceProductData } from '~/utils/wholesaleReferenceLayout'
+import { repairHiddenPriceGroupTexts } from '~/utils/canvasJsonClassifiers'
 
 const mkChild = (props: any = {}) => {
   const c: any = {
@@ -36,6 +38,32 @@ const mkGroup = (children: any[], props: any = {}) => {
 }
 
 describe('repairLivePriceGroupBackgrounds', () => {
+  it.each([undefined, '18,99'])('preserva censurado com avulso opcional %s após salvar/carregar', (pricePack) => {
+    const data = { packageLabel: 'CAIXA', packQuantity: 24, showCensored: true, pricePack }
+    const children: any[] = [...createWholesaleReferenceTemplateJson().objects,
+      { type: 'Textbox', name: 'censored_promotional_heading', text: 'PREÇO PROMOCIONAL', width: 210, height: 23 },
+      { type: 'Image', name: 'censored_stamp', width: 294, height: 196, scaleX: .8, scaleY: .8 }
+    ]
+    const pg = mkGroup(children.map(o => mkChild(o)), { name: 'priceGroup' })
+    applyWholesaleReferenceProductData(pg, data)
+    const json: any = { objects: [{ type: 'Group', objects: [{ type: 'Textbox', text: 'Produto' }, { type: 'Group', name: 'priceGroup', objects: JSON.parse(JSON.stringify(pg.getObjects())) }] }] }
+    expect(repairHiddenPriceGroupTexts(json)).toBe(0)
+    const restored = mkGroup(json.objects[0].objects[1].objects.map((o: any) => mkChild(o)), { name: 'priceGroup' })
+    const canvas = mkGroup([mkGroup([restored], { isProductCard: true, _productData: data })])
+    for (let i = 0; i < 3; i++) repairLivePriceGroupBackgrounds(canvas)
+    for (const name of ['atac_wholesale_bg', 'atac_banner_bg']) {
+      expect(restored.getObjects().find((o: any) => o.name === name).visible).toBe(false)
+    }
+    expect(restored.getObjects().find((o: any) => o.name === 'atac_retail_bg').visible).toBe(!!pricePack)
+    if (pricePack) {
+      expect(restored.getObjects().find((o: any) => o.name === 'retail_price_text').text).toBe(pricePack)
+      const retail = restored.getObjects().find((o: any) => o.name === 'atac_retail_bg')
+      const heading = restored.getObjects().find((o: any) => o.name === 'censored_promotional_heading')
+      expect(heading.top - heading.height / 2).toBeGreaterThan(retail.top + retail.height / 2)
+    }
+    expect(restored.getObjects().find((o: any) => o.name === 'censored_stamp').visible).toBe(true)
+    expect(restored.getObjects().find((o: any) => o.name === 'wholesale_reference_packaging').text).toBe('CAIXA\nC/ 24 UNIDADES')
+  })
   it('null/non-canvas: 0', () => {
     expect(repairLivePriceGroupBackgrounds(null)).toBe(0)
     expect(repairLivePriceGroupBackgrounds({})).toBe(0)

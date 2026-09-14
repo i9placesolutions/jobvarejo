@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Check, ChevronDown, ListChecks, MousePointer2, Move, Tag } from 'lucide-vue-next'
+import { Check, ChevronDown, DollarSign, ListChecks, MousePointer2, Move, Tag } from 'lucide-vue-next'
 
 type LabelInteractionMode = 'move' | 'edit'
 
@@ -28,6 +28,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'mode', mode: LabelInteractionMode): void
   (e: 'select-all'): void
+  (e: 'edit-price'): void
   (e: 'template', templateId: string): void
   (e: 'manage-templates'): void
 }>()
@@ -104,6 +105,16 @@ watch(() => props.visible, (visible) => {
         @click="emit('select-all')"
       >
         <ListChecks class="h-3 w-3" />
+      </button>
+
+      <button
+        type="button"
+        class="flex h-6 w-6 items-center justify-center rounded-md text-white/65 transition hover:bg-emerald-500/25 hover:text-emerald-100 active:bg-emerald-500/40"
+        title="Editar preços deste produto"
+        aria-label="Editar preços deste produto"
+        @click="emit('edit-price')"
+      >
+        <DollarSign class="h-3 w-3" />
       </button>
 
       <span class="mx-0.5 h-4 w-px bg-white/10" aria-hidden="true" />
