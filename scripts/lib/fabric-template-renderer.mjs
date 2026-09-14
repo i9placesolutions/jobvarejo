@@ -1,4 +1,5 @@
 import http from 'node:http'
+import ts from 'typescript'
 import { readFile, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,16 +11,18 @@ export async function createTemplateRenderer(readAsset) {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost')
+      if (url.pathname === '/calendar.mjs') { res.setHeader('content-type', 'text/javascript'); res.end(ts.transpileModule(await readFile(join(root, 'utils/calendarCardLayout.ts'), 'utf8'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText); return }
       if (url.pathname === '/fabric.mjs') { res.setHeader('content-type', 'text/javascript'); res.end(await readFile(join(root, 'node_modules/fabric/dist/index.min.mjs'))); return }
       if (url.pathname === '/font.ttf') { res.end(await readFile(join(root, 'public/art-studio/fonts/Barlow-ExtraBold.ttf'))); return }
       if (url.pathname === '/api/storage/p') { res.end(await readAsset(url.searchParams.get('key'))); return }
       res.setHeader('content-type', 'text/html')
       res.end(`<style>@font-face{font-family:Barlow;src:url('/font.ttf');font-weight:100 900}</style><canvas id="c"></canvas><script type="module">
 import {StaticCanvas} from '/fabric.mjs';
+import {layoutCalendarCards} from '/calendar.mjs';
 await document.fonts.load('900 24px Barlow');
 window.renderTemplate=async(data,width,height)=>{
  const c=new StaticCanvas(document.createElement('canvas'),{width,height,renderOnAddRemove:false});
- try{await c.loadFromJSON(data);c.renderAll();return c.toDataURL({format:'png',multiplier:Math.min(1,600/width)});}finally{await c.dispose();}
+ try{await c.loadFromJSON(data);layoutCalendarCards(c.getObjects());c.renderAll();return {image:c.toDataURL({format:'png',multiplier:Math.min(1,600/width)}),geometry:c.getObjects().filter(o=>o.quickValidityLayout==='calendar-card'||/^(standard-validity-background|validity-heading|stock-validity|reference-validity-|header-validity-calendar)/.test(o.name||'')).map(o=>({id:o._customId,left:o.left,top:o.top,width:o.width,height:o.height,visible:o.visible}))};}finally{await c.dispose();}
 };</script>`)
     } catch (error) { res.statusCode = 500; res.end(String(error)) }
   })
@@ -48,8 +51,9 @@ window.renderTemplate=async(data,width,height)=>{
   return {
     async render(canvas, width, height) {
       const result = await call('Runtime.evaluate', { expression: `window.renderTemplate(${JSON.stringify(canvas)},${width},${height})`, awaitPromise: true, returnByValue: true })
-      if (result.exceptionDetails || !result.result?.value?.startsWith('data:image/png;base64,')) throw new Error('Falha ao renderizar miniatura Fabric: ' + JSON.stringify(result.exceptionDetails))
-      return Buffer.from(result.result.value.split(',')[1], 'base64')
+      if (result.exceptionDetails || !result.result?.value?.image?.startsWith('data:image/png;base64,')) throw new Error('Falha ao renderizar miniatura Fabric: ' + JSON.stringify(result.exceptionDetails))
+      for (const patch of result.result.value.geometry) { const object = canvas.objects.find(o => o._customId === patch.id); if (object) { const {id,...values}=patch; Object.assign(object, values) } }
+      return Buffer.from(result.result.value.image.split(',')[1], 'base64')
     },
     async close() { ws.close(); chrome.kill(); await new Promise(resolve => server.close(resolve)) }
   }

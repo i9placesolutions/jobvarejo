@@ -13,6 +13,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { writeFile } from 'node:fs/promises'
 import pg from 'pg'
+import { paletteFromArtwork, applyArtworkPalette } from './lib/template-art-palette.mjs'
 import { createTemplateRenderer } from './lib/fabric-template-renderer.mjs'
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 
@@ -733,6 +734,7 @@ export const run = async () => {
     donorZone = donorCanvas.objects?.find((object) => object?.isProductZone) || null
   }
   const plans = []
+  const paletteCache = new Map()
   const planningErrors = []
   for (const [projectIndex, project] of candidates.entries()) {
     if (apply) console.error(`[standardize] preparando ${projectIndex + 1}/${candidates.length}: ${project.name}`)
@@ -747,6 +749,17 @@ export const run = async () => {
         donorZone ||= canvas.objects?.find((object) => object?.isProductZone) || null
       })
       const entries = planTemplateStandardization({ project, loadedCanvases: loaded, donorZone })
+      for (const entry of entries) {
+        const art = chooseBackground(entry.canvas) || entries.map(e => chooseBackground(e.canvas)).find(Boolean)
+        const key = art?.src ? s3KeyFromRef(art.src) : ''
+        if (!key) throw new Error('Fundo ausente para extrair a paleta')
+        if (!paletteCache.has(key)) {
+          const image = await s3.send(new GetObjectCommand({Bucket:process.env.WASABI_BUCKET,Key:key}))
+          paletteCache.set(key, await paletteFromArtwork(Buffer.from(await image.Body.transformToByteArray())))
+        }
+        applyArtworkPalette(entry.canvas, paletteCache.get(key))
+        entry.changed = true
+      }
       const changed = entries.some((entry) => entry.changed || entry.created)
       if (changed) plans.push({ project, entries })
     } catch (error) {
@@ -774,7 +787,7 @@ export const run = async () => {
   if (planningErrors.length) {
     await database.end()
     s3.destroy()
-    throw new Error(`Há ${planningErrors.length} modelo(s) com validação pendente; execução cancelada antes de qualquer gravação.`)
+    throw new Error(`Execução cancelada antes de qualquer gravação: ${JSON.stringify(planningErrors)}`)
   }
 
   // Os uploads podem levar minutos. Fechar a conexão de leitura impede que o
@@ -790,8 +803,8 @@ export const run = async () => {
     for (const [planIndex, { project, entries }] of plans.entries()) {
       console.error(`[standardize] enviando ${planIndex + 1}/${plans.length}: ${project.name}`)
       const nextPages = await mapWithConcurrency(entries, 4, async (entry) => {
-        const raw = Buffer.from(JSON.stringify(entry.canvas))
         const thumbnail = await renderer.render(entry.canvas, entry.page.width, entry.page.height)
+        const raw = Buffer.from(JSON.stringify(entry.canvas))
         const prefix = `projects/${OWNER_ID}/${project.id}/standard-layout/${revision}`
         const canvasDataPath = `${prefix}/page_${entry.page.id}.json.gz`
         const thumbnailPath = `${prefix}/thumb_${entry.page.id}.png`

@@ -1,3 +1,4 @@
+import { layoutCalendarCards } from './calendarCardLayout'
 import { layoutFamilyContacts } from './familyContactLayout'
 import { layoutHeaderOfferValidity } from './headerOfferValidity'
 import { isSplitFooterValidity, hasSplitFooterValidityCompanions } from './splitFooterValidity'
@@ -11,6 +12,7 @@ const right = (b: any) => b.left + b.width
 /** Repair confirmed page clipping without changing fonts, scales or product geometry. */
 export const repairDynamicTextLayoutBounds = (objects: any[], createValidityBackdrop?: (props: Record<string, any>, index: number) => any): { changed: boolean; unresolved: string[] } => {
   let changed = layoutFamilyContacts(objects)
+  changed = layoutCalendarCards(objects) || changed
   const unresolved: string[] = []
   for (const frame of objects.filter(o => o.isFrame && o.visible !== false && typeof o.getBoundingRect === 'function')) {
     const fb = bounds(frame), children = objects.filter(o => o.parentFrameId === frame._customId && o.visible !== false && !o.isFrame)
