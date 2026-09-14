@@ -13,6 +13,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { writeFile } from 'node:fs/promises'
 import pg from 'pg'
+import { createTemplateRenderer } from './lib/fabric-template-renderer.mjs'
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 
 export const OWNER_ID = 'eb847e8e-7c19-4bee-8042-376528ce6192'
@@ -163,17 +164,6 @@ const reserveZoneTop = (zone, top, gap = 8) => {
 const findDynamic = (objects, field) => objects.find((object) => String(object?.businessProfileField || '') === field)
 const findValidity = (objects) => objects.find((object) => object?.quickDataField === 'validity' || object?.businessProfileField === 'validity')
 
-const standardValidityText = () => 'OFERTA VÁLIDA DE\n14 A 19 DE SETEMBRO\nOU ENQUANTO DURAREM OS ESTOQUES'
-
-const hidePreviousValidityDecorations = (objects, field) => {
-  for (const object of objects) {
-    if (object === field) continue
-    const name = String(object?.name || '').toLowerCase()
-    if (name === 'standard-validity-background' || name.startsWith('header-validity-calendar')) continue
-    if (object?.quickDynamicIconFor === 'validity' || name.includes('validity')) object.visible = false
-  }
-}
-
 const hidePreviousFooterDecorations = (objects, frameBounds, footerTop, scale) => {
   const minimumTop = footerTop - 46 * scale
   for (const object of objects) {
@@ -192,28 +182,6 @@ const hidePreviousFooterDecorations = (objects, frameBounds, footerTop, scale) =
   }
 }
 
-const makeHeaderCalendar = (objects, frameId, x, y, size, accent) => {
-  const outline = rect(frameId, {
-    name: 'header-validity-calendar', layerName: 'Calendário da validade',
-    left: x, top: y, width: size, height: size, rx: size * 0.14, ry: size * 0.14,
-    fill: 'transparent', stroke: accent, strokeWidth: Math.max(2, size * 0.055),
-    selectable: false, evented: false
-  })
-  const bar = rect(frameId, {
-    name: 'header-validity-calendar-bar', left: x + size * 0.12, top: y + size * 0.23,
-    width: size * 0.76, height: Math.max(2, size * 0.05), fill: accent,
-    selectable: false, evented: false
-  })
-  const dotSize = Math.max(2, size * 0.09)
-  const dots = [0, 1, 2, 3, 4, 5].map((index) => rect(frameId, {
-    name: 'header-validity-calendar-dot',
-    left: x + size * (0.22 + (index % 3) * 0.25), top: y + size * (0.48 + Math.floor(index / 3) * 0.22),
-    width: dotSize, height: dotSize, rx: dotSize / 2, ry: dotSize / 2, fill: accent,
-    selectable: false, evented: false
-  }))
-  objects.push(outline, bar, ...dots)
-}
-
 /**
  * Reutiliza a própria caixa de validade quando ela existe. Isto evita dois
  * campos concorrentes na edição rápida e preserva a data configurada antes.
@@ -221,75 +189,91 @@ const makeHeaderCalendar = (objects, frameId, x, y, size, accent) => {
 export const ensureHeaderValidity = (canvas, page, options = {}) => {
   const objects = canvas.objects || (canvas.objects = [])
   const frame = frameFor(canvas, page)
-  if (!objects.includes(frame)) objects.unshift(frame)
-  const frameBounds = objectBounds(frame)
-  const zone = objects.find((object) => object?.isProductZone)
+  const bounds = objectBounds(frame), scale = bounds.width / 1080
+  const zone = objects.find(o => o.isProductZone)
+  const zoneTop = zone ? objectBounds(zone).top : bounds.top + bounds.height * .32
+  const margin = 18 * scale
   const horizontal = options.horizontal === true
-  const scale = frameBounds.width / 1080
-  // Um banner 16:9 já tem largura suficiente para letras maiores. Limitar a
-  // altura ao espaço vertical impede que a data consuma o cabeçalho inteiro.
-  const cardHeight = horizontal
-    ? Math.round(Math.min(frameBounds.height * 0.13, 76 * scale))
-    : Math.round(96 * scale)
-  const margin = Math.round(18 * scale)
-  const requestedWidth = Math.min(horizontal ? frameBounds.width * 0.38 : frameBounds.width * 0.54, horizontal ? 690 * scale : 590 * scale)
-  const width = Math.max(260 * scale, requestedWidth)
-  const x = frameBounds.right - width - margin
-  const y = frameBounds.top + margin
-  const neededBottom = y + cardHeight
-  if (zone && objectBounds(zone).top < neededBottom + 8 * scale) reserveZoneTop(zone, neededBottom, 12 * scale)
-
-  const oldBackdrop = objects.find((object) => object?.name === 'validity-backdrop')
-  if (oldBackdrop) oldBackdrop.visible = false
-  const existingCard = objects.find((object) => object?.name === 'standard-validity-background')
-  const card = existingCard || rect(frame._customId, {
-    name: 'standard-validity-background', layerName: 'Faixa de validade',
-    fill: '#0636a7', stroke: '#ffe500', strokeWidth: Math.max(2, 2.4 * scale), rx: 14 * scale, ry: 14 * scale,
-    selectable: false, evented: false
-  })
-  objectSet(card, { parentFrameId: frame._customId, left: x, top: y, width, height: cardHeight, originX: 'left', originY: 'top', visible: true })
-  if (!objects.includes(card)) objects.push(card)
-
-  const field = findValidity(objects) || text(frame._customId, { name: 'header-validity', layerName: 'Validade da oferta' })
-  const existingStart = String(field.quickValidityStartDate || '').trim()
-  const existingEnd = String(field.quickValidityEndDate || '').trim()
-  const calendarWidth = Math.round(cardHeight * 0.61)
-  const contentX = x + calendarWidth + 24 * scale
-  const contentWidth = Math.max(120, width - calendarWidth - 40 * scale)
-  objectSet(field, {
-    parentFrameId: frame._customId,
-    name: 'header-validity', layerName: 'Validade da oferta',
-    originX: 'left', originY: 'top', left: contentX, top: y + 12 * scale, width: contentWidth,
-    // O tamanho base precisa acomodar a segunda linha, que é maior e amarela.
-    // Se a base for menor do que essa linha, o Fabric calcula o espaçamento
-    // vertical com a métrica menor e as três linhas acabam se encostando.
-    scaleX: 1, scaleY: 1, fontFamily: 'Barlow', fontWeight: 700, fontSize: Math.max(18, 22 * scale),
-    fill: '#ffffff', textAlign: 'left', lineHeight: 1.04, splitByGrapheme: false,
-    text: standardValidityText(), __rawText: standardValidityText(),
-    quickDataField: 'validity', quickFieldEnabled: true,
-    quickValidityStartDate: existingStart || '2026-09-14', quickValidityEndDate: existingEnd || '2026-09-19',
-    quickValidityMode: field.quickValidityMode || 'date_range',
-    quickValidityWhileStocks: field.quickValidityWhileStocks !== false,
-    quickValidityDateFormat: field.quickValidityDateFormat || 'long',
-    dynamicFieldKey: 'validity', dynamicFieldResizeMode: 'reflow',
-    dynamicFieldBaseFontSize: Math.max(18, 22 * scale), dynamicFieldAutoFitFontSize: Math.max(18, 22 * scale),
-    dynamicFieldAutoHeight: true, quickValidityLayout: 'header-card', visible: true,
-    styles: {
-      0: Object.fromEntries([...('OFERTA VÁLIDA DE')].map((_, index) => [index, { fontSize: Math.max(11, 12 * scale), fontWeight: 700, fill: '#ffffff' }])),
-      1: Object.fromEntries([...('14 A 19 DE SETEMBRO')].map((_, index) => [index, { fontSize: Math.max(16, 22 * scale), fontWeight: 900, fill: '#ffe500' }])),
-      2: Object.fromEntries([...('OU ENQUANTO DURAREM OS ESTOQUES')].map((_, index) => [index, { fontSize: Math.max(9, 10 * scale), fontWeight: 700, fill: '#ffffff' }]))
+  if (horizontal && zone && objectBounds(zone).left < bounds.left + bounds.width * .30) {
+    const old = objectBounds(zone), left = bounds.left + bounds.width * .35
+    const width = bounds.right - margin - left
+    objectSet(zone, { scaleX: (zone.scaleX || 1) * width / old.width,
+      left: zone.originX === 'center' ? left + width / 2 : zone.originX === 'right' ? left + width : left })
+    syncZoneSnapshot(zone, { ...old, left, width, right: left + width })
+    for (const backdrop of objects.filter(o => /product-area-background/.test(o.name || ''))) {
+      objectSet(backdrop, { originX: 'left', left: left - 10 * scale, width: width + 20 * scale, scaleX: 1 })
     }
-  })
-  bringToFront(objects, field)
-  hidePreviousValidityDecorations(objects, field)
-
-  const existingCalendar = objects.filter((object) => String(object?.name || '').startsWith('header-validity-calendar'))
-  if (!existingCalendar.length) makeHeaderCalendar(objects, frame._customId, x + 13 * scale, y + (cardHeight - calendarWidth) / 2, calendarWidth, '#ffe500')
-  else {
-    // Mantém o ícone já existente: objetos futuros não duplicam o calendário.
-    for (const object of existingCalendar) object.parentFrameId = frame._customId
   }
-  return { changed: true, field, card, frame, zone: objects.find((object) => object?.isProductZone) }
+  const width = horizontal ? Math.max(220 * scale, (zone ? objectBounds(zone).left - bounds.left : bounds.width * .34) - margin * 2) : bounds.width * .46
+  const height = horizontal ? 130 * scale : Math.min(180 * scale, (zoneTop - bounds.top) * .38)
+  const x = horizontal ? bounds.left + margin : bounds.right - width - margin
+  const footer = objects.find(o => o.name === 'footer-premium-background')
+  const y = horizontal ? (footer ? objectBounds(footer).top : bounds.bottom - 120 * scale) - height - margin : zoneTop - height - 22 * scale
+  const logoTop = horizontal ? bounds.top + (y - bounds.top) * .58 : bounds.top + margin
+  const field = findValidity(objects) || text(frame._customId, { name: 'header-validity' })
+  // Todos os elementos anteriores da validade são substituídos em conjunto.
+  for (const o of objects) if (o !== field && (/validity/.test(o.name || '') || o.quickDynamicIconFor === 'validity')) {
+    o.visible = false
+    delete o.quickDynamicIconFor
+  }
+  const addRect = (name, left, top, w, h, fill, extra = {}) => {
+    const o = objects.find(o => o.name === name) || rect(frame._customId, { name })
+    objectSet(o, { parentFrameId: frame._customId, originX: 'left', originY: 'top', left, top, width: w, height: h,
+      scaleX: 1, scaleY: 1, fill, strokeWidth: 0, rx: 8 * scale, ry: 8 * scale,
+      visible: true, quickDynamicIconFor: 'validity', ...extra })
+    bringToFront(objects, o); return o
+  }
+  const card = addRect('standard-validity-background', x, y, width, height, '#ffe500', { stroke: '#ffffff', strokeWidth: 3 * scale, rx: 16 * scale, ry: 16 * scale })
+  const icon = height * .38, contentX = x + icon + 22 * scale, contentWidth = width - icon - 32 * scale
+  const bandH = height * .17
+  addRect('reference-validity-heading-band', contentX, y + 7 * scale, contentWidth, bandH, '#ec0016')
+  addRect('reference-validity-stock-band', contentX, y + height - bandH - 6 * scale, contentWidth, bandH, '#07196a')
+  const start = field.quickValidityStartDate || '', end = field.quickValidityEndDate || start
+  const date = raw => /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T12:00:00Z`) : null
+  const sd = date(start), ed = date(end)
+  const label = d => d.toLocaleString('pt-BR', { month: 'long', timeZone: 'UTC' }).toUpperCase()
+  let period = field.text || 'DEFINA A DATA'
+  if (sd && ed) {
+    if (start === end || field.quickValidityMode === 'single_day') period = `${sd.getUTCDate()} DE\n${label(sd)}`
+    else if (start.slice(0, 7) === end.slice(0, 7)) period = `${sd.getUTCDate()} ${ed.getUTCDate() === sd.getUTCDate() + 1 ? 'E' : 'A'} ${ed.getUTCDate()} DE\n${label(ed)}`
+    else period = `${sd.getUTCDate()} DE ${label(sd)} A ${ed.getUTCDate()} DE ${label(ed)}`
+  }
+  if (field.quickValidityMode === 'while_stocks') period = 'ENQUANTO DURAREM OS ESTOQUES'
+  const size = height * .21
+  if (field.quickValidityWhileStocks === false || field.quickValidityMode === 'while_stocks') objects.find(o => o.name === 'reference-validity-stock-band').visible = false
+  objectSet(field, { parentFrameId: frame._customId, name: 'header-validity', originX: 'left', originY: 'top',
+    left: contentX, top: y + bandH + 12 * scale, width: contentWidth, height: height * .5,
+    scaleX: 1, scaleY: 1, fontFamily: 'Barlow', fontWeight: 900, fontSize: size, fill: '#07196a',
+    textAlign: 'center', lineHeight: 1, styles: {}, text: period, __rawText: period,
+    quickDataField: 'validity', quickFieldEnabled: true, quickValidityLayout: 'calendar-card',
+    dynamicFieldKey: 'validity', dynamicFieldResizeMode: 'reflow', dynamicFieldBaseFontSize: size,
+    dynamicFieldAutoFitFontSize: size, dynamicFieldAutoHeight: true, visible: true })
+  bringToFront(objects, field)
+  for (const [name, value, top] of [
+    ['validity-heading', field.quickValidityMode === 'while_stocks' ? 'OFERTAS VÁLIDAS' : 'OFERTAS VÁLIDAS DIAS', y + 7 * scale],
+    ['stock-validity', field.quickValidityWhileStocks !== false && field.quickValidityMode !== 'while_stocks' ? 'ENQUANTO DURAREM OS ESTOQUES' : '', y + height - bandH - 6 * scale]
+  ]) {
+    const o = objects.find(o => o.name === name) || text(frame._customId, { name })
+    objectSet(o, { parentFrameId: frame._customId, originX: 'left', originY: 'top', left: contentX, top: top + bandH * .08,
+      width: contentWidth, height: bandH, scaleX: 1, scaleY: 1, text: value, __rawText: value,
+      fontFamily: 'Barlow', fontSize: bandH * .66, fontWeight: 900, fill: '#ffffff', textAlign: 'center', styles: {}, visible: !!value })
+    bringToFront(objects, o)
+  }
+  const ix = x + 14 * scale, iy = y + (height - icon * 1.3) / 2
+  addRect('header-validity-calendar', ix, iy, icon, icon * 1.3, '#ffffff', { stroke: '#07196a', strokeWidth: 3 * scale })
+  addRect('header-validity-calendar-bar', ix, iy, icon, icon * .3, '#ec0016')
+  for (let i = 0; i < 6; i++) addRect(`header-validity-calendar-cell-${i}`, ix + icon * (.16 + i % 3 * .25), iy + icon * (.46 + Math.floor(i / 3) * .32), icon * .16, icon * .2, '#07196a', { rx: 0, ry: 0 })
+  const logo = findDynamic(objects, 'logo')
+  if (logo?.quickLogoSlot) objectSet(logo, { originX: 'left', originY: 'top', left: x, top: logoTop,
+    width, height: Math.max(24, y - logoTop - 10 * scale), scaleX: 1, scaleY: 1,
+    quickLogoMaxWidth: width, quickLogoMaxHeight: Math.max(24, y - logoTop - 10 * scale),
+    quickLogoCenterX: x + width / 2, quickLogoCenterY: (logoTop + y - 10 * scale) / 2 })
+  const seal = objects.find(o => /selo/i.test(o.name || '') && String(o.type).toLowerCase() === 'image')
+  if (seal) {
+    const fit = Math.min((horizontal ? width : bounds.width * .54) / seal.width, (horizontal ? logoTop - bounds.top : zoneTop - bounds.top - margin) / seal.height)
+    objectSet(seal, { originX: 'left', originY: 'top', left: bounds.left + 4 * scale, top: bounds.top, scaleX: fit, scaleY: fit })
+  }
+  return { changed: true, field, card, frame, zone }
 }
 
 const footerLabel = (field) => ({
@@ -314,7 +298,7 @@ const ensureFooterItem = (objects, frameId, field, box, scale) => {
   const border = existingBox || rect(frameId, { name: boxName, layerName: footerLabel(field), selectable: false, evented: false })
   objectSet(border, {
     parentFrameId: frameId, left: box.left, top: box.top, width: box.width, height: box.height,
-    fill: 'transparent', stroke: 'rgba(255,255,255,0.28)', strokeWidth: 0,
+    fill: '#ffffff', stroke: '#ffe500', strokeWidth: 1, rx: 24 * scale, ry: 24 * scale,
     originX: 'left', originY: 'top', scaleX: 1, scaleY: 1, visible: true
   })
   bringToFront(objects, border)
@@ -324,9 +308,9 @@ const ensureFooterItem = (objects, frameId, field, box, scale) => {
   const title = existingTitle || text(frameId, { name: titleName, layerName: footerLabel(field), selectable: false, evented: false })
   objectSet(title, {
     parentFrameId: frameId, name: titleName, originX: 'left', originY: 'top',
-    left: box.left + 12 * scale, top: box.top + 12 * scale, width: box.width - 24 * scale,
+    left: box.left + 12 * scale, top: box.top + 4 * scale, width: box.width - 24 * scale,
     scaleX: 1, scaleY: 1, text: footerLabel(field), fontFamily: 'Barlow', fontWeight: 900,
-    fontSize: Math.max(10, 11 * scale), fill: '#ffe500', textAlign: 'left', lineHeight: 1,
+    fontSize: Math.max(8, 9 * scale), fill: '#07196a', textAlign: 'left', lineHeight: 1,
     splitByGrapheme: false, visible: true
   })
   bringToFront(objects, title)
@@ -336,11 +320,11 @@ const ensureFooterItem = (objects, frameId, field, box, scale) => {
     const slot = existing || rect(frameId, { name: 'footer-payment-images', layerName: 'Cartões aceitos' })
     objectSet(slot, {
       parentFrameId: frameId, name: 'footer-payment-images', layerName: 'Cartões aceitos',
-      originX: 'left', originY: 'top', left: box.left + 12 * scale, top: box.top + 32 * scale,
-      width: Math.max(26, box.width - 24 * scale), height: Math.max(18, box.height - 44 * scale),
+      originX: 'left', originY: 'top', left: box.left + 12 * scale, top: box.top + 17 * scale,
+      width: Math.max(26, box.width - 24 * scale), height: Math.max(18, box.height - 21 * scale),
       scaleX: 1, scaleY: 1, fill: 'transparent', stroke: null, strokeWidth: 0,
       businessProfileField: 'footerPaymentImages', quickFieldEnabled: true,
-      footerPaymentWidth: Math.max(26, box.width - 24 * scale), footerPaymentHeight: Math.max(18, box.height - 44 * scale),
+      footerPaymentWidth: Math.max(26, box.width - 24 * scale), footerPaymentHeight: Math.max(18, box.height - 21 * scale),
       visible: true
     })
     bringToFront(objects, slot)
@@ -351,10 +335,10 @@ const ensureFooterItem = (objects, frameId, field, box, scale) => {
   const size = Math.max(12, footerFontSize(field, scale))
   objectSet(dynamic, {
     parentFrameId: frameId, name: `footer-dynamic-${field}`, layerName: footerLabel(field),
-    originX: 'left', originY: 'top', left: box.left + 12 * scale, top: box.top + 31 * scale,
+    originX: 'left', originY: 'top', left: box.left + 12 * scale, top: box.top + 17 * scale,
     width: Math.max(38, box.width - 24 * scale), scaleX: 1, scaleY: 1,
-    text: footerSample(field), __rawText: footerSample(field), fontFamily: 'Barlow', fontWeight: 700,
-    fontSize: size, fill: '#ffffff', textAlign: 'left', lineHeight: 1.04,
+    text: dynamic.text || footerSample(field), __rawText: dynamic.text || footerSample(field), fontFamily: 'Barlow', fontWeight: 700,
+    fontSize: size, fill: '#07196a', textAlign: 'left', lineHeight: 1.04,
     splitByGrapheme: field === 'address', visible: true,
     businessProfileField: field, quickFieldEnabled: true,
     dynamicFieldKey: field, dynamicFieldResizeMode: 'reflow', dynamicFieldBaseFontSize: size,
@@ -364,7 +348,7 @@ const ensureFooterItem = (objects, frameId, field, box, scale) => {
   return dynamic
 }
 
-/** Cria um rodapé único, de quatro colunas, sem deixar os dados sobre os cards. */
+/** Rodapé em duas linhas: Instagram/WhatsApp e endereço/cartões. */
 export const ensureBusinessFooter = (canvas, page, options = {}) => {
   const objects = canvas.objects || (canvas.objects = [])
   const frame = frameFor(canvas, page)
@@ -375,7 +359,7 @@ export const ensureBusinessFooter = (canvas, page, options = {}) => {
   // A tipografia do rodapé cresce pela largura; a área horizontal, porém,
   // deve continuar abaixo dos cards. Esta trava mantém 16:9 equilibrado.
   const footerHeight = horizontal
-    ? Math.round(Math.min(frameBounds.height * 0.13, 78 * scale))
+    ? Math.round(Math.min(frameBounds.height * 0.20, 120 * scale))
     : Math.round(120 * scale)
   const footerTop = frameBounds.bottom - footerHeight
   const zone = objects.find((object) => object?.isProductZone)
@@ -392,21 +376,27 @@ export const ensureBusinessFooter = (canvas, page, options = {}) => {
   })
   if (!objects.includes(background)) objects.push(background)
 
-  const columnWidth = frameBounds.width / requiredFooterFields.length
+  const gap = 8 * scale, inset = 16 * scale
+  const usable = frameBounds.width - inset * 2 - gap
   for (const [index, field] of requiredFooterFields.entries()) {
-    const x = frameBounds.left + index * columnWidth
-    const box = { left: x, top: footerTop, width: columnWidth, height: footerHeight }
-    ensureFooterItem(objects, frame._customId, field, box, scale)
-    if (index > 0) {
-      const dividerName = `footer-divider-${index}`
-      const divider = objects.find((object) => object?.name === dividerName) || rect(frame._customId, { name: dividerName, selectable: false, evented: false })
-      objectSet(divider, {
-        parentFrameId: frame._customId, left: x, top: footerTop + 10 * scale, width: Math.max(1, scale), height: footerHeight - 20 * scale,
-        originX: 'left', originY: 'top', scaleX: 1, scaleY: 1, fill: 'rgba(255,255,255,0.45)', visible: true
-      })
-      bringToFront(objects, divider)
+    const right = index % 2 === 1, row = Math.floor(index / 2)
+    const box = { left: frameBounds.left + inset + (right ? usable * .62 + gap : 0),
+      top: footerTop + gap + row * (footerHeight - gap * 3) / 2 + row * gap,
+      width: usable * (right ? .38 : .62), height: (footerHeight - gap * 3) / 2 }
+    const item = ensureFooterItem(objects, frame._customId, field, box, scale)
+    const icon = objects.find(o => o.name === `icon-${field}`)
+    if (icon && field !== 'footerPaymentImages') {
+      const fit = (box.height - 12 * scale) / Math.max(icon.width, icon.height)
+      objectSet(icon, { originX: 'left', originY: 'top', left: box.left + 8 * scale, top: box.top + 6 * scale, scaleX: fit, scaleY: fit, visible: true })
+      bringToFront(objects, icon)
+      const inset = box.height + 4 * scale
+      item.left = box.left + inset; item.width = box.width - inset - 10 * scale
+      const title = objects.find(o => o.name === `footer-title-${field}`)
+      title.left = item.left; title.width = item.width
     }
   }
+  for (const o of objects) if (/^footer-divider-/.test(o.name || '')) o.visible = false
+
   return { changed: true, frame, zone: objects.find((object) => object?.isProductZone), footerTop, footerHeight }
 }
 
@@ -448,7 +438,7 @@ const ensureProductZone = (canvas, page, donorZone) => {
   const scale = frameBounds.width / 1080
   const header = Math.max(96 * scale, frameBounds.height * (horizontal ? .16 : .15))
   const footer = horizontal
-    ? Math.round(Math.min(frameBounds.height * 0.13, 78 * scale))
+    ? Math.round(Math.min(frameBounds.height * 0.20, 120 * scale))
     : Math.round(120 * scale)
   const margin = 18 * scale
   const box = {
@@ -570,6 +560,16 @@ const ensureValidityNeeded = (objects, frame, horizontal) => horizontal || !find
 export const normalizeTemplateCanvas = ({ canvas, page, donorZone = null, forceFooter = false, forceValidity = false }) => {
   const result = deepCopy(canvas)
   result.objects ||= []
+  const normalizeAssets = objects => {
+    for (const object of objects) {
+      if (typeof object.src === 'string' && /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(object.src)) {
+        const url = new URL(object.src)
+        if (url.pathname === '/api/storage/p' && url.searchParams.has('key')) object.src = url.pathname + url.search
+      }
+      if (Array.isArray(object.objects)) normalizeAssets(object.objects)
+    }
+  }
+  normalizeAssets(result.objects)
   const frame = frameFor(result, page)
   if (!result.objects.includes(frame)) result.objects.unshift(frame)
   ensureProductZone(result, page, donorZone)
@@ -708,40 +708,6 @@ const readCanvas = async (s3, key) => {
   return JSON.parse(String(bytes))
 }
 
-const readThumbnail = async (s3, reference) => {
-  const key = s3KeyFromRef(reference)
-  if (!key) return null
-  try {
-    const response = await s3.send(new GetObjectCommand({ Bucket: process.env.WASABI_BUCKET, Key: key }))
-    return await bodyToBuffer(response.Body)
-  } catch { return null }
-}
-
-const svgOverlay = (width, height, horizontal) => {
-  const footerH = horizontal ? Math.round(height * .108) : Math.round(height * .089)
-  const footerTop = height - footerH
-  const dateW = Math.round(width * (horizontal ? .37 : .52))
-  const dateH = Math.max(34, Math.round(height * .075))
-  const dateX = width - dateW - Math.max(8, Math.round(width * .018))
-  const dateY = Math.max(8, Math.round(height * .018))
-  const columns = ['INSTAGRAM', 'WHATSAPP', 'ENDEREÇO', 'CARTÕES']
-  const text = columns.map((label, index) => {
-    const x = Math.round(index * width / columns.length + 8)
-    return `<text x="${x}" y="${footerTop + footerH * .30}" fill="#ffe500" font-family="Arial" font-weight="700" font-size="${Math.max(7, width / 86)}">${label}</text><text x="${x}" y="${footerTop + footerH * .67}" fill="white" font-family="Arial" font-weight="700" font-size="${Math.max(8, width / 64)}">${index === 0 ? '@SUALOJA' : index === 1 ? '(64) 99999-9999' : index === 2 ? 'ENDEREÇO DA LOJA' : 'VISA  MASTERCARD'}</text>`
-  }).join('')
-  const lines = [1, 2, 3].map((index) => `<rect x="${Math.round(index * width / 4)}" y="${footerTop + 5}" width="1" height="${footerH - 10}" fill="rgba(255,255,255,.45)"/>`).join('')
-  return Buffer.from(`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><rect x="${dateX}" y="${dateY}" width="${dateW}" height="${dateH}" rx="${Math.round(dateH*.14)}" fill="#0636a7" stroke="#ffe500" stroke-width="2"/><text x="${dateX + dateH*.13}" y="${dateY + dateH*.34}" fill="white" font-family="Arial" font-weight="700" font-size="${Math.max(7,width/96)}">OFERTA VÁLIDA DE</text><text x="${dateX + dateH*.13}" y="${dateY + dateH*.62}" fill="#ffe500" font-family="Arial" font-weight="900" font-size="${Math.max(9,width/67)}">14 A 19 DE SETEMBRO</text><text x="${dateX + dateH*.13}" y="${dateY + dateH*.84}" fill="white" font-family="Arial" font-weight="700" font-size="${Math.max(6,width/118)}">ENQUANTO DURAREM OS ESTOQUES</text><rect x="0" y="${footerTop}" width="${width}" height="${footerH}" fill="#0636a7" stroke="#ffe500" stroke-width="1"/>${lines}${text}</svg>`)
-}
-
-const buildThumbnail = async (buffer, width, height, horizontal) => {
-  let sharp
-  try { sharp = (await import('sharp')).default } catch { return buffer }
-  const previewWidth = Math.min(600, Math.max(300, Math.round(width * .46)))
-  const previewHeight = Math.max(200, Math.round(previewWidth * height / width))
-  const base = buffer ? sharp(buffer).resize(previewWidth, previewHeight, { fit: 'cover' }) : sharp({ create: { width: previewWidth, height: previewHeight, channels: 4, background: '#0636a7' } })
-  return base.composite([{ input: svgOverlay(previewWidth, previewHeight, horizontal), top: 0, left: 0 }]).png().toBuffer()
-}
-
 const cli = () => {
   const args = new Map(process.argv.slice(2).map((argument) => {
     const [key, value] = argument.split('=', 2)
@@ -817,15 +783,15 @@ export const run = async () => {
   const writeDatabase = createDatabaseClient()
   const revision = Date.now()
   const prepared = []
+  const renderer = await createTemplateRenderer(async key => {
+    const asset = await s3.send(new GetObjectCommand({ Bucket: process.env.WASABI_BUCKET, Key: key })); return Buffer.from(await asset.Body.transformToByteArray())
+  })
   try {
     for (const [planIndex, { project, entries }] of plans.entries()) {
       console.error(`[standardize] enviando ${planIndex + 1}/${plans.length}: ${project.name}`)
       const nextPages = await mapWithConcurrency(entries, 4, async (entry) => {
         const raw = Buffer.from(JSON.stringify(entry.canvas))
-        const oldReference = Array.isArray(project.canvas_data) ? project.canvas_data.find((page) => page.id === entry.page.id) : null
-        const originalThumb = oldReference ? await readThumbnail(s3, oldReference.thumbnailUrl) : null
-        const horizontal = entry.page.templateFormatId === 'tv'
-        const thumbnail = await buildThumbnail(originalThumb, entry.page.width, entry.page.height, horizontal)
+        const thumbnail = await renderer.render(entry.canvas, entry.page.width, entry.page.height)
         const prefix = `projects/${OWNER_ID}/${project.id}/standard-layout/${revision}`
         const canvasDataPath = `${prefix}/page_${entry.page.id}.json.gz`
         const thumbnailPath = `${prefix}/thumb_${entry.page.id}.png`
@@ -870,6 +836,7 @@ export const run = async () => {
       throw error
     }
   } finally {
+    await renderer.close()
     await writeDatabase.end().catch(() => undefined)
     s3.destroy()
   }

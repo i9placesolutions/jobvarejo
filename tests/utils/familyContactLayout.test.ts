@@ -23,3 +23,9 @@ it('troca telefone e validade sem mover produtos e mantém a organização ao re
  expect(layoutFamilyContacts(a)).toBe(false)
  frame.name='outro-modelo';phone.top=100;expect(layoutFamilyContacts(a)).toBe(false);expect(phone.top).toBe(100)
 })
+it('preserva a composição nova no modelo Família', () => {
+ const objects=[obj({isFrame:true,_customId:'f',name:'fim-semana-familia',width:1080,height:1920}),obj({parentFrameId:'f',isProductZone:true}),obj({parentFrameId:'f',quickDataField:'validity',quickValidityLayout:'calendar-card'}),obj({parentFrameId:'f',businessProfileField:'whatsapp'})]
+ const before=JSON.stringify(objects)
+ expect(layoutFamilyContacts(objects)).toBe(false)
+ expect(JSON.stringify(objects)).toBe(before)
+})

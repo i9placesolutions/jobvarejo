@@ -58,3 +58,9 @@ it('alinha bloco e calendário à esquerda sem restaurar a faixa ao reaplicar', 
   expect([text.left, text.top, icon.left, icon.top]).toEqual(before)
   expect(band.visible).toBe(false)
 })
+it('preserva o quadro calendário mesmo com o aviso de estoque oculto', () => {
+  const date = object({ quickValidityLayout: 'calendar-card', quickValidityStartDate: '2026-09-13', quickValidityEndDate: '2026-09-14', text: '13 E 14 DE\nSETEMBRO', fill: '#07196a', styles: {} })
+  const before = JSON.stringify(date)
+  expect(layoutHeaderOfferValidity(date, [object({ isProductZone: true, top: 500 })])).toBeNull()
+  expect(JSON.stringify(date)).toBe(before)
+})

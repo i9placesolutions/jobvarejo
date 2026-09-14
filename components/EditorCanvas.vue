@@ -19305,7 +19305,7 @@ const handleQuickModeValidityUpdate = (payload: {
         }
         for (const sibling of canvas.value?.getObjects() || []) {
             if (sibling.parentFrameId === object.parentFrameId && ((!separateFields && sibling.name === 'validity-backdrop') || sibling.quickDynamicIconFor === 'validity')) {
-                sibling.set({ visible: quickShowValidity.value && !!nextText, dirty: true })
+                sibling.set({ visible: quickShowValidity.value && !!nextText && (sibling.name !== 'reference-validity-stock-band' || !!splitText.stock), dirty: true })
             }
         }
         const validityContainer = getOfferValidityVisibilityTarget(object)

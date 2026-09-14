@@ -46,12 +46,26 @@ describe('standardize flyer template dynamics', () => {
     expect(result.changed).toBe(true)
     expect(result.validation).toEqual({ ok: true, errors: [] })
     expect(validity.name).toBe('header-validity')
-    expect(validity.text).toContain('14 A 19 DE SETEMBRO')
-    expect(validity.fontSize).toBeGreaterThanOrEqual(validity.styles[1][0].fontSize)
+    expect(validity.text).toBe('DEFINA A DATA')
+    expect(validity.quickValidityLayout).toBe('calendar-card')
     expect(objectBounds(productZone).bottom).toBeLessThanOrEqual(objectBounds(footer).top - 1)
     expect(['instagram', 'whatsapp', 'address', 'footerPaymentImages'].every((field) =>
       result.canvas.objects.some((object: any) => object.businessProfileField === field)
     )).toBe(true)
+  })
+
+  it('keeps configured dates and places the calendar below the logo with a two-row footer', () => {
+    const source = { objects: [frame(1080, 1920), { ...zone(1000, 1200), left: 40, top: 550 },
+      { type: 'Rect', businessProfileField: 'logo', quickLogoSlot: true, width: 400, height: 250 },
+      { ...textbox('validity', 500, 20, 450, 'old'), quickDataField: 'validity', quickValidityStartDate: '2026-09-13', quickValidityEndDate: '2026-09-14' }] }
+    const { canvas } = normalizeTemplateCanvas({ canvas: source, page: page('stories', 1080, 1920), forceFooter: true, forceValidity: true })
+    const get = (name: string) => canvas.objects.find((o: any) => o.name === name)
+    expect(get('header-validity').text).toBe('13 E 14 DE\nSETEMBRO')
+    expect(get('standard-validity-background').fill).toBe('#ffe500')
+    const logo = canvas.objects.find((o: any) => o.businessProfileField === 'logo')
+    expect(objectBounds(logo).bottom).toBeLessThan(objectBounds(get('standard-validity-background')).top)
+    expect(get('footer-contact-instagram').top).toBe(get('footer-contact-whatsapp').top)
+    expect(get('footer-contact-address').top).toBeGreaterThan(get('footer-contact-instagram').top)
   })
 
   it('does not rewrite a vertical model that already has the standard dynamic fields inside its frame', () => {

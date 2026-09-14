@@ -2,6 +2,7 @@ import { splitFooterValidityText } from './splitFooterValidity'
 
 /** Usa somente a área de validade já reservada acima da zona de produtos. */
 export const layoutHeaderOfferValidity = (text: any, children: any[]): boolean | null => {
+  if (text.quickValidityLayout === 'calendar-card') return null
   if (text.quickOfferScope?.mode && text.quickOfferScope.mode !== 'all') return null
   if (!text.quickValidityStartDate && !text.quickValidityEndDate) return null
   const box = text.getBoundingRect()
