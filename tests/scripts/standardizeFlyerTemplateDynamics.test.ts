@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   createMissingFormatCanvas,
+  ensureHeaderValidity,
   hasUsableFrame,
   normalizeTemplateCanvas,
   objectBounds,
@@ -116,4 +117,11 @@ describe('standardize flyer template dynamics', () => {
       expect(normalized.canvas.objects.find((object: any) => object.isFrame)?.height).toBe(format[3])
     }
   })
+})
+
+it('não força duas linhas quando a oferta vale por um único dia', () => {
+  const date = { ...textbox('validity', 500, 30, 400, '14 DE SETEMBRO'), quickDataField: 'validity', quickValidityStartDate: '2026-09-14', quickValidityEndDate: '2026-09-14', quickValidityMode: 'single_day' }
+  const canvas = { objects: [frame(1080, 1920), { ...zone(1000, 1200), left: 40, top: 550 }, date] }
+  ensureHeaderValidity(canvas, page('stories', 1080, 1920))
+  expect(date.text).toBe('14 DE SETEMBRO')
 })

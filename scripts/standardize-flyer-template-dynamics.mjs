@@ -235,7 +235,7 @@ export const ensureHeaderValidity = (canvas, page, options = {}) => {
   const label = d => d.toLocaleString('pt-BR', { month: 'long', timeZone: 'UTC' }).toUpperCase()
   let period = field.text || 'DEFINA A DATA'
   if (sd && ed) {
-    if (start === end || field.quickValidityMode === 'single_day') period = `${sd.getUTCDate()} DE\n${label(sd)}`
+    if (start === end || field.quickValidityMode === 'single_day') period = `${sd.getUTCDate()} DE ${label(sd)}`
     else if (start.slice(0, 7) === end.slice(0, 7)) period = `${sd.getUTCDate()} ${ed.getUTCDate() === sd.getUTCDate() + 1 ? 'E' : 'A'} ${ed.getUTCDate()} DE\n${label(ed)}`
     else period = `${sd.getUTCDate()} DE ${label(sd)} A ${ed.getUTCDate()} DE ${label(ed)}`
   }
