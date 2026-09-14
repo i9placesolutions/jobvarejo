@@ -709,16 +709,59 @@ const readCanvas = async (s3, key) => {
   return JSON.parse(String(bytes))
 }
 
+/** Ajuste restrito ao rodapé e à área útil; preserva selos, logo e validade. */
+export const refineFooterSpacing = (canvas) => {
+  const objects = canvas.objects || []
+  const frame = objects.find(o => o.isFrame)
+  const footer = objects.find(o => o.name === 'footer-premium-background')
+  const background = objects.find(o => o.name === 'product-area-background')
+  const zone = objects.find(o => o.isProductZone)
+  if (!frame || !footer || !zone) return false
+  const scale = objectBounds(frame).width / 1080
+  for (const box of objects.filter(o => /^footer-contact-/.test(o.name || '') && o.visible !== false)) {
+    box.rx = 12 * scale; box.ry = 12 * scale
+  }
+  for (const title of objects.filter(o => /^footer-title-/.test(o.name || '') && o.visible !== false)) {
+    title.fontSize = 11 * scale
+    title.dynamicFieldBaseFontSize = title.fontSize
+    title.dynamicFieldAutoFitFontSize = title.fontSize
+  }
+  for (const item of objects.filter(o => ['instagram', 'whatsapp', 'address'].includes(o.businessProfileField))) {
+    const box = objects.find(o => o.name === `footer-contact-${item.businessProfileField}`)
+    if (!box) continue
+    const size = (item.businessProfileField === 'address' ? 20 : 24) * scale
+    Object.assign(item, { top: objectBounds(box).top + 18 * scale, fontSize: size,
+      dynamicFieldBaseFontSize: size, dynamicFieldAutoFitFontSize: size, lineHeight: 1, styles: {} })
+  }
+  if (background) {
+    const old = objectBounds(background)
+    const bottom = objectBounds(footer).top - 10 * scale
+    // Não altera o topo do painel: mantém a margem da data já aprovada.
+    if (bottom > old.top + 80 * scale) {
+      background.scaleY = (background.scaleY || 1) * (bottom - old.top) / old.height
+      background.top = background.originY === 'center' ? (old.top + bottom) / 2 : background.originY === 'bottom' ? bottom : old.top
+      const panel = objectBounds(background), inset = 18 * scale
+      const target = {left:panel.left+inset,top:panel.top+inset,width:panel.width-inset*2,height:panel.height-inset*2}
+      const current = objectBounds(zone)
+      Object.assign(zone, {scaleX:(zone.scaleX || 1)*target.width/current.width,scaleY:(zone.scaleY || 1)*target.height/current.height,
+        left:zone.originX==='center'?target.left+target.width/2:zone.originX==='right'?target.left+target.width:target.left,
+        top:zone.originY==='center'?target.top+target.height/2:zone.originY==='bottom'?target.top+target.height:target.top})
+      syncZoneSnapshot(zone, target)
+    }
+  }
+  return true
+}
+
 const cli = () => {
   const args = new Map(process.argv.slice(2).map((argument) => {
     const [key, value] = argument.split('=', 2)
     return [key, value || true]
   }))
-  return { apply: args.has('--apply'), only: typeof args.get('--only') === 'string' ? args.get('--only') : '', output: typeof args.get('--output') === 'string' ? args.get('--output') : '' }
+  return { footerSpacing: args.has('--footer-spacing'), apply: args.has('--apply'), only: typeof args.get('--only') === 'string' ? args.get('--only') : '', output: typeof args.get('--output') === 'string' ? args.get('--output') : '' }
 }
 
 export const run = async () => {
-  const { apply, only, output } = cli()
+  const { apply, only, output, footerSpacing } = cli()
   const database = createDatabaseClient()
   await database.connect()
   const { rows } = await database.query(`select id,name,canvas_data,template_config,preview_url,updated_at from projects where user_id=$1 and is_template=true order by name`, [OWNER_ID])
@@ -748,8 +791,15 @@ export const run = async () => {
         loaded.set(page.id, canvas)
         donorZone ||= canvas.objects?.find((object) => object?.isProductZone) || null
       })
-      const entries = planTemplateStandardization({ project, loadedCanvases: loaded, donorZone })
-      for (const entry of entries) {
+      const entries = footerSpacing ? templatePages.map(page => {
+        const canvas = structuredClone(loaded.get(page.id))
+        if (!canvas) throw new Error('Canvas ausente')
+        const changed = refineFooterSpacing(canvas)
+        const validation = validateTemplateCanvas(canvas, page)
+        if (!validation.ok) throw new Error(validation.errors.join('; '))
+        return {page, canvas, changed, created:false, validation}
+      }) : planTemplateStandardization({ project, loadedCanvases: loaded, donorZone })
+      for (const entry of footerSpacing ? [] : entries) {
         const art = chooseBackground(entry.canvas) || entries.map(e => chooseBackground(e.canvas)).find(Boolean)
         const key = art?.src ? s3KeyFromRef(art.src) : ''
         if (!key) throw new Error('Fundo ausente para extrair a paleta')

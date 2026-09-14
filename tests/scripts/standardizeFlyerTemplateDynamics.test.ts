@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createMissingFormatCanvas,
   ensureHeaderValidity,
+  refineFooterSpacing,
   hasUsableFrame,
   normalizeTemplateCanvas,
   objectBounds,
@@ -124,4 +125,22 @@ it('não força duas linhas quando a oferta vale por um único dia', () => {
   const canvas = { objects: [frame(1080, 1920), { ...zone(1000, 1200), left: 40, top: 550 }, date] }
   ensureHeaderValidity(canvas, page('stories', 1080, 1920))
   expect(date.text).toBe('14 DE SETEMBRO')
+})
+
+it('aproveita o painel dos produtos e melhora o rodapé sem alterar o cabeçalho', () => {
+ const seal = { name:'Selo', left:20, top:20, width:400, height:300 }
+ const backdrop = { type:'Rect',name:'product-area-background',left:28,top:450,width:1024,height:734,scaleX:1,scaleY:1 }
+ const products = { ...zone(972,690),left:54,top:479 }
+ const footer = { name:'footer-premium-background',left:0,top:1230,width:1080,height:120 }
+ const canvas = {objects:[frame(1080,1350),seal,backdrop,products,footer]}
+ const before=JSON.stringify(seal)
+ refineFooterSpacing(canvas)
+ expect(objectBounds(backdrop).bottom).toBe(1220)
+ expect(objectBounds(products).bottom).toBe(1202)
+ expect(objectBounds(products).left).toBe(46)
+ expect(products._zoneStateSnapshot.zone.geometry).toMatchObject({height:objectBounds(products).height})
+ expect(JSON.stringify(seal)).toBe(before)
+ const result=JSON.stringify(canvas)
+ refineFooterSpacing(canvas)
+ expect(JSON.stringify(canvas)).toBe(result)
 })
