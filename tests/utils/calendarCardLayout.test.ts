@@ -20,3 +20,13 @@ it('recolhe uma data curta e o aviso desativado, sem mover a base nem acumular a
  layoutCalendarCards(objects)
  expect(card.height).toBeGreaterThan(first)
 })
+it('reserva margem acima do fundo branco dos produtos e não acumula deslocamento',()=>{
+ const card=obj('standard-validity-background',180)
+ const date=obj('header-validity',40,{quickValidityLayout:'calendar-card',fontSize:32})
+ const background=obj('product-area-background',500,{top:180})
+ const objects=[card,date,obj('validity-heading',20),obj('stock-validity',18),background]
+ layoutCalendarCards(objects)
+ expect(card.top+card.height).toBeCloseTo(160)
+ expect(layoutCalendarCards(objects)).toBe(false)
+ expect(background.top).toBe(180)
+})

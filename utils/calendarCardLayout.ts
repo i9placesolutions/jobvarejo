@@ -15,7 +15,12 @@ export const layoutCalendarCards = (objects: any[]): boolean => {
     date.initDimensions?.(); heading.initDimensions?.(); stock.initDimensions?.()
     const bounds = card.getBoundingRect(), scale = Math.abs(card.scaleY || 1)
     const gap = Math.max(3, Number(date.fontSize) * .18) * Math.abs(date.scaleY || 1)
-    const bottom = bounds.top + bounds.height
+    const frame = objects.find(o => o.isFrame && o._customId === date.parentFrameId)
+    const margin = 20 * (frame?.getBoundingRect ? frame.getBoundingRect().width / 1080 : 1)
+    const productAreas = siblings.filter(o => (o.isProductZone || o.name === 'product-area-background') && o.visible !== false && o.getBoundingRect)
+      .map(o => o.getBoundingRect())
+      .filter(b => b.left < bounds.left + bounds.width && b.left + b.width > bounds.left && b.top > bounds.top)
+    const bottom = Math.min(bounds.top + bounds.height, ...productAreas.map(b => b.top - margin))
     const headingHeight = heading.getBoundingRect().height
     const dateHeight = date.getBoundingRect().height
     const stockHeight = stock.visible !== false && String(stock.text || '').trim() ? stock.getBoundingRect().height : 0
