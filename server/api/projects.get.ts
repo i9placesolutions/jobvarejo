@@ -115,7 +115,10 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const id = String(query.id || '').trim()
   const templatesOnly = String(query.templates || '').trim() === '1'
-  const summaryOnly = String(query.summary || '').trim() === '1'
+  const rawSummary = Array.isArray(query.summary) ? query.summary[0] : query.summary
+  const summaryMode = String(rawSummary || '').trim()
+  const summaryOnly = summaryMode === '1'
+  const dashboardSummary = summaryMode === 'dashboard'
   const rawTemplateCategory = Array.isArray(query.category) ? query.category[0] : query.category
   const rawTemplateSubcategory = Array.isArray(query.subcategory) ? query.subcategory[0] : query.subcategory
   const templateCategory = templatesOnly
@@ -296,7 +299,101 @@ export default defineEventHandler(async (event) => {
         ${categoryClause}
       order by project.updated_at desc
     `
-    const baseSql = summaryOnly ? summaryListSql : fullListSql
+    // Os cards do dashboard só precisam dos campos de organização, uma prévia
+    // e sua proporção. A consulta comum agregava e devolvia os metadados de
+    // todas as páginas; aqui lemos apenas a primeira página para manter a
+    // proporção visual e usamos o preview persistido. Projetos legados sem
+    // preview continuam usando a primeira thumbnail disponível como fallback.
+    const dashboardListSql = `
+      select *
+      from (
+        select
+          project.id,
+          project.name,
+          project.created_at,
+          project.updated_at,
+          nullif(btrim(coalesce(
+            first_page.value ->> 'thumbnailUrl',
+            first_page.value ->> 'thumbnail_url',
+            ''
+          )), '') as primary_thumbnail_url,
+          project.preview_url as stored_preview_url,
+          project.folder_id,
+          project.last_viewed,
+          project.is_shared,
+          project.is_starred,
+          project.is_template,
+          first_page.value ->> 'width' as preview_width,
+          first_page.value ->> 'height' as preview_height
+        from public.projects project
+        left join lateral (
+          select page.value
+          from jsonb_array_elements(
+            case
+              when jsonb_typeof(project.canvas_data) = 'array' then project.canvas_data
+              when jsonb_typeof(project.canvas_data -> 'pages') = 'array' then project.canvas_data -> 'pages'
+              else '[]'::jsonb
+            end
+          ) with ordinality as page(value, ordinality)
+          order by page.ordinality
+          limit 1
+        ) as first_page on true
+        where project.user_id = $1
+          and coalesce(project.is_template, false) = $2
+          and nullif(btrim(project.preview_url), '') is not null
+          ${categoryClause}
+
+        union all
+
+        select
+          project.id,
+          project.name,
+          project.created_at,
+          project.updated_at,
+          fallback.thumbnail_url as primary_thumbnail_url,
+          null::text as stored_preview_url,
+          project.folder_id,
+          project.last_viewed,
+          project.is_shared,
+          project.is_starred,
+          project.is_template,
+          fallback.preview_width,
+          fallback.preview_height
+        from public.projects project
+        left join lateral (
+          select
+            nullif(btrim(coalesce(
+              page.value ->> 'thumbnailUrl',
+              page.value ->> 'thumbnail_url',
+              ''
+            )), '') as thumbnail_url,
+            page.value ->> 'width' as preview_width,
+            page.value ->> 'height' as preview_height
+          from jsonb_array_elements(
+            case
+              when jsonb_typeof(project.canvas_data) = 'array' then project.canvas_data
+              when jsonb_typeof(project.canvas_data -> 'pages') = 'array' then project.canvas_data -> 'pages'
+              else '[]'::jsonb
+            end
+          ) with ordinality as page(value, ordinality)
+          where nullif(btrim(coalesce(
+            page.value ->> 'thumbnailUrl',
+            page.value ->> 'thumbnail_url',
+            ''
+          )), '') is not null
+          order by page.ordinality
+          limit 1
+        ) as fallback on true
+        where project.user_id = $1
+          and coalesce(project.is_template, false) = $2
+          and nullif(btrim(project.preview_url), '') is null
+          ${categoryClause}
+      ) as dashboard_projects
+      order by dashboard_projects.updated_at desc
+    `
+    const baseSql = dashboardSummary
+      ? dashboardListSql
+      : (summaryOnly ? summaryListSql : fullListSql)
     if (safeLimit !== null) params.push(safeLimit)
     const sql = safeLimit !== null ? `${baseSql} limit $${params.length}` : baseSql
 
@@ -304,6 +401,37 @@ export default defineEventHandler(async (event) => {
 
     return await Promise.all(
       (rows || []).map(async (p: any) => {
+        if (dashboardSummary) {
+          const {
+            preview_width: _previewWidth,
+            preview_height: _previewHeight,
+            primary_thumbnail_url: _primaryThumbnailUrl,
+            stored_preview_url: _storedPreviewUrl,
+            ...dashboardProject
+          } = p || {}
+          const primaryPreviewUrl = await resolveStorageReadUrl(
+            p?.primary_thumbnail_url,
+            user.id,
+            { direct: false }
+          )
+          return {
+            ...dashboardProject,
+            // O proxy é resolvido sob a sessão atual e evita assinar todas as
+            // miniaturas antes de o loader progressivo decidir quais exibir.
+            // Mantém também o fallback para a prévia persistida quando uma
+            // referência antiga da primeira página não puder ser usada.
+            preview_url: primaryPreviewUrl || await resolveStorageReadUrl(
+              p?.stored_preview_url,
+              user.id,
+              { direct: false }
+            ),
+            ...getProjectPreviewSize([{
+              width: p?.preview_width,
+              height: p?.preview_height
+            }])
+          }
+        }
+
         const summaryPageMeta = summaryOnly
           ? [
               {

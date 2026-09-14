@@ -163,7 +163,9 @@ const loadData = async () => {
     const [profile, , projectsData] = await Promise.all([
       $fetch('/api/profile', { headers }).catch(() => null),
       loadFolders({ scope: 'project' }).catch(() => null),
-      $fetch('/api/projects', { headers }).catch(() => [])
+      // A dashboard organiza cards; o canvas completo só é necessário ao abrir
+      // um projeto no editor. O modo compacto preserva pastas/favoritos/recentes.
+      $fetch('/api/projects', { headers, query: { summary: 'dashboard' } }).catch(() => [])
     ])
 
     if (profile) user.value = profile as any

@@ -27,7 +27,12 @@ const fetchProjects = async () => {
   isLoading.value = true
   try {
       const headers = await getApiAuthHeaders()
-      const data = await $fetch('/api/projects', { headers });
+      // Este modal só lista cards e abre pelo ID; não precisa baixar metadados
+      // de todas as páginas de cada projeto.
+      const data = await $fetch('/api/projects', {
+        headers,
+        query: { summary: 'dashboard' }
+      });
       if (data) {
         projects.value = Array.isArray(data) ? data : []
       }
