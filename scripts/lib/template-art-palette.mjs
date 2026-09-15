@@ -17,6 +17,12 @@ export async function paletteFromArtwork(buffer) {
   return {main:hex(rgb.map(x=>x*.7)),ink:hex(rgb.map(x=>x*.24)),surface:hex(rgb.map(x=>x*.17+255*.83))}
 }
 export function applyArtworkPalette(canvas,palette){
+  const main = String(palette?.main || '').replace('#','')
+  const channels = main.length===6 ? [0,2,4].map(offset=>parseInt(main.slice(offset,offset+2),16)) : null
+  const luminance = channels ? (0.2126*channels[0] + 0.7152*channels[1] + 0.0722*channels[2]) / 255 : 0
+  const foreground = luminance > .56 ? palette.ink : palette.surface
+  const panelFill = luminance > .56 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)'
+  const panelStroke = luminance > .56 ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.42)'
   for(const object of canvas.objects||[]){
     const name=object.name||''
     if(name==='footer-premium-background'){
@@ -26,8 +32,9 @@ export function applyArtworkPalette(canvas,palette){
     }
     else if(name==='standard-validity-background')object.fill=palette.surface
     else if(/^reference-validity-.*-band$/.test(name))object.fill=palette.main
-    else if(name==='header-validity'||/^footer-(title-|dynamic-)/.test(name)){object.fill=palette.ink;object.styles={}}
-    else if(/^footer-contact-/.test(name)){object.fill=palette.surface;object.stroke=palette.main;object.opacity=.98}
+    else if(name==='header-validity'){object.fill=palette.ink;object.styles={}}
+    else if(/^footer-(title-|dynamic-)/.test(name)){object.fill=foreground;object.styles={}}
+    else if(/^footer-contact-/.test(name)){object.fill=panelFill;object.stroke=panelStroke;object.opacity=1}
     else if(/^header-validity-calendar/.test(name)){
       if(name==='header-validity-calendar'){object.fill='#ffffff';object.stroke=palette.ink}
       else object.fill=palette.main

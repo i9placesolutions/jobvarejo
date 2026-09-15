@@ -66,9 +66,10 @@ describe('standardize flyer template dynamics', () => {
     expect(get('standard-validity-background').fill).toBe('#ffe500')
     const logo = canvas.objects.find((o: any) => o.businessProfileField === 'logo')
     expect(objectBounds(logo).bottom).toBeLessThan(objectBounds(get('standard-validity-background')).top)
-    expect(get('footer-contact-instagram').top).toBe(get('footer-contact-whatsapp').top)
-    expect(get('footer-contact-address').top).toBe(get('footer-contact-instagram').top)
-    expect(get('footer-contact-payments').top).toBeGreaterThan(get('footer-contact-address').top)
+    expect(get('footer-contact-whatsapp').top).toBeGreaterThan(get('footer-contact-instagram').top)
+    expect(get('footer-contact-address').top).toBeGreaterThan(get('footer-contact-whatsapp').top)
+    expect(get('footer-contact-payments').top).toBe(get('footer-contact-instagram').top)
+    expect(get('footer-contact-payments').left).toBeGreaterThan(get('footer-contact-instagram').left)
   })
 
   it('does not rewrite a vertical model that already has the standard dynamic fields inside its frame', () => {

@@ -5,10 +5,12 @@ it('usa a cor do fundo e mantém contraste na faixa do rodapé',async()=>{
  const red=await sharp({create:{width:40,height:40,channels:3,background:'#d02010'}}).png().toBuffer()
  const palette=await paletteFromArtwork(red)
  expect(parseInt(palette.main.slice(1,3),16)).toBeGreaterThan(parseInt(palette.main.slice(5,7),16))
- const canvas={objects:[{name:'footer-premium-background',fill:'#0636a7'},{name:'header-validity',fill:'#07196a'},{name:'standard-validity-background',fill:'#ffe500'}]}
+ const canvas={objects:[{name:'footer-premium-background',fill:'#0636a7'},{name:'footer-contact-instagram',fill:'#fff'},{name:'footer-title-instagram',fill:'#07196a'},{name:'header-validity',fill:'#07196a'},{name:'standard-validity-background',fill:'#ffe500'}]}
  applyArtworkPalette(canvas,palette)
  expect(canvas.objects[0]!.fill).toBe(palette.main)
  expect((canvas.objects[0] as any)!.opacity).toBe(.94)
- expect(canvas.objects[1]!.fill).toBe(palette.ink)
+ expect(canvas.objects[1]!.fill).toBe('rgba(255,255,255,0.12)')
  expect(canvas.objects[2]!.fill).toBe(palette.surface)
+ expect(canvas.objects[3]!.fill).toBe(palette.ink)
+ expect(canvas.objects[4]!.fill).toBe(palette.surface)
 })

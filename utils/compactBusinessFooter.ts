@@ -43,7 +43,17 @@ const labels: Record<FooterField, string> = {
   footerPaymentImages: 'CARTÕES ACEITOS'
 }
 
-const textSize = (field: FooterField, scale: number): number => Math.max(11, (field === 'address' ? 16 : 18) * scale)
+const textSize = (field: FooterField, scale: number): number => Math.max(13, (field === 'address' ? 20 : field === 'instagram' ? 24 : 25) * scale)
+
+const footerStyle = (fill: unknown) => {
+  const match = String(fill || '').match(/^#([0-9a-f]{6})$/i)
+  if (!match) return { text: '#ffffff', panel: 'rgba(255,255,255,0.12)', stroke: 'rgba(255,255,255,0.42)' }
+  const [red = 0, green = 0, blue = 0] = [0, 2, 4].map(offset => parseInt(match[1]!.slice(offset, offset + 2), 16))
+  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255
+  return luminance > .56
+    ? { text: '#172033', panel: 'rgba(0,0,0,0.10)', stroke: 'rgba(0,0,0,0.28)' }
+    : { text: '#ffffff', panel: 'rgba(255,255,255,0.12)', stroke: 'rgba(255,255,255,0.42)' }
+}
 
 const fieldFor = (object: any): FooterField | null => {
   const field = String(object?.businessProfileField || '')
@@ -74,7 +84,7 @@ const placeIcon = (icon: any, box: { left: number; top: number; width: number; h
   if (!icon) return false
   const iconWidth = objectWidth(icon)
   const iconHeight = objectHeight(icon)
-  const iconSize = Math.min(28 * scale, Math.max(12 * scale, box.height - 14 * scale))
+  const iconSize = Math.min(34 * scale, Math.max(14 * scale, box.height - 14 * scale))
   const fit = iconSize / Math.max(iconWidth, iconHeight)
   return setObject(icon, {
     originX: 'left', originY: 'top',
@@ -95,27 +105,28 @@ export const compactBusinessFooter = (objects: any[]): boolean => {
     const old = bounds(background)
     const scale = Math.max(.25, old.width / 1080)
     const bottom = old.top + old.height
-    const targetHeight = 136 * scale
+    const targetHeight = 220 * scale
     const zone = objects.find(object => object?.isProductZone && (!background.parentFrameId || object.parentFrameId === background.parentFrameId))
-    const canGrow = old.height < targetHeight && zone && bounds(zone).top + bounds(zone).height <= bottom - targetHeight - 8 * scale
+    const canGrow = old.height < targetHeight && (!zone || bounds(zone).top + bounds(zone).height <= bottom - targetHeight - 8 * scale)
     const nextHeight = old.height > targetHeight + 1 || canGrow ? targetHeight : old.height
     if (Math.abs(old.height - nextHeight) > .5 || Math.abs(old.top - (bottom - nextHeight)) > .5) {
       changed = setObject(background, { top: bottom - nextHeight, height: nextHeight }) || changed
     }
 
     const footer = bounds(background)
-    const inset = 8 * scale
-    const gap = 6 * scale
+    const style = footerStyle(background.fill)
+    const inset = 10 * scale
+    const gap = 8 * scale
     const innerWidth = footer.width - inset * 2
     const innerHeight = footer.height - inset * 2
-    const paymentHeight = Math.max(28 * scale, Math.min(36 * scale, innerHeight * .29))
-    const contactHeight = Math.max(42 * scale, innerHeight - paymentHeight - gap)
-    const contactWidth = (innerWidth - gap * 2) / 3
+    const leftWidth = innerWidth * .58
+    const rightWidth = innerWidth - leftWidth - gap
+    const rowHeight = Math.max(48 * scale, (innerHeight - gap * 2) / 3)
     const boxes: Record<FooterField, { left: number; top: number; width: number; height: number }> = {
-      instagram: { left: footer.left + inset, top: footer.top + inset, width: contactWidth, height: contactHeight },
-      whatsapp: { left: footer.left + inset + contactWidth + gap, top: footer.top + inset, width: contactWidth, height: contactHeight },
-      address: { left: footer.left + inset + (contactWidth + gap) * 2, top: footer.top + inset, width: contactWidth, height: contactHeight },
-      footerPaymentImages: { left: footer.left + inset, top: footer.top + inset + contactHeight + gap, width: innerWidth, height: paymentHeight }
+      instagram: { left: footer.left + inset, top: footer.top + inset, width: leftWidth, height: rowHeight },
+      whatsapp: { left: footer.left + inset, top: footer.top + inset + rowHeight + gap, width: leftWidth, height: rowHeight },
+      address: { left: footer.left + inset, top: footer.top + inset + (rowHeight + gap) * 2, width: leftWidth, height: rowHeight },
+      footerPaymentImages: { left: footer.left + inset + leftWidth + gap, top: footer.top + inset, width: rightWidth, height: innerHeight }
     }
 
     for (const field of FOOTER_FIELDS) {
@@ -125,8 +136,7 @@ export const compactBusinessFooter = (objects: any[]): boolean => {
         changed = setObject(border, {
           left: box.left, top: box.top, width: box.width, height: box.height,
           scaleX: 1, scaleY: 1, originX: 'left', originY: 'top',
-          fill: !border.fill || border.fill === 'transparent' ? '#ffffff' : border.fill,
-          stroke: !border.stroke || border.stroke === 'transparent' ? '#ffe500' : border.stroke,
+          fill: style.panel, stroke: style.stroke,
           strokeWidth: Math.max(1, 1.5 * scale), rx: 14 * scale, ry: 14 * scale, visible: true
         }) || changed
       }
@@ -134,40 +144,41 @@ export const compactBusinessFooter = (objects: any[]): boolean => {
       const title = findTitle(objects, background, field)
       const item = findFieldObject(objects, background, field)
       if (field === 'footerPaymentImages') {
-        const labelWidth = Math.min(box.width * .28, 130 * scale)
+        const labelWidth = Math.min(box.width - 24 * scale, 170 * scale)
+        const paymentWidth = Math.max(30 * scale, box.width - 24 * scale)
         if (title) changed = setObject(title, {
-          left: box.left + 12 * scale, top: box.top + 5 * scale, width: labelWidth,
-          originX: 'left', originY: 'top', fontSize: Math.max(7, 9 * scale),
-          fontFamily: 'Barlow', fontWeight: 900, fill: title.fill || '#07196a', visible: true
+          left: box.left + 12 * scale, top: box.top + 12 * scale, width: labelWidth,
+          originX: 'left', originY: 'top', fontSize: Math.max(8, 11 * scale),
+          fontFamily: 'Barlow', fontWeight: 900, fill: style.text, visible: true
         }) || changed
         if (item) changed = setObject(item, {
-          left: box.left + labelWidth + 4 * scale, top: box.top + 5 * scale,
-          width: Math.max(30 * scale, box.width - labelWidth - 16 * scale),
-          height: Math.max(16 * scale, box.height - 10 * scale), scaleX: 1, scaleY: 1,
+          left: box.left + 12 * scale, top: box.top + 38 * scale,
+          width: paymentWidth,
+          height: Math.max(28 * scale, box.height - 50 * scale), scaleX: 1, scaleY: 1,
           originX: 'left', originY: 'top',
-          footerPaymentWidth: Math.max(30 * scale, box.width - labelWidth - 16 * scale),
-          footerPaymentHeight: Math.max(16 * scale, box.height - 10 * scale), visible: true
+          footerPaymentWidth: paymentWidth,
+          footerPaymentHeight: Math.max(28 * scale, box.height - 50 * scale), visible: true
         }) || changed
         continue
       }
 
       const icon = objects.find(object => object?.name === `icon-${field}` && (object.parentFrameId === background.parentFrameId || inside(object, background)))
       changed = placeIcon(icon, box, scale) || changed
-      const iconSize = Math.min(28 * scale, Math.max(12 * scale, box.height - 14 * scale))
-      const contentLeft = box.left + iconSize + 20 * scale
-      const contentWidth = Math.max(36 * scale, box.width - iconSize - 28 * scale)
+      const iconSize = Math.min(34 * scale, Math.max(14 * scale, box.height - 14 * scale))
+      const contentLeft = box.left + iconSize + 22 * scale
+      const contentWidth = Math.max(48 * scale, box.width - iconSize - 34 * scale)
       if (title) changed = setObject(title, {
-        left: contentLeft, top: box.top + 5 * scale, width: contentWidth,
-        originX: 'left', originY: 'top', fontSize: Math.max(7, 9 * scale),
-        fontFamily: 'Barlow', fontWeight: 900, fill: title.fill || '#07196a', visible: true
+        left: contentLeft, top: box.top + 10 * scale, width: contentWidth,
+        originX: 'left', originY: 'top', fontSize: Math.max(8, 11 * scale),
+        fontFamily: 'Barlow', fontWeight: 900, fill: style.text, visible: true
       }) || changed
       if (item) {
         const size = textSize(field, scale)
         changed = setObject(item, {
-          left: contentLeft, top: box.top + 18 * scale, width: contentWidth,
+          left: contentLeft, top: box.top + 30 * scale, width: contentWidth,
           originX: 'left', originY: 'top', scaleX: 1, scaleY: 1,
           fontFamily: 'Barlow', fontWeight: 800, fontSize: size, lineHeight: 1.02,
-          dynamicFieldBaseFontSize: size, dynamicFieldAutoFitFontSize: size,
+          dynamicFieldBaseFontSize: size, dynamicFieldAutoFitFontSize: size, fill: style.text,
           dynamicFieldAutoHeight: true, dynamicFieldHeight: 0,
           splitByGrapheme: field === 'address', visible: item.visible !== false
         }) || changed
