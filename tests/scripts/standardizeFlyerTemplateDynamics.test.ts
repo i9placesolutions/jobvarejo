@@ -56,7 +56,7 @@ describe('standardize flyer template dynamics', () => {
     )).toBe(true)
   })
 
-  it('keeps configured dates and places the calendar below the logo with a two-row footer', () => {
+  it('keeps configured dates and places the calendar below the logo with a contact row and payment strip', () => {
     const source = { objects: [frame(1080, 1920), { ...zone(1000, 1200), left: 40, top: 550 },
       { type: 'Rect', businessProfileField: 'logo', quickLogoSlot: true, width: 400, height: 250 },
       { ...textbox('validity', 500, 20, 450, 'old'), quickDataField: 'validity', quickValidityStartDate: '2026-09-13', quickValidityEndDate: '2026-09-14' }] }
@@ -67,7 +67,8 @@ describe('standardize flyer template dynamics', () => {
     const logo = canvas.objects.find((o: any) => o.businessProfileField === 'logo')
     expect(objectBounds(logo).bottom).toBeLessThan(objectBounds(get('standard-validity-background')).top)
     expect(get('footer-contact-instagram').top).toBe(get('footer-contact-whatsapp').top)
-    expect(get('footer-contact-address').top).toBeGreaterThan(get('footer-contact-instagram').top)
+    expect(get('footer-contact-address').top).toBe(get('footer-contact-instagram').top)
+    expect(get('footer-contact-payments').top).toBeGreaterThan(get('footer-contact-address').top)
   })
 
   it('does not rewrite a vertical model that already has the standard dynamic fields inside its frame', () => {

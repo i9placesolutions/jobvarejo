@@ -19182,6 +19182,7 @@ const persistInactiveQuickBusinessFields = async () => {
         const pageObjects = page.canvasData.objects || []
         const splitValidity = pageObjects.find((object: any) => isSplitFooterValidity(object) && hasSplitFooterValidityCompanions(object, pageObjects))
         const splitText = validity ? splitFooterValidityText({ ...validity, layout: splitValidity?.quickValidityLayout }) : null
+        const footerChanged = compactBusinessFooter(pageObjects)
         let updated = updateIsolatedPageFields(page.canvasData, object => {
             if (splitValidity && splitText && ['validity-heading', 'stock-validity', 'validity-backdrop'].includes(object.name)) {
                 if (object.name === 'validity-backdrop') return { visible: false }
@@ -19212,15 +19213,17 @@ const persistInactiveQuickBusinessFields = async () => {
             }
             return result
         })
-        const paymentData = updated || cloneCanvasDataForLoad(page.canvasData)
+        const paymentData = cloneCanvasDataForLoad(updated || page.canvasData)
+        let paymentChanged = false
         for (const [slotIndex, slot] of (paymentData.objects || []).entries()) {
             if (slot.businessProfileField !== 'footerPaymentImages') continue
             const group = await createFooterPaymentGroup(fabric, slot, profile.footerPaymentImages)
             group.set({ visible: overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false, quickFieldEnabled: overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false })
             paymentData.objects[slotIndex] = group.toObject(['_customId', 'parentFrameId', 'name', 'layerName', 'businessProfileField', 'quickFieldEnabled', 'footerPaymentWidth', 'footerPaymentHeight'])
             group.dispose()
-            updated = paymentData
+            paymentChanged = true
         }
+        if (paymentChanged || footerChanged) updated = paymentData
         if (updated) updatePageData(index, updated, { source: 'user', markUnsaved: true, skipIfSameFingerprint: true, reason: 'quick-business-all-pages' })
     }
 }

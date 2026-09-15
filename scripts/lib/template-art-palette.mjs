@@ -19,11 +19,15 @@ export async function paletteFromArtwork(buffer) {
 export function applyArtworkPalette(canvas,palette){
   for(const object of canvas.objects||[]){
     const name=object.name||''
-    if(name==='footer-premium-background'){object.fill='transparent';object.stroke='transparent'}
+    if(name==='footer-premium-background'){
+      // Uma faixa translúcida preserva a arte nas bordas e dá contraste
+      // constante para os campos comerciais e os cartões do cadastro.
+      object.fill=palette.main;object.opacity=.94;object.stroke=palette.surface;object.strokeWidth=Math.max(1,Number(object.strokeWidth||0))
+    }
     else if(name==='standard-validity-background')object.fill=palette.surface
     else if(/^reference-validity-.*-band$/.test(name))object.fill=palette.main
     else if(name==='header-validity'||/^footer-(title-|dynamic-)/.test(name)){object.fill=palette.ink;object.styles={}}
-    else if(/^footer-contact-/.test(name))object.stroke=palette.main
+    else if(/^footer-contact-/.test(name)){object.fill=palette.surface;object.stroke=palette.main;object.opacity=.98}
     else if(/^header-validity-calendar/.test(name)){
       if(name==='header-validity-calendar'){object.fill='#ffffff';object.stroke=palette.ink}
       else object.fill=palette.main

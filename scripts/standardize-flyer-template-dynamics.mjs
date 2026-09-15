@@ -291,7 +291,7 @@ const footerSample = (field) => ({
   footerPaymentImages: ''
 }[field] || '')
 
-const footerFontSize = (field, scale) => field === 'address' ? 16 * scale : field === 'instagram' ? 18 * scale : 20 * scale
+const footerFontSize = (field, scale) => field === 'address' ? 16 * scale : field === 'instagram' ? 18 * scale : 19 * scale
 
 const ensureFooterItem = (objects, frameId, field, box, scale) => {
   const boxName = `footer-contact-${field === 'footerPaymentImages' ? 'payments' : field}`
@@ -299,7 +299,7 @@ const ensureFooterItem = (objects, frameId, field, box, scale) => {
   const border = existingBox || rect(frameId, { name: boxName, layerName: footerLabel(field), selectable: false, evented: false })
   objectSet(border, {
     parentFrameId: frameId, left: box.left, top: box.top, width: box.width, height: box.height,
-    fill: '#ffffff', stroke: '#ffe500', strokeWidth: 1, rx: 24 * scale, ry: 24 * scale,
+    fill: '#ffffff', stroke: '#ffe500', strokeWidth: Math.max(1, 1.5 * scale), rx: 14 * scale, ry: 14 * scale,
     originX: 'left', originY: 'top', scaleX: 1, scaleY: 1, visible: true
   })
   bringToFront(objects, border)
@@ -349,7 +349,11 @@ const ensureFooterItem = (objects, frameId, field, box, scale) => {
   return dynamic
 }
 
-/** Rodapé em duas linhas: Instagram/WhatsApp e endereço/cartões. */
+/**
+ * Rodapé comercial legível em todos os formatos: três contatos na mesma
+ * faixa e cartões em uma linha separada. Cada valor continua sendo um campo
+ * dinâmico independente para o cadastro da loja.
+ */
 export const ensureBusinessFooter = (canvas, page, options = {}) => {
   const objects = canvas.objects || (canvas.objects = [])
   const frame = frameFor(canvas, page)
@@ -360,8 +364,8 @@ export const ensureBusinessFooter = (canvas, page, options = {}) => {
   // A tipografia do rodapé cresce pela largura; a área horizontal, porém,
   // deve continuar abaixo dos cards. Esta trava mantém 16:9 equilibrado.
   const footerHeight = horizontal
-    ? Math.round(Math.min(frameBounds.height * 0.20, 120 * scale))
-    : Math.round(120 * scale)
+    ? Math.round(Math.min(frameBounds.height * 0.20, 136 * scale))
+    : Math.round(136 * scale)
   const footerTop = frameBounds.bottom - footerHeight
   const zone = objects.find((object) => object?.isProductZone)
   if (zone) reserveZoneBottom(zone, footerTop, 10 * scale)
@@ -377,23 +381,44 @@ export const ensureBusinessFooter = (canvas, page, options = {}) => {
   })
   if (!objects.includes(background)) objects.push(background)
 
-  const gap = 8 * scale, inset = 16 * scale
-  const usable = frameBounds.width - inset * 2 - gap
-  for (const [index, field] of requiredFooterFields.entries()) {
-    const right = index % 2 === 1, row = Math.floor(index / 2)
-    const box = { left: frameBounds.left + inset + (right ? usable * .62 + gap : 0),
-      top: footerTop + gap + row * (footerHeight - gap * 3) / 2 + row * gap,
-      width: usable * (right ? .38 : .62), height: (footerHeight - gap * 3) / 2 }
+  const inset = 8 * scale, gap = 6 * scale
+  const innerWidth = frameBounds.width - inset * 2
+  const innerHeight = footerHeight - inset * 2
+  const paymentHeight = Math.max(28 * scale, Math.min(36 * scale, innerHeight * .29))
+  const contactHeight = Math.max(42 * scale, innerHeight - paymentHeight - gap)
+  const contactWidth = (innerWidth - gap * 2) / 3
+  const boxes = {
+    instagram: { left: frameBounds.left + inset, top: footerTop + inset, width: contactWidth, height: contactHeight },
+    whatsapp: { left: frameBounds.left + inset + contactWidth + gap, top: footerTop + inset, width: contactWidth, height: contactHeight },
+    address: { left: frameBounds.left + inset + (contactWidth + gap) * 2, top: footerTop + inset, width: contactWidth, height: contactHeight },
+    footerPaymentImages: { left: frameBounds.left + inset, top: footerTop + inset + contactHeight + gap, width: innerWidth, height: paymentHeight }
+  }
+  for (const field of requiredFooterFields) {
+    const box = boxes[field]
     const item = ensureFooterItem(objects, frame._customId, field, box, scale)
     const icon = objects.find(o => o.name === `icon-${field}`)
     if (icon && field !== 'footerPaymentImages') {
-      const fit = (box.height - 12 * scale) / Math.max(icon.width, icon.height)
-      objectSet(icon, { originX: 'left', originY: 'top', left: box.left + 8 * scale, top: box.top + 6 * scale, scaleX: fit, scaleY: fit, visible: true })
+      const iconWidth = Math.max(1, num(icon.width, 1))
+      const iconHeight = Math.max(1, num(icon.height, 1))
+      const iconSize = Math.min(28 * scale, box.height - 14 * scale)
+      const fit = iconSize / Math.max(iconWidth, iconHeight)
+      const iconTop = box.top + (box.height - Math.max(iconHeight, iconWidth) * fit) / 2
+      objectSet(icon, { originX: 'left', originY: 'top', left: box.left + 8 * scale, top: iconTop, scaleX: fit, scaleY: fit, visible: true })
       bringToFront(objects, icon)
-      const inset = box.height + 4 * scale
-      item.left = box.left + inset; item.width = box.width - inset - 10 * scale
+      const contentInset = iconSize + 12 * scale
+      item.left = box.left + contentInset; item.width = Math.max(36 * scale, box.width - contentInset - 8 * scale)
       const title = objects.find(o => o.name === `footer-title-${field}`)
-      title.left = item.left; title.width = item.width
+      if (title) { title.left = item.left; title.width = item.width }
+    } else if (field === 'footerPaymentImages') {
+      const title = objects.find(o => o.name === `footer-title-${field}`)
+      const labelWidth = Math.min(box.width * .28, 130 * scale)
+      if (title) { title.left = box.left + 12 * scale; title.top = box.top + 5 * scale; title.width = labelWidth }
+      objectSet(item, {
+        left: box.left + labelWidth + 4 * scale, top: box.top + 5 * scale,
+        width: Math.max(30 * scale, box.width - labelWidth - 16 * scale), height: Math.max(16 * scale, box.height - 10 * scale),
+        footerPaymentWidth: Math.max(30 * scale, box.width - labelWidth - 16 * scale),
+        footerPaymentHeight: Math.max(16 * scale, box.height - 10 * scale)
+      })
     }
   }
   for (const o of objects) if (/^footer-divider-/.test(o.name || '')) o.visible = false
@@ -528,8 +553,8 @@ export const createMissingFormatCanvas = ({ project, sourceCanvas, donorZone, fo
   const zoneSource = (sourceCanvas?.objects || []).find((object) => object?.isProductZone) || donorZone
   if (!zoneSource) throw new Error(`Não foi encontrada zona-base para ${project?.name || 'modelo'}`)
   const footerHeight = format[0] === 'tv'
-    ? Math.round(Math.min(height * 0.13, 78 * scale))
-    : Math.round(120 * scale)
+    ? Math.round(Math.min(height * 0.20, 136 * scale))
+    : Math.round(136 * scale)
   const zoneBox = { left: 20 * scale, top: headerHeight + 18 * scale, width: width - 40 * scale, height: height - headerHeight - footerHeight - 34 * scale }
   const zone = cloneZoneForFrame(zoneSource, frame, zoneBox, {
     templateFormatId: format[0], templateFormatLabel: formatLabel,
