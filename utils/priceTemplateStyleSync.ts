@@ -9,6 +9,11 @@ export const syncPriceTemplateStyle = (group: any, template: any, revivePaint: (
     for (const child of node.objects || []) index(child)
   }
   index(template)
+  // Posições e escalas pertencem ao mesmo sistema de coordenadas autorado.
+  // Restaurar só a escala sobre posições já normalizadas desloca o R$ a cada
+  // carregamento/duplicação. Etiquetas atacarejo têm reflow próprio por variante.
+  const restoreSingleGeometry = (group.__preserveManualLayout === true || template.__preserveManualLayout === true)
+    && !sources.has('atac_retail_bg')
   const keys = ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'textAlign', 'charSpacing', 'lineHeight', 'underline', 'strokeWidth', 'rx', 'ry', '__priceRichIntegerStyle', '__priceRichDecimalStyle', '__priceRichIntegerScale', '__priceRichDecimalScale']
   const visit = (node: any) => {
     const source = sources.get(node.name)
@@ -30,6 +35,16 @@ export const syncPriceTemplateStyle = (group: any, template: any, revivePaint: (
       // A referência lateral tem colunas fixas; mantém apenas a posição externa
       // do grupo e deixa o reflow calcular as linhas verticais de cada produto.
       if (template.__referenceStyleVersion === 2 && source.left !== undefined) patch.left = source.left
+      if (restoreSingleGeometry) {
+        for (const key of ['left', 'top', 'originX', 'originY', 'angle', 'skewX', 'skewY', 'flipX', 'flipY']) {
+          if (source[key] !== undefined) patch[key] = source[key]
+        }
+        if (source.height !== undefined && !('text' in source)) patch.height = source.height
+        for (const key of ['Left', 'Top', 'ScaleX', 'ScaleY', 'OriginX', 'OriginY']) {
+          const property = key[0]!.toLowerCase() + key.slice(1)
+          if (source[property] !== undefined) patch[`__original${key}`] = source[property]
+        }
+      }
       node.set?.(patch)
       Object.assign(node, patch)
       if (node.__priceRichText) applyRichPriceTextValue(node, node.text)

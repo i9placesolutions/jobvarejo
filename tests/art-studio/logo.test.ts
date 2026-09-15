@@ -50,7 +50,7 @@ describe('Logo do estúdio — contrato das ofertas', () => {
     const meta = await sharp(await trimArtTransparency(source)).metadata()
     expect([meta.width, meta.height]).toEqual([80, 60])
   })
-  it('renderer mantém tamanho do slot com trim, container e contorno', async () => {
+  it('renderer elimina margens recriadas pelo slot sem perder container e contorno', async () => {
     const image = await sharp({
       create: { width: 60, height: 25, channels: 4, background: '#00ff00' }
     })
@@ -75,7 +75,11 @@ describe('Logo do estúdio — contrato das ofertas', () => {
         outlineWidth: 4
       })
       const meta = await sharp(output).metadata()
-      expect([meta.width, meta.height]).toEqual([205, 140])
+      expect(meta.width).toBeLessThanOrEqual(205)
+      expect(meta.height).toBeLessThanOrEqual(140)
+      const retrimmed = await sharp(await trimArtTransparency(output)).metadata()
+      expect([meta.width, meta.height]).toEqual([retrimmed.width, retrimmed.height])
+      if (backdrop === 'none') expect(meta.height).toBeLessThan(110)
     }
   })
   it('URL do preview reflete configurações sem alterar a referência salva', () => {
@@ -88,7 +92,7 @@ describe('Logo do estúdio — contrato das ofertas', () => {
     expect(artLayerImageSrc(layer)).toContain('trim=true')
     expect(layer.src).toBe('/api/art-studio/brand-logo')
     expect(artLayerImageSrc({ ...layer, autoTrim: false })).toContain(
-      'trim=false'
+      'trim=true'
     )
   })
 })
@@ -98,8 +102,17 @@ it('contorno forma base contínua sem listras e acompanha a silhueta', async () 
   const output = await prepareArtLogo(source,{width:60,height:60,trim:true,backdrop:'none',padding:20,outline:true,outlineColor:'#ffffff',outlineWidth:4})
   const {data,info} = await sharp(output).ensureAlpha().raw().toBuffer({resolveWithObject:true})
   const pixel=(x:number,y:number)=>[...data.subarray((y*info.width+x)*4,(y*info.width+x)*4+4)]
-  for(let y=12;y<48;y++) expect(pixel(30,y)[3]).toBe(255)
-  expect(pixel(30,12)).toEqual([255,255,255,255])
-  expect(pixel(30,30)).toEqual([255,0,0,255])
-  expect(pixel(3,3)[3]).toBe(0)
+  const cx=Math.floor(info.width/2), cy=Math.floor(info.height/2)
+  for(let y=2;y<info.height-2;y++) expect(pixel(cx,y)[3]).toBe(255)
+  expect(pixel(cx,2)).toEqual([255,255,255,255])
+  expect(pixel(cx,cy)).toEqual([255,0,0,255])
+  expect(info.width).toBeLessThan(60)
+})
+
+it('documento antigo com trim desativado ainda remove margens e preserva proporção', async () => {
+  const input=await sharp({create:{width:80,height:30,channels:4,background:'#ff0000'}})
+    .extend({top:50,bottom:50,left:50,right:50,background:'#00000000'}).png().toBuffer()
+  const output=await prepareArtLogo(input,{width:240,height:240,trim:false,backdrop:'none',padding:0,outline:false,outlineColor:'#ffffff',outlineWidth:4})
+  const meta=await sharp(output).metadata()
+  expect([meta.width,meta.height]).toEqual([240,90])
 })

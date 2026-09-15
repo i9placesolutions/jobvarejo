@@ -4,9 +4,13 @@ import { artLayerImageSrc } from '~/utils/art-studio/logo'
 import { ART_ICONS } from '~/types/art-studio'
 const props=defineProps<{ composition: ArtComposition; label?: string }>()
 const uid=useId()
+import { artTextArc, measureArtText } from '~/utils/art-studio/textArc'
+const fontsReady=ref(0)
+const arcGlyphs=(layer:ArtLayer)=>{void fontsReady.value;return import.meta.client?artTextArc(layer,measureArtText(layer)):[]}
+
 import { loadArtFonts } from '~/utils/art-studio/fonts'
-onMounted(()=>{void loadArtFonts(props.composition)})
-watch(()=>props.composition,()=>{if(import.meta.client)void loadArtFonts(props.composition)})
+onMounted(()=>{void loadArtFonts(props.composition).then(()=>fontsReady.value++)})
+watch(()=>props.composition,()=>{if(import.meta.client)void loadArtFonts(props.composition).then(()=>fontsReady.value++)})
 const paint=(layer:ArtLayer)=>layer.gradient?`url(#${uid}-${layer.id})`:layer.fill
 const lines = (layer: ArtLayer) => {
   const max = Math.max(
@@ -36,6 +40,7 @@ const lines = (layer: ArtLayer) => {
     xmlns="http://www.w3.org/2000/svg"
   >
     <defs>
+      <filter v-for="layer in composition.layers.filter(l=>l.textShadow)" :key="`shadow-${layer.id}`" :id="`${uid}-shadow-${layer.id}`" x="-50%" y="-100%" width="200%" height="300%"><feDropShadow dx="4" dy="4" stdDeviation="4" :flood-color="layer.textShadowColor || '#000000'" /></filter>
       <filter v-for="layer in composition.layers.filter(l=>l.blur)" :key="`blur-${layer.id}`" :id="`${uid}-blur-${layer.id}`" x="-100%" y="-100%" width="300%" height="300%" color-interpolation-filters="sRGB"><feGaussianBlur :stdDeviation="layer.blur" /></filter>
       <template v-for="layer in composition.layers.filter(l=>l.gradient)" :key="layer.id">
         <linearGradient v-if="layer.gradient!.type==='linear'" :id="`${uid}-${layer.id}`" :x1=".5-Math.cos(layer.gradient!.angle*Math.PI/180)/2" :y1=".5-Math.sin(layer.gradient!.angle*Math.PI/180)/2" :x2=".5+Math.cos(layer.gradient!.angle*Math.PI/180)/2" :y2=".5+Math.sin(layer.gradient!.angle*Math.PI/180)/2">
@@ -54,13 +59,18 @@ const lines = (layer: ArtLayer) => {
       :key="layer.id"
       :transform="`translate(${layer.x} ${layer.y}) rotate(${layer.rotation})`"
       :opacity="layer.opacity"
-      :filter="layer.blur ? `url(#${uid}-blur-${layer.id})` : undefined"
+      :stroke="layer.kind==='text' ? layer.textStrokeColor || '#ffffff' : undefined" :stroke-width="layer.kind==='text' ? layer.textStrokeWidth || 0 : 0" paint-order="stroke fill"
+      :filter="layer.textShadow ? `url(#${uid}-shadow-${layer.id})` : layer.blur ? `url(#${uid}-blur-${layer.id})` : undefined"
     >
+      <g v-if="layer.kind==='text' && layer.textArc">
+        <text v-for="(glyph,index) in arcGlyphs(layer)" :key="index" :transform="`translate(${glyph.x} ${glyph.y}) rotate(${glyph.angle}) scale(${layer.fontScaleX || 1} 1)`" text-anchor="middle" dominant-baseline="central" :font-family="`Art ${layer.fontFamily}`" :font-size="glyph.fontSize" :font-weight="layer.fontWeight" :fill="paint(layer)">{{ glyph.char }}</text>
+      </g>
       <text
-        v-if="layer.kind === 'text'"
+        v-else-if="layer.kind === 'text'"
         :fill="paint(layer)"
         :font-family="`Art ${layer.fontFamily}, ${layer.fontFamily}`"
         :font-size="layer.fontSize"
+        :letter-spacing="layer.letterSpacing || 0"
         :transform="`scale(${layer.fontScaleX || 1} 1)`"
         :font-weight="layer.fontWeight"
         :text-anchor="

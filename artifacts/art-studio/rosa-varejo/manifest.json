@@ -1,0 +1,102 @@
+{
+  "elements": {
+    "punho-lenco-rosa": {
+      "id": "c0eaf9a4-4bee-428e-a021-489cd2683bf7",
+      "src": "/api/art-studio/assets/c0eaf9a4-4bee-428e-a021-489cd2683bf7",
+      "key": "imagens/biblioteca/elementos/rosa-varejo/punho-lenco-rosa-35481f8684e2.png",
+      "sha256": "35481f8684e2ff82989f3cc393e8aabe437f6dbc21917267d23783ced7b35ce8"
+    },
+    "mao-laco-rosa": {
+      "id": "e849a112-732a-4c83-8eab-4e440ac2d8e2",
+      "src": "/api/art-studio/assets/e849a112-732a-4c83-8eab-4e440ac2d8e2",
+      "key": "imagens/biblioteca/elementos/rosa-varejo/mao-laco-rosa-6ae68e19c6a6.png",
+      "sha256": "6ae68e19c6a6593cbbbdb0eac1179bb1ee790047c5dde2dd5ab6881e3072f9a7"
+    },
+    "cadeira-odontologica-rosa": {
+      "id": "97bb2369-d9b5-407e-8f53-79ee68fdfd5b",
+      "src": "/api/art-studio/assets/97bb2369-d9b5-407e-8f53-79ee68fdfd5b",
+      "key": "imagens/biblioteca/elementos/rosa-varejo/cadeira-odontologica-rosa-55b15dcc0ba7.png",
+      "sha256": "55b15dcc0ba78b844c6182254d037e6166e4d4b0e032ae2060d5468a5339c312"
+    },
+    "laco-rosa-fluido": {
+      "id": "c24ccf6a-acce-48b4-9eb3-0c9495f3c20c",
+      "src": "/api/art-studio/assets/c24ccf6a-acce-48b4-9eb3-0c9495f3c20c",
+      "key": "imagens/biblioteca/elementos/rosa-varejo/laco-rosa-fluido-e8354563ffab.png",
+      "sha256": "e8354563ffab8a98d3645f0146f857578debd06cbcc40d105711622a0254c055"
+    },
+    "carrinho-amarelo": {
+      "id": "d629dc0d-d118-4f05-8d8f-74ab88e236c6",
+      "src": "/api/art-studio/assets/d629dc0d-d118-4f05-8d8f-74ab88e236c6",
+      "key": "imagens/biblioteca/elementos/rosa-varejo/carrinho-amarelo-f96294586fd4.png",
+      "sha256": "f96294586fd41e5cceafec945a9834f6480272f1a863e9e93b0dc4ce8559aef6"
+    },
+    "agricultoras-hortifruti": {
+      "id": "1e6e8a1f-6650-45d9-a00d-c0dde0f4a454",
+      "src": "/api/art-studio/assets/1e6e8a1f-6650-45d9-a00d-c0dde0f4a454",
+      "key": "imagens/biblioteca/elementos/rosa-varejo/agricultoras-hortifruti-35e5ff0e1c83.png",
+      "sha256": "35e5ff0e1c8337a11c71348f5629e994f30e0be28616e0f1147ad1ad497a56ab"
+    },
+    "moeda-dourada": {
+      "id": "5eac02eb-1d21-4e77-8e02-bb0ebaf494b1",
+      "src": "/api/art-studio/assets/5eac02eb-1d21-4e77-8e02-bb0ebaf494b1",
+      "key": "imagens/biblioteca/elementos/rosa-varejo/moeda-dourada-491e21c259ff.png",
+      "sha256": "491e21c259ff78561b2a060241a53d6bf0ce732446acde24a415217295d3ea75"
+    },
+    "moeda-verde": {
+      "id": "e00d6220-49f7-466a-8b82-5a9090f04547",
+      "src": "/api/art-studio/assets/e00d6220-49f7-466a-8b82-5a9090f04547",
+      "key": "imagens/biblioteca/elementos/rosa-varejo/moeda-verde-7bf1da163beb.png",
+      "sha256": "7bf1da163beba9b252dce645b594e3a1ca373aac44067c765819ebf2762ca151"
+    },
+    "cesta-azul": {
+      "id": "82ae9b49-dc3a-4813-a031-cf05ae9ae017",
+      "src": "/api/art-studio/assets/82ae9b49-dc3a-4813-a031-cf05ae9ae017",
+      "key": "imagens/biblioteca/elementos/rosa-varejo/cesta-azul-402849703cc6.png",
+      "sha256": "402849703cc62eb9bb83a7dd37acc8cd18af51e33d7f5f93c487a34aaa016e08"
+    }
+  },
+  "templates": {
+    "essa-luta-e-nossa": {
+      "id": "44540ebe-0781-4331-8548-1734f388c4d1",
+      "name": "Outubro Rosa — essa luta é nossa",
+      "revision": 1,
+      "published": true,
+      "formats": 5
+    },
+    "outubro-rosa-cuidado": {
+      "id": "64210987-d109-4ab9-88a1-f19a91c2be6c",
+      "name": "Outubro Rosa — cuidado em suas mãos",
+      "revision": 1,
+      "published": true,
+      "formats": 5
+    },
+    "conecte-se-corpo": {
+      "id": "2ef1a78e-dbfe-45cc-803a-0bc263e09655",
+      "name": "Outubro Rosa — conecte-se com seu corpo",
+      "revision": 1,
+      "published": true,
+      "formats": 5
+    },
+    "venha-fazer-compras": {
+      "id": "b1749cdb-dd24-4b9f-9ad7-2e973458bdfc",
+      "name": "Varejo — venha fazer suas compras",
+      "revision": 1,
+      "published": true,
+      "formats": 5
+    },
+    "frescor-e-economia": {
+      "id": "b04676bb-567f-4e4e-bb54-4321c46a4afc",
+      "name": "Hortifruti — frescor e economia",
+      "revision": 1,
+      "published": true,
+      "formats": 5
+    },
+    "economia-na-lista": {
+      "id": "d974861a-0dbe-4c33-980d-dd63fa724028",
+      "name": "Varejo — economia na lista de compras",
+      "revision": 1,
+      "published": true,
+      "formats": 5
+    }
+  }
+}

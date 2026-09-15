@@ -42,7 +42,7 @@ const QUICK_PRICE_BACKGROUND_NAME_RE = /(?:^|_)(?:price|offer|atac|retail|wholes
 
 export type QuickEditableColorTarget = {
   id: string
-  kind: 'native' | 'product-card' | 'price-label'
+  kind: 'native' | 'product-card' | 'price-label' | 'product-area'
   label: string
   description: string
   count: number
@@ -338,6 +338,13 @@ const collectPriceLabelShapes = (objects: any[]): Array<{ object: any; property:
  * modelo reutilizável original.
  */
 export const collectQuickEditableColorTargets = (objects: any[]): QuickEditableColorTarget[] => {
+  // O painel é independente dos cards e pode estar bloqueado no modo rápido.
+  // A identificação explícita evita recolorir o cenário ou a moldura da página.
+  const areaObjects = (Array.isArray(objects) ? objects : []).flatMap(collectDescendants)
+    .filter(object => normalizedName(object) === 'product-area-background' &&
+      isVectorColorObject(object) && object.visible !== false && !object.isFrame &&
+      !object.isProductZone && !object.isGridZone)
+    .map(object => ({ object, property: 'fill' as const }))
   const cardObjects = collectCardBackgrounds(objects)
   const priceObjects = collectPriceLabelShapes(objects)
   const nativeObjects = collectQuickNativeColorTargets(objects)
@@ -362,13 +369,14 @@ export const collectQuickEditableColorTargets = (objects: any[]): QuickEditableC
       ).replace(/\s+/g, ' ').trim()
       const target = buildColorTarget({
         id: `object:${id}:${item.property}`, kind,
-        label: kind === 'product-card' && productName ? productName : `${label} ${targets.length + 1}`,
-        description: kind === 'product-card' ? 'Fundo do card deste produto' : String(item.object.name || 'Altera somente este elemento.'),
+        label: kind === 'product-area' ? (areaObjects.length > 1 ? `${label} ${targets.length + 1}` : label) : kind === 'product-card' && productName ? productName : `${label} ${targets.length + 1}`,
+        description: kind === 'product-area' ? 'Quadro atrás da zona de produtos desta página' : kind === 'product-card' ? 'Fundo do card deste produto' : String(item.object.name || 'Altera somente este elemento.'),
         objects: [item]
       })
       if (target) targets.push(target)
     })
   }
+  append(areaObjects, 'product-area', 'Fundo da área de produtos')
   append(cardObjects, 'product-card', 'Fundo do card')
   append(priceObjects, 'price-label', 'Forma da etiqueta')
   append(nativeObjects, 'native', 'Elemento')

@@ -1,0 +1,12 @@
+import pg from 'pg';import {readFile,writeFile} from 'node:fs/promises';import {createHmac,createHash,randomUUID} from 'node:crypto';
+const root='artifacts/art-studio/dia-das-criancas',url='http://127.0.0.1:3119';
+const db=new pg.Client({connectionString:process.env.POSTGRES_DATABASE_URL});await db.connect();
+try{
+ const {rows}=await db.query("SELECT id,email,role FROM profiles WHERE role='super_admin'");if(rows.length!==1)throw Error('Admin ambíguo');const u=rows[0],now=Math.floor(Date.now()/1000),enc=x=>Buffer.from(JSON.stringify(x)).toString('base64url');const b=enc({alg:'HS256',typ:'JWT',iss:'jobvarejo'})+'.'+enc({sub:u.id,email:u.email,role:u.role,iat:now,exp:now+1800});const headers={Authorization:'Bearer '+b+'.'+createHmac('sha256',process.env.AUTH_JWT_SECRET).update(b).digest('base64url')};
+ async function req(path,opts={}){const r=await fetch(url+path,{...opts,headers:{...headers,...opts.headers}});if(!r.ok)throw Error(path+' '+r.status+' '+await r.text());return r.json()}
+ const params=new URLSearchParams({source:'brand',width:'300',height:'300',trim:'false',backdrop:'none',padding:'12',outline:'false',outlineColor:'#ffffff',outlineWidth:'4'});
+ const response=await fetch(url+'/api/art-studio/image-view?'+params,{headers});if(!response.ok)throw Error('Logo '+response.status);const bytes=Buffer.from(await response.arrayBuffer());await writeFile(root+'/logo-auto-trim.png',bytes);
+ const sharp=(await import('sharp')).default;const meta=await sharp(bytes).metadata();if(!meta.width||!meta.height||meta.width===meta.height)throw Error('Logo permaneceu quadrada');console.log(JSON.stringify({realLogoDimensions:[meta.width,meta.height],legacyTrimFalseIgnored:true}));
+ const {rows:templates}=await db.query('SELECT composition FROM art_studio_templates WHERE id=$1',['93cdd8df-2445-4b93-913e-276d657124c1']);const docs=[templates[0].composition,...templates[0].composition.alternates];for(const d of docs){const l=d.layers.find(l=>l.binding==='logo');if(!l)throw Error('Formato sem logo');l.src='/api/art-studio/brand-logo';}
+ const r=await fetch(url+'/api/art-studio/render',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({compositions:docs})});if(!r.ok)throw Error('Render '+r.status+' '+await r.text());await writeFile(root+'/formatos-com-logo.zip',Buffer.from(await r.arrayBuffer()));console.log('Cinco formatos com logo renderizados pelo endpoint autenticado.');
+}finally{await db.end()}

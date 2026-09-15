@@ -19,6 +19,12 @@ const layer = z.object({
   fontFamily: z.enum(ART_FONTS).optional(),
   fontScaleX: finite.min(.4).max(2).optional(),
   lineHeight: finite.min(.7).max(2.5).optional(),
+  letterSpacing: finite.min(0).max(60).optional(),
+  textStrokeWidth: finite.min(0).max(20).optional(),
+  textStrokeColor: color.optional(),
+  textShadow: z.boolean().optional(),
+  textShadowColor: color.optional(),
+  textArc: finite.min(-180).max(180).optional(),
   fontSize: finite.min(6).max(1000).optional(),
   fontWeight: z
     .union([z.literal(400), z.literal(600), z.literal(700), z.literal(800)])

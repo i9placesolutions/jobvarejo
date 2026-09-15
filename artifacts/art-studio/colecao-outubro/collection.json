@@ -1,0 +1,42 @@
+[
+  {
+    "slug": "sorriso-arco-iris",
+    "name": "Dia das Crianças — sorriso e arco-íris",
+    "collection": "Dia das Crianças"
+  },
+  {
+    "slug": "amigos-coloridos",
+    "name": "Dia das Crianças — amigos e cores",
+    "collection": "Dia das Crianças"
+  },
+  {
+    "slug": "sonhar-alto",
+    "name": "Dia das Crianças — sonhar alto",
+    "collection": "Dia das Crianças"
+  },
+  {
+    "slug": "pequeno-aviador",
+    "name": "Dia das Crianças — pequeno aviador",
+    "collection": "Dia das Crianças"
+  },
+  {
+    "slug": "abrace-prevencao",
+    "name": "Outubro Rosa — abrace a prevenção",
+    "collection": "Outubro Rosa"
+  },
+  {
+    "slug": "prevencao-diferenca",
+    "name": "Outubro Rosa — prevenção faz a diferença",
+    "collection": "Outubro Rosa"
+  },
+  {
+    "slug": "rosa-conscientizacao",
+    "name": "Outubro Rosa — flor da conscientização",
+    "collection": "Outubro Rosa"
+  },
+  {
+    "slug": "escolha-rosa",
+    "name": "Outubro Rosa — escolha o rosa todos os dias",
+    "collection": "Outubro Rosa"
+  }
+]

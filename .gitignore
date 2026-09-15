@@ -73,3 +73,7 @@ coverage/
 # Generated local previews and project backups
 /output/
 /.art-studio-deletion-backups/
+
+# Isolated Nuxt validation builds
+/.nuxt-*-check/
+/.output-*-check/

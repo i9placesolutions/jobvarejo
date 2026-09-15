@@ -7,12 +7,35 @@ worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)
 class ArtWorkerTests(unittest.TestCase):
  def doc(self):
   return {'version':1,'width':1080,'height':1350,'background':'#ffffff','layers':[{'id':'title','kind':'text','name':'Título','x':80,'y':200,'width':900,'height':400,'rotation':0,'opacity':1,'visible':True,'locked':False,'fill':'#123456','fontFamily':'Barlow','fontSize':112,'fontWeight':800,'text':'Mensagem especial para você e sua família','align':'left','binding':'companyName'}]}
+ def test_text_outline_shadow_and_spacing_change_pixels(self):
+  doc=self.doc();layer=doc['layers'][0];layer.update(text='Crianças',fontFamily='Knewave',fontWeight=400)
+  plain=worker.render(doc,{}).tobytes()
+  for effect in [{'textStrokeWidth':6,'textStrokeColor':'#ff0000'},{'textShadow':True,'textShadowColor':'#ff0000'},{'letterSpacing':15}]:
+   changed=self.doc();changed['layers'][0]=dict(layer,**effect)
+   self.assertNotEqual(plain,worker.render(changed,{}).tobytes())
+ def test_curved_text_changes_render_and_supports_downloaded_font(self):
+  doc=self.doc();layer=doc['layers'][0];layer.update(text='12 de Outubro',textArc=110,fontFamily='Knewave',fontWeight=400)
+  curved=worker.render(doc,{})
+  layer['textArc']=0
+  straight=worker.render(doc,{})
+  self.assertNotEqual(curved.tobytes(),straight.tobytes())
+  self.assertEqual(curved.size,straight.size)
  def test_five_formats_and_unicode(self):
   for width,height in [(1080,1350),(1080,1080),(1080,1920),(794,1123),(1920,1080)]:
    original=self.doc();doc=worker.compose(original,width,height,{'companyName':'Promoção • açougue • pão de queijo'})
    self.assertEqual(doc['layers'][0]['text'],'Promoção • açougue • pão de queijo')
    self.assertEqual(worker.render(doc,{}).size,(width,height))
    self.assertEqual(original['width'],1080)
+ def test_contain_upscales_small_assets_and_preserves_aspect(self):
+  import io,base64
+  from PIL import Image
+  raw=io.BytesIO();Image.new('RGBA',(20,10),'#ff0000').save(raw,format='PNG')
+  doc=self.doc();doc['layers'][0].update(kind='image',x=0,y=0,width=200,height=200,src='small',fit='contain')
+  result=worker.render(doc,{'small':base64.b64encode(raw.getvalue()).decode()})
+  self.assertEqual(result.getpixel((5,55))[:3],(255,0,0))
+  self.assertEqual(result.getpixel((195,145))[:3],(255,0,0))
+  self.assertEqual(result.getpixel((100,45))[:3],(255,255,255))
+  self.assertEqual(result.getpixel((100,155))[:3],(255,255,255))
  def test_missing_image_never_silent(self):
   doc=self.doc();doc['layers'][0].update(kind='image',src='/api/art-studio/assets/test')
   with self.assertRaises(ValueError):worker.render(doc,{})

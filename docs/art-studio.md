@@ -76,3 +76,11 @@ Camadas agora aceitam `gradient` linear/radial com `from`, `to`, `startOpacity`,
 - `Consumidor Referencia` é uma reconstrução dos caracteres visíveis, derivada de Russo One sob OFL; não é identificação da fonte original. Caracteres não presentes na referência conservam a base e precisam de revisão para novas mensagens.
 - `blur` (0–150 px) mantém as formas de sombra independentes, com cor, opacidade, posição e desfoque. Fabric usa um raster temporário do SVG filtrado; o JSON conserva a camada editável. Pillow amplia o bitmap antes do desfoque para evitar bordas retangulares.
 - Os seis modelos continuam como rascunhos: ainda há diferenças visuais nas fotografias e na composição em relação à referência.
+
+### Logo automática e recorte permanente
+
+O modelo “Dia das Crianças — alegria em 3D” possui uma camada `binding: logo` em cada um dos cinco formatos. Ao criar a arte, o editor resolve a logo do perfil da conta autenticada. O auto trim é permanente, inclusive em documentos antigos com `autoTrim: false`. A preparação recorta tanto a imagem de origem quanto o resultado com container/contorno, para não recriar margens transparentes na seleção do Fabric. A mesma imagem preparada alimenta a exportação Pillow. Cores opacas não são removidas.
+
+### Efeitos de texto
+
+Selecione uma camada de texto para ajustar **Texto em arco** (−180° a 180°, zero mantém reto), **Espaço entre letras**, **Contorno** e sua cor, ou **Sombra do texto** e sua cor. O texto em arco continua sendo uma única camada editável pelo campo de conteúdo. `textArc`, `letterSpacing`, `textStrokeWidth`, `textStrokeColor`, `textShadow` e `textShadowColor` são persistidos no JSON; Fabric, prévia SVG e Pillow interpretam esses campos. A fonte Knewave está disponível localmente com sua licença OFL, como alternativa de pincel encorpado.

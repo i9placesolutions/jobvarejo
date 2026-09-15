@@ -1,0 +1,64 @@
+{
+  "asset": {
+    "id": "6bdcc514-4e4c-4b5e-8f66-107eda4da88f",
+    "src": "/api/art-studio/assets/6bdcc514-4e4c-4b5e-8f66-107eda4da88f"
+  },
+  "templateId": "93cdd8df-2445-4b93-913e-276d657124c1",
+  "revision": 5,
+  "elements": {
+    "menina": {
+      "id": "d6518367-eb22-4b47-9948-34f1650d967b",
+      "src": "/api/art-studio/assets/d6518367-eb22-4b47-9948-34f1650d967b",
+      "key": "imagens/biblioteca/elementos/dia-das-criancas/menina-db77dab0fc57.png",
+      "sha256": "db77dab0fc57921357c16ff84cb70d907604f14a04dfe0e7a64ef2d9eed5cb9f"
+    },
+    "ruivo": {
+      "id": "c40f9449-75f4-4753-8d9b-abee162401d4",
+      "src": "/api/art-studio/assets/c40f9449-75f4-4753-8d9b-abee162401d4",
+      "key": "imagens/biblioteca/elementos/dia-das-criancas/ruivo-d81e324d22fa.png",
+      "sha256": "d81e324d22fa9d3d6b0490f6cee5ac3994f4c2a40d79ff9d87f244d811759a0f"
+    },
+    "amarelo": {
+      "id": "1f6845d3-8e05-4535-a54c-659176abd5f6",
+      "src": "/api/art-studio/assets/1f6845d3-8e05-4535-a54c-659176abd5f6",
+      "key": "imagens/biblioteca/elementos/dia-das-criancas/amarelo-4704273969c5.png",
+      "sha256": "4704273969c56ef50fba137313d04666cd2db44f8ba70a38e82208703c5f4d4d"
+    },
+    "cacheado": {
+      "id": "41fdfcbc-fc7f-41db-89bc-fe5f59a4a2d5",
+      "src": "/api/art-studio/assets/41fdfcbc-fc7f-41db-89bc-fe5f59a4a2d5",
+      "key": "imagens/biblioteca/elementos/dia-das-criancas/cacheado-f623126d1e51.png",
+      "sha256": "f623126d1e5193671eb213a57e01490b0bc44716b23632573f3bea1f0f5c289c"
+    },
+    "titulo": {
+      "id": "be747b54-23ea-4536-983a-7e3058b7d54a",
+      "src": "/api/art-studio/assets/be747b54-23ea-4536-983a-7e3058b7d54a",
+      "key": "imagens/biblioteca/elementos/dia-das-criancas/titulo-06a83ad26235.png",
+      "sha256": "06a83ad26235082101e7a687cd1a7f3f31d2f6ba36aaa2d7034711c3ca92bfc9"
+    },
+    "placa": {
+      "id": "c31c0006-4488-4e41-9072-8f6ab939e61b",
+      "src": "/api/art-studio/assets/c31c0006-4488-4e41-9072-8f6ab939e61b",
+      "key": "imagens/biblioteca/elementos/dia-das-criancas/placa-737b7550a787.png",
+      "sha256": "737b7550a787f979572c0d1a1eef135920e8285275e2995a5d83da40a6f7d72b"
+    },
+    "presente": {
+      "id": "ada11863-c8f6-49e3-924f-3314767031b9",
+      "src": "/api/art-studio/assets/ada11863-c8f6-49e3-924f-3314767031b9",
+      "key": "imagens/biblioteca/elementos/dia-das-criancas/presente-46c4e770b119.png",
+      "sha256": "46c4e770b119b8550efcbd5122950cc643a9f33d1ee9201d8dd4093f2c854a41"
+    },
+    "aviao": {
+      "id": "964b3d82-47f4-42c2-9144-e8ab11880b85",
+      "src": "/api/art-studio/assets/964b3d82-47f4-42c2-9144-e8ab11880b85",
+      "key": "imagens/biblioteca/elementos/dia-das-criancas/aviao-67620ddd7597.png",
+      "sha256": "67620ddd7597aeaa060f38af292b27a883405a35ed4fd4a3ee621c2daf9b306d"
+    },
+    "foguete": {
+      "id": "67e1a493-e2ad-4077-9b64-1fc01d6812f1",
+      "src": "/api/art-studio/assets/67e1a493-e2ad-4077-9b64-1fc01d6812f1",
+      "key": "imagens/biblioteca/elementos/dia-das-criancas/foguete-51371fa14a6b.png",
+      "sha256": "51371fa14a6b2d71d68cc166820da9a535aad75d974c6aa8315dbd5b46f5a760"
+    }
+  }
+}

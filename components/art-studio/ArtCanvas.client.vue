@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import {
   Canvas,
+  Group,
+  Shadow,
+  FabricText,
   Gradient,
   Textbox,
   Rect,
@@ -10,6 +13,7 @@ import {
   type FabricObject
 } from 'fabric'
 import type { ArtComposition, ArtLayer } from '~/types/art-studio'
+import { artTextArc, measureArtText } from '~/utils/art-studio/textArc'
 import { artLayerImageSrc } from '~/utils/art-studio/logo'
 import { ART_ICONS } from '~/types/art-studio'
 import { loadArtFonts } from '~/utils/art-studio/fonts'
@@ -97,6 +101,7 @@ const changed = (object?: FabricObject) => {
   layer.width = Math.max(1, entry.layer.width * fx)
   layer.height = Math.max(1, entry.layer.height * fy)
   layer.rotation = object.angle
+  if (layer.kind === 'text' && layer.textArc) layer.fontSize = Math.max(6,(entry.layer.fontSize || 48)*Math.min(fx,fy))
   if (layer.kind === 'text' && object instanceof Textbox) {
     if (layer.text !== object.text) layer.binding = ''
     layer.text = object.text
@@ -144,6 +149,10 @@ async function render(doc: ArtComposition) {
         originY: 'top' as const,
         angle: layer.rotation,
         opacity: layer.opacity,
+        stroke: layer.kind==='text' ? layer.textStrokeColor || '#ffffff' : undefined,
+        strokeWidth: layer.kind==='text' ? layer.textStrokeWidth || 0 : 0,
+        paintFirst: 'stroke' as const,
+        shadow: layer.kind==='text' && layer.textShadow ? new Shadow({color:layer.textShadowColor || '#000000',blur:8,offsetX:4,offsetY:4}) : undefined,
         fill: layer.gradient ? artGradient(layer.gradient) : layer.fill,
         selectable: !layer.locked,
         evented: !layer.locked,
@@ -154,11 +163,15 @@ async function render(doc: ArtComposition) {
         cornerSize: 10,
         touchCornerSize: 28
       }
-      if (layer.kind === 'text') {
+      if (layer.kind === 'text' && layer.textArc) {
+        const glyphs = artTextArc(layer, measureArtText(layer)).map(p=>new FabricText(p.char,{left:p.x,top:p.y,originX:'center',originY:'center',angle:p.angle,fontSize:p.fontSize,fontFamily:`Art ${layer.fontFamily || 'Barlow'}`,fontWeight:layer.fontWeight || 400,fill:layer.fill,stroke:layer.textStrokeColor || '#ffffff',strokeWidth:layer.textStrokeWidth || 0,paintFirst:'stroke',scaleX:layer.fontScaleX || 1}))
+        obj = new Group([new Rect({left:0,top:0,width:layer.width,height:layer.height,fill:'transparent',strokeWidth:0}),...glyphs],options)
+      } else if (layer.kind === 'text') {
         const text = new Textbox(layer.text || '', {
           ...options,
           width: layer.width / (layer.fontScaleX || 1),
           scaleX: layer.fontScaleX || 1,
+          charSpacing: (layer.letterSpacing || 0)/(layer.fontSize || 48)*1000,
           fontSize: layer.fontSize || 48,
           fontFamily: `Art ${layer.fontFamily || 'Barlow'}`,
           fontWeight: layer.fontWeight || 400,

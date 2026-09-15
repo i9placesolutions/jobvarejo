@@ -200,6 +200,9 @@ const numeric = (
     | 'width'
     | 'height'
     | 'rotation'
+    | 'letterSpacing'
+    | 'textStrokeWidth'
+    | 'textArc'
     | 'fontSize'
     | 'opacity'
     | 'cropX'
@@ -215,6 +218,9 @@ const numeric = (
     height: [1, 8192],
     rotation: [-360, 360],
     fontSize: [6, 1000],
+    textArc: [-180, 180],
+    letterSpacing: [0, 60],
+    textStrokeWidth: [0, 20],
     opacity: [0, 1],
     cropX: [0, 1],
     cropY: [0, 1]
@@ -1082,6 +1088,16 @@ onBeforeUnmount(() => {
               </select></label
             >
             <div class="field-row">
+              <label class="field">Espaço entre letras<input class="art-input" type="number" min="0" max="60" :value="selected.letterSpacing || 0" @change="numeric('letterSpacing', $event)" /></label>
+              <label class="field">Contorno<input class="art-input" type="number" min="0" max="20" :value="selected.textStrokeWidth || 0" @change="numeric('textStrokeWidth', $event)" /></label>
+            </div>
+            <label class="field">Cor do contorno<input type="color" :value="selected.textStrokeColor || '#ffffff'" @input="patch({textStrokeColor: ($event.target as HTMLInputElement).value})" /></label>
+            <label class="field"><span><input type="checkbox" :checked="selected.textShadow" @change="patch({textShadow: ($event.target as HTMLInputElement).checked})" /> Sombra do texto</span></label>
+            <label v-if="selected.textShadow" class="field">Cor da sombra<input type="color" :value="selected.textShadowColor || '#000000'" @input="patch({textShadowColor: ($event.target as HTMLInputElement).value})" /></label>
+            <label class="field">Texto em arco (0 = reto)
+              <input type="number" min="-180" max="180" step="5" :value="selected.textArc || 0" @change="numeric('textArc', $event)" />
+            </label>
+            <div class="field-row">
               <label class="field"
                 >Tamanho<input
                   :value="selected.fontSize"
@@ -1132,20 +1148,9 @@ onBeforeUnmount(() => {
           >
           <template v-if="selected.kind === 'image'">
             <template v-if="selected.binding === 'logo'">
-              <label class="publish-check"
-                ><input
-                  type="checkbox"
-                  :checked="selected.autoTrim !== false"
-                  @change="
-                    patch({
-                      autoTrim: ($event.target as HTMLInputElement).checked
-                    })
-                  "
-                />Auto trim da logo</label
-              >
               <p class="panel-help">
-                Remove margens transparentes e encaixa a marca inteira no
-                espaço, sem distorcer.
+                Recorte automático sempre ativo: remove margens transparentes
+                e ajusta a logo ao conteúdo, sem distorcer.
               </p>
               <label class="field"
                 >Fundo / container<select

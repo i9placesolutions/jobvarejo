@@ -5276,6 +5276,13 @@ const collectQuickModeProductsForFormatResize = (): any[] => {
 
             const product = {
                 ...savedProduct,
+                __resizeVisual: {
+                    card: card.toObject([...CANVAS_CUSTOM_PROPS]),
+                    styles: clonePlainForZoneSnapshot(getZoneGlobalStyles(zone)),
+                    styleOverrides: clonePlainForZoneSnapshot(zone._zoneStyleOverrides || {}),
+                    templateSnapshot: clonePlainForZoneSnapshot(zone._zoneTemplateSnapshot || null),
+                    templateSnapshotId: zone._zoneTemplateSnapshotId
+                },
                 // A ordem dos cards é mantida pela ordem da coleta; este
                 // vínculo pertence à zona antiga e precisa ser regenerado na
                 // zona da composição escolhida.
@@ -5337,13 +5344,56 @@ const rebuildQuickModeProductsForSelectedFormat = async (products: any[]): Promi
             continue
         }
 
-        await simulateSmartGrid(slice, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, {
+        const originalVisual = slice[0]?.__resizeVisual
+        if (originalVisual) {
+            zone._zoneGlobalStyles = clonePlainForZoneSnapshot(originalVisual.styles)
+            zone._zoneStyleOverrides = clonePlainForZoneSnapshot(originalVisual.styleOverrides)
+            zone._zoneTemplateSnapshot = clonePlainForZoneSnapshot(originalVisual.templateSnapshot)
+            zone._zoneTemplateSnapshotId = originalVisual.templateSnapshotId
+        }
+        const cleanProducts = slice.map(({ __resizeVisual, ...product }: any) => product)
+        await simulateSmartGrid(cleanProducts, { margin: 10, gap: 15, orphanBehavior: 'fill' }, zone, {
             mode: 'replace',
             sourceMode: 'manual',
             autoLayout: true,
             persist: false,
             previewFormat: getCurrentProductZonePreviewFormat()
         })
+        // A importação calcula somente os slots do formato novo. O conteúdo
+        // nativo do card anterior preserva imagens, etiqueta e ajustes manuais.
+        const slots = sortCardsByZoneOrder(getZoneChildren(zone))
+        if (slots.length !== slice.length) throw new Error('A grade não preservou todos os produtos.')
+        for (let cardIndex = 0; cardIndex < slots.length; cardIndex += 1) {
+            const visual = slice[cardIndex]?.__resizeVisual
+            if (!visual?.card) continue
+            const slot = slots[cardIndex]
+            const [restored] = await enlivenObjectsAsync([visual.card])
+            if (!restored) throw new Error('Não foi possível preservar a aparência de um produto.')
+            restoreNamesFromJson([restored], [visual.card])
+            const width = slot._cardWidth || slot.width
+            const height = slot._cardHeight || slot.height
+            Object.assign(restored, {
+                isProductCard: true,
+                parentZoneId: slot.parentZoneId,
+                smartGridId: slot.smartGridId,
+                _zoneOrder: slot._zoneOrder,
+                _zoneSlot: slot._zoneSlot ? clonePlainForZoneSnapshot(slot._zoneSlot) : undefined,
+                _productData: { ...cleanProducts[cardIndex], zoneInstanceId: zone._customId },
+                clipPath: null,
+                excludeFromExport: false
+            })
+            applyCardFrameBinding(restored, getResolvedZoneFrameId(zone))
+            resizeSmartObject(restored, width, height, {
+                ...visual.styles, ...getCardStyleOverrides(restored)
+            })
+            restored.set({ left: slot.left, top: slot.top, originX: slot.originX, originY: slot.originY,
+                scaleX: slot.scaleX, scaleY: slot.scaleY, dirty: true })
+            restored.setCoords()
+            const stackIndex = canvas.value.getObjects().indexOf(slot)
+            canvas.value.remove(slot)
+            canvas.value.insertAt(stackIndex, restored)
+        }
+        invalidateZoneRuntimeIndex()
         syncZoneDerivedMetadata(zone)
     }
 
@@ -25233,22 +25283,17 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
     // Never restore layoutManager from plain JSON (Fabric v7 expects class instance).
     delete (groupOpts as any).layoutManager;
     delete (groupOpts as any).layout;
-    let enlivened: any[];
+    let g: any;
     try {
-        enlivened = await enlivenObjectsAsync(objectsJson);
-    } catch (enlivenErr: any) {
-        // Fontes inválidas ou objetos corrompidos podem causar falha no enliven
-        console.error('[instantiatePriceGroupFromTemplate] Falha ao reconstruir objetos do template (possível fonte inválida):', enlivenErr?.message || enlivenErr);
-        throw new Error(`Falha ao reconstruir objetos do template: ${enlivenErr?.message || 'erro desconhecido'}`);
+        // O JSON já usa coordenadas locais do grupo. O construtor comum executa
+        // FitContent de novo e desloca os filhos; fromObject preserva esse plano.
+        g = await fabric.Group.fromObject({ ...groupOpts, objects: objectsJson });
+    } catch (error: any) {
+        throw new Error(`Falha ao reconstruir objetos do template: ${error?.message || 'erro desconhecido'}`);
     }
-    if (!Array.isArray(enlivened) || enlivened.length === 0) throw new Error('Template group failed to enliven objects');
-
-    // FIX: Fabric v7 enlivenObjects does NOT restore `name` and custom props on children.
-    // Re-apply them from the original JSON so setPriceOnPriceGroup can find named text fields.
-    // restoreNamesFromJson extraido para utils/canvasJsonClassifiers.ts.
+    const enlivened = g.getObjects();
+    if (!enlivened.length) throw new Error('Template group failed to enliven objects');
     restoreNamesFromJson(enlivened, objectsJson);
-
-    const g = new fabric.Group(enlivened, groupOpts);
     migratePriceGroupToRichText(g, fabric);
     const cloneSafe = <T>(value: T): T => {
         try {
@@ -29633,6 +29678,8 @@ const handleAutoOfferLayout = async () => {
             :current-page-id="currentPageId"
             :template-models="quickModeTemplateModels"
             :current-model-id="quickModeCurrentModelId"
+            :product-area-colors="quickModeColorTargets.filter(target => target.kind === 'product-area')"
+            @product-area-color="applyQuickModeColorChange"
             :product-palette-styles="quickCardColorSettings.styles"
             @product-palette="handleUpdateGlobalStyles('productPalette', $event, { targetId: quickModeTargetZoneId })"
             :card-color-mode="quickCardColorSettings.mode"

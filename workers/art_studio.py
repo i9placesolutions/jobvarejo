@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageChops, ImageFilter
 
-FAMILIES = {'Montserrat':'Montserrat','Barlow': 'Barlow', 'Barlow Condensed': 'BarlowCondensed', 'Anton': 'Anton', 'Oswald': 'Oswald','Roboto Slab':'RobotoSlab','Audiowide':'Audiowide','Bebas Neue':'BebasNeue','Caveat':'Caveat','Russo One':'RussoOne','Consumidor Referencia':'ConsumidorReferencia','Patua One':'PatuaOne'}
+FAMILIES = {'Knewave':'Knewave','Montserrat':'Montserrat','Barlow': 'Barlow', 'Barlow Condensed': 'BarlowCondensed', 'Anton': 'Anton', 'Oswald': 'Oswald','Roboto Slab':'RobotoSlab','Audiowide':'Audiowide','Bebas Neue':'BebasNeue','Caveat':'Caveat','Russo One':'RussoOne','Consumidor Referencia':'ConsumidorReferencia','Patua One':'PatuaOne'}
 WEIGHTS = {400: 'Regular', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold'}
 ICONS = {
  'heart': 'M 50 88 C 0 55 0 12 27 12 C 40 12 48 22 50 28 C 52 22 60 12 73 12 C 100 12 100 55 50 88 Z',
@@ -38,20 +38,20 @@ def font_for(layer, size):
     if family == 'Anton': filename = 'Anton-Regular.ttf'
     if family == 'Oswald': filename = 'Oswald[wght].ttf'
     if family in ['Roboto Slab','Caveat','Montserrat']: filename=FAMILIES[family]+'[wght].ttf'
-    if family in ['Audiowide','Bebas Neue','Russo One','Consumidor Referencia','Patua One']: filename=FAMILIES[family]+'-Regular.ttf'
+    if family in ['Knewave','Audiowide','Bebas Neue','Russo One','Consumidor Referencia','Patua One']: filename=FAMILIES[family]+'-Regular.ttf'
     font = ImageFont.truetype(str(fonts_dir()/filename), max(6, int(size)))
     if family == 'Oswald': font.set_variation_by_axes([min(700, weight)])
     if family in ['Roboto Slab','Caveat','Montserrat']: font.set_variation_by_axes([min(700 if family=='Caveat' else 900,weight)])
     return font
 
 
-def wrap(text, font, width):
+def wrap(text, font, width, spacing=0):
     rows = []
     for paragraph in text.split('\n'):
         row = ''
         for word in paragraph.split(' '):
             candidate = (row+' '+word).strip()
-            if row and font.getlength(candidate) > width: rows.append(row); row = word
+            if row and font.getlength(candidate)+max(0,len(candidate)-1)*spacing > width: rows.append(row); row = word
             else: row = candidate
         rows.append(row)
     return rows
@@ -68,8 +68,8 @@ def fit(layer):
     lo, hi, best = 6, initial, None
     while lo <= hi:
         size = (lo+hi)//2
-        font = font_for(layer,size); rows = wrap(text,font,layer['width']/layer.get('fontScaleX',1))
-        if len(rows)*size*layer.get('lineHeight',1.16) <= layer['height'] and all(font.getlength(row)*layer.get('fontScaleX',1)<=layer['width'] for row in rows):
+        font = font_for(layer,size); rows = wrap(text,font,layer['width']/layer.get('fontScaleX',1),layer.get('letterSpacing',0))
+        if len(rows)*size*layer.get('lineHeight',1.16) <= layer['height'] and all((font.getlength(row)+max(0,len(row)-1)*layer.get('letterSpacing',0))*layer.get('fontScaleX',1)<=layer['width'] for row in rows):
             best=(rows,size);lo=size+1
         else: hi=size-1
     if not best: raise ValueError('Um texto não cabe na área. Aumente a caixa ou reduza o conteúdo.')
@@ -96,7 +96,7 @@ def compose(source, width, height, values):
             elif layer['kind']=='image' and layer['binding']=='logo': layer['src']=values['logo']
         if layer['kind']=='text':
             layer['fontSize']=max(6,layer.get('fontSize',48)*min(sx,sy))
-            rows,size=fit(layer);layer['fontSize']=size
+            rows,size=fit(layer) if not layer.get('textArc') else ([],layer['fontSize']);layer['fontSize']=size
             # Mantém o conteúdo original; a quebra é recalculada pelo editor/renderer sem perder palavras.
     validate(doc)
     return doc
@@ -128,13 +128,37 @@ def render(doc,assets):
         if w*h>24_000_000: raise ValueError('Elemento grande demais para exportar.')
         tile=Image.new('RGBA',(w,h));draw=ImageDraw.Draw(tile)
         if layer['kind']=='text':
-            rows,size=fit(layer);font=font_for(layer,size)
-            text_width=max(1,round(w/layer.get('fontScaleX',1)))
-            text_tile=Image.new('RGBA',(text_width,h));draw=ImageDraw.Draw(text_tile)
-            for n,row in enumerate(rows):
-                length=font.getlength(row);align=layer.get('align','left');x=(text_width-length)/2 if align=='center' else text_width-length if align=='right' else 0
-                draw.text((x,n*size*layer.get('lineHeight',1.16)),row,font=font,fill=layer['fill'],anchor='lt')
-            tile=text_tile.resize((w,h),Image.Resampling.LANCZOS)
+            if layer.get('textArc'):
+                size=layer.get('fontSize',48);font=font_for(layer,size)
+                chars=list(layer.get('text','').replace('\n',' '));widths=[(font.getlength(c)+layer.get('letterSpacing',0))*layer.get('fontScaleX',1) for c in chars]
+                total=sum(widths) or 1;sweep=math.radians(max(-180,min(180,layer['textArc'])));radius=total/abs(sweep);sign=1 if sweep>0 else -1
+                points=[];offset=0
+                for c,advance in zip(chars,widths):
+                    a=((offset+advance/2)/total-.5)*sweep;offset+=advance
+                    points.append((c,radius*math.sin(a)*sign,radius*(1-math.cos(a))*sign,math.degrees(a)))
+                xmin=min([0]+[p[1] for p in points])-size;xmax=max([0]+[p[1] for p in points])+size
+                ymin=min([0]+[p[2] for p in points])-size;ymax=max([0]+[p[2] for p in points])+size
+                scale=min(1,w/(xmax-xmin),h/(ymax-ymin));font=font_for(layer,size*scale)
+                for c,x,y,a in points:
+                    if c.isspace(): continue
+                    box=font.getbbox(c);pad=2+round(layer.get('textStrokeWidth',0));glyph=Image.new('RGBA',(max(1,box[2]-box[0]+2*pad),max(1,box[3]-box[1]+2*pad)))
+                    ImageDraw.Draw(glyph).text((pad-box[0],pad-box[1]),c,font=font,fill=layer['fill'],stroke_width=round(layer.get('textStrokeWidth',0)),stroke_fill=layer.get('textStrokeColor','#ffffff'))
+                    glyph=glyph.resize((max(1,round(glyph.width*layer.get('fontScaleX',1))),glyph.height),Image.Resampling.LANCZOS).rotate(-a,Image.Resampling.BICUBIC,expand=True)
+                    px=(x-(xmin+xmax)/2)*scale+w/2;py=(y-(ymin+ymax)/2)*scale+h/2
+                    tile.alpha_composite(glyph,(round(px-glyph.width/2),round(py-glyph.height/2)))
+            else:
+                rows,size=fit(layer);font=font_for(layer,size)
+                text_width=max(1,round(w/layer.get('fontScaleX',1)))
+                text_tile=Image.new('RGBA',(text_width,h));draw=ImageDraw.Draw(text_tile)
+                for n,row in enumerate(rows):
+                    length=font.getlength(row)+max(0,len(row)-1)*layer.get('letterSpacing',0);align=layer.get('align','left');x=(text_width-length)/2 if align=='center' else text_width-length if align=='right' else 0
+                    if layer.get('letterSpacing'):
+                        for c in row:
+                            draw.text((x,n*size*layer.get('lineHeight',1.16)-font.getbbox(row)[1]),c,font=font,fill=layer['fill'],stroke_width=round(layer.get('textStrokeWidth',0)),stroke_fill=layer.get('textStrokeColor','#ffffff'))
+                            x+=font.getlength(c)+layer['letterSpacing']
+                    else:
+                        draw.text((x,n*size*layer.get('lineHeight',1.16)),row,font=font,fill=layer['fill'],anchor='lt',stroke_width=round(layer.get('textStrokeWidth',0)),stroke_fill=layer.get('textStrokeColor','#ffffff'))
+                tile=text_tile.resize((w,h),Image.Resampling.LANCZOS)
         elif layer['kind']=='shape':
             if layer.get('shape')=='path': draw.polygon(icon_points('heart',w,h,layer['pathData']),fill=layer['fill'])
             elif layer.get('shape')=='ellipse': draw.ellipse((0,0,w-1,h-1),fill=layer['fill'])
@@ -147,7 +171,10 @@ def render(doc,assets):
             raw=base64.b64decode(assets[src]);asset=ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert('RGBA')
             if layer.get('fit')=='cover': tile=ImageOps.fit(asset,(w,h),method=Image.Resampling.LANCZOS,centering=(layer.get('cropX',.5),layer.get('cropY',.5)))
             else:
-                asset.thumbnail((w,h),Image.Resampling.LANCZOS);tile.alpha_composite(asset,((w-asset.width)//2,(h-asset.height)//2))
+                asset=ImageOps.contain(asset,(w,h),method=Image.Resampling.LANCZOS);tile.alpha_composite(asset,((w-asset.width)//2,(h-asset.height)//2))
+        if layer['kind']=='text' and layer.get('textShadow'):
+            shadow=Image.new('RGBA',tile.size,layer.get('textShadowColor','#000000'));shadow.putalpha(tile.getchannel('A').filter(ImageFilter.GaussianBlur(4)))
+            combined=Image.new('RGBA',tile.size);combined.alpha_composite(shadow,(4,4));combined.alpha_composite(tile);tile=combined
         if layer.get('gradient') and layer['kind'] in ['shape','icon']:
             g=layer['gradient'];smallw=min(w,128);smallh=min(h,128)
             a=tuple(int(g['from'][k:k+2],16) for k in (1,3,5));b=tuple(int(g['to'][k:k+2],16) for k in (1,3,5))

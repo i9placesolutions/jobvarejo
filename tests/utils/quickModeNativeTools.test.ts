@@ -73,3 +73,28 @@ describe('quickModeNativeTools', () => {
     expect(target?.opacity).toBe(0.72)
   })
 })
+
+it('expõe o quadro bloqueado sem misturar cards, moldura ou fundo da arte', () => {
+  const panel = { type: 'rect', name: 'product-area-background', _customId: 'panel', fill: '#fffbee', stroke: '#ffd600', selectable: false, isQuickGenerated: true }
+  const frame = { type: 'rect', isFrame: true, fill: '#ffffff' }
+  const card = { type: 'rect', name: 'offerBackground', fill: '#ffffff' }
+  const targets = collectQuickEditableColorTargets([panel, frame, group([card], { isProductCard: true })])
+  const target = targets.find(t => t.kind === 'product-area')!
+  expect(target.label).toBe('Fundo da área de produtos')
+  expect(target.objects).toEqual([{ object: panel, property: 'fill' }])
+  expect(targets.filter(t => t.objects.some(x => x.object === panel))).toHaveLength(1)
+  target.objects[0]!.object.fill = '#123456'
+  const restored = JSON.parse(JSON.stringify(panel))
+  expect(collectQuickEditableColorTargets([restored])[0]?.color).toBe('#123456')
+  expect(restored.stroke).toBe('#ffd600')
+  expect(card.fill).toBe('#ffffff')
+  expect(frame.fill).toBe('#ffffff')
+})
+
+it('permite recolorir quadros transparentes agrupados sem alterar sua borda', () => {
+  const panel = { type: 'rect', name: 'product-area-background', fill: 'transparent', stroke: '#ffd600' }
+  const targets = collectQuickEditableColorTargets([group([panel])])
+  expect(targets).toHaveLength(1)
+  expect(targets[0]?.kind).toBe('product-area')
+  expect(targets[0]?.objects[0]?.property).toBe('fill')
+})

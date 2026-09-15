@@ -116,6 +116,7 @@ const BUSINESS_FIELDS: Array<{ id: BusinessFieldId; label: string }> = [
 ]
 
 const props = defineProps<{
+  productAreaColors?: Array<{ id: string; label: string; color: string | null }>
   productPaletteStyles?: Partial<GlobalStyles>
   cardColorMode?: 'auto' | 'manual'
   cardColor?: string
@@ -145,6 +146,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (event: 'product-area-color', payload: { targetId: string; value: string }): void
   (event: 'restore-grid', payload: { zoneId: string; preset: 'model' | '2' | '3' }): void
   (event: 'mobile-section', value: string): void
   (event: 'export'): void
@@ -1035,6 +1037,16 @@ const useTemplateModel = (modelId: string) => {
         <button type="button" class="quick-mode-library-action" @click="activeTab = 'search'">
           Pesquisar produtos
         </button>
+      </section>
+
+      <section v-if="props.productAreaColors?.length" class="quick-mode-data-panel">
+        <strong>Fundo da área de produtos</strong>
+        <p>Cor do quadro atrás dos produtos nesta página.</p>
+        <label v-for="target in props.productAreaColors" :key="target.id" class="flex items-center justify-between gap-3 py-2">
+          <span>{{ target.label }}</span>
+          <input type="color" :aria-label="target.label" :value="target.color || '#ffffff'" :disabled="props.busy"
+            @change="emit('product-area-color', { targetId: target.id, value: ($event.target as HTMLInputElement).value })" />
+        </label>
       </section>
 
       <section v-if="productsReviewed && (activeTab === 'mine' || mobileSection === 'tools')" class="quick-mode-data-panel">

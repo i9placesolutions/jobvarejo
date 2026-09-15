@@ -7,7 +7,7 @@ export const hasArtLogoTreatment = (layer: ArtLayer) =>
 export const artLogoOptions = (layer: ArtLayer) => ({
   width: Math.max(1, Math.round(layer.width)),
   height: Math.max(1, Math.round(layer.height)),
-  trim: layer.autoTrim !== false,
+  trim: true,
   backdrop: layer.logoBackdrop || 'none',
   padding: layer.logoPadding ?? 12,
   outline: layer.logoOutline === true,
@@ -22,5 +22,5 @@ export const artLayerImageSrc = (layer: ArtLayer) => {
       : layer.src.split('/').pop() || ''
   const options = artLogoOptions(layer)
   return `/api/art-studio/image-view?${new URLSearchParams({
-    v: '3', source, ...Object.fromEntries(Object.entries(options).map(([k, v]) => [k, String(v)])) })}`
+    v: '4', source, ...Object.fromEntries(Object.entries(options).map(([k, v]) => [k, String(v)])) })}`
 }

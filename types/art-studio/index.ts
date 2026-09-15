@@ -3,7 +3,7 @@ export const ART_FONTS = [
   'Barlow Condensed',
   'Oswald',
   'Roboto Slab', 'Audiowide', 'Bebas Neue', 'Caveat', 'Russo One', 'Consumidor Referencia', 'Patua One',
-  'Anton'
+  'Anton', 'Knewave'
 ] as const
 export const ART_CATEGORIES = [
   'Datas comemorativas',
@@ -39,6 +39,12 @@ export type ArtLayer = {
   fontFamily?: string
   fontScaleX?: number
   lineHeight?: number
+  letterSpacing?: number
+  textStrokeWidth?: number
+  textStrokeColor?: string
+  textShadow?: boolean
+  textShadowColor?: string
+  textArc?: number
   fontSize?: number
   fontWeight?: number
   align?: 'left' | 'center' | 'right'

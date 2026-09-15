@@ -48,12 +48,8 @@ export const prepareArtLogo = async (
   options: ArtLogoOptions
 ) => {
   // Mesma política das ofertas: alpha <= 8 é margem; preto/branco opacos são conteúdo.
-  const trimmed = options.trim
-    ? await trimArtTransparency(input)
-    : await sharp(input, { limitInputPixels: 24_000_000 })
-        .rotate()
-        .png()
-        .toBuffer()
+  // Auto trim é obrigatório, inclusive para documentos antigos com trim=false.
+  const trimmed = await trimArtTransparency(input)
   const factor = Math.min(1, 2048 / Math.max(options.width, options.height)),
     width = Math.max(1, Math.round(options.width * factor)),
     height = Math.max(1, Math.round(options.height * factor))
@@ -113,5 +109,7 @@ export const prepareArtLogo = async (
     layers.push({ input: outline })
   }
   layers.push({ input: logo, left, top })
-  return base.composite(layers).png().toBuffer()
+  // O contain cria margens no slot; removê-las também após aplicar os efeitos
+  // permite que Fabric selecione apenas o conteúdo visível.
+  return trimArtTransparency(await base.composite(layers).png().toBuffer())
 }
