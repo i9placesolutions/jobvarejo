@@ -87,6 +87,38 @@ export const createProfileWithPassword = async (params: {
   const normalizedEmail = normalizeEmail(params.email)
   const trimmedName = String(params.name || '').trim()
 
+  // Esta instalação mantém public.profiles ligado a auth.users por uma FK.
+  // Criar primeiro a identidade do Supabase deixa o trigger criar o perfil e
+  // mantém o fluxo de cadastro próprio do JobVarejo compatível com os dois
+  // formatos de banco (com ou sem schema auth).
+  let authUserCreated = false
+  try {
+    await pgQuery(
+      `insert into auth.users
+        (id, aud, role, email, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+       values ($1::uuid, 'authenticated', 'authenticated', $2, now(), $3::jsonb, $4::jsonb, now(), now())
+       on conflict (id) do nothing`,
+      [id, normalizedEmail, JSON.stringify({ provider: 'jobvarejo' }), JSON.stringify({ name: trimmedName, email: normalizedEmail })]
+    )
+    authUserCreated = true
+  } catch (error: any) {
+    const code = String(error?.code || '')
+    const message = String(error?.message || '').toLowerCase()
+    const authUnavailable = code === '42P01' || code === '3F000' || message.includes('schema "auth"') || message.includes('relation "auth.users"')
+    if (!authUnavailable) throw error
+  }
+
+  if (authUserCreated) {
+    const synchronized = await pgOneOrNull<ProfileRow>(
+      `update public.profiles
+          set email = $2, name = $3, role = $4::user_role, password_hash = $5, updated_at = timezone('utc', now())
+        where id = $1
+        returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at`,
+      [id, normalizedEmail, trimmedName, params.role, params.passwordHash]
+    )
+    if (synchronized) return synchronized
+  }
+
   let rows: ProfileRow[] = []
   try {
     const first = await pgQuery<ProfileRow>(

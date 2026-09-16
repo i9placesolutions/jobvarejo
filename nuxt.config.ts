@@ -84,6 +84,21 @@ export default defineNuxtConfig({
     wasabiSecretKey: process.env.WASABI_SECRET_KEY || process.env.NUXT_WASABI_SECRET_KEY || '',
     redisUrl: process.env.REDIS_URL || process.env.NUXT_REDIS_URL || '',
 
+    // Rádio Indoor / MusicGPT (privado; nunca é enviado ao navegador)
+    musicgptApiKey: process.env.MUSICGPT_API_KEY || process.env.NUXT_MUSICGPT_API_KEY || '',
+    musicgptApiUrl:
+      process.env.MUSICGPT_API_URL ||
+      process.env.NUXT_MUSICGPT_API_URL ||
+      'https://api.musicgpt.com/api/public/v1/MusicAI',
+    musicgptWebhookUrl: process.env.MUSICGPT_WEBHOOK_URL || process.env.NUXT_MUSICGPT_WEBHOOK_URL || '',
+    musicgptWebhookSecret: process.env.MUSICGPT_WEBHOOK_SECRET || process.env.NUXT_MUSICGPT_WEBHOOK_SECRET || '',
+    musicgptTtsUrl:
+      process.env.MUSICGPT_TTS_URL ||
+      process.env.NUXT_MUSICGPT_TTS_URL ||
+      'https://api.musicgpt.com/api/public/v1/TextToSpeech',
+    musicgptDefaultVoiceId: process.env.MUSICGPT_DEFAULT_VOICE_ID || process.env.NUXT_MUSICGPT_DEFAULT_VOICE_ID || '',
+    musicgptDefaultVoiceGender: process.env.MUSICGPT_DEFAULT_VOICE_GENDER || process.env.NUXT_MUSICGPT_DEFAULT_VOICE_GENDER || 'female',
+
     openaiApiKey: process.env.NUXT_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
     geminiApiKey: process.env.NUXT_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '',
     parseProductsTimeoutMs:

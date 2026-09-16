@@ -2,6 +2,13 @@
 interface NuxtRuntimeConfig {
   openaiApiKey?: string
   geminiApiKey?: string
+  musicgptApiKey?: string
+  musicgptApiUrl?: string
+  musicgptWebhookUrl?: string
+  musicgptWebhookSecret?: string
+  musicgptTtsUrl?: string
+  musicgptDefaultVoiceId?: string
+  musicgptDefaultVoiceGender?: string
 
   googleCseApiKey?: string
   googleCseCx?: string
