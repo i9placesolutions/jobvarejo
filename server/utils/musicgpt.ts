@@ -19,6 +19,25 @@ export interface MusicGptResult {
   raw: Record<string, any>
 }
 
+/**
+ * O MusicGPT só recebe `webhook_url` no body — ele não envia header de
+ * autenticação no callback. Por isso embutimos o segredo na query da URL
+ * (`?secret=...`) e o endpoint valida esse valor ao receber o POST.
+ */
+export const buildMusicGptWebhookUrl = (baseUrl: string, secret: string): string | null => {
+  const trimmed = String(baseUrl || '').trim()
+  if (!trimmed) return null
+  try {
+    const url = new URL(trimmed)
+    if (secret && !url.searchParams.get('secret') && !url.searchParams.get('webhook_secret')) {
+      url.searchParams.set('secret', secret)
+    }
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
 export const getMusicGptConfig = () => {
   const config = useRuntimeConfig() as any
   const apiKey = String(config.musicgptApiKey || process.env.MUSICGPT_API_KEY || process.env.NUXT_MUSICGPT_API_KEY || '').trim()
@@ -28,8 +47,13 @@ export const getMusicGptConfig = () => {
     process.env.NUXT_MUSICGPT_API_URL ||
     'https://api.musicgpt.com/api/public/v1/MusicAI'
   ).trim()
-  const webhookUrl = String(config.musicgptWebhookUrl || process.env.MUSICGPT_WEBHOOK_URL || process.env.NUXT_MUSICGPT_WEBHOOK_URL || '').trim()
   const webhookSecret = String(config.musicgptWebhookSecret || process.env.MUSICGPT_WEBHOOK_SECRET || process.env.NUXT_MUSICGPT_WEBHOOK_SECRET || '').trim()
+  const configuredWebhook = String(config.musicgptWebhookUrl || process.env.MUSICGPT_WEBHOOK_URL || process.env.NUXT_MUSICGPT_WEBHOOK_URL || '').trim()
+  const appBase = String(config.appBaseUrl || process.env.APP_BASE_URL || '').trim().replace(/\/$/, '')
+  const derivedWebhook = !configuredWebhook && appBase
+    ? `${appBase}/api/radio-indoor/ai/musicgpt-webhook`
+    : configuredWebhook
+  const webhookUrl = buildMusicGptWebhookUrl(derivedWebhook, webhookSecret) || ''
   const ttsUrl = String(
     config.musicgptTtsUrl ||
     process.env.MUSICGPT_TTS_URL ||
@@ -38,7 +62,17 @@ export const getMusicGptConfig = () => {
   ).trim()
   const defaultVoiceId = String(config.musicgptDefaultVoiceId || process.env.MUSICGPT_DEFAULT_VOICE_ID || process.env.NUXT_MUSICGPT_DEFAULT_VOICE_ID || '').trim()
   const defaultVoiceGender = String(config.musicgptDefaultVoiceGender || process.env.MUSICGPT_DEFAULT_VOICE_GENDER || process.env.NUXT_MUSICGPT_DEFAULT_VOICE_GENDER || 'female').trim().toLowerCase()
-  return { configured: Boolean(apiKey), apiKey, apiUrl, webhookUrl, webhookSecret, ttsUrl, defaultVoiceId, defaultVoiceGender }
+  return {
+    configured: Boolean(apiKey),
+    apiKey,
+    apiUrl,
+    webhookUrl,
+    webhookSecret,
+    webhookConfigured: Boolean(webhookUrl && webhookSecret),
+    ttsUrl,
+    defaultVoiceId,
+    defaultVoiceGender
+  }
 }
 
 const getFirstString = (value: any, keys: string[]): string | null => {
@@ -70,7 +104,10 @@ export const getMusicGptAudioUrl = (payload: any): string | null => {
     conversion?.conversion_path,
     conversion?.conversion_path_wav_1,
     conversion?.conversion_path_wav_2,
-    conversion?.conversion_path_wav
+    conversion?.conversion_path_wav,
+    payload?.audio_url,
+    payload?.conversion_path_1,
+    payload?.conversion_path
   ]
   return candidates.find((value) => typeof value === 'string' && /^https:\/\//i.test(value))?.slice(0, 2048) || null
 }
@@ -186,7 +223,7 @@ export const musicGptStatusForClient = () => {
   return {
     configured: config.configured,
     apiUrl: config.apiUrl,
-    webhookConfigured: Boolean(config.webhookUrl),
+    webhookConfigured: config.webhookConfigured,
     ttsConfigured: config.configured && Boolean(config.ttsUrl)
   }
 }

@@ -53,14 +53,21 @@ Configure no servidor (nunca em `runtimeConfig.public`):
 MUSICGPT_API_KEY=...
 MUSICGPT_API_URL=https://api.musicgpt.com/api/public/v1/MusicAI
 MUSICGPT_TTS_URL=https://api.musicgpt.com/api/public/v1/TextToSpeech
-MUSICGPT_WEBHOOK_URL=https://seu-dominio.example/api/radio-indoor/ai/musicgpt-webhook
-MUSICGPT_WEBHOOK_SECRET=...
+# Se omitido, usa APP_BASE_URL + /api/radio-indoor/ai/musicgpt-webhook
+MUSICGPT_WEBHOOK_URL=https://jobvarejo.com.br/api/radio-indoor/ai/musicgpt-webhook
+MUSICGPT_WEBHOOK_SECRET=um-segredo-longo
 # opcional para off/locução sem preencher o voice_id no formulário
 MUSICGPT_DEFAULT_VOICE_ID=...
 MUSICGPT_DEFAULT_VOICE_GENDER=female
 ```
 
-O formulário de solicitações registra jingle, off, locução e música. Sem a chave, o pedido fica salvo como `queued` e pode ser enviado depois. Com a chave, jingles e músicas usam MusicAI; offs e locuções usam TextToSpeech com a voz escolhida no banco (ou o padrão configurado). O JobVarejo guarda `task_id`/`conversion_id` e o webhook atualiza o status sem expor o segredo ao cliente. Consulte os contratos assíncronos na [documentação oficial do MusicGPT](https://docs.musicgpt.com/api-documentation/endpoint/MusicAI) e no [TextToSpeech](https://docs.musicgpt.com/api-documentation/conversions/texttospeech).
+O MusicGPT **não envia header de autenticação** no callback. O JobVarejo
+embute `?secret=...` na `webhook_url` enviada ao provedor e valida esse
+valor no endpoint. Sem `MUSICGPT_WEBHOOK_SECRET` (ou URL derivada de
+`APP_BASE_URL`), o pedido ainda é criado, mas o retorno depende do polling
+da tela de solicitações.
+
+O formulário de solicitações registra jingle, off, locução e música. Sem a chave, o pedido fica salvo como `queued` e pode ser enviado depois. Com a chave, jingles e músicas usam MusicAI; offs e locuções usam TextToSpeech com a voz escolhida no banco (ou o padrão configurado). A amostra clonada é entregue ao MusicGPT por uma URL pública de curta duração em `/api/radio-indoor/ai/voice-sample` (não pela URL assinada do Wasabi). O JobVarejo guarda `task_id`/`conversion_id` e o webhook atualiza o status sem expor o segredo ao cliente. Consulte os contratos assíncronos na [documentação oficial do MusicGPT](https://docs.musicgpt.com/api-documentation/endpoint/MusicAI) e no [TextToSpeech](https://docs.musicgpt.com/api-documentation/conversions/texttospeech).
 
 ### Banco de vozes
 

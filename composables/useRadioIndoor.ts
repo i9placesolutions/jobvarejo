@@ -12,12 +12,24 @@ export interface RadioTrack {
   [key: string]: any
 }
 
+export interface RadioAlbum {
+  album: string
+  artist: string
+  genre: string
+  releaseYear?: number | null
+  trackCount: number
+  thumbnailKey?: string | null
+  thumbnailUrl?: string | null
+  sampleTrackId?: string | null
+}
+
 export const useRadioIndoor = () => {
   const bootstrap = useState<any | null>('radio-indoor-bootstrap', () => null)
   const stations = useState<any[]>('radio-indoor-stations', () => [])
   const selectedStationId = useState<string>('radio-indoor-selected-station-id', () => '')
   const catalog = useState<RadioTrack[]>('radio-indoor-catalog', () => [])
-  const facets = useState<any>('radio-indoor-facets', () => ({ genres: [] }))
+  const albums = useState<RadioAlbum[]>('radio-indoor-albums', () => [])
+  const facets = useState<any>('radio-indoor-facets', () => ({ genres: [], artists: [], albums: [] }))
   const playerData = useState<any | null>('radio-indoor-player', () => null)
   const requests = useState<any[]>('radio-indoor-requests', () => [])
   const voices = useState<any[]>('radio-indoor-voices', () => [])
@@ -61,8 +73,21 @@ export const useRadioIndoor = () => {
     const query = { ...filters, ...(filters.stationId || selectedStationId.value ? { stationId: filters.stationId || selectedStationId.value } : {}) }
     const data = await $fetch<any>('/api/radio-indoor/catalog', { query })
     catalog.value = Array.isArray(data?.items) ? data.items : []
-    facets.value = data?.facets || { genres: [] }
+    if (Array.isArray(data?.albums)) albums.value = data.albums
+    if (data?.facets) facets.value = data.facets
     setupRequired.value = Boolean(data?.setupRequired)
+    return data
+  }
+
+  const loadAlbums = async (filters: Record<string, any> = {}) => {
+    const query = {
+      ...filters,
+      view: 'albums',
+      limit: filters.limit || 300,
+      ...(filters.stationId || selectedStationId.value ? { stationId: filters.stationId || selectedStationId.value } : {})
+    }
+    const data = await $fetch<any>('/api/radio-indoor/catalog', { query })
+    albums.value = Array.isArray(data?.albums) ? data.albums : []
     return data
   }
 

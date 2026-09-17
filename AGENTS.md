@@ -200,4 +200,21 @@ Para desenvolvimento minimo funcional:
 - **Fabric.js 7**: Usa monkey-patches e propriedades customizadas (`isFrame`, `parentFrameId`, `_customId`, `isSmartObject`, `_zoneGlobalStyles`)
 - **Autoimports Nuxt**: `$fetch`, `useRuntimeConfig`, `defineEventHandler`, `createError`, `getCookie`, `getHeader`, `navigateTo`, `useState`, `useRoute` etc. estao disponiveis sem import explicito
 - **Storage**: Arquivos no Wasabi seguem pattern `{userId}/{projectId}/pages/{pageId}/canvas.json.gz`
+
 - **Code splitting**: Chunks manuais em `nuxt.config.ts` (vendor-fabric, vendor-aws, editor-canvas, etc.)
+
+## Contexto compartilhado do Vault Obsidian
+
+A documentação complementar deste projeto está em `/Users/rafaelmendes/Documents/Obsidian/01 - Projetos/jobvarejo`.
+
+Antes de analisar, planejar ou alterar o projeto:
+
+1. Leia `/Users/rafaelmendes/Documents/Obsidian/04 - IA/REGRAS PARA IA.md`.
+2. Leia `/Users/rafaelmendes/Documents/Obsidian/HOME.md`.
+3. Leia `/Users/rafaelmendes/Documents/Obsidian/01 - Projetos/README.md`.
+4. Leia `/Users/rafaelmendes/Documents/Obsidian/01 - Projetos/jobvarejo/README.md`.
+5. Consulte apenas as notas específicas necessárias: arquitetura, banco de dados, integrações, bugs, roadmap, decisões técnicas e prompts.
+
+Use a documentação como contexto, mas confirme fatos atuais no código, no banco, nos logs ou no ambiente. Não invente informações; em caso de incerteza, use `> ⚠️ Precisa ser confirmado.`. Não copie segredos, tokens, senhas ou arquivos `.env` para o Vault. Só altere notas temáticas do Vault quando isso fizer parte da tarefa.
+Ao concluir qualquer tarefa específica de jobvarejo, inclusive análise, diagnóstico, configuração ou tarefa sem alteração de código, acrescente uma entrada ao final de `/Users/rafaelmendes/Documents/Obsidian/01 - Projetos/jobvarejo/Registro de Atividades.md`.
+Antes de registrar, leia o arquivo atual e apenas acrescente a entrada com data, solicitação, resultado, status, arquivos alterados, validações, decisões e pendências. Não apague o histórico, não registre segredos e não declare uma execução que não ocorreu.

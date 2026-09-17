@@ -9,7 +9,7 @@ import {
   radioTableErrorResponse
 } from '../../../utils/radio-indoor'
 import { requireRadioStationAccess } from '../../../utils/radio-access'
-import { getAccessibleRadioVoice, getRadioVoiceSampleUrl } from '../../../utils/radio-voices'
+import { getAccessibleRadioVoice, getMusicGptVoiceSampleUrl } from '../../../utils/radio-voices'
 
 const allowedKinds = new Set(['jingle', 'off', 'voice', 'music'])
 
@@ -70,8 +70,11 @@ export default defineEventHandler(async (event) => {
     await pgQuery(`update public.radio_requests set status = 'processing', provider = 'musicgpt' where id = $1 and user_id = $2`, [request.id, ownerUserId])
     let sampleAudioUrl: string | null = null
     let voiceProfileName: string | null = null
+    let sampleDeliveryMode: 'app-proxy' | 'wasabi-presigned' | null = null
     if (selectedVoiceProfile) {
-      sampleAudioUrl = await getRadioVoiceSampleUrl(selectedVoiceProfile, 900)
+      const sample = await getMusicGptVoiceSampleUrl(event, selectedVoiceProfile, ownerUserId, 900)
+      sampleAudioUrl = sample.url
+      sampleDeliveryMode = sample.mode
       voiceProfileName = String(selectedVoiceProfile.name || '').slice(0, 120) || null
     }
     const effectiveVoiceId = sampleAudioUrl ? null : (voiceId || provider.defaultVoiceId)
@@ -101,9 +104,33 @@ export default defineEventHandler(async (event) => {
         returning id, station_id, kind, title, brief, lyrics, style, voice_id, voice_profile_id, status, provider,
                   provider_task_id, provider_conversion_id, result_storage_key, result_source_url,
                   result_format, result_duration_ms, error, metadata, created_at, updated_at`,
-      [submission.taskId, submission.conversionId, jsonParam({ providerResponse: submission.raw, requestedBy: user.id, voiceProfileId: persistedVoiceProfileId, voiceProfileName }), request.id, ownerUserId]
+      [
+        submission.taskId,
+        submission.conversionId,
+        jsonParam({
+          providerResponse: submission.raw,
+          requestedBy: user.id,
+          voiceProfileId: persistedVoiceProfileId,
+          voiceProfileName,
+          sampleDeliveryMode,
+          webhookConfigured: provider.webhookConfigured
+        }),
+        request.id,
+        ownerUserId
+      ]
     )
-    return { success: true, request: updated || request, provider: { configured: true, accepted: true } }
+    return {
+      success: true,
+      request: updated || request,
+      provider: {
+        configured: true,
+        accepted: true,
+        webhookConfigured: provider.webhookConfigured,
+        message: provider.webhookConfigured
+          ? 'Solicitação aceita pelo MusicGPT. O áudio chega pelo webhook.'
+          : 'Solicitação aceita. Configure MUSICGPT_WEBHOOK_URL/SECRET para retorno automático.'
+      }
+    }
   } catch (error: any) {
     const setup = radioTableErrorResponse(error)
     if (setup) return setup

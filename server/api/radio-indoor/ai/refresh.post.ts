@@ -49,7 +49,7 @@ export default defineEventHandler(async (event) => {
     const updated = await pgOneOrNull<any>(
       `update public.radio_requests set status = $1, result_source_url = coalesce($2, result_source_url),
           result_storage_key = coalesce($3, result_storage_key), result_format = coalesce($4, result_format),
-          error = case when $1 = 'failed' then $5 when $1 = 'processing' and $6 is not null then $6 else null end,
+          error = case when $1 = 'failed' then $5::text when $1 = 'processing' and $6::text is not null then $6::text else null end,
           metadata = metadata || $7::jsonb, updated_at = now()
        where id = $8 and user_id = $9
        returning id, status, result_source_url, result_storage_key, result_format, error, metadata, updated_at`,

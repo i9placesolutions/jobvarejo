@@ -1,4 +1,9 @@
-import { cleanText, getRadioPresignedGetUrl, isRadioStorageKey, isUuid, jsonObject } from './radio-indoor'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import type { H3Event } from 'h3'
+import { GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { getS3Client } from './s3'
+import { cleanText, getRadioStorageConfig, isRadioStorageKey, isUuid, jsonObject } from './radio-indoor'
 import { pgOneOrNull, pgQuery } from './postgres'
 
 export const RADIO_VOICE_CONSENT_VERSION = 'voice-cloning-consent-v1'
@@ -163,7 +168,142 @@ export const getRadioVoiceSampleUrl = async (voice: any, expiresIn = 900): Promi
   if (!isRadioStorageKey(key) || !key.startsWith('radio-indoor/voices/')) {
     throw createError({ statusCode: 422, statusMessage: 'Amostra da voz inválida' })
   }
-  return getRadioPresignedGetUrl(key, expiresIn)
+  const extension = key.split('.').pop()?.toLowerCase() || 'mp3'
+  const safeExt = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'webm'].includes(extension) ? extension : 'mp3'
+  const mime = String(voice?.sample_content_type || '').split(';')[0]?.trim() || 'audio/mpeg'
+  const { bucket } = getRadioStorageConfig()
+  return getSignedUrl(
+    getS3Client(),
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ResponseContentType: mime,
+      ResponseContentDisposition: `inline; filename="voice-sample.${safeExt}"`
+    }),
+    { expiresIn }
+  )
+}
+
+const getVoiceSampleSigningSecret = (): string => {
+  const config = useRuntimeConfig() as any
+  const secret = String(
+    config.musicgptWebhookSecret ||
+    process.env.MUSICGPT_WEBHOOK_SECRET ||
+    config.authJwtSecret ||
+    process.env.AUTH_JWT_SECRET ||
+    ''
+  ).trim()
+  if (!secret) throw createError({ statusCode: 500, statusMessage: 'Segredo para amostra MusicGPT ausente' })
+  return secret
+}
+
+const encodeBase64Url = (value: string | Buffer): string =>
+  Buffer.from(value).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+
+const decodeBase64Url = (value: string): Buffer => {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/')
+  const padLength = (4 - (normalized.length % 4)) % 4
+  return Buffer.from(`${normalized}${'='.repeat(padLength)}`, 'base64')
+}
+
+const safeEqual = (left: string, right: string): boolean => {
+  const a = Buffer.from(String(left || ''))
+  const b = Buffer.from(String(right || ''))
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
+
+/** Token curto para o MusicGPT baixar a amostra sem cookie de sessão. */
+export const createMusicGptVoiceSampleToken = (input: {
+  voiceId: string
+  ownerUserId: string
+  expiresInSeconds?: number
+}): string => {
+  if (!isUuid(input.voiceId) || !isUuid(input.ownerUserId)) {
+    throw createError({ statusCode: 422, statusMessage: 'Identificadores de voz inválidos' })
+  }
+  const exp = Math.floor(Date.now() / 1000) + Math.max(60, Math.min(input.expiresInSeconds || 900, 1800))
+  const payload = encodeBase64Url(JSON.stringify({ v: input.voiceId, o: input.ownerUserId, exp }))
+  const signature = createHmac('sha256', getVoiceSampleSigningSecret()).update(`mgpt-voice:${payload}`).digest('base64url')
+  return `${payload}.${signature}`
+}
+
+export const verifyMusicGptVoiceSampleToken = (token: string): { voiceId: string; ownerUserId: string } | null => {
+  const raw = String(token || '').trim()
+  const parts = raw.split('.')
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null
+  const [payloadPart, signature] = parts
+  const expected = createHmac('sha256', getVoiceSampleSigningSecret()).update(`mgpt-voice:${payloadPart}`).digest('base64url')
+  if (!safeEqual(signature, expected)) return null
+  try {
+    const parsed = JSON.parse(decodeBase64Url(payloadPart).toString('utf8')) as { v?: string; o?: string; exp?: number }
+    if (!isUuid(parsed.v) || !isUuid(parsed.o)) return null
+    if (!Number.isFinite(parsed.exp) || Number(parsed.exp) < Math.floor(Date.now() / 1000)) return null
+    return { voiceId: String(parsed.v), ownerUserId: String(parsed.o) }
+  } catch {
+    return null
+  }
+}
+
+const isLoopbackOrigin = (origin: string): boolean => {
+  try {
+    const host = new URL(origin).hostname.toLowerCase()
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local')
+  } catch {
+    return true
+  }
+}
+
+/** Origem pública que o MusicGPT consegue chamar (preferir APP_BASE_URL / webhook). */
+export const resolveMusicGptPublicOrigin = (event?: H3Event): string | null => {
+  const config = useRuntimeConfig() as any
+  const webhook = String(config.musicgptWebhookUrl || process.env.MUSICGPT_WEBHOOK_URL || '').trim()
+  if (webhook) {
+    try {
+      const origin = new URL(webhook).origin
+      if (!isLoopbackOrigin(origin)) return origin
+    } catch { /* ignore */ }
+  }
+  for (const candidate of [config.appBaseUrl, process.env.APP_BASE_URL, process.env.NUXT_PUBLIC_SITE_URL]) {
+    const value = String(candidate || '').trim()
+    if (!value) continue
+    try {
+      const origin = new URL(value).origin
+      if (!isLoopbackOrigin(origin)) return origin
+    } catch { /* ignore */ }
+  }
+  if (event) {
+    try {
+      const origin = getRequestURL(event).origin
+      if (!isLoopbackOrigin(origin)) return origin
+    } catch { /* ignore */ }
+  }
+  return null
+}
+
+/**
+ * Prefere URL do JobVarejo (proxy autenticado por token) em vez da URL
+ * assinada do Wasabi — o MusicGPT falhava ao baixar/converter a amostra S3.
+ */
+export const getMusicGptVoiceSampleUrl = async (
+  event: H3Event,
+  voice: any,
+  ownerUserId: string,
+  expiresIn = 900
+): Promise<{ url: string; mode: 'app-proxy' | 'wasabi-presigned' }> => {
+  const origin = resolveMusicGptPublicOrigin(event)
+  if (origin) {
+    const token = createMusicGptVoiceSampleToken({
+      voiceId: String(voice.id),
+      ownerUserId,
+      expiresInSeconds: expiresIn
+    })
+    return {
+      url: `${origin}/api/radio-indoor/ai/voice-sample?token=${encodeURIComponent(token)}`,
+      mode: 'app-proxy'
+    }
+  }
+  return { url: await getRadioVoiceSampleUrl(voice, expiresIn), mode: 'wasabi-presigned' }
 }
 
 export const cleanVoiceName = (value: unknown): string => cleanText(value, 120)
