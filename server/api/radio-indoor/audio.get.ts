@@ -20,6 +20,7 @@ export default defineEventHandler(async (event) => {
   const user = playerIdentity ? { id: playerIdentity.userId } : await requireAuthenticatedUser(event)
   await enforceRateLimit(event, `radio-audio:${user.id}`, 600, 60_000)
   const trackId = String(getQuery(event).trackId || '').trim()
+  const shouldDownload = ['1', 'true', 'yes'].includes(String(getQuery(event).download || '').toLowerCase())
   const track = await getAccessibleTrack(user.id, trackId, playerIdentity?.stationId)
   if (!track || !track.storage_key || !isRadioStorageKey(track.storage_key)) {
     throw createError({ statusCode: 404, statusMessage: 'Áudio não encontrado' })
@@ -35,9 +36,18 @@ export default defineEventHandler(async (event) => {
     if (!result.Body) throw createError({ statusCode: 404, statusMessage: 'Áudio não encontrado' })
     const contentType = result.ContentType || (String(track.audio_format || '').toLowerCase() === 'webm' ? 'audio/webm' : 'audio/mpeg')
     const contentLength = Number(result.ContentLength || 0)
+    const extension = String(track.audio_format || '').toLowerCase() === 'webm' ? 'webm' :
+      String(track.audio_format || '').toLowerCase() === 'wav' ? 'wav' : 'mp3'
+    const safeTitle = String(track.title || 'audio-jobvarejo')
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120) || 'audio-jobvarejo'
     setResponseHeaders(event, {
       'Content-Type': contentType,
-      'Content-Disposition': 'inline',
+      'Content-Disposition': shouldDownload
+        ? `attachment; filename="${safeTitle}.${extension}"; filename*=UTF-8''${encodeURIComponent(`${safeTitle}.${extension}`)}`
+        : 'inline',
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=86400, stale-while-revalidate=604800',
       'X-Radio-Track': String(track.id)

@@ -1,6 +1,6 @@
 import { requireAuthenticatedUser } from '../../../utils/auth'
 import { enforceRateLimit } from '../../../utils/rate-limit'
-import { getMusicGptConversion, ingestMusicGptAudio } from '../../../utils/musicgpt'
+import { getMusicGptAudioUrl, getMusicGptConversion, ingestMusicGptAudio } from '../../../utils/musicgpt'
 import { pgOneOrNull } from '../../../utils/postgres'
 import { cleanText, isUuid, jsonParam, parseRequestBody, radioTableErrorResponse } from '../../../utils/radio-indoor'
 import { radioAccessAllows } from '../../../utils/radio-access'
@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
     const response = await getMusicGptConversion({ taskId: String(request.provider_task_id), conversionType })
     const conversion = response?.conversion && typeof response.conversion === 'object' ? response.conversion : response
     const providerStatus = cleanText(conversion?.status || conversion?.state, 40).toLowerCase()
-    const audioUrl = typeof conversion?.audio_url === 'string' && /^https:\/\//i.test(conversion.audio_url) ? conversion.audio_url.slice(0, 2048) : null
+    const audioUrl = getMusicGptAudioUrl(response)
     const status = audioUrl || ['completed', 'complete', 'success', 'succeeded', 'ready'].includes(providerStatus)
       ? 'ready' : ['failed', 'error'].includes(providerStatus) ? 'failed' : 'processing'
     let stored: { storageKey: string; format: string; bytes: number } | null = null

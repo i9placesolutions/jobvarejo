@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const preferredLogoSource = useLogoImageSource()
 import { ArrowLeft, Check, CreditCard, FileUp, Loader2, MapPin, MessageCircle, Plus, Save, Search, Store, Trash2, X } from 'lucide-vue-next'
 import {
   BUSINESS_PAYMENT_OPTIONS,
@@ -254,7 +255,7 @@ onMounted(loadProfile)
         <section class="profile-form surface">
           <div class="surface-title"><div><p>MARCA</p><h2>Identidade</h2></div><span class="status-dot">Sincronizado</span></div>
           <div class="logo-row">
-            <div class="logo-preview"><img v-if="logoUrl" :src="logoUrl" :alt="form.companyName || 'Logo da loja'" /><Store v-else class="h-7 w-7" /></div>
+            <div class="logo-preview"><img v-if="logoUrl" :src="preferredLogoSource(logoUrl)" :alt="form.companyName || 'Logo da loja'" /><Store v-else class="h-7 w-7" /></div>
             <div><strong>Logo padrão da loja</strong><p>Ela será usada nos encartes quando o campo Logo da loja estiver ativo.</p><button class="secondary-button" type="button" :disabled="isUploading" @click="chooseLogo"><Loader2 v-if="isUploading" class="h-4 w-4 animate-spin" /><FileUp v-else class="h-4 w-4" />Escolher arquivo</button><input ref="logoInput" type="file" accept="image/*" hidden @change="handleLogo" /></div>
           </div>
           <div class="form-grid"><label><span>Nome da loja</span><input v-model="form.companyName" type="text" maxlength="160" /></label><label><span>Slogan</span><input v-model="form.slogan" type="text" maxlength="180" placeholder="A melhor oferta perto de você" /></label></div>

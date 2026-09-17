@@ -16,7 +16,7 @@ const stickerColor = computed(() => /^#[\da-f]{6}$/i.test(props.logo.__stickerOu
 <template>
     <section class="quick-logo-actions" aria-label="Opções da logo" @pointerdown.stop @click.stop @keydown.stop>
         <header>
-            <div><strong>Logo da loja</strong><p>Personalize o fundo e o contorno da sua logo.</p></div>
+            <div><strong>Logo da loja</strong><p>Fundo e contorno são salvos na sua conta para todos os modelos.</p></div>
             <button type="button" class="close" aria-label="Fechar opções da logo" @click="emit('close')">×</button>
         </header>
         <fieldset>

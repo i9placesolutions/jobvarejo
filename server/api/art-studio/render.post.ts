@@ -1,3 +1,4 @@
+import { readLogoPreference } from '../../utils/logo-preference'
 import { readArtImage } from '~/server/utils/art-studio-image'
 import { prepareArtLogo } from '~/server/utils/art-studio-logo'
 import {
@@ -16,6 +17,7 @@ import { runArtPython } from '~/server/utils/art-studio-python'
 import { enforceRateLimit } from '~/server/utils/rate-limit'
 export default defineEventHandler(async (event) => {
   const user = await artUser(event)
+  const preference = await readLogoPreference(user.id)
   await enforceRateLimit(event, `art-render:${user.id}`, 10, 60_000)
   const data = parseArtInput(
     z.object({ compositions: z.array(artCompositionSchema).min(1).max(8) }),
@@ -58,10 +60,10 @@ export default defineEventHandler(async (event) => {
     for (const layer of doc.layers) {
       if (!layer.visible || !layer.src || !hasArtLogoTreatment(layer)) continue
       const source = layer.src,
-        key = artLayerImageSrc(layer)
+        key = artLayerImageSrc(layer, preference)
       if (!assets[key])
         assets[key] = (
-          await prepareArtLogo(rawImages.get(source)!, artLogoOptions(layer))
+          await prepareArtLogo(rawImages.get(source)!, artLogoOptions(layer, preference))
         ).toString('base64')
       layer.src = key
       layer.fit = 'contain'

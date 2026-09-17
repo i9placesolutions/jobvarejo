@@ -1108,7 +1108,7 @@ const targetPages = computed(() => project.pages.map((p, i) => ({ id: i, name: p
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <span class="block text-[11px] font-semibold tracking-wide text-zinc-200">Fundo da logo</span>
-            <span class="mt-0.5 block text-[10px] leading-snug text-zinc-500">A logo continua no local definido no modelo.</span>
+            <span class="mt-0.5 block text-[10px] leading-snug text-zinc-500">Fundo, borda e contorno são salvos na sua conta para todos os modelos.</span>
           </div>
           <span class="shrink-0 rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-violet-300">Logo</span>
         </div>

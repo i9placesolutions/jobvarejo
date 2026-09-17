@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const preferredLogoSource = useLogoImageSource()
 import type { BuilderThemeBusinessField, BuilderThemeElement } from '~/types/builder'
 import {
   normalizeBuilderThemeComposition,
@@ -212,7 +213,7 @@ const rootStyle = computed(() => ({
 
         <img
           v-else-if="element.kind === 'business_field' && element.field === 'logo'"
-          :src="logoUrl"
+          :src="preferredLogoSource(logoUrl)"
           alt="Logo da loja"
           class="h-full w-full"
           :style="{ objectFit: element.style?.objectFit || 'contain' }"

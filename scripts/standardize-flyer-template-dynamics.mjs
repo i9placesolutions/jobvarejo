@@ -22,7 +22,10 @@ export const EXCLUDED_TEMPLATE_IDS = new Set([
   // Canaã: pedido explícito para manter sem alterações.
   'ea0d0789-3081-409c-b830-10739806b065',
   // Mega — Sábado de Ofertas, enviado pelo usuário como modelo que não deve mudar.
-  '4f092cdb-138c-4cf1-b2f7-4aacc018a890'
+  '4f092cdb-138c-4cf1-b2f7-4aacc018a890',
+  // Outubro Queima de Estoque: rodapé personalizado no padrão da referência
+  // (faixa vermelha 3 colunas). A padronização destruiria o layout.
+  'eda6e0c8-eb39-4361-8da0-763329a2f71b'
 ])
 export const DEFAULT_DONOR_TEMPLATE_ID = 'f2fcc88f-1d67-486a-b4c8-d0561a47c505'
 

@@ -44,6 +44,7 @@ import {
   resizeArt,
   stableArtString
 } from '~/utils/art-studio/composition'
+import { normalizeLogoPreference, applyLogoPreferenceToArt } from '~/utils/logoPreference'
 import { normalizeBusinessProfile } from '~/utils/businessProfile'
 const ArtCanvas = defineAsyncComponent(
   () => import('~/components/art-studio/ArtCanvas.client.vue')
@@ -72,9 +73,14 @@ const brief = ref({
   color: '#eff8cb'
 })
 const allFormats = computed(() => [doc.value, ...(doc.value.alternates || [])])
-const selected = computed(() =>
-  doc.value.layers.find((l) => l.id === selectedId.value)
-)
+const logoPreferences = useLogoPreference()
+const selected = computed(() => {
+  const layer = doc.value.layers.find(l => l.id === selectedId.value)
+  if (!layer) return undefined
+  const display = { ...layer }
+  applyLogoPreferenceToArt(display, logoPreferences.preference.value)
+  return display
+})
 const ready = ref(false),
   loading = ref(true),
   error = ref(''),
@@ -184,6 +190,9 @@ watch(name, snapshot)
 const apply = (value: ArtComposition) => {
   doc.value = value
 }
+watch(logoPreferences.preference, preference => {
+  for (const page of allFormats.value) for (const layer of page.layers) applyLogoPreferenceToArt(layer, preference)
+}, { deep: true })
 const patch = (updates: Partial<ArtLayer>) => {
   if (!selected.value) return
   const next = cloneArt(doc.value)
@@ -192,6 +201,15 @@ const patch = (updates: Partial<ArtLayer>) => {
     updates
   )
   doc.value = next
+  const layer = next.layers.find(l => l.id === selectedId.value)
+  if (layer?.binding === 'logo' && Object.keys(updates).some(key => ['logoBackdrop', 'logoOutline', 'logoOutlineColor', 'logoOutlineWidth'].includes(key))) {
+    const preference = normalizeLogoPreference({
+      backdrop: layer.logoBackdrop, outline: layer.logoOutline,
+      outlineColor: layer.logoOutlineColor, outlineWidth: layer.logoOutlineWidth,
+      ...logoPreferences.preference.value,
+      ...Object.fromEntries(Object.entries(updates).map(([key, value]) => [({ logoBackdrop: 'backdrop', logoOutline: 'outline', logoOutlineColor: 'outlineColor', logoOutlineWidth: 'outlineWidth' } as Record<string, string>)[key] || key, value])) })!
+    void logoPreferences.save(preference).catch(() => { error.value = 'Falha ao salvar a preferência da logo. Tente novamente.' })
+  }
 }
 const numeric = (
   key:
@@ -459,6 +477,7 @@ const setBinding = (event: Event) => {
 const exportPng = async () => {
   error.value = ''
   try {
+    await logoPreferences.flush()
     const href = await canvas.value?.exportPng()
     if (!href) throw new Error('Aguarde o editor carregar.')
     const link = document.createElement('a')
@@ -560,6 +579,7 @@ const exportBatch = async () => {
   formatBusy.value = true
   error.value = ''
   try {
+    await logoPreferences.flush()
     const compositions = allFormats.value.map((page) => {
       const copy = cloneArt(page)
       delete copy.alternates

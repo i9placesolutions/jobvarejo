@@ -20,6 +20,7 @@ export const useRadioIndoor = () => {
   const facets = useState<any>('radio-indoor-facets', () => ({ genres: [] }))
   const playerData = useState<any | null>('radio-indoor-player', () => null)
   const requests = useState<any[]>('radio-indoor-requests', () => [])
+  const voices = useState<any[]>('radio-indoor-voices', () => [])
   const members = useState<any[]>('radio-indoor-members', () => [])
   const players = useState<any[]>('radio-indoor-players', () => [])
   const loading = useState('radio-indoor-loading', () => false)
@@ -75,6 +76,23 @@ export const useRadioIndoor = () => {
     const data = await $fetch<any>('/api/radio-indoor/requests', { query: selectedStationId.value ? { stationId: selectedStationId.value } : undefined })
     requests.value = Array.isArray(data?.items) ? data.items : []
     return data
+  }
+
+  const loadVoices = async () => {
+    const data = await $fetch<any>('/api/radio-indoor/voices', {
+      query: selectedStationId.value ? { stationId: selectedStationId.value } : undefined
+    })
+    voices.value = Array.isArray(data?.items) ? data.items : []
+    return data
+  }
+
+  const revokeVoice = async (voiceId: string) => {
+    const result = await $fetch<any>(`/api/radio-indoor/voices/${encodeURIComponent(voiceId)}`, {
+      method: 'PATCH',
+      body: { action: 'revoke' }
+    })
+    await loadVoices()
+    return result
   }
 
   const loadMembers = async () => {
@@ -148,14 +166,14 @@ export const useRadioIndoor = () => {
       : { ...payload, ...(payload.stationId || selectedStationId.value ? { stationId: payload.stationId || selectedStationId.value } : {}) }
     const result = await $fetch<any>('/api/radio-indoor', { method: 'POST', body })
     if (payload.action === 'create_station' && result?.station?.id) selectedStationId.value = String(result.station.id)
-    await Promise.allSettled([loadBootstrap(), loadPlayer()])
+    await Promise.allSettled([loadBootstrap(), loadPlayer(), loadVoices()])
     return result
   }
 
   const switchStation = async (stationId: string) => {
     if (!stationId) return
     selectedStationId.value = stationId
-    await Promise.all([loadBootstrap(stationId), loadCatalog({ stationId }), loadPlayer(), loadRequests(), loadMembers()])
+    await Promise.all([loadBootstrap(stationId), loadCatalog({ stationId }), loadPlayer(), loadRequests(), loadVoices(), loadMembers()])
   }
 
   return {
@@ -166,6 +184,7 @@ export const useRadioIndoor = () => {
     facets,
     playerData,
     requests,
+    voices,
     members,
     players,
     loading,
@@ -176,9 +195,11 @@ export const useRadioIndoor = () => {
     loadCatalog,
     loadPlayer,
     loadRequests,
+    loadVoices,
     loadMembers,
     createMember,
     createPlayer,
+    revokeVoice,
     switchStation,
     prefetchTrack,
     prefetchQueue,

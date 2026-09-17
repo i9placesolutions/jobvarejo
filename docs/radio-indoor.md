@@ -60,7 +60,23 @@ MUSICGPT_DEFAULT_VOICE_ID=...
 MUSICGPT_DEFAULT_VOICE_GENDER=female
 ```
 
-O formulário de solicitações registra jingle, off, locução e música. Sem a chave, o pedido fica salvo como `queued` e pode ser enviado depois. Com a chave, jingles e músicas usam MusicAI; offs e locuções usam TextToSpeech e exigem um `voice_id` (ou o padrão configurado). O JobVarejo guarda `task_id`/`conversion_id` e o webhook atualiza o status sem expor o segredo ao cliente. Consulte os contratos assíncronos na [documentação oficial do MusicGPT](https://docs.musicgpt.com/api-documentation/endpoint/MusicAI) e no [TextToSpeech](https://docs.musicgpt.com/api-documentation/conversions/texttospeech).
+O formulário de solicitações registra jingle, off, locução e música. Sem a chave, o pedido fica salvo como `queued` e pode ser enviado depois. Com a chave, jingles e músicas usam MusicAI; offs e locuções usam TextToSpeech com a voz escolhida no banco (ou o padrão configurado). O JobVarejo guarda `task_id`/`conversion_id` e o webhook atualiza o status sem expor o segredo ao cliente. Consulte os contratos assíncronos na [documentação oficial do MusicGPT](https://docs.musicgpt.com/api-documentation/endpoint/MusicAI) e no [TextToSpeech](https://docs.musicgpt.com/api-documentation/conversions/texttospeech).
+
+### Banco de vozes
+
+O cadastro de uma voz clonada é feito exclusivamente em **Administração do
+Builder → MusicGPT / Banco de vozes** (`/admin/musicgpt`). O administrador envia
+a amostra, registra a confirmação de autorização e pode revogar o perfil. A
+amostra é guardada em um prefixo privado do Wasabi; ela não aparece como uma
+URL pública nem pode ser baixada por um usuário sem sessão.
+
+Na Rádio Indoor, a tela **Banco de vozes** é somente leitura: cada usuário pode
+ouvir a prévia e selecionar uma voz liberada ao criar um off ou uma locução. O
+servidor verifica novamente a loja, o status ativo e o consentimento antes de
+enviar uma URL assinada de curta duração ao TextToSpeech. O endpoint de upload
+(`/api/admin/musicgpt/voices`) e a revogação exigem uma sessão com papel
+`admin` ou `super_admin`; esconder o formulário no cliente não é a única
+barreira.
 
 ## Worker de agenda
 

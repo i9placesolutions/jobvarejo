@@ -271,3 +271,62 @@ SELECT id, user_id, 'owner', 'active', user_id
   FROM public.radio_stations
 ON CONFLICT (station_id, user_id) DO UPDATE
   SET access_level = 'owner', status = 'active', updated_at = now();
+
+-- Banco de vozes da Rádio Indoor. A amostra permanece privada no Wasabi e só
+-- é enviada ao provedor por uma URL assinada de curta duração durante uma
+-- solicitação de locução. O uso só é permitido após o responsável confirmar
+-- que tem autorização para clonar a voz.
+CREATE TABLE IF NOT EXISTS public.radio_voice_profiles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  station_id uuid REFERENCES public.radio_stations(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  description text,
+  gender text NOT NULL DEFAULT 'female' CHECK (gender IN ('female', 'male')),
+  sample_storage_key text NOT NULL,
+  sample_content_type text NOT NULL,
+  sample_size_bytes integer NOT NULL CHECK (sample_size_bytes > 0),
+  consent_status text NOT NULL DEFAULT 'confirmed'
+    CHECK (consent_status IN ('confirmed', 'revoked')),
+  consent_version text NOT NULL DEFAULT 'voice-cloning-consent-v1',
+  consent_confirmed_at timestamptz NOT NULL DEFAULT now(),
+  status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'revoked', 'archived')),
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.radio_requests
+  ADD COLUMN IF NOT EXISTS voice_profile_id uuid;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_constraint
+     WHERE conname = 'radio_requests_voice_profile_id_fkey'
+       AND conrelid = 'public.radio_requests'::regclass
+  ) THEN
+    ALTER TABLE public.radio_requests
+      ADD CONSTRAINT radio_requests_voice_profile_id_fkey
+      FOREIGN KEY (voice_profile_id)
+      REFERENCES public.radio_voice_profiles(id)
+      ON DELETE SET NULL;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS radio_voice_profiles_account_idx
+  ON public.radio_voice_profiles(user_id, status, station_id, lower(name));
+CREATE INDEX IF NOT EXISTS radio_voice_profiles_station_idx
+  ON public.radio_voice_profiles(station_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS radio_requests_voice_profile_idx
+  ON public.radio_requests(voice_profile_id, created_at DESC);
+
+DROP TRIGGER IF EXISTS radio_voice_profiles_updated_at ON public.radio_voice_profiles;
+CREATE TRIGGER radio_voice_profiles_updated_at
+  BEFORE UPDATE ON public.radio_voice_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.update_radio_indoor_updated_at();
+
+COMMENT ON TABLE public.radio_voice_profiles IS 'Amostras autorizadas para síntese de voz da Rádio Indoor; arquivos privados no Wasabi';

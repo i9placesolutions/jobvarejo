@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { LOGO_STYLE_PROPERTIES, logoPreferenceFromFabric, applyLogoPreferenceToFabric } from "~/utils/logoPreference"
 import { createIsolatedDynamicTextbox } from '~/utils/isolatedDynamicTextbox'
 import { applyDynamicBusinessTextColor } from '~/utils/dynamicBusinessFields'
 import { installGroupClipCacheGuard } from '~/utils/fabricGroupClipCache'
@@ -4221,6 +4222,7 @@ import {
 import {
     formatBusinessAddressValues,
     formatBusinessContactValues,
+    normalizeBusinessEntries,
     formatBrazilianBusinessPhone,
     formatBusinessPaymentMethods
 } from '~/utils/businessProfile'
@@ -14666,8 +14668,28 @@ const updatePriceGroupManualScaleOverride = (group: any, axis: 'x' | 'y', nextSc
     return nextScale;
 };
 
-const updateObjectProperty = (prop: string, value: any) =>
-    getEditorCanvasActionsController().updateObjectProperty(prop, value);
+const logoPreferences = useLogoPreference()
+let logoPreferenceSaveTimer: ReturnType<typeof setTimeout> | undefined
+let pendingLogoPreference: ReturnType<typeof logoPreferenceFromFabric> | null = null
+const flushLogoPreference = async () => {
+    clearTimeout(logoPreferenceSaveTimer)
+    const preference = pendingLogoPreference
+    pendingLogoPreference = null
+    if (preference) await logoPreferences.save(preference)
+    await logoPreferences.flush()
+}
+const updateObjectProperty = (prop: string, value: any) => {
+    const object = canvas.value?.getActiveObject?.()
+    getEditorCanvasActionsController().updateObjectProperty(prop, value)
+    if (!isQuickLogoImage(object) || !LOGO_STYLE_PROPERTIES.has(prop)) return
+    pendingLogoPreference = logoPreferenceFromFabric(object)
+    clearTimeout(logoPreferenceSaveTimer)
+    logoPreferenceSaveTimer = setTimeout(() => {
+        void flushLogoPreference().catch(() => {
+            notifyEditorError('Não foi possível salvar a preferência da logo na sua conta. Tente novamente.')
+        })
+    }, 350)
+};
 
 const applySmartStyle = (group: any, key: string, value: any) => {
     // Traverse group to find specific sub-elements
@@ -15655,6 +15677,7 @@ const getExportShareContext = (): import('~/utils/editorExportShareController').
     getAllFrames,
     getFrameById,
     exportProjectPages: async (ids: string[], format: any, qualityPreset: any) => {
+        await flushLogoPreference()
         const controller = await loadExportShareController()
         const results = []
         for (const page of project.pages.filter((page: any) => ids.includes(String(page.id)))) {
@@ -15669,6 +15692,18 @@ const getExportShareContext = (): import('~/utils/editorExportShareController').
             })
             try {
                 await offscreen.loadFromJSON(prepareCanvasDataForLoad(page.canvasData, { silent: true }))
+                const outlineRuntime = createStickerOutlineRuntime({ getCanvas: () => offscreen, renderNow: () => offscreen.renderAll() })
+                const applyExportLogoStyle = (objects: any[]) => {
+                    for (const object of objects) {
+                        if (isQuickLogoImage(object)) {
+                            applyLogoPreferenceToFabric(object, quickBusinessProfile.value.logoPreference)
+                            syncQuickLogoBackdrop(object, offscreen)
+                            if (object.__stickerOutlineEnabled) outlineRuntime.applyStickerOutlinePatch(object)
+                        }
+                        if (object.getObjects) applyExportLogoStyle(object.getObjects())
+                    }
+                }
+                applyExportLogoStyle(offscreen.getObjects())
                 const pageContext = {
                     ...getExportShareContext(), canvas: { value: offscreen },
                     getAllFrames: () => offscreen.getObjects().filter(isFrameLikeObject),
@@ -18174,13 +18209,13 @@ const getQuickLogoBackdropGeometry = (
     return { width, height, rx: Math.min(16, width / 2), ry: Math.min(16, height / 2) }
 }
 
-const findQuickLogoBackdrop = (logoObject: any): any | null => {
-    if (!canvas.value || !logoObject) return null
+const findQuickLogoBackdrop = (logoObject: any, targetCanvas = canvas.value): any | null => {
+    if (!targetCanvas || !logoObject) return null
     const backdropId = String(logoObject?.quickLogoBackdropId || '').trim()
     const ownerId = String(logoObject?._customId || '').trim()
     if (!backdropId && !ownerId) return null
 
-    return (canvas.value.getObjects?.() || []).find((object: any) => {
+    return (targetCanvas.getObjects?.() || []).find((object: any) => {
         if (!object?.quickLogoBackdrop) return false
         const objectId = String(object?._customId || '').trim()
         const objectOwnerId = String(object?.quickLogoBackdropOwnerId || '').trim()
@@ -18188,18 +18223,18 @@ const findQuickLogoBackdrop = (logoObject: any): any | null => {
     }) || null
 }
 
-const removeQuickLogoBackdrop = (logoObject: any): boolean => {
-    if (!canvas.value || !logoObject) return false
+const removeQuickLogoBackdrop = (logoObject: any, targetCanvas = canvas.value): boolean => {
+    if (!targetCanvas || !logoObject) return false
     const backdropId = String(logoObject?.quickLogoBackdropId || '').trim()
     const ownerId = String(logoObject?._customId || '').trim()
-    const matches = (canvas.value.getObjects?.() || []).filter((object: any) => {
+    const matches = (targetCanvas.getObjects?.() || []).filter((object: any) => {
         if (!object?.quickLogoBackdrop) return false
         const objectId = String(object?._customId || '').trim()
         const objectOwnerId = String(object?.quickLogoBackdropOwnerId || '').trim()
         return (backdropId && objectId === backdropId) || (ownerId && objectOwnerId === ownerId)
     })
     matches.forEach((object: any) => {
-        try { canvas.value?.remove(object) } catch { /* ignore */ }
+        try { targetCanvas?.remove(object) } catch { /* ignore */ }
         try { object.dispose?.() } catch { /* ignore */ }
     })
     if (typeof logoObject.set === 'function') {
@@ -18214,11 +18249,11 @@ const removeQuickLogoBackdrop = (logoObject: any): boolean => {
  * normal do Fabric (selecao, crop, persistencia e troca de fonte permanecem
  * compativeis com o editor existente).
  */
-const syncQuickLogoBackdrop = (logoObject: any): any | null => {
-    if (!canvas.value || !fabric || !logoObject) return null
+const syncQuickLogoBackdrop = (logoObject: any, targetCanvas = canvas.value): any | null => {
+    if (!targetCanvas || !fabric || !logoObject) return null
 
     if (!isQuickLogoImageObject(logoObject)) {
-        const backdrop = findQuickLogoBackdrop(logoObject)
+        const backdrop = findQuickLogoBackdrop(logoObject, targetCanvas)
         if (backdrop && backdrop.visible !== false) {
             backdrop.set({ visible: false })
             backdrop.dirty = true
@@ -18232,7 +18267,7 @@ const syncQuickLogoBackdrop = (logoObject: any): any | null => {
 
     const backdropMode = normalizeQuickLogoBackdropMode(logoObject?.quickLogoBackdropMode)
     if (backdropMode === 'none') {
-        removeQuickLogoBackdrop(logoObject)
+        removeQuickLogoBackdrop(logoObject, targetCanvas)
         logoObject.set?.({ quickLogoBackdropMode: backdropMode, quickLogoBackdropId: undefined })
         logoObject.dirty = true
         logoObject.setCoords?.()
@@ -18255,7 +18290,7 @@ const syncQuickLogoBackdrop = (logoObject: any): any | null => {
     const geometry = getQuickLogoBackdropGeometry(baseWidth, baseHeight, backdropMode)
     const width = geometry.width
     const height = geometry.height
-    let backdrop = findQuickLogoBackdrop(logoObject)
+    let backdrop = findQuickLogoBackdrop(logoObject, targetCanvas)
 
     if (!backdrop) {
         backdrop = new fabric.Rect({
@@ -18296,11 +18331,11 @@ const syncQuickLogoBackdrop = (logoObject: any): any | null => {
             excludeFromExport: false
         })
         backdrop._customId = makeId()
-        const logoIndex = canvas.value.getObjects?.().indexOf(logoObject) ?? -1
-        if (typeof (canvas.value as any).insertAt === 'function' && logoIndex >= 0) {
-            ;(canvas.value as any).insertAt(logoIndex, backdrop)
+        const logoIndex = targetCanvas.getObjects?.().indexOf(logoObject) ?? -1
+        if (typeof (targetCanvas as any).insertAt === 'function' && logoIndex >= 0) {
+            ;(targetCanvas as any).insertAt(logoIndex, backdrop)
         } else {
-            canvas.value.add(backdrop)
+            targetCanvas.add(backdrop)
             if (typeof (backdrop as any).sendToBack === 'function') (backdrop as any).sendToBack()
         }
     }
@@ -18361,19 +18396,19 @@ const syncQuickLogoBackdrop = (logoObject: any): any | null => {
     // Keep the backdrop behind the image after a replacement or a manual
     // layer-order change. Do this only when the order is wrong to avoid
     // touching the canvas stack during every pointer-move frame.
-    const objects = canvas.value.getObjects?.() || []
+    const objects = targetCanvas.getObjects?.() || []
     const backdropIndex = objects.indexOf(backdrop)
     const logoIndex = objects.indexOf(logoObject)
     if (backdropIndex > logoIndex && logoIndex >= 0) {
-        if (typeof (canvas.value as any).moveObjectTo === 'function') {
-            ;(canvas.value as any).moveObjectTo(backdrop, logoIndex)
-        } else if (typeof (canvas.value as any).insertAt === 'function') {
-            canvas.value.remove(backdrop)
-            ;(canvas.value as any).insertAt(Math.max(0, logoIndex), backdrop)
+        if (typeof (targetCanvas as any).moveObjectTo === 'function') {
+            ;(targetCanvas as any).moveObjectTo(backdrop, logoIndex)
+        } else if (typeof (targetCanvas as any).insertAt === 'function') {
+            targetCanvas.remove(backdrop)
+            ;(targetCanvas as any).insertAt(Math.max(0, logoIndex), backdrop)
         }
     }
 
-    syncObjectFrameClip(backdrop)
+    if (targetCanvas === canvas.value) syncObjectFrameClip(backdrop)
     return backdrop
 }
 
@@ -18580,66 +18615,88 @@ let quickLogoLoadSequence = 0
 const syncQuickLogoBinding = async (profile: Record<string, any>): Promise<boolean> => {
     if (!canvas.value || !fabric) return false
     const source = project.isTemplate === true && !isQuickMode.value ? '' : getQuickLogoSource(profile)
-    let logoObject = canvas.value.getObjects().find((object: any) => (
+    // Um modelo pode ter mais de um espaço de logo (ex.: cabeçalho + rodapé).
+    // Todos os slots precisam acompanhar a logo do cadastro, não só o primeiro.
+    const logoObjects = canvas.value.getObjects().filter((object: any) => (
         String(object?.businessProfileField || '').trim().toLowerCase() === 'logo' ||
         object?.quickLogoSlot === true
-    )) as any
-    // Atualiza apenas a logo definida no modelo; o perfil não cria elementos.
-    if (!logoObject) return false
+    )) as any[]
+    // Atualiza apenas as logos definidas no modelo; o perfil não cria elementos.
+    if (!logoObjects.length) return false
 
-    const enabled = quickBusinessFieldOverrides.value.logo ?? logoObject?.quickFieldEnabled !== false
+    const enabled = quickBusinessFieldOverrides.value.logo ?? logoObjects.some((slot: any) => slot?.quickFieldEnabled !== false)
     const pageSessionId = activePageLoadSessionId
     const pageId = getActiveProjectPageId()
-    const isCurrentLogoPage = () => pageSessionId === activePageLoadSessionId && pageId === getActiveProjectPageId() && !!canvas.value?.getObjects().includes(logoObject)
+    const isCurrentLogoPage = (slot: any) => pageSessionId === activePageLoadSessionId && pageId === getActiveProjectPageId() && !!canvas.value?.getObjects().includes(slot)
     const requestId = ++quickLogoLoadSequence
 
     if (!source) {
-        if (logoObject.type === 'image') {
+        let changed = false
+        for (const logoObject of logoObjects) {
+            if (logoObject.type === 'image') {
+                removeQuickLogoBackdrop(logoObject)
+                const placeholder = createQuickLogoSlot(logoObject)
+                if (!placeholder) continue
+                placeholder.set({ quickFieldEnabled: enabled })
+                changed = replaceQuickLogoObject(logoObject, placeholder) || changed
+                continue
+            }
+            // No modo de criação do modelo, o slot continua visível como área de
+            // reserva. Na edição rápida, sem logo cadastrada, o campo fica oculto.
             removeQuickLogoBackdrop(logoObject)
-            const placeholder = createQuickLogoSlot(logoObject)
-            if (!placeholder) return false
-            placeholder.set({ quickFieldEnabled: enabled })
-            return replaceQuickLogoObject(logoObject, placeholder)
+            const shouldShowPlaceholder = !isQuickMode.value
+            const slotChanged = logoObject.visible !== shouldShowPlaceholder || logoObject.quickFieldEnabled !== enabled || !!logoObject.quickLogoSource
+            logoObject.set({
+                visible: shouldShowPlaceholder,
+                quickFieldEnabled: enabled,
+                quickLogoSource: ''
+            })
+            logoObject.dirty = true
+            logoObject.setCoords?.()
+            changed = slotChanged || changed
         }
-        // No modo de criação do modelo, o slot continua visível como área de
-        // reserva. Na edição rápida, sem logo cadastrada, o campo fica oculto.
-        removeQuickLogoBackdrop(logoObject)
-        const shouldShowPlaceholder = !isQuickMode.value
-        const changed = logoObject.visible !== shouldShowPlaceholder || logoObject.quickFieldEnabled !== enabled || !!logoObject.quickLogoSource
-        logoObject.set({
-            visible: shouldShowPlaceholder,
-            quickFieldEnabled: enabled,
-            quickLogoSource: ''
-        })
-        logoObject.dirty = true
-        logoObject.setCoords?.()
         return changed
     }
 
-    const currentSource = String(logoObject?.quickLogoSource || logoObject?.__originalSrc || '').trim()
-    if (logoObject.type === 'image' && currentSource === source) {
-        const nextVisible = enabled
-        const changed = logoObject.visible !== nextVisible || logoObject.quickFieldEnabled !== enabled
-        logoObject.set({ visible: nextVisible, quickFieldEnabled: enabled })
-        syncQuickLogoBackdrop(logoObject)
-        logoObject.dirty = true
-        logoObject.setCoords?.()
-        return changed
+    let changed = false
+    for (const logoObject of logoObjects) {
+        if (applyLogoPreferenceToFabric(logoObject, profile.logoPreference)) {
+            invalidateStickerOutlineCache(logoObject)
+            if (logoObject.__stickerOutlineEnabled) applyStickerOutlinePatch(logoObject)
+            changed = true
+        }
+        const currentSource = String(logoObject?.quickLogoSource || logoObject?.__originalSrc || '').trim()
+        if (logoObject.type === 'image' && currentSource === source) {
+            const nextVisible = enabled
+            const slotChanged = logoObject.visible !== nextVisible || logoObject.quickFieldEnabled !== enabled
+            logoObject.set({ visible: nextVisible, quickFieldEnabled: enabled })
+            syncQuickLogoBackdrop(logoObject)
+            logoObject.dirty = true
+            logoObject.setCoords?.()
+            changed = slotChanged || changed
+            continue
+        }
     }
+    const pendingSlots = logoObjects.filter((logoObject: any) =>
+        !(logoObject.type === 'image' && String(logoObject?.quickLogoSource || logoObject?.__originalSrc || '').trim() === source))
+    if (!pendingSlots.length) return changed
 
     try {
-        const image = await fabric.Image.fromURL(getQuickLogoUrl(source), { crossOrigin: 'anonymous' })
-        if (requestId !== quickLogoLoadSequence || !isCurrentLogoPage() || !canvas.value || !image) return false
-        await autoTrimFabricImageAsync(image, { preserveVisualPosition: true })
-        if (requestId !== quickLogoLoadSequence || !isCurrentLogoPage()) return false
-        markProductImageTrimmed(image)
-        const imageWidth = Number(image.width || 0)
-        const imageHeight = Number(image.height || 0)
-        if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) || imageWidth <= 0 || imageHeight <= 0) {
-            throw new Error('A logo não possui dimensões válidas.')
-        }
+        for (const logoObject of pendingSlots) {
+            if (requestId !== quickLogoLoadSequence || !canvas.value) return changed
+            if (!isCurrentLogoPage(logoObject)) continue
+            const image = await fabric.Image.fromURL(getQuickLogoUrl(source), { crossOrigin: 'anonymous' })
+            if (requestId !== quickLogoLoadSequence || !isCurrentLogoPage(logoObject) || !canvas.value || !image) return changed
+            await autoTrimFabricImageAsync(image, { preserveVisualPosition: true })
+            if (requestId !== quickLogoLoadSequence || !isCurrentLogoPage(logoObject)) return changed
+            markProductImageTrimmed(image)
+            const imageWidth = Number(image.width || 0)
+            const imageHeight = Number(image.height || 0)
+            if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) || imageWidth <= 0 || imageHeight <= 0) {
+                throw new Error('A logo não possui dimensões válidas.')
+            }
 
-        const metrics = getQuickLogoSlotMetrics(logoObject)
+            const metrics = getQuickLogoSlotMetrics(logoObject)
         const slotWidth = logoObject.type === 'image' ? metrics.maxWidth : Math.max(24, Math.abs(Number(logoObject.width || 0) * Number(logoObject.scaleX || 1)) || metrics.maxWidth)
         const slotHeight = logoObject.type === 'image' ? metrics.maxHeight : Math.max(24, Math.abs(Number(logoObject.height || 0) * Number(logoObject.scaleY || 1)) || metrics.maxHeight)
         const backdropPadding = getQuickLogoBackdropPadding(logoObject)
@@ -18698,6 +18755,7 @@ const syncQuickLogoBinding = async (profile: Record<string, any>): Promise<boole
             layerName: 'Logo da loja',
             _customId: String(logoObject?._customId || makeId())
         })
+        applyLogoPreferenceToFabric(image, profile.logoPreference)
         ;(image as any).__originalSrc = source
         ;(image as any).src = getQuickLogoUrl(source)
         const replaced = replaceQuickLogoObject(logoObject, image)
@@ -18705,21 +18763,36 @@ const syncQuickLogoBinding = async (profile: Record<string, any>): Promise<boole
             syncQuickLogoBackdrop(image)
             if ((image as any).__stickerOutlineEnabled) applyStickerOutlinePatch(image)
         }
-        return replaced
+        changed = replaced || changed
+        }
+        return changed
     } catch (error) {
         if (requestId !== quickLogoLoadSequence) return false
         console.warn('[quick-editor] Não foi possível carregar a logo padrão:', error)
-        const changed = logoObject.visible !== false || logoObject.quickFieldEnabled !== enabled
-        logoObject.set({ visible: false, quickFieldEnabled: enabled })
-        const backdrop = findQuickLogoBackdrop(logoObject)
-        if (backdrop) backdrop.set({ visible: false })
-        logoObject.dirty = true
-        logoObject.setCoords?.()
-        return changed
+        let failedChanged = changed
+        for (const logoObject of pendingSlots) {
+            if (!canvas.value?.getObjects().includes(logoObject)) continue
+            const slotChanged = logoObject.visible !== false || logoObject.quickFieldEnabled !== enabled
+            logoObject.set({ visible: false, quickFieldEnabled: enabled })
+            const backdrop = findQuickLogoBackdrop(logoObject)
+            if (backdrop) backdrop.set({ visible: false })
+            logoObject.dirty = true
+            logoObject.setCoords?.()
+            failedChanged = slotChanged || failedChanged
+        }
+        return failedChanged
     }
 }
 
-const getQuickBusinessProfileValue = (profile: Record<string, any>, field: string): string => {
+const getQuickBusinessProfileValue = (profile: Record<string, any>, field: string, object?: any): string => {
+    // Modelos com contato único continuam vinculados ao primeiro item do cadastro.
+    if (object?.businessProfileEntryIndex === 0 && (field === 'whatsapp' || field === 'address')) {
+        const source = field === 'whatsapp'
+            ? profile?.whatsappNumbers ?? profile?.whatsapp_numbers ?? profile?.whatsapps
+            : profile?.addresses ?? profile?.enderecos ?? profile?.addressList
+        const entries = normalizeBusinessEntries(source, profile?.[field], field, field === 'whatsapp' ? 80 : 300).slice(0, 1)
+        return field === 'whatsapp' ? formatBusinessContactValues(entries) : formatBusinessAddressValues(entries)
+    }
     const rawValue = field === 'paymentMethods'
         ? profile?.paymentMethods ?? profile?.payment_methods
         : field === 'paymentNotes'
@@ -19102,7 +19175,7 @@ const applyQuickBusinessProfileBindings = async (
         if (field === 'logo' || field === 'footerPaymentImages') return
         const dynamicConfigChanged = configureDynamicBusinessTextObject(object, fabric)
         if (dynamicConfigChanged) changed = true
-        const liveText = getQuickBusinessProfileValue(profile, field)
+        const liveText = getQuickBusinessProfileValue(profile, field, object)
         const templateSample = STORE_DYNAMIC_FIELDS.find(item => item.field === field)?.sample || ''
         // Advanced model editing previews the logged-in store data when it is
         // available, while retaining the exact text configured in the model
@@ -19136,21 +19209,59 @@ const applyQuickBusinessProfileBindings = async (
         markQuickDynamicObjectDirty(object)
     })
 
+    // Ícones auxiliares do rodapé (quickDynamicIconFor) acompanham o campo:
+    // sem WhatsApp/telefone/endereço/rede, o ícone some junto com o texto.
+    // Amostras exclusivas do modelo (quickTemplateSample) ficam ocultas aqui.
+    if (isQuickMode.value) {
+        walkQuickCanvasObjects((object: any) => {
+            if (typeof object?.set !== 'function') return
+            if (object?.quickTemplateSample === true) {
+                if (object.visible !== false) {
+                    object.set('visible', false)
+                    changed = true
+                }
+                markQuickDynamicObjectDirty(object)
+                return
+            }
+            const iconFor = normalizeQuickBusinessField(object?.quickDynamicIconFor)
+            if (!iconFor || iconFor === 'validity') return
+            const iconEnabled = quickBusinessFieldOverrides.value[iconFor] ?? object?.quickFieldEnabled !== false
+            const iconValue = getQuickBusinessProfileValue(profile, iconFor, object)
+            const hasIconValue = iconEnabled && !!String(iconValue ?? '').trim()
+            const hasQuickUserText = typeof object.dynamicUserText === 'string' && object.dynamicUserTextSource === 'quick-user' && !!object.dynamicUserText.trim()
+            const nextIconVisible = hasIconValue || hasQuickUserText
+            if (object.visible !== nextIconVisible) {
+                object.set('visible', nextIconVisible)
+                changed = true
+            }
+            if (object.quickFieldEnabled !== iconEnabled) {
+                object.set('quickFieldEnabled', iconEnabled)
+                changed = true
+            }
+            markQuickDynamicObjectDirty(object)
+        })
+    }
+
     const textLayoutRepair = repairDynamicTextLayoutBounds(canvas.value.getObjects(), createQuickValidityBackdrop)
     if (textLayoutRepair.changed) {
         changed = true
         sanitizeAllClipPaths()
     }
     for (const slot of canvas.value.getObjects().filter((o: any) => o.businessProfileField === 'footerPaymentImages')) {
+        slot.set({ visible: !!profile.footerPaymentImages?.length && (quickBusinessFieldOverrides.value.footerPaymentImages ?? slot.quickFieldEnabled !== false) })
+    }
+    changed = compactBusinessFooter(canvas.value.getObjects()) || changed
+    for (const slot of canvas.value.getObjects().filter((o: any) => o.businessProfileField === 'footerPaymentImages')) {
         try {
             const group = await createFooterPaymentGroup(fabric, slot, profile.footerPaymentImages)
             if (!isCurrentPage()) { group.dispose(); return }
-            group.set({ visible: quickBusinessFieldOverrides.value.footerPaymentImages ?? slot.quickFieldEnabled !== false, quickFieldEnabled: quickBusinessFieldOverrides.value.footerPaymentImages ?? slot.quickFieldEnabled !== false })
+            group.set({ visible: !!profile.footerPaymentImages?.length && (quickBusinessFieldOverrides.value.footerPaymentImages ?? slot.quickFieldEnabled !== false), quickFieldEnabled: quickBusinessFieldOverrides.value.footerPaymentImages ?? slot.quickFieldEnabled !== false })
             changed = replaceQuickLogoObject(slot, group) || changed
         } catch (error) { if (!isCurrentPage()) return; slot.set({ visible: false }); changed = true; console.warn('[quick-editor] Falha ao carregar cartões do rodapé', error) }
     }
     const logoChanged = await syncQuickLogoBinding(profile)
     if (!isCurrentPage()) return
+    changed = compactBusinessFooter(canvas.value.getObjects()) || changed
     if (changed || logoChanged) {
         refreshCanvasObjects()
         safeRequestRenderAll()
@@ -19184,18 +19295,33 @@ const persistInactiveQuickBusinessFields = async () => {
         const splitText = validity ? splitFooterValidityText({ ...validity, layout: splitValidity?.quickValidityLayout }) : null
         const footerChanged = compactBusinessFooter(pageObjects)
         let updated = updateIsolatedPageFields(page.canvasData, object => {
+            if (object?.quickTemplateSample === true) {
+                return object.visible === false ? null : { visible: false }
+            }
             if (splitValidity && splitText && ['validity-heading', 'stock-validity', 'validity-backdrop'].includes(object.name)) {
                 if (object.name === 'validity-backdrop') return { visible: false }
                 const text = object.name === 'validity-heading' ? splitText.heading : splitText.stock
                 return { text, visible: validity?.show !== false && validity?.dateFormat !== 'hidden' && !!splitText.period && !!text }
             }
             const isValidity = object.quickDataField === 'validity' || object.businessProfileField === 'validity'
+            const iconFor = !isValidity ? normalizeQuickBusinessField(object?.quickDynamicIconFor) : ''
+            if (iconFor && iconFor !== 'validity') {
+                const iconEnabled = overrides[iconFor] ?? object.quickFieldEnabled !== false
+                const rawIconText = object.dynamicUserTextSource === 'quick-user' && typeof object.dynamicUserText === 'string'
+                    ? object.dynamicUserText
+                    : getQuickBusinessProfileValue(profile, iconFor, object)
+                return { quickFieldEnabled: iconEnabled, visible: iconEnabled && !!String(rawIconText ?? '').trim() }
+            }
             const field = isValidity && validity ? 'validity' : getQuickBusinessFieldFromObject(object)
             if (!field) return null
             const enabled = field === 'validity' ? validity?.show !== false && validity?.dateFormat !== 'hidden' : overrides[field] ?? object.quickFieldEnabled !== false
-            if (field === 'logo') return { quickFieldEnabled: enabled, visible: enabled && !!getQuickLogoSource(profile) }
+            if (field === 'logo') {
+                const styled = { ...object }
+                applyLogoPreferenceToFabric(styled, profile.logoPreference)
+                return { ...styled, quickFieldEnabled: enabled, visible: enabled && !!getQuickLogoSource(profile) }
+            }
             if (!['text', 'textbox', 'i-text'].includes(String(object.type || '').toLowerCase())) return null
-            const text = field === 'validity' ? (isSplitFooterValidity(object) && validity ? resolveSplitFooterValidityText(object, pageObjects, validity) : String(validityText || '')) : getQuickBusinessProfileValue(profile, field)
+            const text = field === 'validity' ? (isSplitFooterValidity(object) && validity ? resolveSplitFooterValidityText(object, pageObjects, validity) : String(validityText || '')) : getQuickBusinessProfileValue(profile, field, object)
             const runtime = createIsolatedDynamicTextbox(fabric, object)
             configureDynamicBusinessTextObject(runtime, fabric)
             setQuickDynamicTextValue(runtime, text)
@@ -19214,16 +19340,21 @@ const persistInactiveQuickBusinessFields = async () => {
             return result
         })
         const paymentData = cloneCanvasDataForLoad(updated || page.canvasData)
+        for (const slot of paymentData.objects || []) {
+            if (slot.businessProfileField === 'footerPaymentImages') slot.visible = !!profile.footerPaymentImages?.length && (overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false)
+        }
+        let finalFooterChanged = compactBusinessFooter(paymentData.objects || [])
         let paymentChanged = false
         for (const [slotIndex, slot] of (paymentData.objects || []).entries()) {
             if (slot.businessProfileField !== 'footerPaymentImages') continue
             const group = await createFooterPaymentGroup(fabric, slot, profile.footerPaymentImages)
-            group.set({ visible: overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false, quickFieldEnabled: overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false })
+            group.set({ visible: !!profile.footerPaymentImages?.length && (overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false), quickFieldEnabled: overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false })
             paymentData.objects[slotIndex] = group.toObject(['_customId', 'parentFrameId', 'name', 'layerName', 'businessProfileField', 'quickFieldEnabled', 'footerPaymentWidth', 'footerPaymentHeight'])
             group.dispose()
             paymentChanged = true
         }
-        if (paymentChanged || footerChanged) updated = paymentData
+        finalFooterChanged = compactBusinessFooter(paymentData.objects || []) || finalFooterChanged
+        if (paymentChanged || footerChanged || finalFooterChanged) updated = paymentData
         if (updated) updatePageData(index, updated, { source: 'user', markUnsaved: true, skipIfSameFingerprint: true, reason: 'quick-business-all-pages' })
     }
 }
@@ -19372,7 +19503,7 @@ const handleQuickModeValidityUpdate = (payload: {
         const separateFields = split && hasSplitFooterValidityCompanions(object, siblings)
         setQuickDynamicTextValue(object, split ? resolveSplitFooterValidityText(object, siblings, { startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value }) : nextText)
         if (split) {
-            object.set({ quickValidityLayout: object.quickValidityLayout === 'calendar-card' ? 'calendar-card' : 'split-footer', visible: quickShowValidity.value && !!splitText.period })
+            object.set({ quickValidityLayout: ['calendar-card', 'inline-footer'].includes(object.quickValidityLayout) ? object.quickValidityLayout : 'split-footer', visible: quickShowValidity.value && !!splitText.period })
             for (const sibling of canvas.value?.getObjects() || []) {
                 if (sibling.parentFrameId !== object.parentFrameId) continue
                 if (separateFields && sibling.name === 'validity-backdrop') sibling.set({ visible: false })
@@ -19996,6 +20127,7 @@ const processQuickEditorSeed = async (): Promise<void> =>
 onMounted(() => {
     if (typeof window === 'undefined') return
     window.addEventListener('business-profile:updated', handleBusinessProfileUpdated)
+    window.addEventListener('focus', refreshBusinessProfile)
     void processQuickEditorSeed()
     void refreshBusinessProfile()
 })
@@ -20003,6 +20135,7 @@ onMounted(() => {
 onUnmounted(() => {
     if (typeof window !== 'undefined') {
         window.removeEventListener('business-profile:updated', handleBusinessProfileUpdated)
+        window.removeEventListener('focus', refreshBusinessProfile)
     }
 })
 

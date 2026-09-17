@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const preferredLogoSource = useLogoImageSource()
 import { Building2, Phone, MessageCircle, Instagram, Facebook, Globe, MapPin, CreditCard, Hash, Tag, Camera, Loader2, Check, Upload, Image, RefreshCw, Eye, EyeOff, ChevronDown } from 'lucide-vue-next'
 import type { BuilderFlyerDefaults } from '~/types/builder'
 
@@ -401,7 +402,7 @@ onMounted(() => {
               @click="triggerFileInput"
               class="relative w-20 h-20 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50 transition-all group overflow-hidden shrink-0"
             >
-              <img v-if="logoPreviewUrl" :src="logoPreviewUrl" alt="Logo" class="w-full h-full object-contain rounded-xl" />
+              <img v-if="logoPreviewUrl" :src="preferredLogoSource(logoPreviewUrl)" alt="Logo" class="w-full h-full object-contain rounded-xl" />
               <div v-else class="text-slate-400 group-hover:text-emerald-600 transition-colors">
                 <Image class="w-7 h-7" />
               </div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const preferredLogoSource = useLogoImageSource()
 import { paymentBrandSvg as paymentBrandSvgs } from '~/utils/paymentBrandSvg'
 import { builderThemeSupportsModel } from '~/utils/builderThemeFormats'
 import {
@@ -1149,7 +1150,7 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
               >
                 <img
                   v-if="currentLogoUrl"
-                  :src="currentLogoUrl"
+                  :src="preferredLogoSource(currentLogoUrl)"
                   alt="Logo"
                   class="w-full h-full object-contain p-1"
                 />

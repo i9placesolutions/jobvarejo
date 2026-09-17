@@ -22,7 +22,7 @@ export async function createFooterPaymentGroup(fabric: any, slot: any, values: u
   const objects: any[] = [new fabric.Rect({ left: 0, top: 0, width, height, fill: 'transparent', strokeWidth: 0, originX: 'left', originY: 'top' })]
   const images = normalizeFooterPaymentImages(values)
   const gap = width * .025
-  const cell = (width - gap * 4) / 5
+  const cell = (width - gap * Math.max(0, images.length - 1)) / Math.max(1, images.length)
   for (const [index, source] of images.entries()) {
     const url = footerPaymentImageUrl(source)
     if (!url) continue

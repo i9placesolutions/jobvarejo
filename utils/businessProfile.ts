@@ -1,3 +1,4 @@
+import { normalizeLogoPreference, type LogoPreference } from './logoPreference'
 import { normalizeFooterPaymentImages } from './footerPaymentImages'
 import {
   BUSINESS_PAYMENT_CARD_NAMES,
@@ -15,6 +16,7 @@ export type BusinessEntry = {
 export type BusinessProfile = {
   companyName: string
   logo: string
+  logoPreference?: LogoPreference | null
   phone: string
   whatsapp: string
   whatsappNumbers: BusinessEntry[]
@@ -226,6 +228,7 @@ export const normalizeBusinessProfile = (value: unknown): BusinessProfile => {
   const paymentMethods = normalizeBusinessPaymentMethods(rawPaymentMethods)
 
   return {
+    logoPreference: normalizeLogoPreference(source.logoPreference),
     companyName: normalizeBusinessText(source.companyName ?? source.name, 160),
     logo: normalizeBusinessText(
       source.logo ??

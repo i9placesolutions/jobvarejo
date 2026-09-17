@@ -34,3 +34,14 @@ it('mantém o quadro de calendário da referência ao trocar datas', () => {
  expect(splitFooterValidityText({startDate:'2026-09-30',endDate:'2026-10-01',layout:'calendar-card',whileStocks:false}).period).toBe('30 DE SETEMBRO A 1 DE OUTUBRO')
  expect(splitFooterValidityText({mode:'while_stocks',layout:'calendar-card'}).stock).toBe('')
 })
+
+
+it('mantém toda a validade horizontal em uma linha ao atualizar o período', () => {
+ const field = { quickValidityLayout: 'inline-footer' }
+ expect(isSplitFooterValidity(field)).toBe(true)
+ const text = resolveSplitFooterValidityText(field, [], {startDate:'2026-12-30',endDate:'2027-01-02',mode:'date_range'})
+ expect(text).toBe('OFERTA VÁLIDA DE 30 DE DEZEMBRO DE 2026 A 2 DE JANEIRO DE 2027 OU ENQUANTO DURAREM OS ESTOQUES')
+ expect(text).not.toMatch(/[\r\n]/)
+ expect(resolveSplitFooterValidityText(field, [], {mode:'while_stocks'})).toBe('OFERTA VÁLIDA ENQUANTO DURAREM OS ESTOQUES')
+ expect(resolveSplitFooterValidityText(field, [], {})).toBe('')
+})

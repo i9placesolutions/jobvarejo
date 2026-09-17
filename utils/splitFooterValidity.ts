@@ -1,6 +1,6 @@
 /** A validade em três linhas mantém a composição do modelo ao trocar as datas. */
 export const isSplitFooterValidity = (object: any): boolean =>
-  ['split-footer', 'calendar-card'].includes(object?.quickValidityLayout) ||
+  ['split-footer', 'calendar-card', 'inline-footer'].includes(object?.quickValidityLayout) ||
   (object?.name === 'dynamic-validity' && object?.quickDataField === 'validity')
 
 export const splitFooterValidityText = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; layout?: string }) => {
@@ -47,6 +47,9 @@ export const resolveSplitFooterValidityText = (
 ): string => {
   const copy = splitFooterValidityText({ ...value, layout: object?.quickValidityLayout })
   if (!copy.period) return ''
+  if (object?.quickValidityLayout === 'inline-footer') {
+    return [copy.heading, copy.period, copy.stock].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+  }
   return hasSplitFooterValidityCompanions(object, siblings)
     ? copy.period
     : [copy.heading, copy.period, copy.stock].filter(Boolean).join('\n')

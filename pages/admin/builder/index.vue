@@ -15,6 +15,7 @@ import {
   PanelBottom,
   Target,
   HelpCircle,
+  Mic2,
 } from 'lucide-vue-next'
 
 definePageMeta({
@@ -138,6 +139,14 @@ const sections = ref<SectionItem[]>([
     icon: HelpCircle,
     countKey: 'qrAcademy',
     count: null
+  },
+  {
+    title: 'MusicGPT / Banco de vozes',
+    description: 'Envie amostras autorizadas e gerencie as vozes usadas nas locuções da Rádio Indoor',
+    href: '/admin/musicgpt',
+    icon: Mic2,
+    countKey: 'radioVoices',
+    count: null
   }
 ])
 
@@ -157,7 +166,8 @@ const fetchCounts = async () => {
     tenants: '/api/admin/builder/tenants',
     cardTemplates: '/api/admin/builder/card-templates',
     headerTemplates: '/api/admin/builder/header-templates',
-    footerTemplates: '/api/admin/builder/footer-templates'
+    footerTemplates: '/api/admin/builder/footer-templates',
+    radioVoices: '/api/admin/musicgpt/voices'
   }
 
   const results = await Promise.allSettled(

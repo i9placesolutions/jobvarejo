@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const preferredLogoSource = useLogoImageSource()
 const { flyer, theme, updateFlyer } = useBuilderFlyer()
 const { tenant } = useBuilderAuth()
 
@@ -97,7 +98,7 @@ const onDragStart = (e: MouseEvent) => {
     <!-- Logo — absolute positioned, draggable -->
     <img
       v-if="showLogo && logoUrl"
-      :src="logoUrl"
+      :src="preferredLogoSource(logoUrl)"
       alt="Logo"
       class="object-contain"
       :class="isDragging ? 'cursor-grabbing' : 'cursor-grab'"

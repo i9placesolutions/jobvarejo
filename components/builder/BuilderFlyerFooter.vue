@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const preferredLogoSource = useLogoImageSource()
 /**
  * BuilderFlyerFooter — Rodape do encarte QROfertas Builder V2
  *
@@ -299,7 +300,7 @@ function badgeStyle(w: number, h: number, radius: string, color: string) {
           gap: '4px',
         }"
       >
-        <img v-if="logoUrl" :src="logoUrl" alt="" :style="{ height: footerLogoSize, objectFit: 'contain' }" />
+        <img v-if="logoUrl" :src="preferredLogoSource(logoUrl)" alt="" :style="{ height: footerLogoSize, objectFit: 'contain' }" />
         <span v-if="empresaNome" :style="{ fontWeight: nameWeight, fontSize: '14px', textTransform: nameTransform, fontFamily: nameFont || 'inherit', textAlign: 'center', lineHeight: '1.1' }">{{ empresaNome }}</span>
         <span v-if="empresaSlogan" :style="{ fontSize: '9px', opacity: 0.6, textAlign: 'center', fontFamily: bodyFont || 'inherit' }">{{ empresaSlogan }}</span>
       </div>
@@ -358,7 +359,7 @@ function badgeStyle(w: number, h: number, radius: string, color: string) {
           minHeight: '60px',
         }"
       >
-        <img v-if="logoUrl" :src="logoUrl" alt="" :style="{ height: footerLogoSize, objectFit: 'contain', marginBottom: '4px' }" />
+        <img v-if="logoUrl" :src="preferredLogoSource(logoUrl)" alt="" :style="{ height: footerLogoSize, objectFit: 'contain', marginBottom: '4px' }" />
         <span
           v-if="empresaNome"
           :style="{

@@ -1,7 +1,7 @@
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { pgQuery } from '../../utils/postgres'
-import { positiveInt, radioTableErrorResponse } from '../../utils/radio-indoor'
+import { positiveInt, radioKeyUrl, radioTableErrorResponse } from '../../utils/radio-indoor'
 import { requireRadioStationAccess } from '../../utils/radio-access'
 
 export default defineEventHandler(async (event) => {
@@ -14,11 +14,16 @@ export default defineEventHandler(async (event) => {
     const scope = await requireRadioStationAccess(user.id, stationId, 'player')
     const station = scope.station
     const result = await pgQuery<any>(
-      `select id, station_id, kind, title, brief, lyrics, style, voice_id, status, provider,
+      `select r.id, r.station_id, r.kind, r.title, r.brief, r.lyrics, r.style, r.voice_id, r.voice_profile_id, r.status, r.provider,
               provider_task_id, provider_conversion_id, result_storage_key, result_source_url,
-              result_format, result_duration_ms, error, metadata, created_at, updated_at
-         from public.radio_requests where user_id = $1 and (station_id = $2 or station_id is null)
-         order by created_at desc limit $3`,
+              result_format, result_duration_ms, r.error, r.metadata, r.created_at, r.updated_at,
+              t.id as catalog_track_id
+         from public.radio_requests r
+         left join public.radio_catalog_tracks t
+           on t.user_id = r.user_id and t.source_provider = 'musicgpt'
+          and t.source_id = r.id::text and t.status = 'ready'
+        where r.user_id = $1 and (r.station_id = $2 or r.station_id is null)
+        order by r.created_at desc limit $3`,
       [scope.ownerUserId, station.id, limit]
     )
     return {
@@ -32,6 +37,7 @@ export default defineEventHandler(async (event) => {
         lyrics: row.lyrics,
         style: row.style,
         voiceId: row.voice_id,
+        voiceProfileId: row.voice_profile_id,
         status: row.status,
         provider: row.provider,
         providerTaskId: row.provider_task_id,
@@ -40,6 +46,8 @@ export default defineEventHandler(async (event) => {
         resultSourceUrl: row.result_source_url,
         resultFormat: row.result_format,
         resultDurationMs: row.result_duration_ms,
+        audioUrl: row.catalog_track_id ? radioKeyUrl('audio', String(row.catalog_track_id)) : null,
+        downloadUrl: row.catalog_track_id ? `${radioKeyUrl('audio', String(row.catalog_track_id))}&download=1` : null,
         error: row.error,
         metadata: row.metadata || {},
         createdAt: row.created_at,

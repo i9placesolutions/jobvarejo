@@ -116,3 +116,17 @@ it('documento antigo com trim desativado ainda remove margens e preserva proporÃ
   const meta=await sharp(output).metadata()
   expect([meta.width,meta.height]).toEqual([240,90])
 })
+
+it('renderiza borda, contorno interno e opacidade salvos na conta', async () => {
+  const source = await sharp({ create: { width: 40, height: 30, channels: 4, background: '#ff0000' } }).png().toBuffer()
+  const output = await prepareArtLogo(source, {
+    width: 100, height: 80, trim: true, backdrop: 'none', padding: 12,
+    outline: true, outlineColor: '#ffffff', outlineWidth: 5, outlineMode: 'inside', outlineOpacity: 0.5,
+    border: true, borderColor: '#0000ff', borderWidth: 2
+  })
+  const { data, info } = await sharp(output).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const colors = Array.from({ length: info.width * info.height }, (_, i) => [...data.subarray(i * 4, i * 4 + 4)])
+  expect(colors.some(([r, g, b, a]) => r === 0 && g === 0 && b === 255 && a === 255)).toBe(true)
+  expect(colors.some(([r, g, b]) => r === 255 && g! > 100 && g! < 200 && b === g)).toBe(true)
+  expect(colors.some(([r, g, b]) => r === 255 && g === 0 && b === 0)).toBe(true)
+})

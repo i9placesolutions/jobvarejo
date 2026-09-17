@@ -98,7 +98,7 @@ export const createStickerCoverage = (
 
 
 // Mesmo EDT e cobertura contínua usados pelo contorno das ofertas.
-export const artStickerCoverage = (inside: Uint8Array, cw: number, ch: number, radius: number, antialias: number) => {
+export const artStickerCoverage = (inside: Uint8Array, cw: number, ch: number, radius: number, antialias: number, mode: StickerOutlineMode = 'outside') => {
  const size=cw*ch
         const INF = 1e20
         const maxN = Math.max(cw, ch)
@@ -149,8 +149,8 @@ export const artStickerCoverage = (inside: Uint8Array, cw: number, ch: number, r
         }
 
         const distances = computeDistSq((idx) => (
-            inside[idx]
+            mode === 'inside' ? !inside[idx] : inside[idx]
         ) ? 0 : INF)
-        return createStickerCoverage(inside, distances, cw, ch, radius, antialias, 'outside')
+        return createStickerCoverage(inside, distances, cw, ch, radius, antialias, mode)
 
 }

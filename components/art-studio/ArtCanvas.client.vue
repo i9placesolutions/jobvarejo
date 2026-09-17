@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const { preference: logoPreference } = useLogoPreference()
+const artLayerImageSrc = (layer: ArtLayer) => baseArtLayerImageSrc(layer, logoPreference.value)
 import {
   Canvas,
   Group,
@@ -14,7 +16,7 @@ import {
 } from 'fabric'
 import type { ArtComposition, ArtLayer } from '~/types/art-studio'
 import { artTextArc, measureArtText } from '~/utils/art-studio/textArc'
-import { artLayerImageSrc } from '~/utils/art-studio/logo'
+import { artLayerImageSrc as baseArtLayerImageSrc } from '~/utils/art-studio/logo'
 import { ART_ICONS } from '~/types/art-studio'
 import { loadArtFonts } from '~/utils/art-studio/fonts'
 import { artImageCrop, cloneArt } from '~/utils/art-studio/composition'
@@ -302,6 +304,7 @@ async function render(doc: ArtComposition) {
     if (ticket === generation) rendering = false
   }
 }
+watch(logoPreference, () => void render(props.composition), { deep: true })
 watch(
   () => props.composition,
   (value) => {

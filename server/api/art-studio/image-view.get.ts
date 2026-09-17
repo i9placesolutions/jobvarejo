@@ -1,3 +1,4 @@
+import { readLogoPreference } from '../../utils/logo-preference'
 import { z } from 'zod'
 import { artUser } from '~/server/utils/art-studio'
 import { parseArtInput } from '~/server/utils/art-studio-schema'
@@ -7,6 +8,7 @@ export default defineEventHandler(async (event) => {
   const user = await artUser(event),
     data = parseArtInput(
       z.object({
+        binding: z.string().optional(),
         source: z.string().regex(/^(brand|[0-9a-f-]{36})$/),
         width: z.coerce.number().int().min(1).max(8192),
         height: z.coerce.number().int().min(1).max(8192),
@@ -19,11 +21,13 @@ export default defineEventHandler(async (event) => {
       }),
       getQuery(event)
     )
+  const preference = data.binding === 'logo' ? await readLogoPreference(user.id) : null
   const buffer = await readArtImage(data.source, user.id),
     output = await prepareArtLogo(buffer, {
       ...data,
       trim: data.trim === 'true',
-      outline: data.outline === 'true'
+      outline: data.outline === 'true',
+      ...preference
     })
   setHeader(event, 'Content-Type', 'image/png')
   setHeader(event, 'X-Content-Type-Options', 'nosniff')

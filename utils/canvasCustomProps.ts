@@ -28,11 +28,17 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     // refluídos, impedindo que slots antigos prevaleçam sobre a escolha.
     '__forceQuickGridRestore',
     'businessProfileField',
+    'businessProfileEntryIndex',
+    'footerLayout',
+    'footerIconSize',
     'footerPaymentWidth',
     'footerPaymentHeight',
     'quickDataField',
     'quickDynamicIconFor',
     'quickFieldEnabled',
+    // Amostra visual exclusiva do modelo (ex.: "SUALOGO", bandeiras de
+    // exemplo). Visível na galeria/edição do modelo, oculta na edição rápida.
+    'quickTemplateSample',
     'quickValidityLayout',
     'quickValidityStartDate',
     'quickValidityEndDate',

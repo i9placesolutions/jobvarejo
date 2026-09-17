@@ -20,11 +20,11 @@ export const isRadioStorageKey = (value: unknown): boolean => {
 }
 
 export const radioKeyUrl = (kind: 'audio' | 'media', id: string): string =>
-  `/api/radio-indoor/${kind}?${kind === 'audio' ? 'trackId' : 'key=' + encodeURIComponent(id)}`
+  `/api/radio-indoor/${kind}?${kind === 'audio' ? 'trackId=' + encodeURIComponent(id) : 'key=' + encodeURIComponent(id)}`
 
 export const radioTableMissing = (error: any): boolean =>
   String(error?.code || '') === '42P01' ||
-  /radio_(stations|catalog_tracks|playlists|playlist_items|programs|program_blocks|schedules|requests|playback_events|schedule_jobs|worker_heartbeats|station_members|players)/i.test(String(error?.message || ''))
+  /radio_(stations|catalog_tracks|playlists|playlist_items|programs|program_blocks|schedules|requests|playback_events|schedule_jobs|worker_heartbeats|station_members|players|voice_profiles)/i.test(String(error?.message || ''))
 
 export const jsonObject = (value: unknown): Record<string, any> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {}

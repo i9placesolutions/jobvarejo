@@ -21,7 +21,10 @@ export default defineEventHandler(async (event) => {
 
   const row = await pgOneOrNull<any>(
     `update public.profiles
-        set business_profile = $1::jsonb,
+        set business_profile = ($1::jsonb - 'logoPreference') ||
+            CASE WHEN business_profile ? 'logoPreference'
+              THEN jsonb_build_object('logoPreference', business_profile->'logoPreference')
+              ELSE '{}'::jsonb END,
             updated_at = timezone('utc', now())
       where id = $2
       returning id, email, name, avatar_url, role, created_at, updated_at, business_profile`,

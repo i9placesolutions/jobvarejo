@@ -65,8 +65,9 @@ export default defineEventHandler(async (event) => {
     const fallback = await pgQuery<any>(
       `select * from public.radio_catalog_tracks
         where user_id = $1 and status = 'ready'
+          and (station_id = $2 or station_id is null)
         order by artist, title limit 80`,
-      [ownerUserId]
+      [ownerUserId, station.id]
     )
     for (const track of fallback.rows) {
       if (seen.has(String(track.id))) continue

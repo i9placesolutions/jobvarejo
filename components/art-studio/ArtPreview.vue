@@ -1,6 +1,8 @@
 <script setup lang="ts">
+const { preference: logoPreference } = useLogoPreference()
+const artLayerImageSrc = (layer: ArtLayer) => baseArtLayerImageSrc(layer, logoPreference.value)
 import type { ArtComposition, ArtLayer } from '~/types/art-studio'
-import { artLayerImageSrc } from '~/utils/art-studio/logo'
+import { artLayerImageSrc as baseArtLayerImageSrc } from '~/utils/art-studio/logo'
 import { ART_ICONS } from '~/types/art-studio'
 const props=defineProps<{ composition: ArtComposition; label?: string }>()
 const uid=useId()

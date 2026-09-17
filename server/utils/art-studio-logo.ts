@@ -9,6 +9,11 @@ export type ArtLogoOptions = {
   outline: boolean
   outlineColor: string
   outlineWidth: number
+  outlineOpacity?: number
+  outlineMode?: 'inside' | 'outside'
+  border?: boolean
+  borderColor?: string
+  borderWidth?: number
 }
 export const trimArtTransparency = async (input: Buffer) => {
   const { data, info } = await sharp(input, { limitInputPixels: 24_000_000 })
@@ -54,7 +59,7 @@ export const prepareArtLogo = async (
     width = Math.max(1, Math.round(options.width * factor)),
     height = Math.max(1, Math.round(options.height * factor))
   const padding = Math.min(
-    options.padding * factor,
+    Math.max(options.padding, options.outline ? options.outlineWidth + 2 : 0, options.border ? (options.borderWidth || 1) + 2 : 0) * factor,
     Math.min(width, height) / 4
   )
   const usableWidth = Math.max(1, Math.floor(width - 2 * padding)),
@@ -88,6 +93,7 @@ export const prepareArtLogo = async (
         `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><g fill="white" fill-opacity="0.94" stroke="white" stroke-opacity="0.98" stroke-width="1">${geometry}</g></svg>`
       )
     })
+  if (options.outlineMode === 'inside') layers.push({ input: logo, left, top })
   if (options.outline) {
     const scale = width * height * 4 <= 16_000_000 ? 2 : 1
     const cw = width * scale, ch = height * scale
@@ -97,18 +103,23 @@ export const prepareArtLogo = async (
         background: '#00000000' }).ensureAlpha().raw().toBuffer()
     const inside = new Uint8Array(cw * ch)
     for(let i=0;i<inside.length;i++) inside[i]=rgba[i*4+3]! >= 16 ? 1 : 0
-    const coverage = artStickerCoverage(inside,cw,ch,options.outlineWidth*factor*scale,scale)
+    const coverage = artStickerCoverage(inside,cw,ch,options.outlineWidth*factor*scale,scale, options.outlineMode)
     const pixels=Buffer.alloc(cw*ch*4)
     const color=options.outlineColor.slice(1)
     const red=parseInt(color.slice(0,2),16), green=parseInt(color.slice(2,4),16), blue=parseInt(color.slice(4,6),16)
     for(let i=0;i<coverage.length;i++) {
-      pixels[i*4]=red;pixels[i*4+1]=green;pixels[i*4+2]=blue;pixels[i*4+3]=Math.round(coverage[i]!*255)
+      pixels[i*4]=red;pixels[i*4+1]=green;pixels[i*4+2]=blue;pixels[i*4+3]=Math.round(coverage[i]!*255*(options.outlineOpacity ?? 1))
     }
     const outline = await sharp(pixels,{raw:{width:cw,height:ch,channels:4}})
       .resize(width,height,{kernel:'linear'}).png().toBuffer()
     layers.push({ input: outline })
   }
-  layers.push({ input: logo, left, top })
+  if (options.outlineMode !== 'inside') layers.push({ input: logo, left, top })
+  if (options.border) {
+    const stroke = Math.max(0, Math.min(40, options.borderWidth || 1)) * factor
+    const borderColor = /^#[\da-f]{6}$/i.test(options.borderColor || '') ? options.borderColor : '#ffffff'
+    layers.push({ input: Buffer.from(`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><rect x="${left}" y="${top}" width="${info.width}" height="${info.height}" fill="none" stroke="${borderColor}" stroke-width="${stroke}"/></svg>`) })
+  }
   // O contain cria margens no slot; removê-las também após aplicar os efeitos
   // permite que Fabric selecione apenas o conteúdo visível.
   return trimArtTransparency(await base.composite(layers).png().toBuffer())

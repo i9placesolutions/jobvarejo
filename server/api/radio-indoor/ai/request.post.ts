@@ -9,6 +9,7 @@ import {
   radioTableErrorResponse
 } from '../../../utils/radio-indoor'
 import { requireRadioStationAccess } from '../../../utils/radio-access'
+import { getAccessibleRadioVoice, getRadioVoiceSampleUrl } from '../../../utils/radio-voices'
 
 const allowedKinds = new Set(['jingle', 'off', 'voice', 'music'])
 
@@ -23,7 +24,12 @@ export default defineEventHandler(async (event) => {
   if (!brief) throw createError({ statusCode: 400, statusMessage: 'Descreva o áudio que você precisa' })
   const lyrics = cleanText(body.lyrics, 6000) || null
   const style = cleanText(body.style || (kind === 'jingle' ? 'vinheta curta para rádio indoor, energética e clara' : 'locução comercial em português do Brasil'), 240) || null
-  const voiceId = cleanText(body.voiceId, 120) || null
+  // Locuções usam somente o banco aprovado pelo Admin (ou o padrão do
+  // servidor). Não aceitamos um voice_id arbitrário enviado pelo usuário da
+  // loja; para MusicAI mantemos o campo compatível com integrações existentes.
+  const requestedVoiceId = cleanText(body.voiceId, 120) || null
+  const voiceId = kind === 'off' || kind === 'voice' ? null : requestedVoiceId
+  const voiceProfileId = cleanText(body.voiceProfileId, 80) || null
   const voiceGender = ['male', 'female'].includes(String(body.gender || '').toLowerCase()) ? String(body.gender).toLowerCase() : 'female'
   let requestId: string | null = null
   let ownerUserId = user.id
@@ -33,14 +39,20 @@ export default defineEventHandler(async (event) => {
     const scope = await requireRadioStationAccess(user.id, stationId, 'operator')
     const station = scope.station
     ownerUserId = scope.ownerUserId
+    let selectedVoiceProfile: any | null = null
+    const persistedVoiceProfileId = (kind === 'off' || kind === 'voice') && voiceProfileId ? voiceProfileId : null
+    if (persistedVoiceProfileId) {
+      selectedVoiceProfile = await getAccessibleRadioVoice(ownerUserId, persistedVoiceProfileId, String(station.id))
+      if (!selectedVoiceProfile) throw createError({ statusCode: 404, statusMessage: 'Banco de voz não encontrado ou sem autorização' })
+    }
     const request = await pgOneOrNull<any>(
       `insert into public.radio_requests
-        (user_id, station_id, kind, title, brief, lyrics, style, voice_id, status, metadata)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9::jsonb)
-       returning id, station_id, kind, title, brief, lyrics, style, voice_id, status, provider, provider_task_id,
+        (user_id, station_id, kind, title, brief, lyrics, style, voice_id, voice_profile_id, status, metadata)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',$10::jsonb)
+       returning id, station_id, kind, title, brief, lyrics, style, voice_id, voice_profile_id, status, provider, provider_task_id,
                  provider_conversion_id, result_storage_key, result_source_url, result_format,
                  result_duration_ms, error, metadata, created_at, updated_at`,
-      [ownerUserId, station?.id || null, kind, title, brief, lyrics, style, voiceId, jsonParam({ requestedFrom: 'radio-indoor-player', requestedBy: user.id, voiceGender })]
+      [ownerUserId, station?.id || null, kind, title, brief, lyrics, style, voiceId, persistedVoiceProfileId, jsonParam({ requestedFrom: 'radio-indoor-player', requestedBy: user.id, voiceGender, voiceProfileId: persistedVoiceProfileId })]
     )
     if (!request) throw createError({ statusCode: 500, statusMessage: 'Não foi possível criar a solicitação' })
     requestId = String(request.id)
@@ -56,17 +68,23 @@ export default defineEventHandler(async (event) => {
     }
 
     await pgQuery(`update public.radio_requests set status = 'processing', provider = 'musicgpt' where id = $1 and user_id = $2`, [request.id, ownerUserId])
-    const effectiveVoiceId = voiceId || provider.defaultVoiceId
-    if ((kind === 'off' || kind === 'voice') && !effectiveVoiceId) {
+    let sampleAudioUrl: string | null = null
+    let voiceProfileName: string | null = null
+    if (selectedVoiceProfile) {
+      sampleAudioUrl = await getRadioVoiceSampleUrl(selectedVoiceProfile, 900)
+      voiceProfileName = String(selectedVoiceProfile.name || '').slice(0, 120) || null
+    }
+    const effectiveVoiceId = sampleAudioUrl ? null : (voiceId || provider.defaultVoiceId)
+    if ((kind === 'off' || kind === 'voice') && !effectiveVoiceId && !sampleAudioUrl) {
       const queued = await pgOneOrNull<any>(
         `update public.radio_requests set status = 'queued', metadata = metadata || $1::jsonb where id = $2 and user_id = $3
          returning id, status, provider, metadata, created_at, updated_at`,
         [jsonParam({ awaitingVoiceId: true }), request.id, ownerUserId]
       )
-      return { success: true, request: queued || request, provider: { configured: true, accepted: false, message: 'Informe um voice_id do MusicGPT ou configure MUSICGPT_DEFAULT_VOICE_ID.' } }
+      return { success: true, request: queued || request, provider: { configured: true, accepted: false, message: 'Selecione uma voz liberada no banco ou configure MUSICGPT_DEFAULT_VOICE_ID.' } }
     }
     const submission = (kind === 'off' || kind === 'voice')
-      ? await submitMusicGptTextToSpeech({ text: lyrics || brief, voiceId: effectiveVoiceId!, gender: voiceGender })
+      ? await submitMusicGptTextToSpeech({ text: lyrics || brief, voiceId: effectiveVoiceId, sampleAudioUrl, gender: voiceGender })
       : await submitMusicGptMusicAi(event, {
           prompt: `${kind === 'jingle' ? 'Crie uma vinheta de rádio indoor' : 'Crie uma música para rádio indoor'}: ${brief}`,
           musicStyle: style,
@@ -80,10 +98,10 @@ export default defineEventHandler(async (event) => {
           set status = 'queued', provider = 'musicgpt', provider_task_id = $1,
               provider_conversion_id = $2, metadata = metadata || $3::jsonb, updated_at = now()
         where id = $4 and user_id = $5
-        returning id, station_id, kind, title, brief, lyrics, style, voice_id, status, provider,
+        returning id, station_id, kind, title, brief, lyrics, style, voice_id, voice_profile_id, status, provider,
                   provider_task_id, provider_conversion_id, result_storage_key, result_source_url,
                   result_format, result_duration_ms, error, metadata, created_at, updated_at`,
-      [submission.taskId, submission.conversionId, jsonParam({ providerResponse: submission.raw, requestedBy: user.id }), request.id, ownerUserId]
+      [submission.taskId, submission.conversionId, jsonParam({ providerResponse: submission.raw, requestedBy: user.id, voiceProfileId: persistedVoiceProfileId, voiceProfileName }), request.id, ownerUserId]
     )
     return { success: true, request: updated || request, provider: { configured: true, accepted: true } }
   } catch (error: any) {

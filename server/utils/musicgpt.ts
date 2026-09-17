@@ -51,6 +51,30 @@ const getFirstString = (value: any, keys: string[]): string | null => {
   return null
 }
 
+/**
+ * O MusicGPT usa nomes diferentes para o resultado dependendo do recurso.
+ * MUSIC_AI normalmente retorna conversion_path_1/2; TTS pode retornar
+ * audio_url ou result_url. Centralizamos a normalização para que polling e
+ * webhook tenham exatamente o mesmo comportamento.
+ */
+export const getMusicGptAudioUrl = (payload: any): string | null => {
+  const conversion = payload?.conversion && typeof payload.conversion === 'object' ? payload.conversion : payload
+  const candidates = [
+    conversion?.audio_url,
+    conversion?.audioUrl,
+    conversion?.result_url,
+    conversion?.resultUrl,
+    conversion?.output?.url,
+    conversion?.conversion_path_1,
+    conversion?.conversion_path_2,
+    conversion?.conversion_path,
+    conversion?.conversion_path_wav_1,
+    conversion?.conversion_path_wav_2,
+    conversion?.conversion_path_wav
+  ]
+  return candidates.find((value) => typeof value === 'string' && /^https:\/\//i.test(value))?.slice(0, 2048) || null
+}
+
 export const submitMusicGptMusicAi = async (
   event: H3Event,
   input: MusicGptSubmission
@@ -99,10 +123,13 @@ export const submitMusicGptMusicAi = async (
 }
 
 export const submitMusicGptTextToSpeech = async (
-  input: { text: string; voiceId: string; gender: string }
+  input: { text: string; voiceId?: string | null; sampleAudioUrl?: string | null; gender: string }
 ): Promise<MusicGptResult> => {
   const config = getMusicGptConfig()
   if (!config.configured) throw createError({ statusCode: 503, statusMessage: 'MusicGPT não está configurado no servidor' })
+  if (!input.voiceId && !input.sampleAudioUrl) {
+    throw createError({ statusCode: 422, statusMessage: 'Informe uma voz do MusicGPT ou uma amostra de voz' })
+  }
   let response: any
   try {
     const controller = new AbortController()
@@ -113,7 +140,8 @@ export const submitMusicGptTextToSpeech = async (
         headers: { Authorization: config.apiKey, 'Content-Type': 'application/json', Accept: 'application/json' },
         body: {
           text: input.text,
-          voice_id: input.voiceId,
+          ...(input.voiceId ? { voice_id: input.voiceId } : {}),
+          ...(input.sampleAudioUrl ? { sample_audio_url: input.sampleAudioUrl } : {}),
           gender: input.gender,
           ...(config.webhookUrl ? { webhook_url: config.webhookUrl } : {})
         },
@@ -167,6 +195,7 @@ const allowedResultHost = (host: string): boolean => {
   const normalized = host.toLowerCase().replace(/\.$/, '')
   return normalized === 'musicgpt.s3.amazonaws.com' ||
     normalized.endsWith('.musicgpt.s3.amazonaws.com') ||
+    /^cdn\d+\.musicgpt\.com$/.test(normalized) ||
     normalized === 'lalals.s3.amazonaws.com' ||
     normalized.endsWith('.lalals.s3.amazonaws.com') ||
     normalized.endsWith('.s3.amazonaws.com')

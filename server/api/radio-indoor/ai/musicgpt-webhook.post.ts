@@ -1,4 +1,4 @@
-import { getMusicGptConfig, ingestMusicGptAudio } from '../../../utils/musicgpt'
+import { getMusicGptAudioUrl, getMusicGptConfig, ingestMusicGptAudio } from '../../../utils/musicgpt'
 import { pgOneOrNull } from '../../../utils/postgres'
 import { cleanText, jsonParam } from '../../../utils/radio-indoor'
 
@@ -16,8 +16,7 @@ export default defineEventHandler(async (event) => {
   const payload = body?.data && typeof body.data === 'object' ? { ...body, ...body.data } : body || {}
   const taskId = cleanText(payload.task_id || payload.taskId || payload.conversion_id_1 || payload.id, 240)
   if (!taskId) throw createError({ statusCode: 400, statusMessage: 'Webhook sem task_id' })
-  const audioUrlRaw = payload.audio_url || payload.audioUrl || payload.result_url || payload.url || payload.output?.url
-  const audioUrl = typeof audioUrlRaw === 'string' && /^https:\/\//i.test(audioUrlRaw) ? audioUrlRaw.slice(0, 2048) : null
+  const audioUrl = getMusicGptAudioUrl(payload)
   const eventStatus = cleanText(payload.status || payload.state, 40).toLowerCase()
   const status = audioUrl || ['completed', 'complete', 'success', 'succeeded', 'ready'].includes(eventStatus)
     ? 'ready'
