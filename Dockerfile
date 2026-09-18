@@ -58,7 +58,8 @@ ENV PRODUCT_IMAGE_PYTHON=/opt/image-worker/bin/python \
     BIREFNET_MODEL=birefnet-general-lite \
     OMP_NUM_THREADS=6 \
     OPENBLAS_NUM_THREADS=6
-RUN apt-get update && apt-get install -y --no-install-recommends curl python3 python3-venv && rm -rf /var/lib/apt/lists/*
+# curl: healthcheck; ffmpeg: clip curto de voz para MusicGPT TTS
+RUN apt-get update && apt-get install -y --no-install-recommends curl ffmpeg python3 python3-venv && rm -rf /var/lib/apt/lists/*
 COPY workers/requirements.txt /tmp/image-worker-requirements.txt
 # Camadas independentes: falhar no modelo não refaz Python e Chromium.
 RUN --mount=type=cache,target=/root/.cache/pip \
