@@ -15,6 +15,7 @@ coverage
 .vitest
 playwright-report
 test-results
+/artifacts/
 /.prettierignore
 /.prettierrc
 /*.md
