@@ -155,7 +155,7 @@ onMounted(loadVoices)
             <div>
               <p class="text-xs font-semibold uppercase tracking-[0.22em] text-violet-300/80">MusicGPT</p>
               <h1 class="mt-1 text-3xl font-semibold tracking-tight">Banco de vozes</h1>
-              <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Cadastre aqui as vozes autorizadas do JobVarejo. O usuário da loja não envia amostras: ele apenas escolhe uma voz liberada ao gerar um off ou uma locução.</p>
+              <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Cadastre aqui as vozes autorizadas. Use amostra só de fala (~20–60s), sem música de fundo — o servidor gera um clip de ~18s otimizado para o MusicGPT clonar de verdade.</p>
             </div>
           </div>
         </div>
@@ -171,7 +171,7 @@ onMounted(loadVoices)
       <div class="mt-8 grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <section class="rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
           <div class="flex items-start justify-between gap-3">
-            <div><h2 class="font-medium text-white">Adicionar voz clonada</h2><p class="mt-1 text-xs leading-5 text-zinc-500">Amostra limpa, de uma única pessoa, em MP3, WAV, M4A, OGG, WEBM, AAC ou FLAC.</p></div>
+            <div><h2 class="font-medium text-white">Adicionar voz clonada</h2><p class="mt-1 text-xs leading-5 text-zinc-500">Preferência: uma pessoa falando sozinha, ambiente quieto, MP3/WAV. Evite vinheta com música — o MusicGPT recomenda amostra sem trilha.</p></div>
             <FileAudio class="h-5 w-5 text-violet-300" />
           </div>
           <div class="mt-5 space-y-4">
@@ -193,7 +193,7 @@ onMounted(loadVoices)
           <div v-if="isLoading && !voices.length" class="flex min-h-48 items-center justify-center text-sm text-zinc-500"><LoaderCircle class="mr-2 h-4 w-4 animate-spin" />Carregando banco…</div>
           <div v-else-if="voices.length" class="mt-5 space-y-3">
             <article v-for="voice in voices" :key="voice.id" class="rounded-xl border border-white/8 bg-black/15 p-3">
-              <div class="flex items-start gap-3"><div class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-400/10 text-violet-200"><Mic2 class="h-5 w-5" /></div><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><strong class="truncate text-sm text-white">{{ voice.name }}</strong><span class="rounded-full border px-2 py-0.5 text-[10px]" :class="voice.status === 'active' ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' : 'border-red-400/20 bg-red-400/10 text-red-200'">{{ voice.status === 'active' ? 'Ativa' : 'Revogada' }}</span></div><p class="mt-1 text-xs text-zinc-500">{{ voice.gender === 'male' ? 'Masculina' : 'Feminina' }} · {{ voice.stationId ? 'Loja específica' : 'Todas as lojas' }} · {{ formatSize(voice.sampleSizeBytes) }}</p><p v-if="voice.description" class="mt-1 truncate text-xs text-zinc-400">{{ voice.description }}</p></div></div>
+              <div class="flex items-start gap-3"><div class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-400/10 text-violet-200"><Mic2 class="h-5 w-5" /></div><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><strong class="truncate text-sm text-white">{{ voice.name }}</strong><span class="rounded-full border px-2 py-0.5 text-[10px]" :class="voice.status === 'active' ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' : 'border-red-400/20 bg-red-400/10 text-red-200'">{{ voice.status === 'active' ? 'Ativa' : 'Revogada' }}</span><span v-if="voice.cloneReady" class="rounded-full border border-sky-400/20 bg-sky-400/10 px-2 py-0.5 text-[10px] text-sky-200">Clone pronto</span><span v-else-if="voice.status === 'active'" class="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-200">Clip pendente</span></div><p class="mt-1 text-xs text-zinc-500">{{ voice.gender === 'male' ? 'Masculina' : 'Feminina' }} · {{ voice.stationId ? 'Loja específica' : 'Todas as lojas' }} · {{ formatSize(voice.sampleSizeBytes) }}</p><p v-if="voice.description" class="mt-1 truncate text-xs text-zinc-400">{{ voice.description }}</p></div></div>
               <div v-if="voice.status === 'active'" class="mt-3 flex flex-wrap items-center gap-2"><audio v-if="voice.sampleUrl" :src="voice.sampleUrl" controls preload="none" class="h-8 min-w-0 flex-1" /><button class="inline-flex items-center gap-1.5 rounded-md border border-red-300/15 px-2.5 py-1.5 text-xs text-red-200 transition hover:bg-red-300/10" @click="revokeVoice(voice)"><ShieldCheck class="h-3.5 w-3.5" /> Revogar</button></div>
             </article>
           </div>

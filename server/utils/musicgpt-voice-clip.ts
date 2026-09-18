@@ -3,15 +3,33 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-/** Trecho curto e limpo para clonagem zero-shot (~10–15s). */
-export const MUSICGPT_VOICE_CLIP_SECONDS = 12
+/**
+ * MusicGPT TTS clona melhor com 10–20s de fala limpa (mono, sem música).
+ * Pulamos 1s inicial (cliques/silêncio) e normalizamos loudness.
+ */
+export const MUSICGPT_VOICE_CLIP_SECONDS = 18
+export const MUSICGPT_VOICE_CLIP_START_SECONDS = 1
+
+export interface MusicGptVoiceClipResult {
+  buffer: Buffer
+  durationSec: number
+  startSec: number
+}
 
 /**
- * Recodifica um trecho válido (mono mp3) em vez de cortar bytes crus —
- * corte bruto quebra frames e o MusicGPT tende a ignorar a amostra.
+ * Recodifica um trecho válido mono mp3 otimizado para clonagem.
+ * Corte cru em bytes quebra frames e o MusicGPT tende a gerar voz genérica.
  */
-export const buildMusicGptVoiceClip = async (source: Buffer): Promise<Buffer | null> => {
+export const buildMusicGptVoiceClip = async (
+  source: Buffer,
+  options?: { startSec?: number; durationSec?: number }
+): Promise<MusicGptVoiceClipResult | null> => {
   if (!source?.length) return null
+  const startSec = Math.max(0, Number(options?.startSec ?? MUSICGPT_VOICE_CLIP_START_SECONDS) || 0)
+  const durationSec = Math.min(
+    30,
+    Math.max(8, Number(options?.durationSec ?? MUSICGPT_VOICE_CLIP_SECONDS) || MUSICGPT_VOICE_CLIP_SECONDS)
+  )
   const dir = await mkdtemp(join(tmpdir(), 'mgpt-voice-'))
   const inputPath = join(dir, 'source.bin')
   const outputPath = join(dir, 'clip.mp3')
@@ -21,18 +39,22 @@ export const buildMusicGptVoiceClip = async (source: Buffer): Promise<Buffer | n
       '-hide_banner',
       '-loglevel', 'error',
       '-y',
+      '-ss', String(startSec),
+      '-t', String(durationSec),
       '-i', inputPath,
-      '-t', String(MUSICGPT_VOICE_CLIP_SECONDS),
       '-vn',
       '-ac', '1',
       '-ar', '44100',
-      '-b:a', '128k',
+      // Foco em voz falada + loudness estável para o modelo de clone.
+      '-af', 'highpass=f=80,lowpass=f=8500,loudnorm=I=-16:TP=-1.5:LRA=11',
+      '-b:a', '192k',
       '-f', 'mp3',
       outputPath
     ])
     if (!ok) return null
-    const clip = await readFile(outputPath)
-    return clip.length > 8_000 ? clip : null
+    const buffer = await readFile(outputPath)
+    if (buffer.length < 12_000) return null
+    return { buffer, durationSec, startSec }
   } catch {
     return null
   } finally {
@@ -52,7 +74,7 @@ const runFfmpeg = (args: string[]): Promise<boolean> =>
     const timer = setTimeout(() => {
       child.kill('SIGKILL')
       finish(false)
-    }, 25_000)
+    }, 45_000)
     child.on('error', () => {
       clearTimeout(timer)
       finish(false)

@@ -9,7 +9,7 @@ import {
   radioTableErrorResponse
 } from '../../../utils/radio-indoor'
 import { requireRadioStationAccess } from '../../../utils/radio-access'
-import { getAccessibleRadioVoice, getMusicGptVoiceSampleUrl } from '../../../utils/radio-voices'
+import { getAccessibleRadioVoice, getMusicGptVoiceSampleUrl, ensureMusicGptCloneSample } from '../../../utils/radio-voices'
 
 const allowedKinds = new Set(['jingle', 'off', 'voice', 'music'])
 
@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
   const requestedVoiceId = cleanText(body.voiceId, 120) || null
   const voiceId = kind === 'off' || kind === 'voice' ? null : requestedVoiceId
   const voiceProfileId = cleanText(body.voiceProfileId, 80) || null
-  const voiceGender = ['male', 'female'].includes(String(body.gender || '').toLowerCase()) ? String(body.gender).toLowerCase() : 'female'
+  const requestedGender = ['male', 'female'].includes(String(body.gender || '').toLowerCase()) ? String(body.gender).toLowerCase() : null
   let requestId: string | null = null
   let ownerUserId = user.id
 
@@ -45,6 +45,10 @@ export default defineEventHandler(async (event) => {
       selectedVoiceProfile = await getAccessibleRadioVoice(ownerUserId, persistedVoiceProfileId, String(station.id))
       if (!selectedVoiceProfile) throw createError({ statusCode: 404, statusMessage: 'Banco de voz não encontrado ou sem autorização' })
     }
+    // Gênero do perfil manda no clone; formulário só entra se não houver perfil.
+    const voiceGender = selectedVoiceProfile
+      ? (String(selectedVoiceProfile.gender || '').toLowerCase() === 'male' ? 'male' : 'female')
+      : (requestedGender || 'female')
     const request = await pgOneOrNull<any>(
       `insert into public.radio_requests
         (user_id, station_id, kind, title, brief, lyrics, style, voice_id, voice_profile_id, status, metadata)
@@ -72,6 +76,11 @@ export default defineEventHandler(async (event) => {
     let voiceProfileName: string | null = null
     let sampleDeliveryMode: 'app-proxy' | 'wasabi-presigned' | null = null
     if (selectedVoiceProfile) {
+      await ensureMusicGptCloneSample({
+        voiceId: String(selectedVoiceProfile.id),
+        ownerUserId,
+        sampleStorageKey: String(selectedVoiceProfile.sample_storage_key || selectedVoiceProfile.sampleStorageKey || '')
+      })
       const sample = await getMusicGptVoiceSampleUrl(event, selectedVoiceProfile, ownerUserId, 900)
       sampleAudioUrl = sample.url
       sampleDeliveryMode = sample.mode
