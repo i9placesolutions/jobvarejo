@@ -43,13 +43,23 @@ const buildClip = (sourceBuf) => {
   const r = spawnSync('ffmpeg', [
     '-hide_banner', '-loglevel', 'error', '-y',
     '-ss', '1', '-t', '18', '-i', input,
-    '-vn', '-ac', '1', '-ar', '44100',
-    '-af', 'highpass=f=80,lowpass=f=8500,loudnorm=I=-16:TP=-1.5:LRA=11',
-    '-b:a', '192k', '-f', 'mp3', output
+    '-vn',
+    '-af', 'pan=mono|c0=0.5*c0+0.5*c1,highpass=f=120,lowpass=f=6500,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11',
+    '-ar', '44100', '-b:a', '192k', '-f', 'mp3', output
   ], { encoding: 'utf8' })
   if (r.status !== 0 || !fs.existsSync(output)) {
-    fs.rmSync(dir, { recursive: true, force: true })
-    throw new Error(r.stderr?.slice(0, 300) || 'ffmpeg failed')
+    // fallback sem afftdn
+    const r2 = spawnSync('ffmpeg', [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-ss', '1', '-t', '18', '-i', input,
+      '-vn',
+      '-af', 'pan=mono|c0=0.5*c0+0.5*c1,highpass=f=120,lowpass=f=6500,loudnorm=I=-16:TP=-1.5:LRA=11',
+      '-ar', '44100', '-b:a', '192k', '-f', 'mp3', output
+    ], { encoding: 'utf8' })
+    if (r2.status !== 0 || !fs.existsSync(output)) {
+      fs.rmSync(dir, { recursive: true, force: true })
+      throw new Error(r2.stderr?.slice(0, 300) || r.stderr?.slice(0, 300) || 'ffmpeg failed')
+    }
   }
   const buf = fs.readFileSync(output)
   fs.rmSync(dir, { recursive: true, force: true })

@@ -98,7 +98,10 @@ export default defineEventHandler(async (event) => {
     const submission = (kind === 'off' || kind === 'voice')
       ? await submitMusicGptTextToSpeech({ text: lyrics || brief, voiceId: effectiveVoiceId, sampleAudioUrl, gender: voiceGender })
       : await submitMusicGptMusicAi(event, {
-          prompt: `${kind === 'jingle' ? 'Crie uma vinheta de rádio indoor' : 'Crie uma música para rádio indoor'}: ${brief}`,
+          // Trilha sempre gerada pelo MusicGPT — a amostra do banco é só referência de voz (TTS).
+          prompt: kind === 'jingle'
+            ? `Crie uma vinheta curta de rádio indoor com trilha musical ORIGINAL (não copie áudio de referência). Texto/ideia: ${brief}`
+            : `Crie uma música para rádio indoor com arranjo ORIGINAL gerado agora. Ideia: ${brief}`,
           musicStyle: style,
           lyrics,
           makeInstrumental: kind === 'music' && !lyrics,

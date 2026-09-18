@@ -349,8 +349,12 @@ const submitRequest = async () => {
 const useVoiceInRequest = (voice: any) => {
   requestForm.voiceProfileId = String(voice?.id || '')
   requestForm.gender = voice?.gender === 'male' ? 'male' : 'female'
+  // Clone só entra no TTS (off/locução). Jingle/música geram trilha no MusicAI.
+  if (requestForm.kind === 'jingle' || requestForm.kind === 'music') {
+    requestForm.kind = 'off'
+  }
   activeView.value = 'requests'
-  showNotice(`Voz “${voice?.name || 'selecionada'}” escolhida para a próxima locução.`, 'success')
+  showNotice(`Voz “${voice?.name || 'selecionada'}” pronta para off/locução (clone). Trilha de jingle/música o MusicGPT cria à parte.`, 'success')
 }
 
 const refreshRequest = async (requestId: string, silent = false) => {

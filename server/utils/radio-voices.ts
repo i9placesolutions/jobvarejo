@@ -164,6 +164,7 @@ export const ensureMusicGptCloneSample = async (input: {
         cloneSampleBytes: clip.buffer.length,
         cloneSampleDurationSec: clip.durationSec,
         cloneSampleStartSec: clip.startSec,
+        cloneIsolateMode: clip.mode,
         clonePreparedAt: new Date().toISOString()
       }),
       input.voiceId,

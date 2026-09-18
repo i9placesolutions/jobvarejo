@@ -74,10 +74,11 @@ O formulário de solicitações registra jingle, off, locução e música. Sem a
 O cadastro de uma voz clonada é feito exclusivamente em **Administração do
 Builder → MusicGPT / Banco de vozes** (`/admin/musicgpt`). O administrador envia
 a amostra (preferência: só fala, ~20–60s, sem música), registra a confirmação de
-autorização e pode revogar o perfil. No upload, o servidor gera um clip
-`.clone.mp3` (~18s, mono, loudnorm) e grava a chave em `metadata` — esse é o
-arquivo que o MusicGPT baixa para clonar. A amostra completa continua privada no
-Wasabi para prévia humana.
+autorização e pode revogar o perfil. No upload, o servidor isola a fala (remove/atenua
+trilha da amostra) num clip `.clone.mp3` (~18s) — esse arquivo é o que o MusicGPT
+usa para clonar a voz. Off/locução = TTS com essa voz. Jingle/música = MusicAI gera
+trilha ORIGINAL (não herda música da amostra). A amostra completa continua privada
+no Wasabi para prévia humana.
 
 Na Rádio Indoor, a tela **Banco de vozes** é somente leitura: cada usuário pode
 ouvir a prévia e selecionar uma voz liberada ao criar um off ou uma locução. O

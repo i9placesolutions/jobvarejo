@@ -155,7 +155,7 @@ onMounted(loadVoices)
             <div>
               <p class="text-xs font-semibold uppercase tracking-[0.22em] text-violet-300/80">MusicGPT</p>
               <h1 class="mt-1 text-3xl font-semibold tracking-tight">Banco de vozes</h1>
-              <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Cadastre aqui as vozes autorizadas. Use amostra só de fala (~20–60s), sem música de fundo — o servidor gera um clip de ~18s otimizado para o MusicGPT clonar de verdade.</p>
+              <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">A amostra pode ter trilha: o servidor isola a fala no clip de clone. Off/locução usam só a voz clonada; jingle/música pedem trilha nova ao MusicGPT.</p>
             </div>
           </div>
         </div>
@@ -171,7 +171,7 @@ onMounted(loadVoices)
       <div class="mt-8 grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <section class="rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
           <div class="flex items-start justify-between gap-3">
-            <div><h2 class="font-medium text-white">Adicionar voz clonada</h2><p class="mt-1 text-xs leading-5 text-zinc-500">Preferência: uma pessoa falando sozinha, ambiente quieto, MP3/WAV. Evite vinheta com música — o MusicGPT recomenda amostra sem trilha.</p></div>
+            <div><h2 class="font-medium text-white">Adicionar voz clonada</h2><p class="mt-1 text-xs leading-5 text-zinc-500">Pode enviar locução com fundo musical: isolamos a fala para o clone. A trilha do produto final (jingle/música) é gerada pelo MusicGPT, não copiada da amostra.</p></div>
             <FileAudio class="h-5 w-5 text-violet-300" />
           </div>
           <div class="mt-5 space-y-4">

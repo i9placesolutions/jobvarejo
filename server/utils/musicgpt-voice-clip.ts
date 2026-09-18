@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 /**
- * MusicGPT TTS clona melhor com 10–20s de fala limpa (mono, sem música).
- * Pulamos 1s inicial (cliques/silêncio) e normalizamos loudness.
+ * Clip só de fala para o MusicGPT clonar a voz.
+ * Trilha/música da amostra é atenuada (mid + banda de voz) —
+ * a trilha do produto final deve ser gerada pelo MusicAI, não herdada.
  */
 export const MUSICGPT_VOICE_CLIP_SECONDS = 18
 export const MUSICGPT_VOICE_CLIP_START_SECONDS = 1
@@ -14,11 +15,11 @@ export interface MusicGptVoiceClipResult {
   buffer: Buffer
   durationSec: number
   startSec: number
+  mode: 'voice-isolate'
 }
 
 /**
- * Recodifica um trecho válido mono mp3 otimizado para clonagem.
- * Corte cru em bytes quebra frames e o MusicGPT tende a gerar voz genérica.
+ * Isola fala (canal mid + banda vocal + denoise) e normaliza loudness.
  */
 export const buildMusicGptVoiceClip = async (
   source: Buffer,
@@ -35,26 +36,33 @@ export const buildMusicGptVoiceClip = async (
   const outputPath = join(dir, 'clip.mp3')
   try {
     await writeFile(inputPath, source)
-    const ok = await runFfmpeg([
-      '-hide_banner',
-      '-loglevel', 'error',
-      '-y',
-      '-ss', String(startSec),
-      '-t', String(durationSec),
-      '-i', inputPath,
-      '-vn',
-      '-ac', '1',
-      '-ar', '44100',
-      // Foco em voz falada + loudness estável para o modelo de clone.
-      '-af', 'highpass=f=80,lowpass=f=8500,loudnorm=I=-16:TP=-1.5:LRA=11',
-      '-b:a', '192k',
-      '-f', 'mp3',
-      outputPath
-    ])
-    if (!ok) return null
-    const buffer = await readFile(outputPath)
-    if (buffer.length < 12_000) return null
-    return { buffer, durationSec, startSec }
+    // 1) tenta isolamento completo (afftdn pode faltar em builds mínimos)
+    // 2) fallback sem denoise
+    const attempts = [
+      'pan=mono|c0=0.5*c0+0.5*c1,highpass=f=120,lowpass=f=6500,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11',
+      'pan=mono|c0=0.5*c0+0.5*c1,highpass=f=120,lowpass=f=6500,loudnorm=I=-16:TP=-1.5:LRA=11'
+    ]
+    for (const af of attempts) {
+      const ok = await runFfmpeg([
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-y',
+        '-ss', String(startSec),
+        '-t', String(durationSec),
+        '-i', inputPath,
+        '-vn',
+        '-af', af,
+        '-ar', '44100',
+        '-b:a', '192k',
+        '-f', 'mp3',
+        outputPath
+      ])
+      if (!ok) continue
+      const buffer = await readFile(outputPath)
+      if (buffer.length < 12_000) continue
+      return { buffer, durationSec, startSec, mode: 'voice-isolate' }
+    }
+    return null
   } catch {
     return null
   } finally {
