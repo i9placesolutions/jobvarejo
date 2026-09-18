@@ -6,6 +6,12 @@ import { verifyMusicGptVoiceSampleToken } from '../../../utils/radio-voices'
 import { pgOneOrNull } from '../../../utils/postgres'
 
 /**
+ * MusicGPT falha em "audio conversion" com amostras longas (~4MB+).
+ * Enviamos só o começo do arquivo (~30s em mp3 128kbps) para clonagem.
+ */
+const MUSICGPT_SAMPLE_MAX_BYTES = 350_000
+
+/**
  * Endpoint público (sem cookie) para o MusicGPT baixar a amostra de voz.
  * Protegido por token HMAC de curta duração gerado em /ai/request.
  */
@@ -35,16 +41,27 @@ export default defineEventHandler(async (event) => {
     const key = String(voice.sample_storage_key)
     const extension = key.split('.').pop()?.toLowerCase() || 'mp3'
     const safeExt = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'webm'].includes(extension) ? extension : 'mp3'
-    const result = await getS3Client().send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+    // Range no S3 evita baixar o arquivo inteiro só para descartar o restante.
+    const result = await getS3Client().send(new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Range: `bytes=0-${MUSICGPT_SAMPLE_MAX_BYTES - 1}`
+    }))
     if (!result.Body) throw createError({ statusCode: 404, statusMessage: 'Amostra de voz não encontrada' })
+    const chunks: Buffer[] = []
+    for await (const chunk of result.Body as AsyncIterable<Uint8Array>) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    }
+    const body = Buffer.concat(chunks).subarray(0, MUSICGPT_SAMPLE_MAX_BYTES)
     setResponseHeaders(event, {
       'Content-Type': voice.sample_content_type || 'audio/mpeg',
       'Content-Disposition': `inline; filename="voice-sample.${safeExt}"`,
+      'Content-Length': String(body.length),
       'Cache-Control': 'private, max-age=300',
-      'X-Radio-Voice': String(voice.id)
+      'X-Radio-Voice': String(voice.id),
+      'X-Radio-Sample-Clip': '1'
     })
-    if (result.ContentLength != null) setResponseHeader(event, 'Content-Length', Number(result.ContentLength))
-    return sendStream(event, result.Body as any)
+    return body
   } catch (error: any) {
     if (error?.statusCode) throw error
     if (error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404) {

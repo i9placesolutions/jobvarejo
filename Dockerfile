@@ -90,6 +90,7 @@ RUN /opt/image-worker/bin/python workers/art_studio.py --self-test
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 CMD curl -fsS "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null || exit 1
+# Start-period curto: Coolify mata o job de deploy se o healthcheck demorar demais.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=12 CMD curl -fsS "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null || exit 1
 
 CMD ["sh", "workers/start-server.sh"]
