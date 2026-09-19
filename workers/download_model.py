@@ -72,11 +72,17 @@ def download(url, target):
         raise RuntimeError(f'Não foi possível baixar a parte {start} do BiRefNet')
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
-        downloaded = list(pool.map(fetch, range(0, size, CHUNK)))
+        starts = list(range(0, size, CHUNK))
+        downloaded = list(pool.map(fetch, starts))
     temporary = target.with_suffix('.partial')
     with temporary.open('wb') as output:
-        for part in downloaded:
-            with part.open('rb') as source:
+        for start, part in zip(starts, downloaded):
+            path = Path(part)
+            # Cache Docker de partes pode ficar inconsistente entre builds;
+            # rebaixa o pedaço ausente em vez de falhar o deploy inteiro.
+            if not path.exists() or path.stat().st_size != min(start + CHUNK, size) - start:
+                path = fetch(start)
+            with path.open('rb') as source:
                 for data in iter(lambda: source.read(CHUNK), b''):
                     output.write(data)
     if checksum(temporary) != md5:
