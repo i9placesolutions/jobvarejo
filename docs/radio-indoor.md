@@ -120,3 +120,11 @@ O player sempre calcula a faixa ativa no fuso da estação. O worker mantém os 
 ## Cache offline
 
 `public/radio-indoor-sw.js` é registrado somente quando o usuário abre o módulo. Ele intercepta apenas `/api/radio-indoor/audio` e `/api/radio-indoor/media`, pré-carrega as próximas três faixas e mantém até 20 respostas locais. Em uma queda de conexão, a faixa atual continua pelo buffer do elemento `<audio>` e as próximas faixas armazenadas podem ser reproduzidas por até aproximadamente 45 minutos, dependendo do tamanho do catálogo.
+
+## Player kiosk
+
+Use `/radio-indoor/player` em computadores da loja. Autenticação é só pelo token
+do player (`X-Radio-Player-Token`, `Authorization: RadioPlayer <token>` ou
+`?playerToken=` nas URLs de áudio). Após criar um player em **Equipe e players**,
+copie o token ou abra o kiosk direto. A fila da agenda é recarregada a cada 60s
+no painel e no kiosk quando a janela de horário muda.

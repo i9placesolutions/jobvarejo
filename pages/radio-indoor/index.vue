@@ -46,7 +46,11 @@ const isCreatingMember = ref(false)
 const isCreatingPlayer = ref(false)
 const createdPlayerToken = ref('')
 const downloadingRequestId = ref<string | null>(null)
+const requestPlaylistId = ref('')
+const addingRequestId = ref<string | null>(null)
 let requestPollTimer: ReturnType<typeof setInterval> | null = null
+let playerRefreshTimer: ReturnType<typeof setInterval> | null = null
+let lastScheduleSignature = ''
 
 const genres = computed(() => {
   const fromApi = Array.isArray(radio.facets.value?.genres) ? radio.facets.value.genres.map((item: any) => String(item.genre)) : []
@@ -91,6 +95,7 @@ const station = computed(() => radio.bootstrap.value?.station || radio.playerDat
 const musicGpt = computed(() => radio.bootstrap.value?.musicGpt || { configured: false, ttsConfigured: false, webhookConfigured: false })
 const access = computed(() => radio.bootstrap.value?.access || { level: station.value?.accessLevel || 'player', canManageUsers: false, canEditProgramming: false })
 const canManageUsers = computed(() => Boolean(access.value.canManageUsers))
+const canEditProgramming = computed(() => Boolean(access.value.canEditProgramming))
 const roleLabel = computed(() => ({ owner: 'Proprietário', manager: 'Gerente', editor: 'Editor de programação', operator: 'Operador', player: 'Player' } as Record<string, string>)[String(access.value.level)] || 'Player')
 const accessLevels = [
   { id: 'manager', label: 'Gerente', description: 'Configura loja, equipe e agenda' },
@@ -117,6 +122,8 @@ const loadAll = async () => {
     await radio.loadBootstrap()
     await Promise.all([radio.loadCatalog(), radio.loadPlayer(), radio.loadRequests(), radio.loadVoices(), radio.loadMembers()])
     if (!memberForm.stationIds.length && selectedStationId.value) memberForm.stationIds = [selectedStationId.value]
+    if (!requestPlaylistId.value && playlists.value[0]?.id) requestPlaylistId.value = String(playlists.value[0].id)
+    if (!selectedPlaylistId.value && playlists.value[0]?.id) selectedPlaylistId.value = String(playlists.value[0].id)
     const firstTrack = queue.value[0] || radio.catalog.value[0]
     if (firstTrack && !currentTrack.value) currentTrack.value = firstTrack
     await radio.registerCache()
@@ -325,6 +332,82 @@ const createSchedule = async () => {
   } catch (error: any) { showNotice(error?.data?.statusMessage || 'Falha ao salvar agenda', 'error') }
 }
 
+const toggleStationStatus = async () => {
+  if (!canManageUsers.value) return
+  const next = station.value?.status === 'active' ? 'paused' : 'active'
+  try {
+    await radio.create({ action: 'toggle_station', status: next })
+    showNotice(next === 'active' ? 'Loja no ar.' : 'Loja pausada (modo de teste).', 'success')
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Não foi possível alterar o status da loja', 'error')
+  }
+}
+
+const toggleScheduleEnabled = async (schedule: any) => {
+  if (!canManageUsers.value && !canEditProgramming.value) return
+  try {
+    await radio.create({
+      action: 'toggle_schedule',
+      scheduleId: schedule.id,
+      enabled: !schedule.enabled
+    })
+    showNotice(schedule.enabled ? 'Horário pausado.' : 'Horário reativado.', 'success')
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Não foi possível pausar o horário', 'error')
+  }
+}
+
+const addRequestToPlaylist = async (item: any) => {
+  const trackId = String(item?.catalogTrackId || '').trim()
+  const playlistId = String(requestPlaylistId.value || selectedPlaylistId.value || '').trim()
+  if (!trackId) {
+    showNotice('Este áudio ainda não entrou no catálogo.', 'info')
+    return
+  }
+  if (!playlistId) {
+    showNotice('Escolha uma playlist abaixo para colocar o áudio na grade.', 'info')
+    return
+  }
+  addingRequestId.value = String(item.id)
+  try {
+    await radio.create({ action: 'add_track', playlistId, trackId, position: 99999 })
+    showNotice(`“${item.title}” adicionada à playlist.`, 'success')
+    await radio.loadPlayer()
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Não foi possível adicionar à playlist', 'error')
+  } finally {
+    addingRequestId.value = null
+  }
+}
+
+const refreshPlayerQueue = async (force = false) => {
+  try {
+    const previousId = currentTrack.value?.id
+    const wasPlaying = isPlaying.value
+    await radio.loadPlayer()
+    const signature = [
+      radio.playerData.value?.schedule?.id || '',
+      radio.playerData.value?.schedule?.startTime || '',
+      radio.playerData.value?.schedule?.endTime || '',
+      queue.value.map((track) => track.id).join(',')
+    ].join('|')
+    if (!force && signature === lastScheduleSignature) return
+    lastScheduleSignature = signature
+    await radio.prefetchQueue(queue.value)
+    if (previousId) {
+      const stillThere = queue.value.find((track) => track.id === previousId)
+      if (stillThere) {
+        currentTrack.value = stillThere
+        if (wasPlaying && audioRef.value?.paused) await audioRef.value.play().catch(() => undefined)
+        return
+      }
+    }
+    if (!currentTrack.value && queue.value[0]) currentTrack.value = queue.value[0]
+  } catch {
+    // Falha silenciosa: a faixa atual continua no buffer do <audio>.
+  }
+}
+
 const submitRequest = async () => {
   if (!requestForm.brief.trim()) return
   isSubmittingRequest.value = true
@@ -470,6 +553,12 @@ const copyPlayerToken = async () => {
   try { await navigator.clipboard.writeText(createdPlayerToken.value); showNotice('Token copiado.', 'success') } catch { showNotice('Selecione e copie o token manualmente.', 'info') }
 }
 
+const openKioskWithToken = () => {
+  if (!createdPlayerToken.value) return
+  const url = `/radio-indoor/player?token=${encodeURIComponent(createdPlayerToken.value)}`
+  window.open(url, '_blank', 'noopener')
+}
+
 const toggleRadioTheme = () => {
   radioTheme.value = radioTheme.value === 'dark' ? 'light' : 'dark'
 }
@@ -483,13 +572,23 @@ if (import.meta.client) {
 onMounted(() => {
   const storedTheme = window.localStorage.getItem(RADIO_THEME_STORAGE_KEY)
   if (storedTheme === 'light' || storedTheme === 'dark') radioTheme.value = storedTheme
-  void loadAll()
+  void loadAll().then(() => {
+    lastScheduleSignature = [
+      radio.playerData.value?.schedule?.id || '',
+      radio.playerData.value?.schedule?.startTime || '',
+      radio.playerData.value?.schedule?.endTime || '',
+      queue.value.map((track) => track.id).join(',')
+    ].join('|')
+  })
   // Sem webhook configurado, consulta tarefas pendentes periodicamente para
   // que o usuário não precise recarregar a página ou clicar em cada item.
   requestPollTimer = setInterval(() => { void refreshPendingRequests() }, 15_000)
+  // Recarrega a fila quando a agenda muda de janela (ex.: 08:00 → 18:00).
+  playerRefreshTimer = setInterval(() => { void refreshPlayerQueue(false) }, 60_000)
 })
 onBeforeUnmount(() => {
   if (requestPollTimer) clearInterval(requestPollTimer)
+  if (playerRefreshTimer) clearInterval(playerRefreshTimer)
   audioRef.value?.pause()
   previewAudioRef.value?.pause()
 })
@@ -526,7 +625,7 @@ onBeforeUnmount(() => {
       <header class="topbar">
         <button class="menu-button mobile-only" aria-label="Abrir menu" @click="showMobileNav = true"><Menu :size="22" /></button>
         <div class="crumb"><span>Rádio Indoor</span><ChevronRight :size="14" /><b>{{ activeView === 'home' ? 'Visão geral' : activeView === 'catalog' ? 'Músicas' : activeView === 'programs' ? 'Programas' : activeView === 'agenda' ? 'Agenda' : activeView === 'voices' ? 'Banco de vozes' : activeView === 'requests' ? 'Gerar áudio' : 'Equipe e players' }}</b></div>
-        <div class="topbar-actions"><div class="station-switcher"><Store :size="15" /><label class="sr-only" for="radio-station-select">Loja ativa</label><select id="radio-station-select" v-model="selectedStationId" @change="changeStation"><option v-for="item in stations" :key="item.id" :value="item.id">{{ item.name }}</option></select><button class="station-add" title="Adicionar loja" @click="showStationForm = !showStationForm"><Plus :size="15" /></button></div><span class="station-status" :class="{ live: station?.status === 'active' }"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</span><button class="icon-button theme-toggle" :aria-label="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" :aria-pressed="radioTheme === 'light'" :title="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" @click="toggleRadioTheme"><Sun v-if="radioTheme === 'dark'" :size="17" /><Moon v-else :size="17" /></button><button class="icon-button" title="Ajuda"><CircleHelp :size="18" /></button></div>
+        <div class="topbar-actions"><div class="station-switcher"><Store :size="15" /><label class="sr-only" for="radio-station-select">Loja ativa</label><select id="radio-station-select" v-model="selectedStationId" @change="changeStation"><option v-for="item in stations" :key="item.id" :value="item.id">{{ item.name }}</option></select><button class="station-add" title="Adicionar loja" @click="showStationForm = !showStationForm"><Plus :size="15" /></button></div><button v-if="canManageUsers" class="station-status clickable" :class="{ live: station?.status === 'active' }" :title="station?.status === 'active' ? 'Pausar loja' : 'Colocar no ar'" @click="toggleStationStatus"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</button><span v-else class="station-status" :class="{ live: station?.status === 'active' }"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</span><button class="icon-button theme-toggle" :aria-label="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" :aria-pressed="radioTheme === 'light'" :title="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" @click="toggleRadioTheme"><Sun v-if="radioTheme === 'dark'" :size="17" /><Moon v-else :size="17" /></button><button class="icon-button" title="Ajuda"><CircleHelp :size="18" /></button></div>
       </header>
 
       <div v-if="showStationForm" class="station-create-panel"><div class="station-create-copy"><Store :size="18" /><div><strong>Adicionar uma loja</strong><span>Catálogo pode ser compartilhado; programação e agenda ficam separadas.</span></div></div><div class="station-create-fields"><input v-model="stationForm.name" placeholder="Nome da loja (ex.: Loja Centro)" @keyup.enter="createStation" /><input v-model="stationForm.timezone" placeholder="Fuso horário" /><button class="button primary" :disabled="isCreatingStation" @click="createStation"><LoaderCircle v-if="isCreatingStation" class="spin" :size="15" /><Plus v-else :size="15" /> Criar loja</button></div></div>
@@ -604,7 +703,7 @@ onBeforeUnmount(() => {
       <template v-else-if="activeView === 'agenda'">
         <section class="page-heading"><div><span class="eyebrow muted">GRADE DA RÁDIO</span><h1>Quando cada programa entra</h1><p>Escolha dias e horários. A estação calcula o programa ativo no player.</p></div></section>
         <div class="workspace-grid"><section class="editor-card"><div class="card-title"><div><h3>Novo horário</h3><p>Você pode criar blocos que atravessam a meia-noite.</p></div><Clock3 :size="20" /></div><label>Programa<select v-model="scheduleForm.programId"><option value="">Selecione</option><option v-for="program in programs" :key="program.id" :value="program.id">{{ program.name }}</option></select></label><div class="time-grid"><label>Início<input v-model="scheduleForm.startTime" type="time" /></label><label>Fim<input v-model="scheduleForm.endTime" type="time" /></label></div><div class="days"><span>Repetir em</span><button v-for="day in [{ id: 0, label: 'D' }, { id: 1, label: 'S' }, { id: 2, label: 'T' }, { id: 3, label: 'Q' }, { id: 4, label: 'Q' }, { id: 5, label: 'S' }, { id: 6, label: 'S' }]" :key="day.id" :class="{ selected: scheduleForm.daysOfWeek.includes(day.id) }" @click="toggleDay(day.id)">{{ day.label }}</button></div><button class="button primary" @click="createSchedule"><CalendarClock :size="16" /> Publicar horário</button></section><section class="editor-card schedule-help"><div class="help-art"><CalendarClock :size="34" /></div><h3>Como funciona</h3><p>O player interno verifica a agenda no fuso da estação e monta a fila automaticamente. Se não houver horário ativo, ele usa o catálogo geral.</p><div class="help-line"><Check :size="15" /> Pode pausar sem apagar</div><div class="help-line"><Check :size="15" /> Cache local mantém até 45 min</div><div class="help-line"><Check :size="15" /> Histórico de reprodução</div></section></div>
-        <section class="list-card"><div class="card-title"><div><h3>Agenda publicada</h3><p>{{ schedules.length }} horário(s)</p></div></div><div v-if="schedules.length" class="schedule-list"><article v-for="schedule in schedules" :key="schedule.id" class="schedule-row"><div class="schedule-time"><strong>{{ schedule.start_time }}</strong><span>até {{ schedule.end_time }}</span></div><div class="schedule-days"><span v-for="day in (schedule.days_of_week || [])" :key="day">{{ ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'][Number(day)] }}</span></div><div class="schedule-program"><CalendarClock :size="15" /><strong>{{ programs.find((program: any) => program.id === schedule.program_id)?.name || 'Programa' }}</strong></div><span class="status-pill" :class="{ paused: !schedule.enabled }">{{ schedule.enabled ? 'Ativo' : 'Pausado' }}</span></article></div><div v-else class="empty-inline"><CalendarClock :size="24" /> Publique um horário para o player escolher a programação.</div></section>
+        <section class="list-card"><div class="card-title"><div><h3>Agenda publicada</h3><p>{{ schedules.length }} horário(s)</p></div><button class="icon-button" title="Atualizar fila do player" @click="refreshPlayerQueue(true)"><RefreshCw :size="17" /></button></div><div v-if="schedules.length" class="schedule-list"><article v-for="schedule in schedules" :key="schedule.id" class="schedule-row"><div class="schedule-time"><strong>{{ schedule.start_time }}</strong><span>até {{ schedule.end_time }}</span></div><div class="schedule-days"><span v-for="day in (schedule.days_of_week || [])" :key="day">{{ ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'][Number(day)] }}</span></div><div class="schedule-program"><CalendarClock :size="15" /><strong>{{ programs.find((program: any) => program.id === schedule.program_id)?.name || 'Programa' }}</strong></div><button v-if="canManageUsers || canEditProgramming" class="status-pill clickable" :class="{ paused: !schedule.enabled }" @click="toggleScheduleEnabled(schedule)">{{ schedule.enabled ? 'Ativo' : 'Pausado' }}</button><span v-else class="status-pill" :class="{ paused: !schedule.enabled }">{{ schedule.enabled ? 'Ativo' : 'Pausado' }}</span></article></div><div v-else class="empty-inline"><CalendarClock :size="24" /> Publique um horário para o player escolher a programação.</div></section>
       </template>
 
       <template v-else-if="activeView === 'voices'">
@@ -617,7 +716,7 @@ onBeforeUnmount(() => {
         <section class="page-heading"><div><span class="eyebrow muted">MUSICGPT</span><h1>Gere áudio para a rádio</h1><p>Crie jingles, músicas, offs e locuções. A solicitação fica registrada e o retorno aparece aqui quando o provedor concluir.</p></div><div class="provider-state" :class="{ connected: musicGpt.configured && musicGpt.webhookConfigured }"><span></span>{{ musicGpt.configured ? (musicGpt.webhookConfigured ? 'MusicGPT + webhook prontos' : 'MusicGPT sem webhook') : 'Integração aguardando chave' }}</div></section>
         <div class="workspace-grid"><section class="editor-card request-editor"><div class="card-title"><div><h3>Nova solicitação</h3><p>Jingle, off, locução ou música original</p></div><Sparkles :size="20" /></div><div class="kind-tabs"><button v-for="kind in [{ id: 'jingle', label: 'Jingle', icon: Zap }, { id: 'off', label: 'Off', icon: Mic2 }, { id: 'voice', label: 'Locução', icon: Headphones }, { id: 'music', label: 'Música', icon: Disc3 }]" :key="kind.id" :class="{ selected: requestForm.kind === kind.id }" @click="requestForm.kind = kind.id"><component :is="kind.icon" :size="16" />{{ kind.label }}</button></div><div class="form-grid"><label>Título<input v-model="requestForm.title" placeholder="Ex.: Oferta de fim de semana" /></label><label>Estilo<input v-model="requestForm.style" placeholder="Energético, sertanejo, jovem..." /></label><label class="full">Briefing<textarea v-model="requestForm.brief" rows="4" placeholder="Conte o que deve ser dito ou criado, público, duração e clima..."></textarea></label><label class="full">Texto/lyrics (opcional)<textarea v-model="requestForm.lyrics" rows="3" placeholder="Texto exato para locução ou letra"></textarea></label><label v-if="requestForm.kind === 'off' || requestForm.kind === 'voice'" class="full">Banco de voz<select v-model="requestForm.voiceProfileId"><option value="">Selecione uma voz liberada</option><option v-for="voice in voices" :key="voice.id" :value="voice.id">{{ voice.name }} · {{ voice.gender === 'male' ? 'Masculina' : 'Feminina' }}</option></select><small class="field-help">As vozes são cadastradas somente pelo administrador no painel MusicGPT.</small></label><label v-if="requestForm.kind === 'off' || requestForm.kind === 'voice'">Gênero da voz<select v-model="requestForm.gender"><option value="female">Feminina</option><option value="male">Masculina</option></select></label></div><button class="button primary" :disabled="isSubmittingRequest" @click="submitRequest"><LoaderCircle v-if="isSubmittingRequest" class="spin" :size="16" /><Send v-else :size="16" /> Enviar solicitação</button><p v-if="!musicGpt.configured" class="inline-note"><Settings2 :size="14" /> O pedido será salvo agora e enviado assim que <code>MUSICGPT_API_KEY</code> estiver configurada.</p></section><section class="editor-card request-guide"><div class="guide-gradient"><Sparkles :size="24" /></div><h3>Uma fila para cada ideia</h3><p>O pedido nasce com status e histórico. Quando o webhook do MusicGPT entregar o áudio, ele fica pronto para entrar em uma playlist.</p><div class="guide-step"><b>1</b><span>Descreva o áudio</span></div><div class="guide-step"><b>2</b><span>Escolha uma voz liberada</span></div><div class="guide-step"><b>3</b><span>Você escolhe onde tocar</span></div></section></div>
         <section v-if="previewRequest" class="request-preview"><div class="request-preview-copy"><strong>Prévia independente</strong><span>{{ previewRequest.title }}</span></div><audio ref="previewAudioRef" :src="previewRequest.audioUrl" controls preload="metadata"></audio><button class="icon-button" title="Fechar prévia" @click="closeRequestPreview"><X :size="16" /></button></section>
-        <section class="list-card"><div class="card-title"><div><h3>Solicitações recentes</h3><p>Ouça ou baixe sem alterar o que está no ar</p></div><button class="icon-button" title="Atualizar" @click="radio.loadRequests"><RefreshCw :size="17" /></button></div><div v-if="radio.requests.value.length" class="request-list"><article v-for="item in radio.requests.value" :key="item.id" class="request-row"><div class="request-kind" :class="item.kind"><Sparkles :size="17" /></div><div class="request-main"><strong>{{ item.title }}</strong><span>{{ item.error && item.status === 'failed' ? item.error : item.brief }}</span></div><div v-if="item.status === 'ready' && item.audioUrl" class="request-actions"><button class="request-action preview" title="Ouvir prévia sem entrar no ar" @click.stop="listenRequestPreview(item)"><Play :size="13" /> Ouvir</button><button class="request-action download" :disabled="downloadingRequestId === item.id" title="Baixar áudio" @click.stop="downloadRequestAudio(item)"><LoaderCircle v-if="downloadingRequestId === item.id" class="spin" :size="13" /><Download v-else :size="13" /> {{ downloadingRequestId === item.id ? 'Baixando' : 'Baixar' }}</button></div><span class="request-status" :class="item.status"><i></i>{{ item.status === 'ready' ? 'Pronto' : item.status === 'processing' ? 'Processando' : item.status === 'failed' ? 'Falhou' : 'Na fila' }}</span><button v-if="item.providerTaskId && item.status !== 'ready' && item.status !== 'failed'" class="request-refresh" title="Consultar MusicGPT" @click="refreshRequest(item.id)"><RefreshCw :size="14" /></button></article></div><div v-else class="empty-inline"><Sparkles :size="24" /> Suas solicitações aparecerão aqui.</div></section>
+        <section class="list-card"><div class="card-title"><div><h3>Solicitações recentes</h3><p>Ouça, baixe ou coloque na playlist sem alterar o que está no ar</p></div><div class="request-playlist-pick"><label class="sr-only" for="request-playlist-select">Playlist destino</label><select id="request-playlist-select" v-model="requestPlaylistId"><option value="">Playlist destino…</option><option v-for="playlist in playlists" :key="playlist.id" :value="playlist.id">{{ playlist.name }}</option></select><button class="icon-button" title="Atualizar" @click="radio.loadRequests"><RefreshCw :size="17" /></button></div></div><div v-if="radio.requests.value.length" class="request-list"><article v-for="item in radio.requests.value" :key="item.id" class="request-row"><div class="request-kind" :class="item.kind"><Sparkles :size="17" /></div><div class="request-main"><strong>{{ item.title }}</strong><span>{{ item.error && item.status === 'failed' ? item.error : item.brief }}</span></div><div v-if="item.status === 'ready' && item.audioUrl" class="request-actions"><button class="request-action preview" title="Ouvir prévia sem entrar no ar" @click.stop="listenRequestPreview(item)"><Play :size="13" /> Ouvir</button><button class="request-action download" :disabled="downloadingRequestId === item.id" title="Baixar áudio" @click.stop="downloadRequestAudio(item)"><LoaderCircle v-if="downloadingRequestId === item.id" class="spin" :size="13" /><Download v-else :size="13" /> {{ downloadingRequestId === item.id ? 'Baixando' : 'Baixar' }}</button><button v-if="canEditProgramming || canManageUsers" class="request-action playlist" :disabled="addingRequestId === item.id || !item.catalogTrackId" title="Adicionar à playlist da grade" @click.stop="addRequestToPlaylist(item)"><LoaderCircle v-if="addingRequestId === item.id" class="spin" :size="13" /><ListMusic v-else :size="13" /> Na playlist</button></div><span class="request-status" :class="item.status"><i></i>{{ item.status === 'ready' ? 'Pronto' : item.status === 'processing' ? 'Processando' : item.status === 'failed' ? 'Falhou' : 'Na fila' }}</span><button v-if="item.providerTaskId && item.status !== 'ready' && item.status !== 'failed'" class="request-refresh" title="Consultar MusicGPT" @click="refreshRequest(item.id)"><RefreshCw :size="14" /></button></article></div><div v-else class="empty-inline"><Sparkles :size="24" /> Suas solicitações aparecerão aqui.</div></section>
       </template>
 
       <template v-else-if="activeView === 'team'">
@@ -626,7 +725,7 @@ onBeforeUnmount(() => {
         <template v-else>
           <div class="workspace-grid">
             <section class="editor-card"><div class="card-title"><div><h3>Cadastrar usuário</h3><p>Um usuário pode ser ligado a mais de uma loja.</p></div><UserPlus :size="20" /></div><div class="form-grid"><label>Nome<input v-model="memberForm.name" placeholder="Nome do usuário" /></label><label>E-mail<input v-model="memberForm.email" type="email" placeholder="usuario@empresa.com" /></label><label>Senha inicial<input v-model="memberForm.password" type="password" placeholder="Mínimo de 8 caracteres" /></label><label>Nível<select v-model="memberForm.accessLevel"><option v-for="level in accessLevels" :key="level.id" :value="level.id">{{ level.label }}</option></select></label></div><div class="store-checks"><span>Vincular às lojas</span><label v-for="item in stations" :key="item.id"><input v-model="memberForm.stationIds" type="checkbox" :value="item.id" /> {{ item.name }}</label></div><button class="button primary" :disabled="isCreatingMember" @click="createMember"><LoaderCircle v-if="isCreatingMember" class="spin" :size="16" /><UserPlus v-else :size="16" /> Cadastrar usuário</button></section>
-            <section class="editor-card"><div class="card-title"><div><h3>Novo player simultâneo</h3><p>Crie um token para cada computador ou filial.</p></div><MonitorPlay :size="20" /></div><label>Nome do player<input v-model="playerForm.name" placeholder="Ex.: Caixa Loja Centro" /></label><button class="button secondary" :disabled="isCreatingPlayer" @click="createPlayer"><LoaderCircle v-if="isCreatingPlayer" class="spin" :size="16" /><MonitorPlay v-else :size="16" /> Criar player</button><div v-if="createdPlayerToken" class="player-token-box"><strong>Token gerado — copie agora</strong><textarea readonly :value="createdPlayerToken"></textarea><button class="button ghost" @click="copyPlayerToken"><Copy :size="15" /> Copiar token</button><small>O token identifica esta loja e não será mostrado novamente.</small></div></section>
+            <section class="editor-card"><div class="card-title"><div><h3>Novo player simultâneo</h3><p>Crie um token para cada computador ou filial.</p></div><MonitorPlay :size="20" /></div><label>Nome do player<input v-model="playerForm.name" placeholder="Ex.: Caixa Loja Centro" /></label><button class="button secondary" :disabled="isCreatingPlayer" @click="createPlayer"><LoaderCircle v-if="isCreatingPlayer" class="spin" :size="16" /><MonitorPlay v-else :size="16" /> Criar player</button><div v-if="createdPlayerToken" class="player-token-box"><strong>Token gerado — copie agora</strong><textarea readonly :value="createdPlayerToken"></textarea><button class="button ghost" @click="copyPlayerToken"><Copy :size="15" /> Copiar token</button><button class="button primary" @click="openKioskWithToken"><MonitorPlay :size="15" /> Abrir player kiosk</button><small>O token identifica esta loja e não será mostrado novamente. Use em <code>/radio-indoor/player</code>.</small></div></section>
           </div>
           <section class="list-card"><div class="card-title"><div><h3>Usuários desta loja</h3><p>{{ radio.members.value.length }} membro(s) com acesso a {{ station?.name || 'esta loja' }}</p></div><button class="icon-button" title="Atualizar" @click="radio.loadMembers"><RefreshCw :size="17" /></button></div><div v-if="radio.members.value.length" class="member-list"><article v-for="member in radio.members.value" :key="member.id" class="member-row"><div class="member-avatar"><Users :size="17" /></div><div class="member-main"><strong>{{ member.name }}</strong><span>{{ member.email }}</span></div><select v-if="!member.isOwner" v-model="member.accessLevel" aria-label="Nível de acesso" @change="updateMember(member)"><option v-for="level in accessLevels" :key="level.id" :value="level.id">{{ level.label }}</option></select><span v-else class="status-pill">Proprietário</span><span class="member-status" :class="member.status">{{ member.status === 'active' ? 'Ativo' : member.status }}</span></article></div><div v-else class="empty-inline"><Users :size="24" /> Nenhum usuário adicional nesta loja.</div></section>
           <section class="list-card"><div class="card-title"><div><h3>Players cadastrados</h3><p>{{ radio.players.value.length }} player(s) para tocar simultaneamente</p></div></div><div v-if="radio.players.value.length" class="member-list"><article v-for="player in radio.players.value" :key="player.id" class="member-row"><div class="member-avatar player"><MonitorPlay :size="17" /></div><div class="member-main"><strong>{{ player.name }}</strong><span>Token terminado em {{ player.tokenHint || '—' }} · {{ player.lastSeenAt ? 'visto recentemente' : 'ainda não conectado' }}</span></div><span class="member-status" :class="player.status">{{ player.status === 'active' ? 'Ativo' : player.status }}</span></article></div><div v-else class="empty-inline"><MonitorPlay :size="24" /> Crie um player para cada ponto de reprodução.</div></section>
@@ -677,7 +776,12 @@ onBeforeUnmount(() => {
 .request-preview-copy span { color:#a29aaa; font-size:10px; margin-top:4px; }
 .request-preview audio { width:min(420px, 48%); height:34px; }
 
-.store-checks { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin:-2px 0 16px; color:#858092; font-size:10px; }.store-checks > span { width:100%; color:#9e99aa; }.store-checks label { display:flex; align-items:center; gap:5px; padding:7px 9px; border:1px solid rgba(255,255,255,.08); border-radius:8px; color:#c8c2d2; cursor:pointer; }.store-checks input { accent-color:#9565ee; }.player-token-box { margin-top:16px; padding:12px; border:1px solid rgba(111,218,169,.23); background:rgba(70,181,125,.07); border-radius:10px; }.player-token-box strong,.player-token-box small { display:block; }.player-token-box strong { color:#a3e6c3; font-size:11px; }.player-token-box textarea { width:100%; min-height:58px; resize:none; margin:9px 0; color:#d9f7e5; background:#12251d; border:1px solid rgba(111,218,169,.25); border-radius:7px; padding:8px; font:10px ui-monospace,monospace; }.player-token-box .button { margin:0 0 7px; }.player-token-box small { color:#85b79d; font-size:9px; }.member-list { display:grid; gap:8px; }.member-row { display:flex; align-items:center; gap:10px; min-height:58px; padding:9px 11px; border:1px solid rgba(255,255,255,.06); border-radius:10px; background:rgba(255,255,255,.018); }.member-avatar { width:32px; height:32px; display:grid; place-items:center; flex:0 0 auto; border-radius:9px; color:#c09af5; background:rgba(128,75,223,.14); }.member-avatar.player { color:#7cddd1; background:rgba(67,193,177,.12); }.member-main { min-width:0; flex:1; }.member-main strong,.member-main span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.member-main strong { color:#ebe7f2; font-size:11px; }.member-main span { color:#7e7a8e; font-size:9px; margin-top:4px; }.member-row select { width:auto; min-width:142px; color:#d9d4e4; background:#171622; border:1px solid rgba(255,255,255,.1); border-radius:7px; padding:7px 8px; font:10px inherit; }.member-status { flex:0 0 auto; color:#7edba7; background:rgba(72,195,128,.09); border:1px solid rgba(72,195,128,.18); border-radius:99px; padding:5px 8px; font-size:9px; }.member-status.paused,.member-status.suspended { color:#e3b177; background:rgba(219,157,81,.09); border-color:rgba(219,157,81,.18); }.member-status.revoked { color:#ff9a9a; background:rgba(237,82,82,.09); border-color:rgba(237,82,82,.18); }
+.store-checks { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin:-2px 0 16px; color:#858092; font-size:10px; }.store-checks > span { width:100%; color:#9e99aa; }.store-checks label { display:flex; align-items:center; gap:5px; padding:7px 9px; border:1px solid rgba(255,255,255,.08); border-radius:8px; color:#c8c2d2; cursor:pointer; }.store-checks input { accent-color:#9565ee; }.player-token-box { margin-top:16px; padding:12px; border:1px solid rgba(111,218,169,.23); background:rgba(70,181,125,.07); border-radius:10px; }.player-token-box strong,.player-token-box small { display:block; }.player-token-box strong { color:#a3e6c3; font-size:11px; }.player-token-box textarea { width:100%; min-height:58px; resize:none; margin:9px 0; color:#d9f7e5; background:#12251d; border:1px solid rgba(111,218,169,.25); border-radius:7px; padding:8px; font:10px ui-monospace,monospace; }.player-token-box .button { margin:0 8px 7px 0; }.player-token-box small { color:#85b79d; font-size:9px; }.player-token-box code { font-size:9px; color:#b7f0d0; }
+.status-pill.clickable,.station-status.clickable { cursor:pointer; border:0; font:inherit; }
+.status-pill.clickable:hover,.station-status.clickable:hover { filter:brightness(1.12); }
+.request-playlist-pick { display:flex; align-items:center; gap:8px; }
+.request-playlist-pick select { min-width:160px; max-width:220px; color:#d9d4e4; background:#171622; border:1px solid rgba(255,255,255,.1); border-radius:7px; padding:7px 8px; font:10px inherit; }
+.request-action.playlist { color:#9fd7ff; background:rgba(70,150,210,.1); border-color:rgba(70,150,210,.22); }.member-list { display:grid; gap:8px; }.member-row { display:flex; align-items:center; gap:10px; min-height:58px; padding:9px 11px; border:1px solid rgba(255,255,255,.06); border-radius:10px; background:rgba(255,255,255,.018); }.member-avatar { width:32px; height:32px; display:grid; place-items:center; flex:0 0 auto; border-radius:9px; color:#c09af5; background:rgba(128,75,223,.14); }.member-avatar.player { color:#7cddd1; background:rgba(67,193,177,.12); }.member-main { min-width:0; flex:1; }.member-main strong,.member-main span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.member-main strong { color:#ebe7f2; font-size:11px; }.member-main span { color:#7e7a8e; font-size:9px; margin-top:4px; }.member-row select { width:auto; min-width:142px; color:#d9d4e4; background:#171622; border:1px solid rgba(255,255,255,.1); border-radius:7px; padding:7px 8px; font:10px inherit; }.member-status { flex:0 0 auto; color:#7edba7; background:rgba(72,195,128,.09); border:1px solid rgba(72,195,128,.18); border-radius:99px; padding:5px 8px; font-size:9px; }.member-status.paused,.member-status.suspended { color:#e3b177; background:rgba(219,157,81,.09); border-color:rgba(219,157,81,.18); }.member-status.revoked { color:#ff9a9a; background:rgba(237,82,82,.09); border-color:rgba(237,82,82,.18); }
 
 .voice-admin-note { margin:0 0 14px; border-color:rgba(160,124,239,.25); background:linear-gradient(110deg,rgba(76,46,133,.24),rgba(21,20,31,.78)); }.voice-admin-note p { max-width:720px; color:#aaa3b6; font-size:11px; line-height:1.65; margin:5px 0 0; }.voice-list { display:grid; gap:8px; }.voice-row { display:flex; align-items:center; gap:10px; min-height:66px; padding:10px 11px; border:1px solid rgba(255,255,255,.06); border-radius:10px; background:rgba(255,255,255,.018); }.voice-avatar { width:35px; height:35px; display:grid; place-items:center; flex:0 0 auto; border-radius:10px; color:#d0a9ff; background:rgba(128,75,223,.15); }.voice-main { min-width:130px; flex:1; }.voice-main strong,.voice-main span,.voice-main small { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.voice-main strong { color:#ebe7f2; font-size:12px; }.voice-main span { color:#8b8597; font-size:9px; margin-top:4px; }.voice-main small { color:#aaa3b5; font-size:9px; margin-top:4px; }.voice-row audio { width:210px; height:32px; }.voice-use { margin:0; white-space:nowrap; }.voice-row .button.ghost { color:#cbb4f7; border-color:rgba(157,112,236,.28); background:rgba(125,74,224,.09); }.voice-row .button.ghost:hover { background:rgba(125,74,224,.2); }
 .player-dock { position:fixed; z-index:30; left:244px; right:0; bottom:0; min-height:83px; background:rgba(15,14,24,.96); backdrop-filter:blur(22px); border-top:1px solid rgba(255,255,255,.1); display:grid; grid-template-columns:1.05fr 1.3fr 1fr; align-items:center; gap:22px; padding:11px 38px; }.player-track { display:flex; align-items:center; gap:11px; min-width:0; }.player-cover { width:52px; height:52px; border-radius:9px; color:#b48cf7; }.now-playing { min-width:0; }.now-playing strong,.now-playing span { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }.now-playing strong { font-size:12px; }.now-playing span { color:#878294; font-size:10px; margin-top:5px; }.player-controls { min-width:0; }.control-buttons { display:flex; justify-content:center; align-items:center; gap:13px; }.control-buttons button { border:0; background:none; color:#aaa5b8; cursor:pointer; display:grid; place-items:center; }.control-buttons button:hover { color:white; }.control-buttons .play-button { width:32px; height:32px; border-radius:50%; color:white; background:#8759ee; box-shadow:0 5px 15px rgba(120,74,222,.38); }.progress-line { display:flex; align-items:center; gap:8px; margin-top:7px; color:#777284; font-size:9px; }.progress-line input,.player-tools input { accent-color:#9468f2; height:3px; flex:1; min-width:0; }.player-tools { display:flex; align-items:center; justify-content:flex-end; gap:9px; color:#888496; }.player-tools input { max-width:92px; }.cache-indicator { display:flex; align-items:center; gap:5px; color:#6dbd93; font-size:9px; margin-left:10px; }.cache-indicator i { width:6px; height:6px; background:#60ce91; }.player-dock audio { display:none; }.spin { animation:spin 1s linear infinite; }@keyframes spin { to { transform:rotate(360deg); } }

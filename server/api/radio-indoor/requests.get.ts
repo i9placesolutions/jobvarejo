@@ -46,6 +46,7 @@ export default defineEventHandler(async (event) => {
         resultSourceUrl: row.result_source_url,
         resultFormat: row.result_format,
         resultDurationMs: row.result_duration_ms,
+        catalogTrackId: row.catalog_track_id ? String(row.catalog_track_id) : null,
         audioUrl: row.catalog_track_id ? radioKeyUrl('audio', String(row.catalog_track_id)) : null,
         downloadUrl: row.catalog_track_id ? `${radioKeyUrl('audio', String(row.catalog_track_id))}&download=1` : null,
         error: row.error,

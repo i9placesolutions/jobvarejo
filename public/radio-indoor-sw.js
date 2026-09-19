@@ -9,6 +9,9 @@ const canonicalKey = (request) => {
   const url = new URL(request.url)
   url.searchParams.delete('cache')
   url.searchParams.delete('t')
+  // Token do kiosk não deve fragmentar o cache nem ficar na chave.
+  url.searchParams.delete('playerToken')
+  url.searchParams.delete('token')
   return url.toString()
 }
 

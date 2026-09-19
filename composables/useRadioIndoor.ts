@@ -91,8 +91,32 @@ export const useRadioIndoor = () => {
     return data
   }
 
-  const loadPlayer = async () => {
-    const data = await $fetch<any>('/api/radio-indoor/player', { query: selectedStationId.value ? { stationId: selectedStationId.value } : undefined })
+  const playerAuthHeaders = (token?: string | null): Record<string, string> => {
+    const value = String(token || '').trim()
+    return value ? { 'X-Radio-Player-Token': value } : {}
+  }
+
+  const withPlayerToken = (url: string | null | undefined, token?: string | null) => {
+    const base = String(url || '').trim()
+    const value = String(token || '').trim()
+    if (!base || !value) return base
+    const separator = base.includes('?') ? '&' : '?'
+    return `${base}${separator}playerToken=${encodeURIComponent(value)}`
+  }
+
+  const loadPlayer = async (options: { stationId?: string; playerToken?: string | null } = {}) => {
+    const token = options.playerToken
+    const stationId = options.stationId || selectedStationId.value || undefined
+    const data = await $fetch<any>('/api/radio-indoor/player', {
+      query: stationId ? { stationId } : undefined,
+      headers: playerAuthHeaders(token)
+    })
+    if (token && Array.isArray(data?.queue)) {
+      data.queue = data.queue.map((track: RadioTrack) => ({
+        ...track,
+        audioUrl: withPlayerToken(track.audioUrl, token)
+      }))
+    }
     playerData.value = data
     return data
   }
@@ -176,9 +200,12 @@ export const useRadioIndoor = () => {
 
   const recordPlayed = async (track: RadioTrack, extra: Record<string, any> = {}) => {
     try {
+      const playerToken = String(extra.playerToken || '').trim() || null
+      const { playerToken: _ignored, ...rest } = extra
       await $fetch('/api/radio-indoor/player/played', {
         method: 'POST',
-        body: { trackId: track.id, ...(selectedStationId.value ? { stationId: selectedStationId.value } : {}), ...extra }
+        headers: playerAuthHeaders(playerToken),
+        body: { trackId: track.id, ...(selectedStationId.value ? { stationId: selectedStationId.value } : {}), ...rest }
       })
     } catch {
       // Histórico é secundário ao playback; não interromper a rádio por ele.
@@ -206,6 +233,7 @@ export const useRadioIndoor = () => {
     stations,
     selectedStationId,
     catalog,
+    albums,
     facets,
     playerData,
     requests,
@@ -218,6 +246,7 @@ export const useRadioIndoor = () => {
     registerCache,
     loadBootstrap,
     loadCatalog,
+    loadAlbums,
     loadPlayer,
     loadRequests,
     loadVoices,
@@ -229,6 +258,7 @@ export const useRadioIndoor = () => {
     prefetchTrack,
     prefetchQueue,
     recordPlayed,
+    withPlayerToken,
     create
   }
 }

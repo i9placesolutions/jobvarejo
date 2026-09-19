@@ -15,7 +15,11 @@ const readPlayerToken = (event: H3Event): string | null => {
   if (explicit) return explicit
   const authorization = String(getHeader(event, 'authorization') || '').trim()
   const match = /^RadioPlayer\s+(.+)$/i.exec(authorization)
-  return match?.[1]?.trim() || null
+  if (match?.[1]?.trim()) return match[1].trim()
+  // Query string permite <audio src> no kiosk (o elemento não envia headers customizados).
+  const query = getQuery(event)
+  const fromQuery = String(query.playerToken || query.token || '').trim()
+  return fromQuery || null
 }
 
 export const getRadioPlayerIdentity = async (event: H3Event): Promise<RadioPlayerIdentity | null> => {

@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
       const created = await createRadioStation(accountScope?.ownerUserId || user.id, body.name, body.timezone, body.slug)
       return { success: true, station: created }
     }
-    const minimumAccess = action === 'toggle_station' || action === 'toggle_schedule' ? 'manager' : 'editor'
+    const minimumAccess = action === 'toggle_station' ? 'manager' : 'editor'
     const scope = await requireRadioStationAccess(user.id, requestedStationId, minimumAccess)
     const station = scope.station
     const ownerUserId = scope.ownerUserId

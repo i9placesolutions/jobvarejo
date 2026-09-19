@@ -283,6 +283,8 @@ export default defineNuxtConfig({
     '/builder/**': {
       ssr: false,
     },
+    '/radio-indoor': { ssr: false },
+    '/radio-indoor/**': { ssr: false },
     '/api/storage/upload': {
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
