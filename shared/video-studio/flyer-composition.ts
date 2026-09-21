@@ -1,3 +1,6 @@
+import {CampaignAtmosphere} from './campaign-atmosphere'
+import {campaignFamily,campaignSound} from './campaign-direction'
+import {BoomExplosion,isBoomTheme} from './boom-effects'
 import {useRetailFonts} from './font-readiness'
 import {videoBackground,backgroundAsset} from './backgrounds'
 import {productEffects} from './native-effects'
@@ -9,7 +12,7 @@ import {displayPrice,type VideoRenderProps,type VideoScene} from './model'
 import {elementMotion} from './catalog-motion'
 import {CatalogTransition,CatalogAtmosphere,AnimatedRetailText} from './catalog-effects'
 import {motionSettings,soundAsset,SOUND_EFFECTS} from './effect-catalog'
-import {musicGain,OPENING_SOUNDS} from './sound-design'
+import {musicGain,OPENING_SOUNDS,BOOM_OPENING_SOUNDS} from './sound-design'
 import {VideoPriceLabel} from './label-renderer'
 import {productLayers} from './product-layout'
 import {EditableElement} from './editable-element'
@@ -47,7 +50,7 @@ function Backdrop({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
  if(kind==='spotlight'||kind==='industrial')for(let i=0;i<5;i++)items.push(div({position:'absolute',left:w*(i*.25-.15),top:-ht*.2,width:w*.32,height:ht*1.5,transformOrigin:'50% 0%',rotate:`${Math.sin(f/23+i+seed%10)*26}deg`,background:`linear-gradient(${r.accent}44,transparent)`,clipPath:'polygon(47% 0,53% 0,100% 100%,0 100%)',opacity:.55}))
  }
  if(props.document.effects.includes('glow'))for(let i=0;i<44;i++){const speed=4+random(i)*11;items.push(div({position:'absolute',left:random(i+99)*w,top:(random(i+80)*ht+f*speed)%(ht+80)-40,width:i%4?4:12,height:i%4?22:12,background:i%3?r.accent:'#fff',borderRadius:r.id==='saldao'?2:6,rotate:`${i*47+f*(i%2?3:-3)}deg`,opacity:(.15+random(i+6)*.4)*intensity,boxShadow:i%4?'none':`0 0 16px ${r.accent}`}))}
- return h(AbsoluteFill,{style:{background:r.backgroundGradient||r.base,overflow:'hidden'}},...items,h(CatalogAtmosphere,{props}))
+ return h(AbsoluteFill,{style:{background:r.backgroundGradient||r.base,overflow:'hidden'}},...items,h(CatalogAtmosphere,{props}),h(BoomExplosion,{props}),h(CampaignAtmosphere,{props}))
 }
 function DateLine({props,large=false}:{props:VideoRenderProps;large?:boolean}){const text=props.document.validity||'INFORME A VALIDADE';return div({...font,display:'flex',alignItems:'center',justifyContent:'center',gap:9,height:'100%',fontSize:fit(text,large?42:22,large?40:50),textShadow:'0 2px 5px #000',lineHeight:1.12},h(SocialIcon,{kind:'calendar',size:large?35:22}),text)}
 function Identity({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
@@ -77,7 +80,7 @@ function Offer({props,r,scene,index}:{props:VideoRenderProps;r:FlyerRecipe;scene
  const layers=productLayers(l.product,p,d.duplicateProducts!==false,o.imageAspectRatio||1,o.copies)
  const images=layers.map(layer=>{const entrance=layer.motionIndex===2?'whip-right':m.product,a=elementMotion(f,entrance,layer.motionIndex,m.speed);return h(EditableElement,{props,scene:scene.id,id:'product-'+layer.motionIndex,key:layer.motionIndex,style:{...box(layer.box),translate:`${a.x}px ${a.y+float}px`,rotate:`${a.rotation+layer.rotation}deg`,scale:a.scale,opacity:a.opacity}},src?h(Img,{src,style:{width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 18px 12px #0006)'}}):div({...font,fontSize:45,paddingTop:80},'ADICIONE A FOTO'))})
  return h(AbsoluteFill,{style:{opacity:exit}},...images,
- h(EditableElement,{props,scene:scene.id,id:'name',style:{...box(l.name),...font,display:'flex',justifyContent:'center',alignItems:'center',fontSize:fit(o.name.toUpperCase(),p?48:60,36),textShadow:'0 3px 0 #0008,0 5px 12px #0009'}},h(AnimatedRetailText,{text:o.name.toUpperCase(),mode:m.text,speed:m.speed})),
+ h(EditableElement,{props,scene:scene.id,id:'name',style:{...box(l.name),...font,display:'flex',justifyContent:'center',alignItems:'center',fontSize:fit(o.name.toUpperCase(),p?42:48,p?30:38),padding:'8px 12px',boxSizing:'border-box',borderRadius:18,background:'linear-gradient(90deg,transparent,#000b 15%,#000b 85%,transparent)',textShadow:'0 3px 0 #0008,0 5px 12px #0009'}},h(AnimatedRetailText,{text:o.name.toUpperCase(),mode:m.text,speed:m.speed})),
  h(EditableElement,{props,scene:scene.id,id:'price',style:{...box(l.price),translate:`${price.x}px ${price.y}px`,scale:price.scale,rotate:`${price.rotation}deg`,opacity:price.opacity}},h(Price,{props,r,price:o.price,unit:o.unit})),
  h(EditableElement,{props,scene:scene.id,id:'validity',style:{...box(l.validity),opacity:mix(f,4,8,0,1)}},h(DateLine,{props})),
  o.condition?h(EditableElement,{props,scene:scene.id,id:'condition',style:{...box(l.condition),...font,fontSize:fit(o.condition,26,55),textShadow:'0 2px 4px #000',opacity:price.opacity}},o.condition):null)
@@ -85,13 +88,14 @@ function Offer({props,r,scene,index}:{props:VideoRenderProps;r:FlyerRecipe;scene
 export function FlyerComposition(props:VideoRenderProps){
  const r=flyerRecipe(props.document.theme)!,d=props.document,{durationInFrames}=useVideoConfig(),f=useCurrentFrame(),m=motionSettings(d.motion),base=props.audioBase||'/video-studio/audio',fonts=props.fontBase||'/art-studio/fonts'
  useRetailFonts(fonts)
+ const opening:ReadonlyArray<{sound:typeof m.accentSound;frame:number;gain:number}>=(campaignFamily(d.theme)?[{sound:m.transitionSound,frame:0,gain:.4},{sound:campaignSound(campaignFamily(d.theme)!),frame:8,gain:1}]:OPENING_SOUNDS)
  const cue=(id:typeof m.accentSound,from:number,gain:number,key:string)=>h(Sequence,{key,from,durationInFrames:Math.min(durationInFrames-from,Math.ceil((SOUND_EFFECTS.find(s=>s.id===id)?.seconds||1)*30))},h(Audio,{src:base+'/'+soundAsset(id),volume:d.audio.effectsVolume*gain}))
  return h(AbsoluteFill,{style:{background:r.base,overflow:'hidden',opacity:mix(f,durationInFrames-5,durationInFrames,1,0)}},
 
  h(RetailCamera,{props},h(Backdrop,{props,r}),h(Identity,{props,r}),...props.scenes.filter(s=>s.id!=='intro').map(s=>h(Sequence,{key:s.id,from:s.from,durationInFrames:s.frames},s.id==='outro'?h(Ending,{props}):h(Offer,{props,r,scene:s,index:d.offers.findIndex(o=>o.id===s.id)})))),
  h(CatalogTransition,{props}),
- ...props.scenes.flatMap(s=>[s.audio&&d.voice.enabled?h(Sequence,{key:'voice'+s.id,from:s.from,durationInFrames:s.frames},h(Audio,{src:s.audio,volume:d.audio.voiceVolume})):null,...(d.audio.sounds&&s.id!=='intro'?[cue(m.transitionSound,s.from,.45,'swipe'+s.id),cue(m.accentSound,s.from+5,.65,'hit'+s.id)]:[])]),
- ...(d.audio.sounds?OPENING_SOUNDS.map(c=>cue(c.sound,c.frame,c.gain,'intro'+c.sound)):[]),
+ ...props.scenes.flatMap(s=>[s.audio&&d.voice.enabled?h(Sequence,{key:'voice'+s.id,from:s.from,durationInFrames:s.frames},h(Audio,{src:s.audio,volume:d.audio.voiceVolume})):null,...(d.audio.sounds&&s.id!=='intro'?[cue(m.transitionSound,s.from,.45,'swipe'+s.id),cue(campaignFamily(d.theme)?campaignSound(campaignFamily(d.theme)!):m.accentSound,s.from+5,isBoomTheme(d.theme)?.95:.65,'hit'+s.id)]:[])]),
+ ...(d.audio.sounds?opening.map(c=>cue(c.sound,c.frame,c.gain,'intro'+c.sound)):[]),
  ...(d.audio.sounds&&props.format==='horizontal'?[cue(m.transitionSound,Math.floor((props.scenes[1]?.from||60)*.48),.5,'logo-swipe')]:[]),
  props.music&&d.audio.music!=='none'?h(Audio,{src:props.music,loop:true,loopVolumeCurveBehavior:'extend',volume:(frame:number)=>musicGain(frame,durationInFrames,d,props.scenes)}):null)
 }

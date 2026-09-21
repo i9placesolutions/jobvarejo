@@ -2,6 +2,7 @@
 import hashlib
 import json
 import math
+import sys
 import random
 import struct
 import subprocess
@@ -86,4 +87,6 @@ if __name__ == '__main__':
     for name in ['retail-drive','retail-bounce']:
         records.append(save(name,30,lambda t,r,n=name:music(n,t,r),True))
     (OUT/'catalog-provenance.json').write_text(json.dumps({'description':'Síntese original do projeto; sem samples externos ou material nativo do CapCut.','assets':records},ensure_ascii=False,indent=2)+'\n')
-    print(f'{len(records)} arquivos originais preparados')
+    subprocess.run([sys.executable,str(Path(__file__).with_name('make_boom_audio.py'))],check=True)
+    subprocess.run([sys.executable,str(Path(__file__).with_name('make_thematic_audio.py'))],check=True)
+    print(f'{len(records)+17} arquivos originais preparados')

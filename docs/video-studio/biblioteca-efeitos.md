@@ -56,3 +56,37 @@ Gerar áudios originais: `python3 workers/video-studio/make_catalog_audio.py`.
 Testes: `npx vitest run tests/video-studio`.
 
 Frames de comparação: `node workers/video-studio/catalog-fixture.mjs` (usa os arquivos da demonstração local). Conferir separadamente API/persistência, navegador com WebGL e MP4 do worker. Pacote instalado, efeito integrado, render validado e aprovação estética do usuário são estados diferentes.
+
+## Boom de Ofertas — revisão temática 14
+
+As duas receitas Boom usam `BoomExplosion`: núcleo luminoso, onda de choque, nuvens radiais e faíscas atrás do conteúdo comercial. A explosão começa no frame 8 da abertura e no frame 5 das ofertas, nos mesmos instantes dos sons de impacto; termina em 38 frames e não se repete durante a leitura. A fumaça ambiente e as brasas seguem em movimento. Transições de fumaça usam tons quentes, sem alterar os demais temas. Os sons vêm da biblioteca local existente, sem nova geração paga.
+
+Prévia dirigida: `scripts/video-studio/review-boom-effects.mjs`. Atualização das duas demonstrações, preservando marca, produtos e edição: `scripts/video-studio/update-boom-demos.mjs`. As exportações anteriores permanecem guardadas. Essa revisão é específica das duas receitas; os outros 100 modelos permanecem na revisão 13.
+
+## Direção temática do catálogo — revisão 17
+
+A revisão 17 cobre os 102 modelos em 17 famílias semânticas. O inventário por UUID, família, som, atmosfera, transição e trilha está em `thematic-direction-v17.json`. A biblioteca compartilha implementações por família; não são 102 efeitos integralmente exclusivos. As variações preservam as artes, paletas, trilhas e sementes de cada modelo.
+
+- Alerta: varreduras de sirene e sinal sonoro alternado.
+- Relâmpago: raios e descarga com cauda de trovão.
+- Carnes: labaredas, fumaça de calor e crepitação.
+- Queima/liquidação: jatos de fogo, brasas e rajada sonora.
+- Padaria: espigas de trigo em movimento, partículas quentes e sino de forno com estalos de crosta. A arte de padaria com nome genérico é identificada pelo UUID.
+- Hortifruti: folhas, partículas e gotas sonoras.
+- Infantil: balões de cores e estouros curtos.
+- Festa: serpentinas/confetes e fogos sonoros.
+- Rosa: pétalas/corações e acorde cristalino.
+- Halloween: morcegos/névoa e sopro grave.
+- Relógio/fecha mês: mostradores/ponteiros e tique-taque/alerta.
+- Neon: anéis elétricos/laser e varredura sintetizada.
+- Industrial: peças metálicas/faíscas e impacto metálico.
+- Cliente/consumidor/show: fachos de palco e acorde de abertura.
+- Economia: moedas/percentuais e caixa/moedas.
+- Impacto/Dia D/mega: estilhaços radiais e pancada de arena.
+- Boom: explosão com fumaça e efeito próprio de 1,45s.
+
+Sons originais sintetizados, sem amostras externas ou cobrança de provedor. Durante o impacto, a música baixa temporariamente 75%, com retorno suave. Efeitos desligados ou volume zero preservam a música. As camadas ficam atrás do conteúdo comercial; o shake e o preço estabilizam após a entrada. A atualização de demonstrações preserva marca, produtos, etiquetas, formatos e transformações editadas, alterando a direção de movimento e a revisão. Nenhuma função do editor de imagem ou rádio é modificada.
+
+## Nome junto à etiqueta — revisão 18
+
+Em todas as 102 receitas, Reels e TV, o nome do produto fica centralizado na coluna da etiqueta, imediatamente acima dela. Faixa escura discreta protege a leitura sobre produto e efeitos. O nome continua editável. A validade permanece abaixo do preço. As seis montagens e as direções temáticas da revisão 17 são preservadas.

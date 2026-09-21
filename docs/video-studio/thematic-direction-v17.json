@@ -1,0 +1,1644 @@
+[
+  {
+    "id": "flyer-c0ba0eab-7b60-41cd-b1f9-3b197446c14e",
+    "sourceProject": "c0ba0eab-7b60-41cd-b1f9-3b197446c14e",
+    "name": "#Vem Economizar",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-c0ba0eab-7b60-41cd-b1f9-3b197446c14e",
+    "seed": 3233418923
+  },
+  {
+    "id": "alerta",
+    "sourceProject": "1d1733a2-a851-43db-a2d9-8bd94566bb2d",
+    "name": "Alerta de Oferta",
+    "revision": 17,
+    "family": "alarm",
+    "backgroundKind": "alarm",
+    "sound": "theme-alarm",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "shutter",
+    "music": "model-1d1733a2-a851-43db-a2d9-8bd94566bb2d",
+    "seed": 488059810
+  },
+  {
+    "id": "flyer-28df0d96-3190-422a-a698-ed3f47fe7cc9",
+    "sourceProject": "28df0d96-3190-422a-a698-ed3f47fe7cc9",
+    "name": "Aqui tem mais oferta",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-28df0d96-3190-422a-a698-ed3f47fe7cc9",
+    "seed": 685706646
+  },
+  {
+    "id": "flyer-ab690e7b-f393-4416-b81c-e6ad3da654a4",
+    "sourceProject": "ab690e7b-f393-4416-b81c-e6ad3da654a4",
+    "name": "Boom de Ofertas — Preto e Dourado",
+    "revision": 17,
+    "family": "boom",
+    "backgroundKind": "embers",
+    "sound": "explosion-retail",
+    "atmosphere": [
+      "smoke-plumes",
+      "embers",
+      "spark-burst"
+    ],
+    "transition": "smoke",
+    "music": "model-ab690e7b-f393-4416-b81c-e6ad3da654a4",
+    "seed": 2875788923
+  },
+  {
+    "id": "flyer-c11924b4-3438-4e49-bd0e-56f702d4843d",
+    "sourceProject": "c11924b4-3438-4e49-bd0e-56f702d4843d",
+    "name": "Boom de Ofertas — Vermelho e Amarelo",
+    "revision": 17,
+    "family": "boom",
+    "backgroundKind": "embers",
+    "sound": "explosion-retail",
+    "atmosphere": [
+      "smoke-plumes",
+      "embers",
+      "spark-burst"
+    ],
+    "transition": "smoke",
+    "music": "model-c11924b4-3438-4e49-bd0e-56f702d4843d",
+    "seed": 3239650484
+  },
+  {
+    "id": "flyer-6a1de6f4-4cd8-46d2-b5d7-0a19c1afbcc4",
+    "sourceProject": "6a1de6f4-4cd8-46d2-b5d7-0a19c1afbcc4",
+    "name": "Canaã — Especial Dia do Cliente — 15/09",
+    "revision": 17,
+    "family": "show",
+    "backgroundKind": "spotlight",
+    "sound": "theme-show",
+    "atmosphere": [
+      "spotlights",
+      "prism"
+    ],
+    "transition": "light",
+    "music": "model-6a1de6f4-4cd8-46d2-b5d7-0a19c1afbcc4",
+    "seed": 1780344564
+  },
+  {
+    "id": "flyer-4245171c-9027-4e7d-98b3-e3c4970f94f9",
+    "sourceProject": "4245171c-9027-4e7d-98b3-e3c4970f94f9",
+    "name": "Dia D — Azul",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-4245171c-9027-4e7d-98b3-e3c4970f94f9",
+    "seed": 1111824156
+  },
+  {
+    "id": "flyer-2162ee00-bb07-4c4e-ab73-03118354695f",
+    "sourceProject": "2162ee00-bb07-4c4e-ab73-03118354695f",
+    "name": "Dia D — Industrial",
+    "revision": 17,
+    "family": "industrial",
+    "backgroundKind": "industrial",
+    "sound": "theme-industrial",
+    "atmosphere": [
+      "embers",
+      "grid"
+    ],
+    "transition": "shutter",
+    "music": "model-2162ee00-bb07-4c4e-ab73-03118354695f",
+    "seed": 560131584
+  },
+  {
+    "id": "flyer-5de3aa49-dcc1-40ad-8ad2-85675463e966",
+    "sourceProject": "5de3aa49-dcc1-40ad-8ad2-85675463e966",
+    "name": "Dia D — Vermelho",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-5de3aa49-dcc1-40ad-8ad2-85675463e966",
+    "seed": 1575201353
+  },
+  {
+    "id": "flyer-99388014-34fe-4d48-831b-24d28f25abda",
+    "sourceProject": "99388014-34fe-4d48-831b-24d28f25abda",
+    "name": "Dia D de Ofertas — Azul",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-99388014-34fe-4d48-831b-24d28f25abda",
+    "seed": 2570616852
+  },
+  {
+    "id": "flyer-bf5ee0e4-82eb-4de4-a46b-cc2dd712803b",
+    "sourceProject": "bf5ee0e4-82eb-4de4-a46b-cc2dd712803b",
+    "name": "Dia D de Ofertas — Preto",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-bf5ee0e4-82eb-4de4-a46b-cc2dd712803b",
+    "seed": 3210666212
+  },
+  {
+    "id": "flyer-a307ebdd-c0b1-4a6c-9091-ee4005246c50",
+    "sourceProject": "a307ebdd-c0b1-4a6c-9091-ee4005246c50",
+    "name": "Dia D de Ofertas — Verde",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-a307ebdd-c0b1-4a6c-9091-ee4005246c50",
+    "seed": 2735205341
+  },
+  {
+    "id": "flyer-1f6219e1-f877-41f1-a294-7f40a8f8f477",
+    "sourceProject": "1f6219e1-f877-41f1-a294-7f40a8f8f477",
+    "name": "Dia D de Ofertas — Vermelho",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-1f6219e1-f877-41f1-a294-7f40a8f8f477",
+    "seed": 526522849
+  },
+  {
+    "id": "flyer-741b8910-18ba-479f-b4e2-e78f13cea583",
+    "sourceProject": "741b8910-18ba-479f-b4e2-e78f13cea583",
+    "name": "Dia D Economizar — Azul",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-741b8910-18ba-479f-b4e2-e78f13cea583",
+    "seed": 1947961616
+  },
+  {
+    "id": "flyer-2d098c27-eb79-4039-b132-cf0b723504b6",
+    "sourceProject": "2d098c27-eb79-4039-b132-cf0b723504b6",
+    "name": "Dia D Economizar — Preto",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-2d098c27-eb79-4039-b132-cf0b723504b6",
+    "seed": 755600423
+  },
+  {
+    "id": "flyer-500e740b-4dac-4b52-9f41-ea0ce53674f8",
+    "sourceProject": "500e740b-4dac-4b52-9f41-ea0ce53674f8",
+    "name": "Dia D Economizar — Vermelho",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-500e740b-4dac-4b52-9f41-ea0ce53674f8",
+    "seed": 1343124491
+  },
+  {
+    "id": "flyer-e08d3ae2-4357-4de2-a518-581e1b9ee1b9",
+    "sourceProject": "e08d3ae2-4357-4de2-a518-581e1b9ee1b9",
+    "name": "Dia das Crianças — Arco-íris",
+    "revision": 17,
+    "family": "children",
+    "backgroundKind": "celebration",
+    "sound": "theme-children",
+    "atmosphere": [
+      "ribbons",
+      "bokeh"
+    ],
+    "transition": "spin",
+    "music": "model-e08d3ae2-4357-4de2-a518-581e1b9ee1b9",
+    "seed": 3767352034
+  },
+  {
+    "id": "flyer-ae849f4d-db0f-49eb-851c-97150216e4bb",
+    "sourceProject": "ae849f4d-db0f-49eb-851c-97150216e4bb",
+    "name": "Dia de hortifruti",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-ae849f4d-db0f-49eb-851c-97150216e4bb",
+    "seed": 2927927117
+  },
+  {
+    "id": "flyer-df8be120-75ae-4bc7-b952-ba47e50f0b45",
+    "sourceProject": "df8be120-75ae-4bc7-b952-ba47e50f0b45",
+    "name": "Dia de Hortifruti — Madeira",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-df8be120-75ae-4bc7-b952-ba47e50f0b45",
+    "seed": 3750486304
+  },
+  {
+    "id": "flyer-e0719515-a234-4328-8551-91eaa34c527c",
+    "sourceProject": "e0719515-a234-4328-8551-91eaa34c527c",
+    "name": "Dia Mais Barato da Semana",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-e0719515-a234-4328-8551-91eaa34c527c",
+    "seed": 3765540117
+  },
+  {
+    "id": "flyer-2bf09a50-e066-4d05-aa85-278259d8752c",
+    "sourceProject": "2bf09a50-e066-4d05-aa85-278259d8752c",
+    "name": "FDS de Ofertas",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-2bf09a50-e066-4d05-aa85-278259d8752c",
+    "seed": 737188432
+  },
+  {
+    "id": "flyer-5dfbc32d-16a7-4f66-90fa-7256719cbe17",
+    "sourceProject": "5dfbc32d-16a7-4f66-90fa-7256719cbe17",
+    "name": "Fds do hortifruti",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-5dfbc32d-16a7-4f66-90fa-7256719cbe17",
+    "seed": 1576780589
+  },
+  {
+    "id": "flyer-f756b6a1-4725-4dbe-9d5a-ee0eb8af5462",
+    "sourceProject": "f756b6a1-4725-4dbe-9d5a-ee0eb8af5462",
+    "name": "Fecha Mês Outubro — Azul e Amarelo",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-f756b6a1-4725-4dbe-9d5a-ee0eb8af5462",
+    "seed": 4149655201
+  },
+  {
+    "id": "flyer-93dff870-741e-4a0c-8c37-4a22c87dddde",
+    "sourceProject": "93dff870-741e-4a0c-8c37-4a22c87dddde",
+    "name": "Fecha Mês Outubro — Azul e Prata",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-93dff870-741e-4a0c-8c37-4a22c87dddde",
+    "seed": 2480928880
+  },
+  {
+    "id": "flyer-231bf506-981f-4e7a-99d2-6cd2dfffc442",
+    "sourceProject": "231bf506-981f-4e7a-99d2-6cd2dfffc442",
+    "name": "Fecha Mês Outubro — Vermelho",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-231bf506-981f-4e7a-99d2-6cd2dfffc442",
+    "seed": 589034758
+  },
+  {
+    "id": "flyer-e3c01941-7973-4999-9886-082332bdd00b",
+    "sourceProject": "e3c01941-7973-4999-9886-082332bdd00b",
+    "name": "Fim de Semana da Família",
+    "revision": 17,
+    "family": "celebration",
+    "backgroundKind": "celebration",
+    "sound": "theme-celebration",
+    "atmosphere": [
+      "ribbons",
+      "spark-burst"
+    ],
+    "transition": "diagonal",
+    "music": "model-e3c01941-7973-4999-9886-082332bdd00b",
+    "seed": 3821017409
+  },
+  {
+    "id": "flyer-cf634706-b20f-4f4b-ab9b-dc4c9334368f",
+    "sourceProject": "cf634706-b20f-4f4b-ab9b-dc4c9334368f",
+    "name": "Fim de Semana do Precinho",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-cf634706-b20f-4f4b-ab9b-dc4c9334368f",
+    "seed": 3479389958
+  },
+  {
+    "id": "flyer-87d633a3-da24-4245-90e7-7000cf26f988",
+    "sourceProject": "87d633a3-da24-4245-90e7-7000cf26f988",
+    "name": "Fim de Semana Imbatível",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-87d633a3-da24-4245-90e7-7000cf26f988",
+    "seed": 2278962083
+  },
+  {
+    "id": "flyer-fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "sourceProject": "fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "name": "Fim de Semana Maluco",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "seed": 4237670692
+  },
+  {
+    "id": "flyer-f2fcc88f-1d67-486a-b4c8-d0561a47c505",
+    "sourceProject": "f2fcc88f-1d67-486a-b4c8-d0561a47c505",
+    "name": "Hora da Oferta — Azul",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-f2fcc88f-1d67-486a-b4c8-d0561a47c505",
+    "seed": 4076652687
+  },
+  {
+    "id": "flyer-4fa00e96-746d-41bf-ac47-b2485be621f5",
+    "sourceProject": "4fa00e96-746d-41bf-ac47-b2485be621f5",
+    "name": "Hora da Oferta — Vermelho",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-4fa00e96-746d-41bf-ac47-b2485be621f5",
+    "seed": 1335889558
+  },
+  {
+    "id": "flyer-6d2a76ae-d271-4957-9d39-baf0532c016d",
+    "sourceProject": "6d2a76ae-d271-4957-9d39-baf0532c016d",
+    "name": "Independênica de preços baixos",
+    "revision": 17,
+    "family": "celebration",
+    "backgroundKind": "celebration",
+    "sound": "theme-celebration",
+    "atmosphere": [
+      "ribbons",
+      "spark-burst"
+    ],
+    "transition": "diagonal",
+    "music": "model-6d2a76ae-d271-4957-9d39-baf0532c016d",
+    "seed": 1831499438
+  },
+  {
+    "id": "flyer-51f9a13e-c93a-49ba-b484-020c7f1646b4",
+    "sourceProject": "51f9a13e-c93a-49ba-b484-020c7f1646b4",
+    "name": "Mega Liquidação de Outubro",
+    "revision": 17,
+    "family": "clearance",
+    "backgroundKind": "embers",
+    "sound": "theme-clearance",
+    "atmosphere": [
+      "fire-jets",
+      "embers",
+      "spark-burst"
+    ],
+    "transition": "smoke",
+    "music": "model-51f9a13e-c93a-49ba-b484-020c7f1646b4",
+    "seed": 1375314238
+  },
+  {
+    "id": "flyer-b101ac2c-1e71-45fa-9d7f-657f001fcd00",
+    "sourceProject": "b101ac2c-1e71-45fa-9d7f-657f001fcd00",
+    "name": "Mega Liquidação de Outubro — Dourado",
+    "revision": 17,
+    "family": "clearance",
+    "backgroundKind": "embers",
+    "sound": "theme-clearance",
+    "atmosphere": [
+      "fire-jets",
+      "embers",
+      "spark-burst"
+    ],
+    "transition": "smoke",
+    "music": "model-b101ac2c-1e71-45fa-9d7f-657f001fcd00",
+    "seed": 2969676844
+  },
+  {
+    "id": "flyer-565b05fd-394a-4b68-b794-4cedbfd8bad7",
+    "sourceProject": "565b05fd-394a-4b68-b794-4cedbfd8bad7",
+    "name": "Mega Outubro — Preto e Laranja",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-565b05fd-394a-4b68-b794-4cedbfd8bad7",
+    "seed": 1448805885
+  },
+  {
+    "id": "flyer-448986b0-ac6a-4dc9-8af5-a756ea3a3e5d",
+    "sourceProject": "448986b0-ac6a-4dc9-8af5-a756ea3a3e5d",
+    "name": "Mega Outubro — Vermelho e Amarelo",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-448986b0-ac6a-4dc9-8af5-a756ea3a3e5d",
+    "seed": 1149863600
+  },
+  {
+    "id": "flyer-2eabb51f-7918-497e-9aa5-40a05a15c102",
+    "sourceProject": "2eabb51f-7918-497e-9aa5-40a05a15c102",
+    "name": "Mês do consumidor 3d",
+    "revision": 17,
+    "family": "show",
+    "backgroundKind": "spotlight",
+    "sound": "theme-show",
+    "atmosphere": [
+      "spotlights",
+      "prism"
+    ],
+    "transition": "light",
+    "music": "model-2eabb51f-7918-497e-9aa5-40a05a15c102",
+    "seed": 783004959
+  },
+  {
+    "id": "flyer-1b9dbdcd-a872-4677-a8f0-f589b6171258",
+    "sourceProject": "1b9dbdcd-a872-4677-a8f0-f589b6171258",
+    "name": "Oferta da Feira — Verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-1b9dbdcd-a872-4677-a8f0-f589b6171258",
+    "seed": 463322573
+  },
+  {
+    "id": "flyer-8ce62416-c892-446f-b627-3f0996d1826e",
+    "sourceProject": "8ce62416-c892-446f-b627-3f0996d1826e",
+    "name": "Oferta da Feira — Vermelho",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-8ce62416-c892-446f-b627-3f0996d1826e",
+    "seed": 2363892758
+  },
+  {
+    "id": "flyer-767d3b5e-902f-4429-a1dd-4642a953884d",
+    "sourceProject": "767d3b5e-902f-4429-a1dd-4642a953884d",
+    "name": "Oferta da Semana — Coração",
+    "revision": 17,
+    "family": "rose",
+    "backgroundKind": "rose",
+    "sound": "theme-rose",
+    "atmosphere": [
+      "bokeh",
+      "ribbons"
+    ],
+    "transition": "iris",
+    "music": "model-767d3b5e-902f-4429-a1dd-4642a953884d",
+    "seed": 1987918686
+  },
+  {
+    "id": "flyer-ba3907a1-1319-4e2b-80e0-90f20a3353fc",
+    "sourceProject": "ba3907a1-1319-4e2b-80e0-90f20a3353fc",
+    "name": "Oferta de Hoje",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-ba3907a1-1319-4e2b-80e0-90f20a3353fc",
+    "seed": 3124299681
+  },
+  {
+    "id": "flyer-69c947f6-a66d-41b4-91e8-65c158f3b3fa",
+    "sourceProject": "69c947f6-a66d-41b4-91e8-65c158f3b3fa",
+    "name": "Oferta do Dia — Calendário Preto",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-69c947f6-a66d-41b4-91e8-65c158f3b3fa",
+    "seed": 1774798838
+  },
+  {
+    "id": "flyer-f43160c9-df3c-43cc-846a-3b14e199530b",
+    "sourceProject": "f43160c9-df3c-43cc-846a-3b14e199530b",
+    "name": "Oferta do Dia — Calendário Vermelho",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-f43160c9-df3c-43cc-846a-3b14e199530b",
+    "seed": 4096876745
+  },
+  {
+    "id": "flyer-09f97ca1-7a0b-448d-bdd8-2c3be407d753",
+    "sourceProject": "09f97ca1-7a0b-448d-bdd8-2c3be407d753",
+    "name": "Oferta do Dia — Luminoso",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-09f97ca1-7a0b-448d-bdd8-2c3be407d753",
+    "seed": 167345313
+  },
+  {
+    "id": "flyer-5d3d74a4-eac4-448a-a528-e1af2014de72",
+    "sourceProject": "5d3d74a4-eac4-448a-a528-e1af2014de72",
+    "name": "Oferta Imbatível — Preto",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-5d3d74a4-eac4-448a-a528-e1af2014de72",
+    "seed": 1564308644
+  },
+  {
+    "id": "flyer-7c170f87-12c7-4558-a797-e5fe05665629",
+    "sourceProject": "7c170f87-12c7-4558-a797-e5fe05665629",
+    "name": "Oferta Imbatível — Vermelho",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-7c170f87-12c7-4558-a797-e5fe05665629",
+    "seed": 2081886087
+  },
+  {
+    "id": "flyer-81092a72-c807-46a5-8996-a0eb8c229446",
+    "sourceProject": "81092a72-c807-46a5-8996-a0eb8c229446",
+    "name": "Oferta Imperdível",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-81092a72-c807-46a5-8996-a0eb8c229446",
+    "seed": 2164861554
+  },
+  {
+    "id": "flyer-590acdf5-85b0-4d7d-914a-4e8bfceee835",
+    "sourceProject": "590acdf5-85b0-4d7d-914a-4e8bfceee835",
+    "name": "Oferta Maluca",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-590acdf5-85b0-4d7d-914a-4e8bfceee835",
+    "seed": 1493880309
+  },
+  {
+    "id": "relampago",
+    "sourceProject": "7ce038d3-8c64-4884-a8c0-c4d976df5ac0",
+    "name": "Oferta Relâmpago — Azul",
+    "revision": 17,
+    "family": "lightning",
+    "backgroundKind": "electric",
+    "sound": "theme-lightning",
+    "atmosphere": [
+      "lightning",
+      "laser-sweep"
+    ],
+    "transition": "light",
+    "music": "model-7ce038d3-8c64-4884-a8c0-c4d976df5ac0",
+    "seed": 2095069395
+  },
+  {
+    "id": "flyer-dcfac1f8-d020-4504-a3b8-94857976a0e9",
+    "sourceProject": "dcfac1f8-d020-4504-a3b8-94857976a0e9",
+    "name": "Oferta Relâmpago — Clássico",
+    "revision": 17,
+    "family": "lightning",
+    "backgroundKind": "electric",
+    "sound": "theme-lightning",
+    "atmosphere": [
+      "lightning",
+      "laser-sweep"
+    ],
+    "transition": "light",
+    "music": "model-dcfac1f8-d020-4504-a3b8-94857976a0e9",
+    "seed": 3707421176
+  },
+  {
+    "id": "flyer-e2c78a0d-09b4-488d-beeb-dc9e3f4ce3e2",
+    "sourceProject": "e2c78a0d-09b4-488d-beeb-dc9e3f4ce3e2",
+    "name": "Oferta Relâmpago — Cromado",
+    "revision": 17,
+    "family": "lightning",
+    "backgroundKind": "electric",
+    "sound": "theme-lightning",
+    "atmosphere": [
+      "lightning",
+      "laser-sweep"
+    ],
+    "transition": "light",
+    "music": "model-e2c78a0d-09b4-488d-beeb-dc9e3f4ce3e2",
+    "seed": 3804727821
+  },
+  {
+    "id": "flyer-330d181a-6b68-436b-9362-b0f0543dc344",
+    "sourceProject": "330d181a-6b68-436b-9362-b0f0543dc344",
+    "name": "Oferta Relâmpago — Elétrico",
+    "revision": 17,
+    "family": "lightning",
+    "backgroundKind": "electric",
+    "sound": "theme-lightning",
+    "atmosphere": [
+      "lightning",
+      "laser-sweep"
+    ],
+    "transition": "light",
+    "music": "model-330d181a-6b68-436b-9362-b0f0543dc344",
+    "seed": 856496154
+  },
+  {
+    "id": "flyer-3556fb20-ced6-4882-a7f3-965b89be114a",
+    "sourceProject": "3556fb20-ced6-4882-a7f3-965b89be114a",
+    "name": "Oferta Relâmpago — Estrelas",
+    "revision": 17,
+    "family": "lightning",
+    "backgroundKind": "electric",
+    "sound": "theme-lightning",
+    "atmosphere": [
+      "lightning",
+      "laser-sweep"
+    ],
+    "transition": "light",
+    "music": "model-3556fb20-ced6-4882-a7f3-965b89be114a",
+    "seed": 894892832
+  },
+  {
+    "id": "flyer-82d00ae9-c8a6-476f-936a-89a13cca86bc",
+    "sourceProject": "82d00ae9-c8a6-476f-936a-89a13cca86bc",
+    "name": "Oferta Relâmpago — Preto",
+    "revision": 17,
+    "family": "lightning",
+    "backgroundKind": "electric",
+    "sound": "theme-lightning",
+    "atmosphere": [
+      "lightning",
+      "laser-sweep"
+    ],
+    "transition": "light",
+    "music": "model-82d00ae9-c8a6-476f-936a-89a13cca86bc",
+    "seed": 2194672361
+  },
+  {
+    "id": "flyer-31750d3a-1f50-42b3-95dd-72adc7f81e20",
+    "sourceProject": "31750d3a-1f50-42b3-95dd-72adc7f81e20",
+    "name": "Oferta Verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-31750d3a-1f50-42b3-95dd-72adc7f81e20",
+    "seed": 829754682
+  },
+  {
+    "id": "flyer-c69acb2e-1446-40a5-913e-82cfd822cffc",
+    "sourceProject": "c69acb2e-1446-40a5-913e-82cfd822cffc",
+    "name": "Ofertas da semana",
+    "revision": 17,
+    "family": "bakery",
+    "backgroundKind": "harvest",
+    "sound": "theme-bakery",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-c69acb2e-1446-40a5-913e-82cfd822cffc",
+    "seed": 3332033326
+  },
+  {
+    "id": "flyer-c8077f8c-9116-48d4-a0a9-c25e1a8e2e73",
+    "sourceProject": "c8077f8c-9116-48d4-a0a9-c25e1a8e2e73",
+    "name": "Ofertas da Semana — Neon",
+    "revision": 17,
+    "family": "neon",
+    "backgroundKind": "neon",
+    "sound": "theme-neon",
+    "atmosphere": [
+      "grid",
+      "laser-sweep"
+    ],
+    "transition": "rgb",
+    "music": "model-c8077f8c-9116-48d4-a0a9-c25e1a8e2e73",
+    "seed": 3355934604
+  },
+  {
+    "id": "flyer-e6a9cff8-e500-47a6-a931-c7f321a5434d",
+    "sourceProject": "e6a9cff8-e500-47a6-a931-c7f321a5434d",
+    "name": "Ofertas de Fim de Ano — Vermelho",
+    "revision": 17,
+    "family": "celebration",
+    "backgroundKind": "celebration",
+    "sound": "theme-celebration",
+    "atmosphere": [
+      "ribbons",
+      "spark-burst"
+    ],
+    "transition": "diagonal",
+    "music": "model-e6a9cff8-e500-47a6-a931-c7f321a5434d",
+    "seed": 3869888504
+  },
+  {
+    "id": "flyer-283e90e7-27ba-411d-9268-e135a519a308",
+    "sourceProject": "283e90e7-27ba-411d-9268-e135a519a308",
+    "name": "Ofertas de Halloween",
+    "revision": 17,
+    "family": "spooky",
+    "backgroundKind": "spooky",
+    "sound": "theme-spooky",
+    "atmosphere": [
+      "smoke-plumes",
+      "prism"
+    ],
+    "transition": "smoke",
+    "music": "model-283e90e7-27ba-411d-9268-e135a519a308",
+    "seed": 675188967
+  },
+  {
+    "id": "flyer-e5dc2833-ef7e-4958-9639-fbd0fe17688b",
+    "sourceProject": "e5dc2833-ef7e-4958-9639-fbd0fe17688b",
+    "name": "Ofertas de Março",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-e5dc2833-ef7e-4958-9639-fbd0fe17688b",
+    "seed": 3856410675
+  },
+  {
+    "id": "flyer-33c1dd75-f03d-40aa-adb6-ff74e75b8ebd",
+    "sourceProject": "33c1dd75-f03d-40aa-adb6-ff74e75b8ebd",
+    "name": "Ofertas de Outubro",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-33c1dd75-f03d-40aa-adb6-ff74e75b8ebd",
+    "seed": 868343157
+  },
+  {
+    "id": "flyer-718f7d8b-019d-4854-b2b3-3f6adaec02ac",
+    "sourceProject": "718f7d8b-019d-4854-b2b3-3f6adaec02ac",
+    "name": "Ofertas Outubro Rosa",
+    "revision": 17,
+    "family": "rose",
+    "backgroundKind": "rose",
+    "sound": "theme-rose",
+    "atmosphere": [
+      "bokeh",
+      "ribbons"
+    ],
+    "transition": "iris",
+    "music": "model-718f7d8b-019d-4854-b2b3-3f6adaec02ac",
+    "seed": 1905229195
+  },
+  {
+    "id": "flyer-a6940573-cacc-4c0a-8dcf-c78214e7b661",
+    "sourceProject": "a6940573-cacc-4c0a-8dcf-c78214e7b661",
+    "name": "Outubro Chegou com Muitas Ofertas",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-a6940573-cacc-4c0a-8dcf-c78214e7b661",
+    "seed": 2794718579
+  },
+  {
+    "id": "flyer-4e4c6061-260b-4f90-b494-d1412b4d8f2a",
+    "sourceProject": "4e4c6061-260b-4f90-b494-d1412b4d8f2a",
+    "name": "Outubro de Carrinho Cheio — Preto",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-4e4c6061-260b-4f90-b494-d1412b4d8f2a",
+    "seed": 1313628257
+  },
+  {
+    "id": "flyer-11264706-ea22-4ae1-bd52-fcf11df89a03",
+    "sourceProject": "11264706-ea22-4ae1-bd52-fcf11df89a03",
+    "name": "Outubro de Carrinho Cheio — Vermelho",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-11264706-ea22-4ae1-bd52-fcf11df89a03",
+    "seed": 287721222
+  },
+  {
+    "id": "flyer-3a257c5c-955e-473d-aef6-ad62209d0f98",
+    "sourceProject": "3a257c5c-955e-473d-aef6-ad62209d0f98",
+    "name": "Outubro de Ofertas — Azul",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-3a257c5c-955e-473d-aef6-ad62209d0f98",
+    "seed": 975535196
+  },
+  {
+    "id": "flyer-77ec8426-e304-41d7-8151-fe4d16b87eba",
+    "sourceProject": "77ec8426-e304-41d7-8151-fe4d16b87eba",
+    "name": "Outubro Fecha Mês",
+    "revision": 17,
+    "family": "clock",
+    "backgroundKind": "clock",
+    "sound": "theme-clock",
+    "atmosphere": [
+      "orbit",
+      "speed-lines"
+    ],
+    "transition": "iris",
+    "music": "model-77ec8426-e304-41d7-8151-fe4d16b87eba",
+    "seed": 2011989030
+  },
+  {
+    "id": "flyer-16abbc12-b89b-40ef-a195-3f0ce8ef5f90",
+    "sourceProject": "16abbc12-b89b-40ef-a195-3f0ce8ef5f90",
+    "name": "Outubro Imbatível",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-16abbc12-b89b-40ef-a195-3f0ce8ef5f90",
+    "seed": 380353554
+  },
+  {
+    "id": "flyer-eda6e0c8-eb39-4361-8da0-763329a2f71b",
+    "sourceProject": "eda6e0c8-eb39-4361-8da0-763329a2f71b",
+    "name": "Outubro Queima de Estoque",
+    "revision": 17,
+    "family": "clearance",
+    "backgroundKind": "embers",
+    "sound": "theme-clearance",
+    "atmosphere": [
+      "fire-jets",
+      "embers",
+      "spark-burst"
+    ],
+    "transition": "smoke",
+    "music": "model-eda6e0c8-eb39-4361-8da0-763329a2f71b",
+    "seed": 3987136712
+  },
+  {
+    "id": "flyer-caffd4fc-bb12-4bb0-aef9-75fccbd67f28",
+    "sourceProject": "caffd4fc-bb12-4bb0-aef9-75fccbd67f28",
+    "name": "Outubro Rosa",
+    "revision": 17,
+    "family": "rose",
+    "backgroundKind": "rose",
+    "sound": "theme-rose",
+    "atmosphere": [
+      "bokeh",
+      "ribbons"
+    ],
+    "transition": "iris",
+    "music": "model-caffd4fc-bb12-4bb0-aef9-75fccbd67f28",
+    "seed": 3405763836
+  },
+  {
+    "id": "flyer-1c2cef7b-5eef-44e0-a613-842245949c08",
+    "sourceProject": "1c2cef7b-5eef-44e0-a613-842245949c08",
+    "name": "Preço Baixo Aqui Tem! — Azul",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-1c2cef7b-5eef-44e0-a613-842245949c08",
+    "seed": 472706939
+  },
+  {
+    "id": "flyer-b117569e-52dc-4279-b495-e55fc263c3aa",
+    "sourceProject": "b117569e-52dc-4279-b495-e55fc263c3aa",
+    "name": "Preço Baixo de Verdade — Azul e Dourado",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-b117569e-52dc-4279-b495-e55fc263c3aa",
+    "seed": 2971096734
+  },
+  {
+    "id": "flyer-187114ca-5538-4792-bce8-74b7a9405550",
+    "sourceProject": "187114ca-5538-4792-bce8-74b7a9405550",
+    "name": "Preço Baixo É Aqui! — Vermelho",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-187114ca-5538-4792-bce8-74b7a9405550",
+    "seed": 410064074
+  },
+  {
+    "id": "flyer-d8a13735-9a14-4c6b-845c-34593fd8d7f2",
+    "sourceProject": "d8a13735-9a14-4c6b-845c-34593fd8d7f2",
+    "name": "Promoção das Crianças",
+    "revision": 17,
+    "family": "children",
+    "backgroundKind": "celebration",
+    "sound": "theme-children",
+    "atmosphere": [
+      "ribbons",
+      "bokeh"
+    ],
+    "transition": "spin",
+    "music": "model-d8a13735-9a14-4c6b-845c-34593fd8d7f2",
+    "seed": 3634444085
+  },
+  {
+    "id": "flyer-bfad873e-26f2-4abb-a219-6be73ef7bd4b",
+    "sourceProject": "bfad873e-26f2-4abb-a219-6be73ef7bd4b",
+    "name": "Quarta e quinta verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-bfad873e-26f2-4abb-a219-6be73ef7bd4b",
+    "seed": 3215820606
+  },
+  {
+    "id": "flyer-1d98aad4-2379-4f8d-bc7d-0e89f03693e2",
+    "sourceProject": "1d98aad4-2379-4f8d-bc7d-0e89f03693e2",
+    "name": "Quarta mais verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-1d98aad4-2379-4f8d-bc7d-0e89f03693e2",
+    "seed": 496544468
+  },
+  {
+    "id": "flyer-d214f77a-3d3a-4f42-8cac-43f6234265f2",
+    "sourceProject": "d214f77a-3d3a-4f42-8cac-43f6234265f2",
+    "name": "Quinta da carne",
+    "revision": 17,
+    "family": "grill",
+    "backgroundKind": "embers",
+    "sound": "theme-grill",
+    "atmosphere": [
+      "fire",
+      "embers",
+      "smoke-plumes"
+    ],
+    "transition": "smoke",
+    "music": "model-d214f77a-3d3a-4f42-8cac-43f6234265f2",
+    "seed": 3524589434
+  },
+  {
+    "id": "flyer-88947f96-face-4e89-b6a1-3f3f2044d97b",
+    "sourceProject": "88947f96-face-4e89-b6a1-3f3f2044d97b",
+    "name": "Quinta da Carne",
+    "revision": 17,
+    "family": "grill",
+    "backgroundKind": "embers",
+    "sound": "theme-grill",
+    "atmosphere": [
+      "fire",
+      "embers",
+      "smoke-plumes"
+    ],
+    "transition": "smoke",
+    "music": "model-88947f96-face-4e89-b6a1-3f3f2044d97b",
+    "seed": 2291433366
+  },
+  {
+    "id": "flyer-3d1e6929-a287-4a65-9874-eb2204fa46bc",
+    "sourceProject": "3d1e6929-a287-4a65-9874-eb2204fa46bc",
+    "name": "Quinta da Carne — Dourada",
+    "revision": 17,
+    "family": "grill",
+    "backgroundKind": "embers",
+    "sound": "theme-grill",
+    "atmosphere": [
+      "fire",
+      "embers",
+      "smoke-plumes"
+    ],
+    "transition": "smoke",
+    "music": "model-3d1e6929-a287-4a65-9874-eb2204fa46bc",
+    "seed": 1025403177
+  },
+  {
+    "id": "flyer-1555a997-254e-40a1-85b0-064f2247315e",
+    "sourceProject": "1555a997-254e-40a1-85b0-064f2247315e",
+    "name": "Quinta de Ofertas",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-1555a997-254e-40a1-85b0-064f2247315e",
+    "seed": 357935511
+  },
+  {
+    "id": "flyer-6e394169-6597-4d8a-afcc-191412fc2430",
+    "sourceProject": "6e394169-6597-4d8a-afcc-191412fc2430",
+    "name": "Quinta e Sexta Imbatível",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-6e394169-6597-4d8a-afcc-191412fc2430",
+    "seed": 1849246057
+  },
+  {
+    "id": "flyer-9bb5f0d1-bdc7-4560-a4fd-511b32610b0a",
+    "sourceProject": "9bb5f0d1-bdc7-4560-a4fd-511b32610b0a",
+    "name": "Quinta e Sexta Imbatível — Azul",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-9bb5f0d1-bdc7-4560-a4fd-511b32610b0a",
+    "seed": 2612392145
+  },
+  {
+    "id": "flyer-3f7ab336-b854-4f50-9c06-893e14247418",
+    "sourceProject": "3f7ab336-b854-4f50-9c06-893e14247418",
+    "name": "Quinta Maluca",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-3f7ab336-b854-4f50-9c06-893e14247418",
+    "seed": 1065005878
+  },
+  {
+    "id": "flyer-4f092cdb-138c-4cf1-b2f7-4aacc018a890",
+    "sourceProject": "4f092cdb-138c-4cf1-b2f7-4aacc018a890",
+    "name": "Sábado de Ofertas — Dourado e Vinho — Dinâmico",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-4f092cdb-138c-4cf1-b2f7-4aacc018a890",
+    "seed": 1326001371
+  },
+  {
+    "id": "saldao",
+    "sourceProject": "6cab0846-804f-45f9-90cc-b385343fa3a6",
+    "name": "Saldão de Ofertas — Neon",
+    "revision": 17,
+    "family": "clearance",
+    "backgroundKind": "embers",
+    "sound": "theme-clearance",
+    "atmosphere": [
+      "fire-jets",
+      "embers",
+      "spark-burst"
+    ],
+    "transition": "smoke",
+    "music": "model-6cab0846-804f-45f9-90cc-b385343fa3a6",
+    "seed": 1823148102
+  },
+  {
+    "id": "flyer-1b226234-5206-491c-840b-59f1ad401af6",
+    "sourceProject": "1b226234-5206-491c-840b-59f1ad401af6",
+    "name": "Segunda suína",
+    "revision": 17,
+    "family": "grill",
+    "backgroundKind": "embers",
+    "sound": "theme-grill",
+    "atmosphere": [
+      "fire",
+      "embers",
+      "smoke-plumes"
+    ],
+    "transition": "smoke",
+    "music": "model-1b226234-5206-491c-840b-59f1ad401af6",
+    "seed": 455238196
+  },
+  {
+    "id": "flyer-fca4e039-f585-4bb6-9022-370d490e163f",
+    "sourceProject": "fca4e039-f585-4bb6-9022-370d490e163f",
+    "name": "Semana das Crianças",
+    "revision": 17,
+    "family": "children",
+    "backgroundKind": "celebration",
+    "sound": "theme-children",
+    "atmosphere": [
+      "ribbons",
+      "bokeh"
+    ],
+    "transition": "spin",
+    "music": "model-fca4e039-f585-4bb6-9022-370d490e163f",
+    "seed": 4238663737
+  },
+  {
+    "id": "flyer-ea0d0789-3081-409c-b830-10739806b065",
+    "sourceProject": "ea0d0789-3081-409c-b830-10739806b065",
+    "name": "Semana do Cliente — Atacado Barlow",
+    "revision": 17,
+    "family": "show",
+    "backgroundKind": "spotlight",
+    "sound": "theme-show",
+    "atmosphere": [
+      "spotlights",
+      "prism"
+    ],
+    "transition": "light",
+    "music": "model-ea0d0789-3081-409c-b830-10739806b065",
+    "seed": 3926722441
+  },
+  {
+    "id": "flyer-a715443f-d6b4-45ed-a28f-18b1e8517c42",
+    "sourceProject": "a715443f-d6b4-45ed-a28f-18b1e8517c42",
+    "name": "Sexta do hortifruti",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-a715443f-d6b4-45ed-a28f-18b1e8517c42",
+    "seed": 2803188799
+  },
+  {
+    "id": "flyer-990c6cb5-a6f6-428a-b044-8721319ab6e4",
+    "sourceProject": "990c6cb5-a6f6-428a-b044-8721319ab6e4",
+    "name": "Sextooou",
+    "revision": 17,
+    "family": "celebration",
+    "backgroundKind": "celebration",
+    "sound": "theme-celebration",
+    "atmosphere": [
+      "ribbons",
+      "spark-burst"
+    ],
+    "transition": "diagonal",
+    "music": "model-990c6cb5-a6f6-428a-b044-8721319ab6e4",
+    "seed": 2567728309
+  },
+  {
+    "id": "flyer-1ff4d7c4-f3b2-47dc-a0ff-c2909bc320b7",
+    "sourceProject": "1ff4d7c4-f3b2-47dc-a0ff-c2909bc320b7",
+    "name": "Show do Consumidor — Azul e Dourado",
+    "revision": 17,
+    "family": "show",
+    "backgroundKind": "spotlight",
+    "sound": "theme-show",
+    "atmosphere": [
+      "spotlights",
+      "prism"
+    ],
+    "transition": "light",
+    "music": "model-1ff4d7c4-f3b2-47dc-a0ff-c2909bc320b7",
+    "seed": 536139716
+  },
+  {
+    "id": "flyer-8ed3deab-f003-49ba-8cf3-2df11c8202e0",
+    "sourceProject": "8ed3deab-f003-49ba-8cf3-2df11c8202e0",
+    "name": "Super Dia D — Azul",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-8ed3deab-f003-49ba-8cf3-2df11c8202e0",
+    "seed": 2396249771
+  },
+  {
+    "id": "flyer-011ee6b6-acac-4d01-9950-35abe62ac066",
+    "sourceProject": "011ee6b6-acac-4d01-9950-35abe62ac066",
+    "name": "Super Dia D — Vermelho",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-011ee6b6-acac-4d01-9950-35abe62ac066",
+    "seed": 18802358
+  },
+  {
+    "id": "flyer-b8a497c1-b11a-431a-95a9-d97cb985980d",
+    "sourceProject": "b8a497c1-b11a-431a-95a9-d97cb985980d",
+    "name": "Super Oferta — Etiqueta",
+    "revision": 17,
+    "family": "impact",
+    "backgroundKind": "electric",
+    "sound": "theme-impact",
+    "atmosphere": [
+      "shockwave",
+      "speed-lines"
+    ],
+    "transition": "snap-zoom",
+    "music": "model-b8a497c1-b11a-431a-95a9-d97cb985980d",
+    "seed": 3097794497
+  },
+  {
+    "id": "flyer-2db9ae75-936e-4f95-815c-636a3c5bb0c4",
+    "sourceProject": "2db9ae75-936e-4f95-815c-636a3c5bb0c4",
+    "name": "Terça e quarta mais verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-2db9ae75-936e-4f95-815c-636a3c5bb0c4",
+    "seed": 767143541
+  },
+  {
+    "id": "flyer-66aaabb8-33ef-43f3-a3f4-f8cb406f8862",
+    "sourceProject": "66aaabb8-33ef-43f3-a3f4-f8cb406f8862",
+    "name": "Terça e quarta mais verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-66aaabb8-33ef-43f3-a3f4-f8cb406f8862",
+    "seed": 1722461112
+  },
+  {
+    "id": "flyer-4b8b98f0-9a34-46e3-ab41-ddcc6135c79d",
+    "sourceProject": "4b8b98f0-9a34-46e3-ab41-ddcc6135c79d",
+    "name": "Terça e quarta verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-4b8b98f0-9a34-46e3-ab41-ddcc6135c79d",
+    "seed": 1267439856
+  },
+  {
+    "id": "flyer-7506f335-2bf6-4650-8206-b283585a5a16",
+    "sourceProject": "7506f335-2bf6-4650-8206-b283585a5a16",
+    "name": "Terça e quarta verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-7506f335-2bf6-4650-8206-b283585a5a16",
+    "seed": 1963389749
+  },
+  {
+    "id": "flyer-ab7f7789-7298-4b34-b4c7-6d8f583d870a",
+    "sourceProject": "ab7f7789-7298-4b34-b4c7-6d8f583d870a",
+    "name": "Terça e quarta verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-ab7f7789-7298-4b34-b4c7-6d8f583d870a",
+    "seed": 2877257609
+  },
+  {
+    "id": "flyer-60114ab3-bb51-4e81-b164-9afa2ecd3437",
+    "sourceProject": "60114ab3-bb51-4e81-b164-9afa2ecd3437",
+    "name": "Terça verde",
+    "revision": 17,
+    "family": "harvest",
+    "backgroundKind": "harvest",
+    "sound": "theme-harvest",
+    "atmosphere": [
+      "dust",
+      "bokeh"
+    ],
+    "transition": "whip-up",
+    "music": "model-60114ab3-bb51-4e81-b164-9afa2ecd3437",
+    "seed": 1611745971
+  },
+  {
+    "id": "flyer-a4d011ae-770a-4098-b7c6-c63e82c175e7",
+    "sourceProject": "a4d011ae-770a-4098-b7c6-c63e82c175e7",
+    "name": "Todo Dia Tem Oferta! — Neon",
+    "revision": 17,
+    "family": "neon",
+    "backgroundKind": "neon",
+    "sound": "theme-neon",
+    "atmosphere": [
+      "grid",
+      "laser-sweep"
+    ],
+    "transition": "rgb",
+    "music": "model-a4d011ae-770a-4098-b7c6-c63e82c175e7",
+    "seed": 2765099438
+  },
+  {
+    "id": "flyer-9db3b4c8-1455-490f-bcff-13316fd9d028",
+    "sourceProject": "9db3b4c8-1455-490f-bcff-13316fd9d028",
+    "name": "Tudo Mais Barato",
+    "revision": 17,
+    "family": "savings",
+    "backgroundKind": "spotlight",
+    "sound": "theme-savings",
+    "atmosphere": [
+      "bokeh",
+      "orbit"
+    ],
+    "transition": "slide",
+    "music": "model-9db3b4c8-1455-490f-bcff-13316fd9d028",
+    "seed": 2645800136
+  }
+]

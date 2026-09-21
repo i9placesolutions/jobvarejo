@@ -1,3 +1,4 @@
+import {CAMPAIGN_SOUNDS} from './campaign-direction'
 import generatedFlyers from './generated-flyer-recipes.json'
 // Biblioteca própria. Nomes do CapCut ficam apenas na documentação de referência.
 export const PRODUCT_ENTRANCES = [
@@ -36,6 +37,8 @@ export const ATMOSPHERE_EFFECTS = [
   {id:'orbit',name:'Órbitas luminosas'}, {id:'grid',name:'Túnel geométrico'},
 ] as const
 export const SOUND_EFFECTS = [
+  ...CAMPAIGN_SOUNDS,
+  {id:'explosion-retail',name:'Explosão de varejo',seconds:1.45},
   {id:'air-swipe',name:'Passagem de ar',seconds:.42}, {id:'whip',name:'Chicote',seconds:.24},
   {id:'suction',name:'Sucção',seconds:.55}, {id:'riser',name:'Crescente',seconds:.8},
   {id:'bass-hit',name:'Impacto grave',seconds:.7}, {id:'metal-hit',name:'Impacto metálico',seconds:.7},

@@ -112,6 +112,143 @@
       "sha256": "d208b41bab3b1fe1a9bb7dabd870db541fa2106a9177a3eb8d6c012f77229585",
       "origin": "original-procedural-synthesis",
       "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "origin": "original-procedural-synthesis",
+      "generator": "workers/video-studio/make_boom_audio.py",
+      "seconds": 1.45,
+      "sha256": "0b94c053566c7fb6df816427f20615f89c774537829f7af1007288bb8af83a2a",
+      "id": "explosion-retail",
+      "path": "sfx/explosion-retail.wav",
+      "source": "workers/video-studio/make_boom_audio.py"
+    },
+    {
+      "id": "theme-bakery",
+      "path": "sfx/theme-bakery.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "af003e453e01747ed2925f5f64cf5ec7739b61d7fdb54559babb39e9309026a5"
+    },
+    {
+      "id": "theme-alarm",
+      "path": "sfx/theme-alarm.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "4ba871db21dcb198ad6d6e0c7662f38d3f3dba13d0429ca8fcd701b6ca00e7d0"
+    },
+    {
+      "id": "theme-lightning",
+      "path": "sfx/theme-lightning.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "29ee56f8b7d0affef48c3fd7d9ad9e6f4e7d7a573fd8a2d400dce707d63c60a5"
+    },
+    {
+      "id": "theme-grill",
+      "path": "sfx/theme-grill.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "cc07c4b7d4ad5539adcdeeb7055c2f3ae53b41fefdf54364fee1a8d09c11763c"
+    },
+    {
+      "id": "theme-clearance",
+      "path": "sfx/theme-clearance.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "4932bbc8fca01998d7b7b69400bbc1e33879212412d23ac488e4af310e35dafe"
+    },
+    {
+      "id": "theme-harvest",
+      "path": "sfx/theme-harvest.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "931e3ab64ff0891447c9a58f72eb7e18a668081538632b85c71bfcf4e309b985"
+    },
+    {
+      "id": "theme-children",
+      "path": "sfx/theme-children.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "7c86091a5c92bf42195a5fa5ce7737bc671b2097b724ea29f241e4f2e053b97c"
+    },
+    {
+      "id": "theme-celebration",
+      "path": "sfx/theme-celebration.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "acf16d84ef7b9a3169b57be574c9614090e30083bf34ba7a07a156fc4de85c16"
+    },
+    {
+      "id": "theme-rose",
+      "path": "sfx/theme-rose.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "80a9395949f5cfa629a743e0520010b79be02e1f948c405fadc200f15ec1a4a0"
+    },
+    {
+      "id": "theme-spooky",
+      "path": "sfx/theme-spooky.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "54cf56863e6eaed440eb43e71c23328840ef7b175b9bc37bc698b396097b82fe"
+    },
+    {
+      "id": "theme-clock",
+      "path": "sfx/theme-clock.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "f1057dc69dec77538243b8abfe3e69fb6c3961aeef36dddf0b351dc7702fd785"
+    },
+    {
+      "id": "theme-neon",
+      "path": "sfx/theme-neon.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "23381da80735f77a858f4cb5cf5cbc11078de44bbdb124afad72586e0b5527b3"
+    },
+    {
+      "id": "theme-industrial",
+      "path": "sfx/theme-industrial.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "57e806253eb52d07c61209c1c76b51c39754e799b4506a90d1f76c33506e5c6a"
+    },
+    {
+      "id": "theme-show",
+      "path": "sfx/theme-show.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "3b42cdaed0dbd43b034170e9be7c29f24c8339ddc924647369321ca1680b3005"
+    },
+    {
+      "id": "theme-savings",
+      "path": "sfx/theme-savings.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "b6af124a147d98f68ec924f884868ee0d46288a4103ae8ff710fd9cedcfce832"
+    },
+    {
+      "id": "theme-impact",
+      "path": "sfx/theme-impact.wav",
+      "seconds": 1.6,
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_thematic_audio.py",
+      "sha256": "02f97bf64bcf3081907ef6b7e53a0691bbb6705f9dc97bb61eda0fc946c3d1b3"
     }
   ]
 }

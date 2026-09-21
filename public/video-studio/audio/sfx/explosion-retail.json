@@ -1,0 +1,6 @@
+{
+  "origin": "original-procedural-synthesis",
+  "generator": "workers/video-studio/make_boom_audio.py",
+  "seconds": 1.45,
+  "sha256": "0b94c053566c7fb6df816427f20615f89c774537829f7af1007288bb8af83a2a"
+}

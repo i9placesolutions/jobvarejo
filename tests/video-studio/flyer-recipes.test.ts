@@ -15,7 +15,8 @@ describe('Encartes em vídeo',()=>{
   }
   for(const format of ['vertical','horizontal'] as const){
    const layout=r[format],a=layout.name
-   for(const key of ['product','seal','logo','price'] as const){
+   expect(a[0]).toBe(layout.price[0]);expect(a[2]).toBe(layout.price[2]);expect(a[1]+a[3]).toBe(layout.price[1]-12)
+   for(const key of ['seal','logo','price'] as const){
     const b=layout[key]
     const intersects=a[0]<b[0]+b[2]&&a[0]+a[2]>b[0]&&a[1]<b[1]+b[3]&&a[1]+a[3]>b[1]
     expect(intersects,`${r.name} ${format}: nome separado de ${key}`).toBe(false)

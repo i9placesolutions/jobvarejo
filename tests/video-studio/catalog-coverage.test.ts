@@ -23,7 +23,7 @@ describe('Cobertura do catálogo de encartes',()=>{
  it('oferece seis fundos com arte própria em cada formato e mantém a escolha do usuário',()=>{
   for(const bg of VIDEO_BACKGROUNDS){
    for(const format of ['vertical','horizontal'] as const)expect(existsSync('public/video-studio/templates/'+backgroundAsset(bg.id,format))).toBe(true)
-   const doc=newVideoFromTemplate('alerta');doc.background=bg.id;applyVideoTemplate(doc,'saldao');expect(doc.background).toBe(bg.id);expect(doc.templateRevision).toBe(13);expect(videoDocumentSchema.safeParse(doc).success).toBe(true)
+   const doc=newVideoFromTemplate('alerta');doc.background=bg.id;applyVideoTemplate(doc,'saldao');expect(doc.background).toBe(bg.id);expect(doc.templateRevision).toBe(18);expect(videoDocumentSchema.safeParse(doc).success).toBe(true)
   }
   expect(videoDocumentSchema.safeParse({...newVideoFromTemplate('alerta'),background:'https://outra-origem'}).success).toBe(false)
  })

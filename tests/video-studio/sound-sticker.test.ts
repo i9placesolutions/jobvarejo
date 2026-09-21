@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
 import {newVideoDocument} from '../../shared/video-studio/model'
-import {musicGain, OPENING_SOUNDS} from '../../shared/video-studio/sound-design'
+import {musicGain, OPENING_SOUNDS, BOOM_OPENING_SOUNDS} from '../../shared/video-studio/sound-design'
 import {fillStickerHoles} from '../../shared/video-studio/sticker-mask'
 import {SOUND_EFFECTS} from '../../shared/video-studio/effect-catalog'
 
@@ -40,3 +40,12 @@ describe('Som e sticker do vídeo', () => {
     for (const cue of OPENING_SOUNDS) expect(SOUND_EFFECTS.some(s => s.id === cue.sound)).toBe(true)
   })
 })
+
+ it('abre espaço para a explosão sem baixar música quando os efeitos estão desligados',()=>{
+  const doc=newVideoDocument();doc.theme='flyer-ab690e7b-f393-4416-b81c-e6ad3da654a4';doc.voice.enabled=false;doc.audio.musicVolume=.5;doc.audio.sounds=true;doc.audio.effectsVolume=.7;
+  const scenes=[{id:'intro',from:0,frames:90}];
+  expect(musicGain(8,300,doc,scenes)).toBeCloseTo(.125);
+  expect(musicGain(60,300,doc,scenes)).toBe(.5);
+  doc.audio.sounds=false;expect(musicGain(8,300,doc,scenes)).toBe(.5);
+  expect(BOOM_OPENING_SOUNDS.find(c=>c.sound==='explosion-retail')?.frame).toBe(8);
+ })
