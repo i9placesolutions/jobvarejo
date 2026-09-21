@@ -6,6 +6,7 @@ definePageMeta({
 })
 
 const auth = useAuth()
+const route = useRoute()
 
 // Form state
 const name = ref('')
@@ -19,6 +20,7 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const isFirstUser = ref(false)
 const BUSINESS_PROFILE_ONBOARDING_KEY = 'jobvarejo:business-profile-onboarding-pending'
+const isTrialSignup = computed(() => String(route.query.trial || '') === '15')
 
 // Check if this will be the first user (super admin)
 const checkFirstUser = async () => {
@@ -136,8 +138,12 @@ const handleRegister = async () => {
           </div>
           <h1 class="text-2xl font-bold mb-2 text-slate-800 tracking-tight">Crie sua conta</h1>
           <p class="text-sm font-medium text-slate-400">
-            Comece sua jornada criativa
+            {{ isTrialSignup ? 'Seu teste de 15 dias começa agora' : 'Comece sua jornada criativa' }}
           </p>
+        </div>
+
+        <div v-if="isTrialSignup" class="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+          <p class="text-sm font-semibold text-orange-700 text-center">15 dias grátis — sem cartão de crédito</p>
         </div>
 
         <!-- First User - Super Admin Banner -->

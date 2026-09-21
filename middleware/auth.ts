@@ -1,14 +1,17 @@
-// Define public routes that don't require authentication
+// Rotas públicas (sem autenticação)
 const publicRoutes = [
+  '/landing',
   '/auth/login',
   '/auth/register',
   '/auth/forgot-password',
   '/auth/reset-password',
+  '/terms',
+  '/privacy',
 ]
 
 export default defineNuxtRouteMiddleware(async (to) => {
   // Allow public routes
-  const isPublicRoute = publicRoutes.some(route => to.path.startsWith(route))
+  const isPublicRoute = publicRoutes.some(route => to.path === route || to.path.startsWith(`${route}/`))
   if (isPublicRoute) {
     return
   }
@@ -36,6 +39,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
       if (builderAuth.isAuthenticated.value) {
         return // builder admin session is valid, let admin middleware check role
       }
+    }
+    // Visitantes na home vão para a landing; demais rotas protegidas → login
+    if (to.path === '/' || to.path === '') {
+      return navigateTo('/landing', { replace: true })
     }
     return navigateTo('/auth/login', { replace: true })
   }

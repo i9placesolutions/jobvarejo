@@ -138,10 +138,8 @@ export const applyHistoryStateToCanvas = async (
       opts.updateScrollbars()
     }
 
-    // FIX: only apply the dark fallback when backgroundColor is truly absent
-    // (null or undefined).  Previously the falsy check `!backgroundColor` also
-    // matched empty string '' (a valid transparent background) and would
-    // silently overwrite it with #1e1e1e after every undo/redo.
+    // loadFromJsonSafe já reaplica o cinza do workspace após o JSON.
+    // Aqui só cobre o caso raro em que o snapshot não trouxe backgroundColor.
     if (opts.canvas.backgroundColor == null) {
       opts.canvas.backgroundColor = '#1e1e1e'
     }

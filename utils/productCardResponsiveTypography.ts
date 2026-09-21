@@ -26,19 +26,21 @@ export const fitResponsiveProductName = (title: any, width: number, height: numb
 }
 
 // Limites finais por card, independentes da célula de referência da zona.
-export const fitResponsiveProductTypography = (group: any, width: number, height: number, nameScale = 1) => {
+export const fitResponsiveProductTypography = (group: any, width: number, height: number, nameScale = 1, fitPrice = true) => {
   if (!(width > 0 && height > 0)) return
   if (applyWholesaleReferenceCardLayout(group, width, height)) return
   const children = group.getObjects?.() || []
   const title = children.find((o: any) => o.name === 'smart_title')
   const price = children.find((o: any) => o.name === 'priceGroup' || o.isPriceGroup)
   fitResponsiveProductName(title, width, height, nameScale)
-  if (price && price.visible !== false) {
+  if (fitPrice && price && price.visible !== false && !price.__manualPricePosition
+    && ![price.__manualScaleX, price.__manualScaleY].some(value =>
+      Number.isFinite(Number(value)) && Math.abs(Number(value) - 1) > 0.0001)) {
     const labelWidth = Math.abs(Number(price.width) * Number(price.scaleX || 1))
     const labelHeight = Math.abs(Number(price.height) * Number(price.scaleY || 1))
     const compact = Math.min(1, Math.sqrt(height / width))
-    const factor = Math.min(1, width * 0.76 * compact / labelWidth, height * 0.30 / labelHeight)
-    if (Number.isFinite(factor) && factor > 0 && factor < 1) {
+    const factor = Math.min(width * 0.86 * compact / labelWidth, height * 0.30 / labelHeight)
+    if (Number.isFinite(factor) && factor > 0 && Math.abs(factor - 1) > 0.001) {
       const bottom = price.getPointByOrigin?.('center', 'bottom')
       price.set({ scaleX: price.scaleX * factor, scaleY: price.scaleY * factor })
       if (bottom) price.setPositionByOrigin?.(bottom, 'center', 'bottom')

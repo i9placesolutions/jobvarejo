@@ -532,7 +532,9 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
       }
     }
 
-    fitResponsiveProductTypography(group, w, h, styles?.prodNameScale ?? 1)
+    // A receita já encaixou a etiqueta no espaço configurado. Um segundo
+    // limite global diminuía o resultado e afastava o render do preview.
+    fitResponsiveProductTypography(group, w, h, styles?.prodNameScale ?? 1, false)
     group.dirty = true
     group.setCoords?.()
   }

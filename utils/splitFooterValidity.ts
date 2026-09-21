@@ -1,9 +1,11 @@
+import { referenceValidityCopy } from './referenceValidityCopy'
 /** A validade em três linhas mantém a composição do modelo ao trocar as datas. */
 export const isSplitFooterValidity = (object: any): boolean =>
-  ['split-footer', 'calendar-card', 'inline-footer'].includes(object?.quickValidityLayout) ||
+  ['split-footer', 'calendar-card', 'inline-footer', 'offer-banner', 'reference-ribbon'].includes(object?.quickValidityLayout) ||
   (object?.name === 'dynamic-validity' && object?.quickDataField === 'validity')
 
 export const splitFooterValidityText = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; layout?: string }) => {
+  if (value.layout === 'reference-ribbon') return referenceValidityCopy(value)
   const parse = (raw?: string) => {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw || ''))
     if (!match) return null
@@ -29,6 +31,11 @@ export const splitFooterValidityText = (value: { startDate?: string; endDate?: s
     }
     return { heading: stocksOnly ? 'OFERTAS VÁLIDAS' : 'OFERTAS VÁLIDAS DIAS', period,
       stock: !stocksOnly && value.whileStocks !== false ? 'ENQUANTO DURAREM OS ESTOQUES' : '' }
+  }
+  if (value.layout === 'offer-banner') {
+    const singleDay = value.mode === 'single_day' || !start || !end || value.startDate === value.endDate
+    return { heading: stocksOnly ? 'OFERTAS VÁLIDAS' : singleDay ? 'OFERTAS VÁLIDAS NO DIA' : 'OFERTAS VÁLIDAS DE', period,
+      stock: !stocksOnly && value.whileStocks !== false ? 'OU ENQUANTO DURAREM OS ESTOQUES' : '' }
   }
   return { heading: stocksOnly ? 'OFERTA VÁLIDA' : 'OFERTA VÁLIDA DE', period,
     stock: !stocksOnly && value.whileStocks !== false ? 'OU ENQUANTO DURAREM OS ESTOQUES' : '' }

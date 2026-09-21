@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { Sparkles } from 'lucide-vue-next'
-
 // Tema claro
 const backgroundStyle = {
   background: `#f8f9fb`,
@@ -51,13 +49,16 @@ if (import.meta.client) {
       <header class="w-full p-4 shrink-0">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
           <NuxtLink
-            to="/"
+            to="/landing"
             class="inline-flex items-center gap-3 group"
           >
-            <div class="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center border border-indigo-200 group-hover:bg-indigo-100 transition-colors">
-              <Sparkles class="w-4 h-4 text-indigo-500" />
-            </div>
-            <span class="text-base font-bold text-slate-800">Studio PRO</span>
+            <img
+              src="/img/jobvarejo-logo.png"
+              alt="JobVarejo"
+              class="h-9 w-auto object-contain"
+              width="160"
+              height="52"
+            >
           </NuxtLink>
         </div>
       </header>
@@ -72,7 +73,7 @@ if (import.meta.client) {
       <!-- Footer -->
       <footer class="w-full p-4 text-center text-xs text-slate-400 shrink-0">
         <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-4">
-          <p>© 2025 Studio PRO</p>
+          <p>© {{ new Date().getFullYear() }} JobVarejo</p>
           <div class="flex items-center gap-4">
             <NuxtLink to="/terms" class="hover:text-slate-700 transition-colors">Termos</NuxtLink>
             <NuxtLink to="/privacy" class="hover:text-slate-700 transition-colors">Privacidade</NuxtLink>

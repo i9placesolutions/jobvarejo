@@ -1,0 +1,7 @@
+{
+  "asset": "public/video-studio/templates/retail-fire-curtain-v1.png",
+  "origin": "built-in image_gen tool",
+  "source": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-75119dcf-c8d6-4a5b-a232-14acbf161b8d.png",
+  "prompt": "Create a production VFX compositing asset for a retail motion-graphics video: a wide horizontal curtain of photorealistic turbulent orange and golden fire along the bottom edge, with richly detailed wispy curling flame tongues at varied heights, hot white-yellow cores, tiny embers. Pure solid black background for screen blending. Upper 65 percent completely black with only a few fine sparks. Flames fill lower 35 percent, irregular organic silhouette, no geometric triangles, no symbols, no typography, no logos, no scene, no ground. Cinematic realistic high-speed flame photography. Wide landscape 16:9 composition, high resolution.",
+  "usage": "Three screen-blended layers with independent movement and frame-based SVG turbulence; two selectable fire configurations."
+}

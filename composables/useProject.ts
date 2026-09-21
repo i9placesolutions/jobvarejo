@@ -1416,6 +1416,12 @@ export const useProject = () => {
 
         // 3. Criar a nova página
         const existingIds = new Set((project.pages || []).map((p: any) => String(p?.id || '').trim()).filter(Boolean))
+        const sourceThumbnail = typeof sourcePage.thumbnail === 'string'
+            ? sourcePage.thumbnail.trim()
+            : ''
+        const sourceThumbnailUrl = typeof sourcePage.thumbnailUrl === 'string'
+            ? sourcePage.thumbnailUrl.trim()
+            : ''
         const newPage: Page = {
             id: ensureUniquePageId(makePageId(), existingIds),
             name: `${sourcePage.name} (Cópia)`,
@@ -1423,8 +1429,11 @@ export const useProject = () => {
             height: sourcePage.height,
             type: sourcePage.type,
             canvasData: clonedJson,
-            thumbnail: sourcePage.thumbnail,
-            thumbnailDirty: !!sourcePage.thumbnail,
+            // Após reload só thumbnailUrl costuma existir; copiar ambos evita
+            // preview vazio (fallback azul) até a regeneração offscreen.
+            thumbnail: sourceThumbnail || undefined,
+            thumbnailUrl: sourceThumbnailUrl || undefined,
+            thumbnailDirty: !!sourceThumbnail,
             lastLoadedFingerprint: computeCanvasFingerprint(clonedJson),
             lastSavedFingerprint: computeCanvasFingerprint(clonedJson),
             lastPersistedObjectCount: getCanvasObjectCount(clonedJson),
@@ -1499,8 +1508,11 @@ export const useProject = () => {
             type: sourceType,
             canvasData: clonedJson,
             canvasDataPath: undefined,
+            // Miniatura própria é gerada após o load; herdar thumbnailUrl do
+            // blueprint falha com frequência e trava o preview no fallback.
             thumbnail: undefined,
-            thumbnailUrl: String(source.thumbnailUrl || '').trim() || undefined,
+            thumbnailUrl: undefined,
+            thumbnailDirty: false,
             lastLoadedFingerprint: computeCanvasFingerprint(clonedJson),
             lastSavedFingerprint: computeCanvasFingerprint(clonedJson),
             lastPersistedObjectCount: getCanvasObjectCount(clonedJson),
@@ -1590,7 +1602,7 @@ export const useProject = () => {
         page.canvasRevision = undefined
         if (clonedJson && typeof clonedJson === 'object') delete (clonedJson as any).__canvasRevision
         page.thumbnail = undefined
-        page.thumbnailUrl = String(source.thumbnailUrl || '').trim() || undefined
+        page.thumbnailUrl = undefined
         page.thumbnailDirty = false
         page.lastLoadedFingerprint = fingerprint
         page.lastSavedFingerprint = fingerprint

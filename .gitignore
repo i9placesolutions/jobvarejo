@@ -78,3 +78,7 @@ coverage/
 # Isolated Nuxt validation builds
 /.nuxt-*-check/
 /.output-*-check/
+
+# Isolated local video builds
+/.nuxt-video-*/
+/.output-video-*/

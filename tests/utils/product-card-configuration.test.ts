@@ -262,3 +262,23 @@ it('oferece perfil próprio para card estreito sem substituir receitas existente
   expect(config.profiles?.tall.elements.image.height).toBe(68)
   expect(config.profiles?.standard.elements.image.width).toBe(75)
 })
+
+it('preenche a área configurada da etiqueta e cresce com um card maior', () => {
+  const price = makeTransformObject({ type: 'group', name: 'priceGroup', width: 340, height: 130 })
+  const objects = [price]
+  const group: any = { type: 'group', __cardConfigurationProfile: 'featured',
+    getObjects: () => objects, _objects: objects, _productData: {}, setCoords() {} }
+  const configuration = createDefaultProductCardConfiguration()
+  configuration.alcoholBadgeEnabled = false
+  Object.assign(configuration.profiles!.featured.elements.price, { x: 50, y: 80, width: 90, height: 36 })
+  const layout = createProductCardConfigurationLayout({ fabric: () => ({}),
+    enableCardElementRotationControl: () => {}, safeRequestRenderAll: () => {}, getPriceGroupFromAny: () => price })
+  layout.applyProductCardConfigurationLayout(group, 300, 300, { cardLayout: configuration })
+  const smallWidth = price.getScaledWidth()
+  layout.applyProductCardConfigurationLayout(group, 900, 900, { cardLayout: configuration })
+  expect(price.getScaledWidth()).toBeCloseTo(810)
+  expect(price.getScaledWidth()).toBeCloseTo(smallWidth * 3)
+  expect(price.getScaledHeight()).toBeLessThanOrEqual(900 * .36)
+  layout.applyProductCardConfigurationLayout(group, 900, 900, { cardLayout: configuration })
+  expect(price.getScaledWidth()).toBeCloseTo(810)
+})

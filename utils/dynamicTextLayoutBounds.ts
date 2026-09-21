@@ -1,5 +1,6 @@
 import { layoutInlineFooterValidity } from './inlineFooterValidityLayout'
 import { layoutCalendarCards } from './calendarCardLayout'
+import { layoutOfferValidityBanner } from './offerValidityBanner'
 import { layoutFamilyContacts } from './familyContactLayout'
 import { layoutHeaderOfferValidity } from './headerOfferValidity'
 import { isSplitFooterValidity, hasSplitFooterValidityCompanions } from './splitFooterValidity'
@@ -15,6 +16,7 @@ export const repairDynamicTextLayoutBounds = (objects: any[], createValidityBack
   let changed = layoutFamilyContacts(objects)
   changed = layoutCalendarCards(objects) || changed
   changed = layoutInlineFooterValidity(objects) || changed
+  changed = layoutOfferValidityBanner(objects) || changed
   const unresolved: string[] = []
   for (const frame of objects.filter(o => o.isFrame && o.visible !== false && typeof o.getBoundingRect === 'function')) {
     const fb = bounds(frame), children = objects.filter(o => o.parentFrameId === frame._customId && o.visible !== false && !o.isFrame)

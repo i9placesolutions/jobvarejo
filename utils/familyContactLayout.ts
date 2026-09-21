@@ -10,7 +10,7 @@ export const layoutFamilyContacts = (objects: any[]): boolean => {
  for (const frame of objects.filter(o => o.isFrame && String(o.name || '').includes('fim-semana-familia') && Number(o.height) > Number(o.width))) {
   const a = objects.filter(o => o.parentFrameId === frame._customId)
   const zone = a.find(o => o.isProductZone), date = a.find(o => o.quickDataField === 'validity'), phone = a.find(o => o.businessProfileField === 'whatsapp')
-  if (!zone || !date || !phone || date.quickValidityLayout === 'calendar-card') continue
+  if (!zone || !date || !phone || ['calendar-card', 'offer-banner', 'reference-ribbon'].includes(date.quickValidityLayout)) continue
   const s = frame.width / 1080, zb = zone.getBoundingRect(), fb = frame.getBoundingRect(), x = fb.left
   const text = (o: any, left: number, top: number, width: number, size: number, fill: string) => set(o, {
    left, top, width, originX:'left', originY:'top', scaleX:1, scaleY:1, fontSize:size,

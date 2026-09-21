@@ -1,0 +1,117 @@
+{
+  "description": "Síntese original do projeto; sem samples externos ou material nativo do CapCut.",
+  "assets": [
+    {
+      "id": "air-swipe",
+      "path": "sfx/air-swipe.wav",
+      "seconds": 0.42,
+      "sha256": "71cd0f85ddeeace28e0f16a7e3e766bd5aa681dfc819658f74006aab383d2dd5",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "whip",
+      "path": "sfx/whip.wav",
+      "seconds": 0.24,
+      "sha256": "8c6cd5fa27038850fe4c34c28578cfebf4ab12a5fb8200fe76b63c2394986e4c",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "suction",
+      "path": "sfx/suction.wav",
+      "seconds": 0.55,
+      "sha256": "1f2044febad987adf0ad7f3819619cedb6a5bbf3d0c0edf0beffa2c3156cbfe8",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "riser",
+      "path": "sfx/riser.wav",
+      "seconds": 0.8,
+      "sha256": "182ea950a147f0c44f248c48637823d86ace545aea2f6a6c920c49c17a586dd9",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "bass-hit",
+      "path": "sfx/bass-hit.wav",
+      "seconds": 0.7,
+      "sha256": "cd7fbbecff1651f628c956d4993f5c31fea7dcb9e34fbf98c05db7a0ed939518",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "metal-hit",
+      "path": "sfx/metal-hit.wav",
+      "seconds": 0.7,
+      "sha256": "87b6e1534fdb9a6bba2d2fcfbec8975d22816fba86b8b9f2968b551365c521ee",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "pop",
+      "path": "sfx/pop.wav",
+      "seconds": 0.18,
+      "sha256": "58f3a0033ea365739c4467fcda87a35ae2a2af23a9d8ff7945284619a3286e95",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "snap",
+      "path": "sfx/snap.wav",
+      "seconds": 0.16,
+      "sha256": "b4e04265824287a6a9e593065f46157566396c1893e82197356ed36d23cae774",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "coin",
+      "path": "sfx/coin.wav",
+      "seconds": 0.6,
+      "sha256": "0d605090e4cba274a1920bec9a4f3bfcb23419537e5923afd41e1bb7803c6d90",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "sparkle",
+      "path": "sfx/sparkle.wav",
+      "seconds": 0.8,
+      "sha256": "feb2704a16aba74f6e7d05fc40f5599ad8bbc8cecac72dbbcb6c14f2c58d6c20",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "glitch",
+      "path": "sfx/glitch.wav",
+      "seconds": 0.3,
+      "sha256": "5bad50375b06f31f88e3e1985572bf86291c3cfaf6182756bce8885e90ba6851",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "boom",
+      "path": "sfx/boom.wav",
+      "seconds": 0.85,
+      "sha256": "760cdfca1cb2068b64b7a44ffea4c7d0c11123d59a723e40874b3d7d7d41ff8d",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "retail-drive",
+      "path": "retail-drive.mp3",
+      "seconds": 30,
+      "sha256": "0e874d73374e7ae169b23141fe90db94ba8edc4878842db8f10bd7e6c34930af",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    },
+    {
+      "id": "retail-bounce",
+      "path": "retail-bounce.mp3",
+      "seconds": 30,
+      "sha256": "d208b41bab3b1fe1a9bb7dabd870db541fa2106a9177a3eb8d6c012f77229585",
+      "origin": "original-procedural-synthesis",
+      "source": "workers/video-studio/make_catalog_audio.py"
+    }
+  ]
+}

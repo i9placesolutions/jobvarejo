@@ -37,3 +37,17 @@ it('restaura posições e escalas juntas após duplicar uma etiqueta manual norm
     expect(group).toMatchObject({left:200,top:500,scaleX:.35,scaleY:.35})
   }
 })
+
+it('restaura a caixa junto com os filhos sem deslocar o grupo após salvar e duplicar', () => {
+  const template = { __preserveManualLayout: true, width: 340, height: 130, objects: [
+    { name: 'price_bg', width: 340, height: 130, left: 0, top: 0, originX: 'center', originY: 'center' }
+  ] }
+  let saved: any = { width: 580, height: 670, left: 200, top: 500, scaleX: 0.8, scaleY: 0.8 }
+  for (let copy = 0; copy < 5; copy++) {
+    const background: any = { ...template.objects[0], set(p: any) { Object.assign(this, p) } }
+    const group: any = { ...saved, getObjects: () => [background], set(p: any) { Object.assign(this, p) } }
+    syncPriceTemplateStyle(group, template)
+    expect(group).toMatchObject({ width: 340, height: 130, left: 200, top: 500, scaleX: 0.8, scaleY: 0.8 })
+    saved = JSON.parse(JSON.stringify(group))
+  }
+})

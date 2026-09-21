@@ -534,6 +534,7 @@ import {
     getSavedViewportTransform,
     setSavedViewportTransform
 } from '~/utils/editorCanvasState'
+import { normalizeProductAreaBackgrounds } from '~/utils/productAreaBackground'
 import { normalizeCanvasAssetUrls, type NormalizeCanvasAssetUrlsResult } from '~/utils/canvasAssetUrls'
 import {
     canGenerateThumbnailNow,
@@ -1259,7 +1260,9 @@ const loadFromJsonSafe = async (json: any): Promise<void> => {
         await c.loadFromJSON(preparedJson);
     } finally {
         c.renderOnAddRemove = prevRenderOnAddRemove;
-        if (isQuickMode.value) c.backgroundColor = '#303133';
+        // loadFromJSON pode restaurar backgroundColor da arte (ex.: azul de preset).
+        // O workspace é sempre cinza neutro — separado do fill do Frame.
+        applyWorkspaceBackgroundColor(c);
         // Re-apply runtime-only properties for persistent user guides after any load.
         try { normalizeUserGuides(c); } catch {}
         safeRequestRenderAll(c);
@@ -5145,7 +5148,7 @@ const addQuickModePage = (formatId: FlyerTemplateFormatId) => {
             })
             if (materializedPage?.id) {
                 if (!await waitForTemplatePageReady(materializedPage.id)) return
-                await ensureQuickPageThumbnail(materializedPage)
+                await ensureQuickPageThumbnail(materializedPage, true)
                 await flushPersistenceNow('quick-page-add', { force: true })
                 return
             }
@@ -5160,8 +5163,11 @@ const addQuickModePage = (formatId: FlyerTemplateFormatId) => {
             applyQuickPageTemplateMetadata(newPage, format, sourceModelName, sourceModelId)
             if (newPage?.id && !await waitForTemplatePageReady(newPage.id)) return
             await resizeQuickModePage(format.id)
+            if (newPage?.id) await ensureQuickPageThumbnail(newPage, true)
         } else {
             addPage('RETAIL_OFFER', format.width, format.height, `${sourceModelName} · ${format.label}`, pageMetadata)
+            const blankPage = project.pages?.[project.activePageIndex]
+            if (blankPage?.id) await ensureQuickPageThumbnail(blankPage, true)
         }
         await flushPersistenceNow('quick-page-add', { force: true })
     })()
@@ -5187,6 +5193,7 @@ const duplicateQuickModePage = (pageId: string) => {
                 resolveQuickModeTemplateModelId(sourcePage) || String(sourcePage?.templateModelId || '').trim() || `model-${makeId()}`
             )
             if (!await waitForTemplatePageReady(duplicatedPage.id)) return
+            await ensureQuickPageThumbnail(duplicatedPage, true)
         }
         await flushPersistenceNow('quick-page-duplicate', { force: true })
     })()
@@ -5224,7 +5231,7 @@ const useQuickModeTemplateModel = (modelId: string) => {
                 metadata: pageMetadata
             })
             if (!materializedPage?.id || !await waitForTemplatePageReady(materializedPage.id)) return
-            await ensureQuickPageThumbnail(materializedPage)
+            await ensureQuickPageThumbnail(materializedPage, true)
             await flushPersistenceNow('quick-model-page-create', { force: true })
             return
         }
@@ -5594,7 +5601,7 @@ const resizeQuickModePage = (formatId: string) => {
                             skipCoalesce: true,
                             skipIfUnchanged: false
                         }))
-                        await ensureQuickPageThumbnail(resizedPage)
+                        await ensureQuickPageThumbnail(resizedPage, true)
                         await flushPersistenceNow('quick-page-resize-template-format', { force: true })
                         notifyEditorInfo(`Formato ${format.label} aplicado com os produtos organizados automaticamente.`)
                         return
@@ -5755,7 +5762,7 @@ const switchToPage = (pageId: string) => {
         if (targetPage && isTemplateCompositionManagedPage(targetPage)) {
             void waitForTemplatePageReady(String(pageId || '')).then(async ready => {
                 if (!ready) return
-                await ensureQuickPageThumbnail(targetPage)
+                await ensureQuickPageThumbnail(targetPage, true)
             })
         }
     })();
@@ -6258,6 +6265,17 @@ const refreshLoadedCanvasTextMetrics = (canvasInstance: any) => {
 const pageSettings = ref({
     backgroundColor: '#1e1e1e' // Match default dark workspace
 })
+
+/** Cor da área infinita ao redor do Frame — nunca a cor da arte/template. */
+const getWorkspaceBackgroundColor = () => (isQuickMode.value ? '#303133' : '#1e1e1e')
+
+const applyWorkspaceBackgroundColor = (targetCanvas: any = canvas.value) => {
+    const workspaceBg = getWorkspaceBackgroundColor()
+    pageSettings.value.backgroundColor = workspaceBg
+    if (!targetCanvas) return workspaceBg
+    targetCanvas.backgroundColor = workspaceBg
+    return workspaceBg
+}
 
 // === Frame Label Overlays (clickable HTML labels for all frames) ===
 const frameLabels = ref<Array<{ id: string; name: string; x: number; y: number; dimX: number; dimY: number; dims: string; isSelected: boolean; frameRef: any }>>([]);
@@ -7407,11 +7425,15 @@ const persistQuickModeColorChange = async (reason: string) => {
 const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
     if (!isQuickMode.value || !canvas.value) return
     const target = getQuickModeColorTarget(payload?.targetId)
-    const color = normalizeQuickModeColor(payload?.value)
+    const color = target?.kind === 'product-area' && payload?.value === 'transparent'
+        ? 'transparent' : normalizeQuickModeColor(payload?.value)
     if (!target || !color) return
 
     target.objects.forEach(({ object, property }) => {
         object.set?.({ [property]: color })
+        if (target.kind === 'product-area') {
+            object.set?.({ productAreaBackgroundMode: color === 'transparent' ? 'transparent' : 'custom', stroke: 'transparent', shadow: null })
+        }
         if (property === 'fill') applyDynamicBusinessTextColor(object, color)
         if (target.kind === 'product-card' && object.group) {
             object.group._cardStyleOverrides = { ...object.group._cardStyleOverrides, cardColor: color, isProdBgTransparent: false }
@@ -7430,6 +7452,7 @@ const clearQuickModeColor = async (targetId: string) => {
 
     target.objects.forEach(({ object, property }) => {
         object.set?.({ [property]: 'transparent', ...(target.kind === 'product-card' ? { stroke: 'transparent' } : {}) })
+        if (target.kind === 'product-area') object.set?.({ productAreaBackgroundMode: 'transparent', stroke: 'transparent', shadow: null })
         if (property === 'fill') applyDynamicBusinessTextColor(object, 'transparent')
         if (target.kind === 'product-card' && object.group) {
             object.group._cardStyleOverrides = { ...object.group._cardStyleOverrides, isProdBgTransparent: true, cardBorderWidth: 0 }
@@ -8630,10 +8653,8 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             // ignore
         }
         clearCanvasForPageSwitch(canvas.value)
-        // THE WORKSPACE BACKGROUND IS DYNAMIC
-        if (canvas.value) {
-            canvas.value.backgroundColor = pageSettings.value.backgroundColor;
-        }
+        // Workspace cinza neutro — não herdar fill da arte/Frame da página anterior
+        applyWorkspaceBackgroundColor(canvas.value)
 
         // Infinite canvas: the Fabric canvas must match the visible wrapper size,
         // NOT the page/frame dimensions (those are represented by Frame objects).
@@ -8970,13 +8991,9 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             // Force update canvasObjects to reflect restored state
             refreshCanvasObjects();
 
-            // Try to sync settings from loaded artboard (re-find after potential removal)
-            if (!artboard) {
-                artboard = canvas.value.getObjects().find((o: any) => o.id === 'artboard-bg');
-            }
-            if (artboard && artboard.fill) {
-                pageSettings.value.backgroundColor = artboard.fill as string;
-            }
+            // Não copiar fill do artboard/Frame para o workspace — isso tingia
+            // a área infinita com a cor da arte (ex.: azul de template).
+            applyWorkspaceBackgroundColor(canvas.value)
 
             // Restore IDs if lost - BUT exclude frames and selectable objects
             canvas.value.getObjects().forEach((o: any) => {
@@ -10436,11 +10453,13 @@ onMounted(async () => {
       // Previously, an anonymous arrow function was passed — impossible to remove.
       const afterRenderFrameLabels = () => { throttledUpdateFrameLabels() }
       canvas.value.on('after:render', handleAfterRenderPerf);
-      // O fundo da área de trabalho é visual; snapshots antigos podem repor
-      // o preto ao hidratar páginas ou restaurar o histórico.
+      // Snapshots antigos / loadFromJSON podem repor a cor da arte no canvas.
+      // Mantém o workspace neutro; no editor completo respeita pageSettings.
       const workspaceCanvas = canvas.value;
       workspaceCanvas.on('before:render', () => {
-          if (isQuickMode.value) workspaceCanvas.backgroundColor = '#303133';
+          workspaceCanvas.backgroundColor = isQuickMode.value
+              ? '#303133'
+              : (pageSettings.value.backgroundColor || '#1e1e1e');
       });
       canvas.value.on('after:render', afterRenderFrameLabels);
       canvas.value.on('after:render', throttledUpdateScrollbars);
@@ -11441,6 +11460,7 @@ const prepareCanvasDataForLoadEntry = (
             placeholderDataUrl: PLACEHOLDER_IMAGE_DATA_URL
         });
         const prepared = normalizedAssets.data;
+        normalizeProductAreaBackgrounds(prepared);
         const legacyProductCardImageRepair = normalizeLegacyProductCardImageTransformsInCanvasData(prepared);
         const entry: PreparedCanvasLoadCacheEntry = {
             token: cacheToken,
@@ -16894,7 +16914,7 @@ const clearCanvas = () => {
     canvas.value.clear();
 
     // ENSURE WORKSPACE IS DARK
-    canvas.value.backgroundColor = isQuickMode.value ? '#303133' : '#1e1e1e';
+    applyWorkspaceBackgroundColor(canvas.value)
 
     // Reset Data
     canvasObjects.value = [];
@@ -18571,6 +18591,7 @@ const createQuickLogoSlot = (sourceObject: any = null): any | null => {
         businessProfileField: 'logo',
         quickFieldEnabled: sourceObject?.quickFieldEnabled !== false,
         quickLogoSource: '',
+        quickLogoUseProfileInTemplate: sourceObject?.quickLogoUseProfileInTemplate === true,
         quickLogoSlot: true,
         quickLogoMaxWidth: metrics.maxWidth,
         quickLogoMaxHeight: metrics.maxHeight,
@@ -18614,7 +18635,8 @@ let quickLogoLoadSequence = 0
 
 const syncQuickLogoBinding = async (profile: Record<string, any>): Promise<boolean> => {
     if (!canvas.value || !fabric) return false
-    const source = project.isTemplate === true && !isQuickMode.value ? '' : getQuickLogoSource(profile)
+    const previewProfileLogo = canvas.value.getObjects().some((object: any) => object.businessProfileField === 'logo' && object.quickLogoUseProfileInTemplate === true)
+    const source = project.isTemplate === true && !isQuickMode.value && !previewProfileLogo ? '' : getQuickLogoSource(profile)
     // Um modelo pode ter mais de um espaço de logo (ex.: cabeçalho + rodapé).
     // Todos os slots precisam acompanhar a logo do cadastro, não só o primeiro.
     const logoObjects = canvas.value.getObjects().filter((object: any) => (
@@ -18732,6 +18754,7 @@ const syncQuickLogoBinding = async (profile: Record<string, any>): Promise<boole
             businessProfileField: 'logo',
             quickFieldEnabled: enabled,
             quickLogoSource: source,
+            quickLogoUseProfileInTemplate: logoObject.quickLogoUseProfileInTemplate === true,
             quickLogoSlot: true,
             quickLogoMaxWidth: slotWidth,
             quickLogoMaxHeight: slotHeight,
@@ -19503,7 +19526,7 @@ const handleQuickModeValidityUpdate = (payload: {
         const separateFields = split && hasSplitFooterValidityCompanions(object, siblings)
         setQuickDynamicTextValue(object, split ? resolveSplitFooterValidityText(object, siblings, { startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value }) : nextText)
         if (split) {
-            object.set({ quickValidityLayout: ['calendar-card', 'inline-footer'].includes(object.quickValidityLayout) ? object.quickValidityLayout : 'split-footer', visible: quickShowValidity.value && !!splitText.period })
+            object.set({ quickValidityLayout: ['calendar-card', 'inline-footer', 'offer-banner', 'reference-ribbon'].includes(object.quickValidityLayout) ? object.quickValidityLayout : 'split-footer', visible: quickShowValidity.value && !!splitText.period })
             for (const sibling of canvas.value?.getObjects() || []) {
                 if (sibling.parentFrameId !== object.parentFrameId) continue
                 if (separateFields && sibling.name === 'validity-backdrop') sibling.set({ visible: false })
@@ -19752,24 +19775,38 @@ const ensureQuickPageThumbnail = async (page: any, refresh = false): Promise<voi
     // A materialized template page must have its own thumbnail. Reusing the
     // source thumbnail can preserve a stale crop/letterbox from another
     // format (especially Story), even when the live canvas is correct.
-    const isTemplatePage = isTemplateCompositionManagedPage(page)
-    if (!page?.id || (!refresh && (page.thumbnail || (!isTemplatePage && page.thumbnailUrl))) || !page.canvasData || !fabric?.StaticCanvas) return
-    const sourceFingerprint = computeCanvasFingerprint(page.canvasData)
+    const pageId = String(page?.id || '').trim()
+    if (!pageId || !fabric?.StaticCanvas) return
+
+    const pageIndex = project.pages.findIndex((item: any) => String(item?.id || '').trim() === pageId)
+    if (pageIndex < 0) return
+    const livePage = project.pages[pageIndex]
+    if (!livePage?.canvasData) return
+
+    const isTemplatePage = isTemplateCompositionManagedPage(livePage)
+    const hasInlineThumb = typeof livePage.thumbnail === 'string' && livePage.thumbnail.trim().length > 0
+    const hasStoredThumb = typeof livePage.thumbnailUrl === 'string' && livePage.thumbnailUrl.trim().length > 0
+    // Páginas de template/materializadas precisam de miniatura própria; thumbnailUrl
+    // herdada do blueprint costuma falhar ou mostrar crop de outro formato.
+    if (!refresh && (hasInlineThumb || (!isTemplatePage && hasStoredThumb))) return
+
+    const sourceJson = livePage.canvasData
     try {
         const dataURL = await generateThumbnailFromCanvasJson({
-            sourceJson: page.canvasData,
+            sourceJson,
             staticCanvasCtor: fabric.StaticCanvas,
-            pageWidth: Number(page.width || 1080),
-            pageHeight: Number(page.height || 1350),
-            defaultWidth: Number(page.width || 1080),
-            defaultHeight: Number(page.height || 1350)
+            pageWidth: Number(livePage.width || 1080),
+            pageHeight: Number(livePage.height || 1350),
+            defaultWidth: Number(livePage.width || 1080),
+            defaultHeight: Number(livePage.height || 1350)
         })
         if (!dataURL) return
-        const pageIndex = project.pages.findIndex((item: any) => String(item?.id || '').trim() === String(page.id).trim())
-        if (pageIndex >= 0 && computeCanvasFingerprint(project.pages[pageIndex]?.canvasData) === sourceFingerprint) {
-            updatePageThumbnail(pageIndex, dataURL)
-            if (refresh) triggerAutoSave()
-        }
+        const latestIndex = project.pages.findIndex((item: any) => String(item?.id || '').trim() === pageId)
+        if (latestIndex < 0) return
+        // Após waitForTemplatePageReady o canvasData pode ser re-sincronizado;
+        // a miniatura ainda representa a mesma página e deve ser aplicada.
+        updatePageThumbnail(latestIndex, dataURL)
+        if (refresh) triggerAutoSave()
     } catch (error) {
         // A miniatura é um aprimoramento visual; a página continua válida
         // mesmo se uma imagem remota não puder ser renderizada no offscreen.

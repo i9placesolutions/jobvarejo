@@ -55,5 +55,18 @@ export const syncPriceTemplateStyle = (group: any, template: any, revivePaint: (
     for (const child of node.getObjects?.() || []) visit(child)
   }
   visit(group)
+  // Os filhos restaurados voltam às coordenadas do modelo. A caixa do grupo
+  // precisa voltar ao mesmo referencial, ou o fit usa dimensões de um card
+  // anterior e deixa controles vazios e a etiqueta visualmente pequena.
+  if (restoreSingleGeometry) {
+    const bounds: Record<string, number> = {}
+    for (const key of ['width', 'height']) {
+      const value = Number(template[key])
+      if (Number.isFinite(value) && value > 0) bounds[key] = value
+    }
+    group.set?.(bounds)
+    Object.assign(group, bounds)
+    group.setCoords?.()
+  }
   group.dirty = true
 }

@@ -1,0 +1,56 @@
+[
+  {
+    "model": "alerta",
+    "sourceProject": "1d1733a2-a851-43db-a2d9-8bd94566bb2d",
+    "sourceName": "Alerta de Oferta",
+    "sourceAsset": "/api/storage/p?key=imagens%2Fmodelos-alerta-oferta-1d1733a2-a851-43db-a2d9-8bd94566bb2d%2Falerta-oferta-background.png",
+    "file": "alerta-background.png",
+    "sha256": "4963bd87bb2a6f29a0bcbe9206f2a3c2be409820430081e08a1527f25042cb49",
+    "operation": "byte-for-byte copy; no private brand or products"
+  },
+  {
+    "model": "alerta",
+    "sourceProject": "1d1733a2-a851-43db-a2d9-8bd94566bb2d",
+    "sourceName": "Alerta de Oferta",
+    "sourceAsset": "/api/storage/p?key=imagens%2Fmodelos-alerta-oferta-1d1733a2-a851-43db-a2d9-8bd94566bb2d%2Falerta-oferta.png",
+    "file": "alerta-seal.png",
+    "sha256": "5dcd8f809abb21394b4a434250bb6926b9a4c3ad6fce7b1704847dc8c41fe0c9",
+    "operation": "byte-for-byte copy; no private brand or products"
+  },
+  {
+    "model": "relampago",
+    "sourceProject": "7ce038d3-8c64-4884-a8c0-c4d976df5ac0",
+    "sourceName": "Oferta Relâmpago — Azul",
+    "sourceAsset": "/api/storage/p?key=imagens%2Fmodelos-relampago-azul-7ce038d3-8c64-4884-a8c0-c4d976df5ac0%2Frelampago-azul-background.png",
+    "file": "relampago-background.png",
+    "sha256": "8b4358f7c4a45885133c3ac4e15c6f2ad7fc905826aaa30bdcc435c91ae53ff3",
+    "operation": "byte-for-byte copy; no private brand or products"
+  },
+  {
+    "model": "relampago",
+    "sourceProject": "7ce038d3-8c64-4884-a8c0-c4d976df5ac0",
+    "sourceName": "Oferta Relâmpago — Azul",
+    "sourceAsset": "/api/storage/p?key=imagens%2Fmodelos-relampago-azul-7ce038d3-8c64-4884-a8c0-c4d976df5ac0%2Frelampago-azul.png",
+    "file": "relampago-seal.png",
+    "sha256": "72fdbb8c8ea0eebd2e5c54d9e7c0c74d48f4235d22eb08e3e8b020403701ff90",
+    "operation": "byte-for-byte copy; no private brand or products"
+  },
+  {
+    "model": "saldao",
+    "sourceProject": "6cab0846-804f-45f9-90cc-b385343fa3a6",
+    "sourceName": "Saldão de Ofertas — Neon",
+    "sourceAsset": "/api/storage/p?key=projects%2Feb847e8e-7c19-4bee-8042-376528ce6192%2F6cab0846-804f-45f9-90cc-b385343fa3a6%2Fassets%2Fondas-confetes.png",
+    "file": "saldao-background.png",
+    "sha256": "2048ad5bf0e3b1b5081d3cc0722a39f2ffbd256f6a7c87ad24bb162a029e870a",
+    "operation": "byte-for-byte copy; no private brand or products"
+  },
+  {
+    "model": "saldao",
+    "sourceProject": "6cab0846-804f-45f9-90cc-b385343fa3a6",
+    "sourceName": "Saldão de Ofertas — Neon",
+    "sourceAsset": "/api/storage/p?key=projects%2Feb847e8e-7c19-4bee-8042-376528ce6192%2F6cab0846-804f-45f9-90cc-b385343fa3a6%2Fassets%2Fselo-preco-baixo.png",
+    "file": "saldao-seal.png",
+    "sha256": "a639333d8b88b166887006d3cc25bae918578473c61998feb1e6ca5eb875e28b",
+    "operation": "byte-for-byte copy; no private brand or products"
+  }
+]

@@ -15,7 +15,7 @@ export default defineNuxtConfig({
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
         {
           rel: 'stylesheet',
-          href: 'https://fonts.googleapis.com/css2?family=Barlow:wght@100;200;300;400;500;600;700;800;900&family=Barlow+Condensed:wght@400;600;700;800;900&family=Oswald:wght@400;600;700&family=Anton&display=swap'
+          href: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Barlow:wght@100;200;300;400;500;600;700;800;900&family=Barlow+Condensed:wght@400;600;700;800;900&family=Oswald:wght@400;600;700&family=Anton&display=swap'
         }
       ]
     }
@@ -181,6 +181,12 @@ export default defineNuxtConfig({
             // accidentally turning a lazy chunk into a global dependency.
             if (id.includes('vite/preload-helper')) return 'app-preload-helper'
 
+            // Recursos de vídeo permanecem separados do Player e dos editores de imagem.
+            if (/\/node_modules\/@remotion\/(effects|shapes|paths|noise|transitions)\//.test(id)) return 'video-visual-effects'
+            if (id.includes('/node_modules/simplex-noise/')) return 'video-visual-effects'
+            if (/\/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'video-react'
+            if (id.includes('/node_modules/remotion/')) return 'video-remotion'
+
             // Editor local code splitting (non-node_modules)
             if (id.includes('/utils/editorCanvasActionsController.ts')) return 'editor-actions'
             if (id.includes('/utils/editorHistoryController.ts')) return 'editor-history'
@@ -268,6 +274,8 @@ export default defineNuxtConfig({
     '/': {
       ssr: false,
     },
+    '/videos': { ssr: false },
+    '/videos/**': { ssr: false },
     '/art-studio': { ssr: false },
     '/art-studio/**': { ssr: false },
     '/label-templates': {

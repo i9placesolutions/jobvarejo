@@ -1,0 +1,451 @@
+{
+  "version": "4.0.526",
+  "checkedAt": "2026-09-20T02:49:44.372Z",
+  "scope": "Imports reais do pacote inteiro. Apenas os marcados integrated-in-video-library estão ligados aos controles e composições do aplicativo; importável não significa validado visualmente.",
+  "resources": [
+    {
+      "name": "barrelDistortion",
+      "module": "@remotion/effects/barrel-distortion",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/barrel-distortion"
+    },
+    {
+      "name": "blur",
+      "module": "@remotion/effects/blur",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/blur"
+    },
+    {
+      "name": "burlap",
+      "module": "@remotion/effects/burlap",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/burlap"
+    },
+    {
+      "name": "flannel",
+      "module": "@remotion/effects/flannel",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/flannel"
+    },
+    {
+      "name": "checkerboard",
+      "module": "@remotion/effects/checkerboard",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/checkerboard"
+    },
+    {
+      "name": "chromaticAberration",
+      "module": "@remotion/effects/chromatic-aberration",
+      "status": "integrated-in-video-library",
+      "reference": "https://www.remotion.dev/docs/effects/chromatic-aberration"
+    },
+    {
+      "name": "colorKey",
+      "module": "@remotion/effects/color-key",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/color-key"
+    },
+    {
+      "name": "colorCorrection",
+      "module": "@remotion/effects/color-correction",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/color-correction"
+    },
+    {
+      "name": "brightness",
+      "module": "@remotion/effects/brightness",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/brightness"
+    },
+    {
+      "name": "contrast",
+      "module": "@remotion/effects/contrast",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/contrast"
+    },
+    {
+      "name": "contourLines",
+      "module": "@remotion/effects/contour-lines",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/contour-lines"
+    },
+    {
+      "name": "dropShadow",
+      "module": "@remotion/effects/drop-shadow",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/drop-shadow"
+    },
+    {
+      "name": "duotone",
+      "module": "@remotion/effects/duotone",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/duotone"
+    },
+    {
+      "name": "emboss",
+      "module": "@remotion/effects/emboss",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/emboss"
+    },
+    {
+      "name": "evolve",
+      "module": "@remotion/effects/evolve",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/evolve"
+    },
+    {
+      "name": "exposure",
+      "module": "@remotion/effects/exposure",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/exposure"
+    },
+    {
+      "name": "fisheye",
+      "module": "@remotion/effects/fisheye",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/fisheye"
+    },
+    {
+      "name": "cornerPin",
+      "module": "@remotion/effects/corner-pin",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/corner-pin"
+    },
+    {
+      "name": "glow",
+      "module": "@remotion/effects/glow",
+      "status": "integrated-in-video-library",
+      "reference": "https://www.remotion.dev/docs/effects/glow"
+    },
+    {
+      "name": "gridlines",
+      "module": "@remotion/effects/gridlines",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/gridlines"
+    },
+    {
+      "name": "halftone",
+      "module": "@remotion/effects/halftone",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/halftone"
+    },
+    {
+      "name": "halftoneLinearGradient",
+      "module": "@remotion/effects/halftone-linear-gradient",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/halftone-linear-gradient"
+    },
+    {
+      "name": "pixelDissolve",
+      "module": "@remotion/effects/pixel-dissolve",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/pixel-dissolve"
+    },
+    {
+      "name": "pixelate",
+      "module": "@remotion/effects/pixelate",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/pixelate"
+    },
+    {
+      "name": "grayscale",
+      "module": "@remotion/effects/grayscale",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/grayscale"
+    },
+    {
+      "name": "hue",
+      "module": "@remotion/effects/hue",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/hue"
+    },
+    {
+      "name": "invert",
+      "module": "@remotion/effects/invert",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/invert"
+    },
+    {
+      "name": "lines",
+      "module": "@remotion/effects/lines",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/lines"
+    },
+    {
+      "name": "linearGradient",
+      "module": "@remotion/effects/linear-gradient",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/linear-gradient"
+    },
+    {
+      "name": "linearGradientTint",
+      "module": "@remotion/effects/linear-gradient-tint",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/linear-gradient-tint"
+    },
+    {
+      "name": "liquidContours",
+      "module": "@remotion/effects/liquid-contours",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/liquid-contours"
+    },
+    {
+      "name": "linearProgressiveBlur",
+      "module": "@remotion/effects/linear-progressive-blur",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/linear-progressive-blur"
+    },
+    {
+      "name": "linearProgressivePixelate",
+      "module": "@remotion/effects/linear-progressive-pixelate",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/linear-progressive-pixelate"
+    },
+    {
+      "name": "levels",
+      "module": "@remotion/effects/levels",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/levels"
+    },
+    {
+      "name": "lut",
+      "module": "@remotion/effects/lut",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/lut"
+    },
+    {
+      "name": "lightLeak",
+      "module": "@remotion/effects/light-leak",
+      "status": "integrated-in-video-library",
+      "reference": "https://www.remotion.dev/docs/effects/light-leak"
+    },
+    {
+      "name": "lightTrail",
+      "module": "@remotion/effects/light-trail",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/light-trail"
+    },
+    {
+      "name": "dotGrid",
+      "module": "@remotion/effects/dot-grid",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/dot-grid"
+    },
+    {
+      "name": "mirror",
+      "module": "@remotion/effects/mirror",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/mirror"
+    },
+    {
+      "name": "noise",
+      "module": "@remotion/effects/noise",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/noise"
+    },
+    {
+      "name": "noiseDisplacement",
+      "module": "@remotion/effects/noise-displacement",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/noise-displacement"
+    },
+    {
+      "name": "outline",
+      "module": "@remotion/effects/outline",
+      "status": "integrated-in-video-library",
+      "reference": "https://www.remotion.dev/docs/effects/outline"
+    },
+    {
+      "name": "paper",
+      "module": "@remotion/effects/paper",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/paper"
+    },
+    {
+      "name": "roughenEdges",
+      "module": "@remotion/effects/roughen-edges",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/roughen-edges"
+    },
+    {
+      "name": "pattern",
+      "module": "@remotion/effects/pattern",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/pattern"
+    },
+    {
+      "name": "radialProgressiveBlur",
+      "module": "@remotion/effects/radial-progressive-blur",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/radial-progressive-blur"
+    },
+    {
+      "name": "radialProgressivePixelate",
+      "module": "@remotion/effects/radial-progressive-pixelate",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/radial-progressive-pixelate"
+    },
+    {
+      "name": "regionBlur",
+      "module": "@remotion/effects/region-blur",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/region-blur"
+    },
+    {
+      "name": "rings",
+      "module": "@remotion/effects/rings",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/rings"
+    },
+    {
+      "name": "saturation",
+      "module": "@remotion/effects/saturation",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/saturation"
+    },
+    {
+      "name": "scanlines",
+      "module": "@remotion/effects/scanlines",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/scanlines"
+    },
+    {
+      "name": "scale",
+      "module": "@remotion/effects/scale",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/scale"
+    },
+    {
+      "name": "shadowsHighlights",
+      "module": "@remotion/effects/shadows-highlights",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/shadows-highlights"
+    },
+    {
+      "name": "shine",
+      "module": "@remotion/effects/shine",
+      "status": "integrated-in-video-library",
+      "reference": "https://www.remotion.dev/docs/effects/shine"
+    },
+    {
+      "name": "shrinkwrap",
+      "module": "@remotion/effects/shrinkwrap",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/shrinkwrap"
+    },
+    {
+      "name": "skew",
+      "module": "@remotion/effects/skew",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/skew"
+    },
+    {
+      "name": "speckle",
+      "module": "@remotion/effects/speckle",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/speckle"
+    },
+    {
+      "name": "starburst",
+      "module": "@remotion/effects/starburst",
+      "status": "integrated-in-video-library",
+      "reference": "https://www.remotion.dev/docs/effects/starburst"
+    },
+    {
+      "name": "tear",
+      "module": "@remotion/effects/tear",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/tear"
+    },
+    {
+      "name": "thermalVision",
+      "module": "@remotion/effects/thermal-vision",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/thermal-vision"
+    },
+    {
+      "name": "tile",
+      "module": "@remotion/effects/tile",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/tile"
+    },
+    {
+      "name": "tint",
+      "module": "@remotion/effects/tint",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/tint"
+    },
+    {
+      "name": "uvTranslate",
+      "module": "@remotion/effects/translate",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/translate"
+    },
+    {
+      "name": "xyTranslate",
+      "module": "@remotion/effects/translate",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/translate"
+    },
+    {
+      "name": "tvSignalOff",
+      "module": "@remotion/effects/tv-signal-off",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/tv-signal-off"
+    },
+    {
+      "name": "venetianBlinds",
+      "module": "@remotion/effects/venetian-blinds",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/venetian-blinds"
+    },
+    {
+      "name": "vibrance",
+      "module": "@remotion/effects/vibrance",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/vibrance"
+    },
+    {
+      "name": "vignette",
+      "module": "@remotion/effects/vignette",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/vignette"
+    },
+    {
+      "name": "wave",
+      "module": "@remotion/effects/wave",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/wave"
+    },
+    {
+      "name": "waves",
+      "module": "@remotion/effects/waves",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/waves"
+    },
+    {
+      "name": "whiteBalance",
+      "module": "@remotion/effects/white-balance",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/white-balance"
+    },
+    {
+      "name": "whiteNoise",
+      "module": "@remotion/effects/white-noise",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/white-noise"
+    },
+    {
+      "name": "zoomBlur",
+      "module": "@remotion/effects/zoom-blur",
+      "status": "integrated-in-video-library",
+      "reference": "https://www.remotion.dev/docs/effects/zoom-blur"
+    },
+    {
+      "name": "zigzag",
+      "module": "@remotion/effects/zigzag",
+      "status": "installed-callable",
+      "reference": "https://www.remotion.dev/docs/effects/zigzag"
+    }
+  ]
+}

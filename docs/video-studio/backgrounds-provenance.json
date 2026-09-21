@@ -1,0 +1,92 @@
+[
+  {
+    "id": "lava",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-9dbd7f63-3670-44d1-bf49-bcae021557e8.png",
+    "prompt": "A bold premium supermarket retail motion-graphics BACKGROUND PLATE, no text, no products, no logo, no lettering. Fiery vermilion red and orange molten lava energy, glossy red sculptural 3D ribbons sweeping diagonally, ember flecks, glowing hot orange fissures and illuminated red beveled panels along the edges, deep crimson center with richly colored depth gradients. Energetic modern 2026 commercial visual style, polished CGI, strong depth, punchy saturated color, cinematic lighting. Not neutral, not grey, not beige, not a plain gradient. Center 55 percent remains visually clean for a large product and price but strongly colored, complex edges and corners, layered foreground framing. Landscape 16:9, high resolution. Design must also work when the central 9:16 portion is cropped for a vertical ad.",
+    "asset": "public/video-studio/templates/backgrounds/lava-v1.png",
+    "origin": "built-in image_gen tool"
+  },
+  {
+    "id": "electric",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-47e1b7f3-cca1-4858-8377-63a7ee92da22.png",
+    "prompt": "A premium energetic supermarket retail motion-graphics BACKGROUND PLATE, no text, no logos, no products, no letters. Saturated cobalt blue and cyan electric speed tunnel, metallic ultramarine angular folded panels framing the edges, white-blue lightning arcs near edges, bright cyan light rails converging into depth, glossy 3D shards suspended at corners, dramatic luminous cyan rim lights. Modern high-end CGI advertising, vivid and striking, no grey neutral space. Center 55 percent is a richly colored royal blue atmospheric depth zone clear enough for products and price graphics. Detailed edges, bold diagonal composition. Landscape 16:9 high resolution, also usable as central vertical 9:16 crop.",
+    "asset": "public/video-studio/templates/backgrounds/electric-v1.png",
+    "origin": "built-in image_gen tool"
+  },
+  {
+    "id": "neon",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-13278b1b-5f34-47b3-8e6f-65c5a11c8627.png",
+    "prompt": "Create a high-end vivid retail advertising motion-graphics background plate. Electric magenta, deep purple and vivid cyan, glossy curved 3D neon tubing and metallic liquid-chrome ribbons looping at the edges, luminous concentric arcs receding in perspective, crisp violet reflective panels and small light streaks. Bold contemporary music-video energy and premium 3D CGI, saturated colors, strong spatial depth, not neutral or grey, not generic stock gradient. Center 55 percent has colorful deep violet depth with no distracting hard objects so product images and price labels can be composited. No text, no words, no logos, no products, no symbols. Wide landscape 16:9, high resolution, allow a beautiful central 9:16 crop.",
+    "asset": "public/video-studio/templates/backgrounds/neon-v1.png",
+    "origin": "built-in image_gen tool"
+  },
+  {
+    "id": "harvest",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-feab1278-75fc-4a48-b2ba-cf732c9ea3f1.png",
+    "prompt": "Create a vivid premium CGI motion graphics background plate for fresh produce supermarket offers. Rich emerald green and luminous lime green, sculptural translucent green glass swooshes and glossy curved podium-like ribbons around the borders, floating detailed tropical green leaves and very tiny dew particles near corners, energetic diagonal sun rays, a sense of rushing freshness and depth. Modern polished 3D commercial art, bold saturation, luminous highlights, no neutral grey or beige. Center 55 percent should stay richly green but free of objects for composited products and prices. No words, no text, no logo, no food products, no people. Landscape 16:9 high resolution, center crop must work for vertical 9:16.",
+    "asset": "public/video-studio/templates/backgrounds/harvest-v1.png",
+    "origin": "built-in image_gen tool"
+  },
+  {
+    "id": "celebration",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-08997949-a6af-4b7f-841e-3bfd3519565e.png",
+    "prompt": "Create an exuberant premium retail advertising CGI BACKGROUND, vibrant tangerine orange, hot pink, yellow and cobalt accents. Glossy sculptural inflated 3D ribbons and large fluid arcs along the edges, floating metallic confetti chips, dynamic radial colored light rays, strong sense of layered depth and motion, high-end polished lighting, contemporary and playful without being childish clipart. Bold saturated color everywhere, not neutral, not beige, not flat. Center 55 percent a saturated warm pink-orange atmospheric space kept free of hard objects for product and price overlays. No words, no text, no letters, no logos, no people, no products. Wide landscape 16:9 high resolution; should also make a striking central 9:16 vertical crop.",
+    "asset": "public/video-studio/templates/backgrounds/celebration-v1.png",
+    "origin": "built-in image_gen tool"
+  },
+  {
+    "id": "red-gold",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-8a6cb843-a5aa-4ded-b800-abf82f52da3e.png",
+    "prompt": "Create a sophisticated yet aggressive high-impact supermarket promotion CGI background plate. Saturated scarlet red and polished metallic gold, large beveled 3D gold ribbons curling and slashing diagonally around the outer edges, luminous red glass panels, gold light trails, tiny gold spark particles, glossy reflections and deep burgundy-red spatial center. Bold contemporary premium retail motion-graphics art, a lot of colored depth, brilliant highlights. Absolutely not neutral grey, beige or plain empty background. Keep center 55 percent free of solid objects for product and price typography overlays while remaining vividly red. No words, no lettering, no logos, no products, no symbols. Landscape 16:9 high resolution, suitable also for central vertical 9:16 crop.",
+    "asset": "public/video-studio/templates/backgrounds/red-gold-v1.png",
+    "origin": "built-in image_gen tool"
+  },
+  {
+    "id": "lava-vertical",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-ffd414ec-2950-4719-bbe9-4b0293a5b669.png",
+    "prompt": "Recompose this background design into a native PORTRAIT 9:16 composition for a supermarket Reels/Stories ad. Preserve its visual style, materials, vivid saturated colors and cinematic lighting. Do NOT squeeze or stretch the landscape image. Rebuild the ribbons, panels and decorative framing to run along left and right edges and corners in a tall layout, leaving the central 60 percent of width available for a large seal at top and products below. Strong depth, energetic retail visual impact, detailed edges, bold richly colored center, nothing neutral. No text, no lettering, no logos, no products, no people. High resolution portrait 9:16.",
+    "asset": "public/video-studio/templates/backgrounds/lava-vertical-v1.png",
+    "origin": "built-in image_gen tool",
+    "reference": "public/video-studio/templates/backgrounds/lava-v1.png"
+  },
+  {
+    "id": "electric-vertical",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-df262976-6f34-4071-a951-b492591b177d.png",
+    "prompt": "Recompose this background design into a native PORTRAIT 9:16 composition for a supermarket Reels/Stories ad. Preserve its visual style, materials, vivid saturated colors and cinematic lighting. Do NOT squeeze or stretch the landscape image. Rebuild the ribbons, panels and decorative framing to run along left and right edges and corners in a tall layout, leaving the central 60 percent of width available for a large seal at top and products below. Strong depth, energetic retail visual impact, detailed edges, bold richly colored center, nothing neutral. No text, no lettering, no logos, no products, no people. High resolution portrait 9:16.",
+    "asset": "public/video-studio/templates/backgrounds/electric-vertical-v1.png",
+    "origin": "built-in image_gen tool",
+    "reference": "public/video-studio/templates/backgrounds/electric-v1.png"
+  },
+  {
+    "id": "neon-vertical",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-03d3c5ee-b10e-45b9-81bd-4cdfd97c15ee.png",
+    "prompt": "Recompose this background design into a native PORTRAIT 9:16 composition for a supermarket Reels/Stories ad. Preserve its visual style, materials, vivid saturated colors and cinematic lighting. Do NOT squeeze or stretch the landscape image. Rebuild the ribbons, panels and decorative framing to run along left and right edges and corners in a tall layout, leaving the central 60 percent of width available for a large seal at top and products below. Strong depth, energetic retail visual impact, detailed edges, bold richly colored center, nothing neutral. No text, no lettering, no logos, no products, no people. High resolution portrait 9:16.",
+    "asset": "public/video-studio/templates/backgrounds/neon-vertical-v1.png",
+    "origin": "built-in image_gen tool",
+    "reference": "public/video-studio/templates/backgrounds/neon-v1.png"
+  },
+  {
+    "id": "harvest-vertical",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-e6314874-03d2-413e-a32a-2d75a1918ab5.png",
+    "prompt": "Recompose this background design into a native PORTRAIT 9:16 composition for a supermarket Reels/Stories ad. Preserve its visual style, materials, vivid saturated colors and cinematic lighting. Do NOT squeeze or stretch the landscape image. Rebuild the ribbons, panels and decorative framing to run along left and right edges and corners in a tall layout, leaving the central 60 percent of width available for a large seal at top and products below. Strong depth, energetic retail visual impact, detailed edges, bold richly colored center, nothing neutral. No text, no lettering, no logos, no products, no people. High resolution portrait 9:16.",
+    "asset": "public/video-studio/templates/backgrounds/harvest-vertical-v1.png",
+    "origin": "built-in image_gen tool",
+    "reference": "public/video-studio/templates/backgrounds/harvest-v1.png"
+  },
+  {
+    "id": "celebration-vertical",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-109f9fe6-8352-44ae-b4b1-882a405f883f.png",
+    "prompt": "Recompose this background design into a native PORTRAIT 9:16 composition for a supermarket Reels/Stories ad. Preserve its visual style, materials, vivid saturated colors and cinematic lighting. Do NOT squeeze or stretch the landscape image. Rebuild the ribbons, panels and decorative framing to run along left and right edges and corners in a tall layout, leaving the central 60 percent of width available for a large seal at top and products below. Strong depth, energetic retail visual impact, detailed edges, bold richly colored center, nothing neutral. No text, no lettering, no logos, no products, no people. High resolution portrait 9:16.",
+    "asset": "public/video-studio/templates/backgrounds/celebration-vertical-v1.png",
+    "origin": "built-in image_gen tool",
+    "reference": "public/video-studio/templates/backgrounds/celebration-v1.png"
+  },
+  {
+    "id": "red-gold-vertical",
+    "path": "/Users/rafaelmendes/.codex/generated_images/01a0bbbf-f4f8-7cc1-bf7e-057440674c11/exec-3c5d901d-fca6-443a-990e-3db56e27d772.png",
+    "prompt": "Recompose this background design into a native PORTRAIT 9:16 composition for a supermarket Reels/Stories ad. Preserve its visual style, materials, vivid saturated colors and cinematic lighting. Do NOT squeeze or stretch the landscape image. Rebuild the ribbons, panels and decorative framing to run along left and right edges and corners in a tall layout, leaving the central 60 percent of width available for a large seal at top and products below. Strong depth, energetic retail visual impact, detailed edges, bold richly colored center, nothing neutral. No text, no lettering, no logos, no products, no people. High resolution portrait 9:16.",
+    "asset": "public/video-studio/templates/backgrounds/red-gold-vertical-v1.png",
+    "origin": "built-in image_gen tool",
+    "reference": "public/video-studio/templates/backgrounds/red-gold-v1.png"
+  }
+]

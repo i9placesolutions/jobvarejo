@@ -37,3 +37,25 @@ it('não trava em 9 nas coordenadas locais do encarte salvo', () => {
   expect(small.title.fontSize / featured.title.fontSize).toBeLessThan(0.75)
   expect(small.title.height).toBeLessThanOrEqual(77.4357 * 0.23)
 })
+it('etiqueta cresce proporcionalmente ao ampliar o card e estabiliza no relayout', () => {
+  const card = makeCard()
+  fitResponsiveProductTypography(card, 300, 300)
+  const scale = card.price.scaleX
+  fitResponsiveProductTypography(card, 900, 900)
+  expect(card.price.scaleX).toBeCloseTo(scale * 3)
+  expect(card.price.scaleY).toBeCloseTo(card.price.scaleX)
+  fitResponsiveProductTypography(card, 900, 900)
+  expect(card.price.scaleX).toBeCloseTo(scale * 3)
+})
+it('preserva a escala já calculada pela receita do card', () => {
+  const card = makeCard()
+  card.price.scaleX = card.price.scaleY = 3
+  fitResponsiveProductTypography(card, 900, 900, 1, false)
+  expect(card.price.scaleX).toBe(3)
+})
+it('preserva o ajuste manual da etiqueta', () => {
+  const card = makeCard()
+  card.price.__manualPricePosition = true
+  fitResponsiveProductTypography(card, 900, 900)
+  expect(card.price.scaleX).toBe(1)
+})

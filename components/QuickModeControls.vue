@@ -317,6 +317,27 @@ const markPageThumbnailError = (page: QuickModePage) => {
   if (id) pageThumbErrors.value[id] = true
 }
 
+const clearPageThumbnailError = (pageId: string) => {
+  const id = String(pageId || '').trim()
+  if (id && pageThumbErrors.value[id]) delete pageThumbErrors.value[id]
+}
+
+watch(
+  () => quickPages.value.map(page => ({
+    id: String(page?.id || '').trim(),
+    thumbnail: typeof page?.thumbnail === 'string' ? page.thumbnail.trim() : ''
+  })),
+  (pages, previousPages) => {
+    // Só libera o @error quando chega uma miniatura inline nova (dataURL gerada).
+    // Liberar por thumbnailUrl herdada reabria o mesmo URL quebrado em loop.
+    const previousById = new Map((previousPages || []).map(page => [page.id, page.thumbnail]))
+    for (const page of pages) {
+      if (!page.id || !page.thumbnail) continue
+      if (page.thumbnail !== previousById.get(page.id)) clearPageThumbnailError(page.id)
+    }
+  }
+)
+
 const getPageFormat = (page: QuickModePage) => {
   const width = Number(page?.width || 0)
   const height = Number(page?.height || 0)
@@ -1041,9 +1062,11 @@ const useTemplateModel = (modelId: string) => {
 
       <section v-if="props.productAreaColors?.length" class="quick-mode-data-panel">
         <strong>Fundo da área de produtos</strong>
-        <p>Cor do quadro atrás dos produtos nesta página.</p>
+        <p>Deixe a arte aparecer entre os cards ou escolha uma cor da paleta do encarte.</p>
         <label v-for="target in props.productAreaColors" :key="target.id" class="flex items-center justify-between gap-3 py-2">
-          <span>{{ target.label }}</span>
+          <span>{{ target.color ? target.label : 'Sem fundo' }}</span>
+          <button type="button" :disabled="props.busy" class="text-sm underline"
+            @click="emit('product-area-color', { targetId: target.id, value: 'transparent' })">Sem fundo</button>
           <input type="color" :aria-label="target.label" :value="target.color || '#ffffff'" :disabled="props.busy"
             @change="emit('product-area-color', { targetId: target.id, value: ($event.target as HTMLInputElement).value })" />
         </label>

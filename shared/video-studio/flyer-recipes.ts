@@ -1,0 +1,20 @@
+import generated from './generated-flyer-recipes.json'
+import type {VideoMotionSettings, SceneTransition} from './effect-catalog'
+export type FlyerRecipeId = string
+export type LayoutBox = readonly [number,number,number,number]
+export interface FlyerLayout {seal:LayoutBox;logo:LayoutBox;product:LayoutBox;name:LayoutBox;price:LayoutBox;validity:LayoutBox;condition:LayoutBox}
+export interface FlyerRecipe {revision?:number;energyBackground?:string;energyBackgroundVertical?:string;backgroundVariant?:number;backgroundGradient?:string;backgroundKind?:string;seed?:number;nativeTitle?:string;sealAspect?:number;layoutName?:string;musicStyle?:string;bpm?:number;id:FlyerRecipeId;name:string;campaign:string;sourceProject:string;accent:string;base:string;ink:string;label:'ticket'|'bolt'|'banner';labelNames:string[];background:string;seal:string;music:string;transition:SceneTransition;motion:VideoMotionSettings;vertical:FlyerLayout;horizontal:FlyerLayout}
+const common={speed:'fast' as const,finish:'clean' as const}
+export const PILOT_RECIPES:Record<FlyerRecipeId,FlyerRecipe>={
+ alerta:{id:'alerta',name:'Alerta de Oferta',campaign:'ALERTA DE OFERTA',sourceProject:'1d1733a2-a851-43db-a2d9-8bd94566bb2d',accent:'#ffe338',base:'#690713',ink:'#3b0710',label:'ticket',labelNames:['PRETA VERMELHA AMARELA','Padrão'],background:'alerta-background.png',seal:'alerta-seal.png',music:'retail-drive',transition:'shutter',motion:{...common,product:'whip-right',text:'stomp',price:'slam',camera:'earthquake',atmosphere:['shockwave','speed-lines'],transitionSound:'whip',accentSound:'boom'},
+ vertical:{seal:[80,65,920,630],logo:[65,1515,950,340],product:[420,825,620,700],name:[100,715,880,85],price:[35,1080,470,330],validity:[35,1435,470,40],condition:[40,990,455,65]},
+ horizontal:{seal:[55,60,630,560],logo:[65,685,610,340],product:[690,215,1130,735],name:[710,70,1100,105],price:[1010,640,660,315],validity:[1010,978,660,30],condition:[1290,180,530,25]}},
+ relampago:{id:'relampago',name:'Oferta Relâmpago — Azul',campaign:'OFERTA RELÂMPAGO',sourceProject:'7ce038d3-8c64-4884-a8c0-c4d976df5ac0',accent:'#ffe92d',base:'#031d64',ink:'#032e78',label:'bolt',labelNames:['preto/amarelo 3d','Padrão'],background:'relampago-background.png',seal:'relampago-seal.png',music:'retail-drive',transition:'diagonal',motion:{...common,product:'whip-left',text:'whip',price:'drop',camera:'impact',atmosphere:['lightning','speed-lines'],transitionSound:'suction',accentSound:'metal-hit'},
+ vertical:{seal:[80,65,920,630],logo:[65,1515,950,340],product:[40,825,620,700],name:[100,715,880,85],price:[575,1080,470,330],validity:[575,1435,470,40],condition:[590,990,450,65]},
+ horizontal:{seal:[1270,50,610,575],logo:[1270,685,600,340],product:[90,210,1160,740],name:[100,65,1120,100],price:[335,640,660,315],validity:[335,978,660,30],condition:[650,175,550,25]}},
+ saldao:{id:'saldao',name:'Saldão de Ofertas — Neon',campaign:'SALDÃO DE OFERTAS',sourceProject:'6cab0846-804f-45f9-90cc-b385343fa3a6',accent:'#ffd929',base:'#700716',ink:'#44070e',label:'banner',labelNames:['Padrão','PRETA VERMELHA AMARELA'],background:'saldao-background.png',seal:'saldao-seal.png',music:'retail-bounce',transition:'whip-up',motion:{...common,product:'rise',text:'stretch',price:'tilt',camera:'swing',atmosphere:['orbit','prism'],transitionSound:'air-swipe',accentSound:'coin'},
+ vertical:{seal:[80,65,920,580],logo:[65,1618,950,255],product:[135,755,810,610],name:[100,655,880,75],price:[165,1320,750,225],validity:[185,1570,710,35],condition:[150,1270,780,40]},
+ horizontal:{seal:[50,45,635,620],logo:[65,705,600,325],product:[730,185,1100,750],name:[750,60,1070,100],price:[950,650,700,315],validity:[950,988,700,30],condition:[1290,165,530,25]}}
+}
+export const FLYER_RECIPES:Record<string,FlyerRecipe>=Object.fromEntries((generated as unknown as FlyerRecipe[]).map(r=>[r.id,r]))
+export const flyerRecipe=(id:string):FlyerRecipe|undefined=>Object.prototype.hasOwnProperty.call(FLYER_RECIPES,id)?FLYER_RECIPES[id as FlyerRecipeId]:undefined
