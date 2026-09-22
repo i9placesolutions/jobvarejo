@@ -54,6 +54,9 @@ export const CARTAZISTA_FORMATS: CartazistaFormat[] = [
 ]
 
 export const CARTAZISTA_THEMES = [
+  { id: 'suina-ouro', name: 'Quarta Suína · Ouro', background: '#fffdf4', accent: '#10100e', ink: '#10100e', price: '#ffffff', secondary: '#10100e', highlight: '#fff000' },
+  { id: 'suina-rustica', name: 'Quarta Suína · Rústica', background: '#10100e', accent: '#fff000', ink: '#ffffff', price: '#ffffff', secondary: '#cf1005', highlight: '#fff000' },
+  { id: 'acougue-gold', name: 'Açougue · Vermelho e Ouro', background: '#fff8ed', accent: '#a40000', ink: '#221611', price: '#a40000', secondary: '#e5b950', highlight: '#181311' },
   { id: 'classic-yellow', name: 'Amarelo clássico', background: '#ffffff', accent: '#ed241c', ink: '#080808', price: '#ed241c', secondary: '#fff82b', highlight: '#fff82b' },
   { id: 'red-impact', name: 'Vermelho impacto', background: '#fff3ef', accent: '#cf1d2e', ink: '#171717', price: '#cf1d2e', secondary: '#ffcf32', highlight: '#ffe2df' },
   { id: 'fresh-green', name: 'Verde fresco', background: '#eff8e9', accent: '#1e704d', ink: '#17342a', price: '#d83b2f', secondary: '#bde58d', highlight: '#dff3c4' },
@@ -80,6 +83,7 @@ export type CartazistaProduct = {
 }
 
 export type CartazistaSettings = {
+  typography?: 'retail-hand' | 'brush' | 'marker' | 'handwritten' | 'original'
   freeDesign?: boolean
   title?: string
   showCurrency?: boolean
@@ -96,6 +100,8 @@ export type CartazistaSettings = {
 }
 
 export type CartazistaHeader = {
+  mascot?: string
+  layout?: 'suina-ouro' | 'suina-rustica'
   id: string
   name: string
   background: string

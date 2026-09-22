@@ -12,6 +12,7 @@ interface Props {
   headerClass?: string
   titleClass?: string
   closeClass?: string
+  surfaceClass?: string
   beforeClose?: () => boolean | Promise<boolean>
 }
 
@@ -65,7 +66,7 @@ const close = async () => {
       >
         <div
           class="bg-zinc-900 border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 relative z-10000 pointer-events-auto"
-          :class="sidePanel ? 'rounded-none h-screen max-h-none border-y-0 border-l-0 border-r-white/15' : (fullscreen ? 'rounded-none w-screen h-screen' : 'rounded-2xl')"
+          :class="[surfaceClass, sidePanel ? 'rounded-none h-screen max-h-none border-y-0 border-l-0 border-r-white/15' : (fullscreen ? 'rounded-none w-screen h-screen' : 'rounded-2xl')]"
           :style="sidePanel ? { width: width, maxWidth: '100%' } : (fullscreen ? {} : { width: width, maxWidth: '100%', maxHeight: 'calc(100vh - 2rem)' })"
         >
           <!-- Header -->

@@ -3466,5 +3466,107 @@
     "sha256": "a4a916e657fd328cdd84ae852762f9c704714f6d2d31087327d5b4d0493de74b",
     "origin": "original-instrumental-synthesis",
     "duration": 30
+  },
+  {
+    "id": "model-d6e5df76-0d63-41fa-8cbd-edd5bf29a259",
+    "style": "rock",
+    "bpm": 112,
+    "seed": 220926,
+    "tonic": 42,
+    "progression": [
+      0,
+      5,
+      7,
+      5
+    ],
+    "motif": [
+      0,
+      7,
+      5,
+      5,
+      5,
+      3,
+      7,
+      3,
+      7,
+      7,
+      3,
+      12,
+      7,
+      12,
+      3,
+      7
+    ],
+    "sha256": "9fc668041d1cae318dd0310210eb8473afafff4e1759c8f242415428a7ab8780",
+    "origin": "original-instrumental-synthesis",
+    "duration": 30
+  },
+  {
+    "id": "model-e092b15b-fb4b-4f32-8978-dc023c1f8c2d",
+    "style": "funk",
+    "bpm": 108,
+    "seed": 22092601,
+    "tonic": 37,
+    "progression": [
+      0,
+      7,
+      9,
+      5
+    ],
+    "motif": [
+      0,
+      0,
+      4,
+      5,
+      4,
+      4,
+      9,
+      0,
+      7,
+      5,
+      4,
+      7,
+      7,
+      9,
+      0,
+      12
+    ],
+    "sha256": "1c1f275313c9ebc822c56b76296a3b8516917c932f9cc576e84743ecd3a801f7",
+    "origin": "original-instrumental-synthesis",
+    "duration": 30
+  },
+  {
+    "id": "model-443b0c73-91f5-4053-898e-fa47854139b8",
+    "style": "tropical",
+    "bpm": 118,
+    "seed": 22092602,
+    "tonic": 38,
+    "progression": [
+      0,
+      3,
+      7,
+      5
+    ],
+    "motif": [
+      0,
+      5,
+      0,
+      0,
+      4,
+      12,
+      4,
+      5,
+      7,
+      4,
+      9,
+      7,
+      7,
+      9,
+      0,
+      7
+    ],
+    "sha256": "ec5d2634425fddfb3a45ebb1d6cf20c49afc9fb6f23c6b3090e1bfa13579af49",
+    "origin": "original-instrumental-synthesis",
+    "duration": 30
   }
 ]

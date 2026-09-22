@@ -1,3 +1,4 @@
+import {isAlcoholicProduct} from '../../../utils/product-card-configuration'
 import { randomUUID } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
 import sharp from 'sharp'
@@ -20,6 +21,6 @@ export default defineEventHandler(async event=>{
  if(!requested)return {items:candidates,warning:unread?'Algumas páginas não puderam ser lidas. Confira a lista antes de importar.':''}
  const offers=[]
  for(const index of requested){const p=products[index],c=candidates[index];if(!p||!c||c.complex){skipped++;continue}let image='';let imageAspectRatio:number|undefined;const key=keyFor(p.imageUrl||p.image);if(key){try{const bytes=await sharp(await read(key),{limitInputPixels:24_000_000}).trim({threshold:10}).resize(1500,1500,{fit:'inside',withoutEnlargement:true}).png().toBuffer();const info=await sharp(bytes).metadata();imageAspectRatio=Number(info.width)/Number(info.height);image=(await putVideoAsset(u.id,'image',c.name,bytes,'image/png','png',{width:info.width,height:info.height})).id}catch{}}
- offers.push({id:randomUUID(),name:c.name.slice(0,120),price:c.price,unit:c.unit.slice(0,30),condition:c.condition.slice(0,140),image,imageAspectRatio})}
+ offers.push({id:randomUUID(),name:c.name.slice(0,120),price:c.price,unit:c.unit.slice(0,30),condition:c.condition.slice(0,140),alcoholBadgeEnabled:typeof p.alcoholBadgeEnabled==='boolean'?p.alcoholBadgeEnabled:isAlcoholicProduct(p),image,imageAspectRatio})}
  return {offers,warning:[skipped?'Ofertas com múltiplos preços precisam ser cadastradas manualmente para preservar as condições.':'',offers.some(o=>!o.image)?'Envie as imagens dos produtos que ficaram sem foto.':''].filter(Boolean).join(' ')}
 })

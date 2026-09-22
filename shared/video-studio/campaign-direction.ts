@@ -7,7 +7,7 @@ export function classifyCampaign(name:string,sourceId?:string):CampaignFamily {
  if(/boom/.test(n))return 'boom'
  if(/alerta/.test(n))return 'alarm'
  if(/relâmpago/.test(n))return 'lightning'
- if(/carne|suína|churras/.test(n))return 'grill'
+ if(/carne|suína|churras|açougue|acougue/.test(n))return 'grill'
  if(/queima|liquida|saldão/.test(n))return 'clearance'
  if(/horti|feira/.test(n)||(/verde/.test(n)&&!/dia d\b/.test(n)))return 'harvest'
  if(/criança/.test(n))return 'children'

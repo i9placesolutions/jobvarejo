@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AdminWorkspaceShell from '~/components/AdminWorkspaceShell.vue'
 import {
   Search,
   ArrowUpRight,

@@ -2,11 +2,21 @@ import {describe,it,expect} from 'vitest'
 import {newVideoFromTemplate} from '../../shared/video-studio/templates'
 import {videoDocumentSchema} from '../../server/utils/video-studio/schema'
 import {defaultTransform,elementTransform,setElementTransform} from '../../shared/video-studio/layout-editing'
-import {videoListIssue,videoOfferFromList} from '../../shared/video-studio/list-import'
+import {videoListIssue,videoOfferFromList,videoListBatchIssue} from '../../shared/video-studio/list-import'
 import {parseProductsAuto} from '../../server/utils/product-text-parser'
 import {productLayers} from '../../shared/video-studio/product-layout'
-import {validateVideoForGeneration} from '../../shared/video-studio/model'
+import {validateVideoForGeneration,buildVideoTimeline} from '../../shared/video-studio/model'
 describe('Edição de vídeos e importação comercial',()=>{
+ it('aceita exatamente seis ofertas selecionadas para 30 segundos',()=>{
+  const products=Array.from({length:11},(_,i)=>({name:`Produto ${i+1}`,price:'1,99'}))
+  expect(videoListBatchIssue(products,6)).toContain('11 produtos')
+  expect(videoListBatchIssue(products.slice(0,6),6)).toBe('')
+  const doc=newVideoFromTemplate('alerta');doc.duration=30;doc.voice.enabled=false
+  doc.offers=products.slice(0,6).map((p,i)=>videoOfferFromList(p,String(i)))
+  const timeline=buildVideoTimeline(doc)
+  expect(timeline.at(-1)!.from+timeline.at(-1)!.frames).toBeLessThanOrEqual(900)
+ })
+
  it('persiste posições por formato e cena sem alterar outro modelo',()=>{
   const doc=newVideoFromTemplate('alerta');setElementTransform(doc,'horizontal','intro','logo',{x:100,y:-40,scale:1.3,rotation:4})
   const saved=videoDocumentSchema.parse(JSON.parse(JSON.stringify(doc)))

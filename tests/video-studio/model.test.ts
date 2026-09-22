@@ -13,8 +13,21 @@ describe('vídeos: preços, revisões e isolamento do contrato',()=>{
 })
 describe('limite real de duração',()=>{
  it('inclui abertura, ofertas e encerramento em cenas contínuas',()=>{const d=fixture(),t=buildVideoTimeline(d,{intro:2,[d.offers[0]!.id]:4,outro:2});expect(t[0]!.from).toBe(0);for(let i=1;i<t.length;i++)expect(t[i]!.from).toBe(t[i-1]!.from+t[i-1]!.frames);expect(t.reduce((a,s)=>a+s.frames,0)).toBeLessThanOrEqual(898)})
- it('não corta fala longa para caber',()=>{const d=fixture();expect(()=>buildVideoTimeline(d,{intro:3,[d.offers[0]!.id]:27,outro:3})).toThrow('ultrapassa')})
+ it('não corta fala longa para caber',()=>{const d=fixture();d.autoFitVoice=false;expect(()=>buildVideoTimeline(d,{intro:3,[d.offers[0]!.id]:27,outro:3})).toThrow('ultrapassa')})
  it('recusa trecho de áudio faltante',()=>{expect(()=>buildVideoTimeline(fixture(),{intro:2,outro:3})).toThrow('não está pronta')})
  it('versão sem voz também respeita o teto e tempo mínimo de leitura',()=>{const d=fixture();d.voice.enabled=false;for(const duration of [15,20,30] as const){d.duration=duration;const t=buildVideoTimeline(d);expect(t.reduce((n,s)=>n+s.frames,0)).toBeLessThanOrEqual(duration*30-2);expect(t[1]!.frames).toBeLessThanOrEqual(150);expect(t[1]!.frames).toBeGreaterThanOrEqual(90)}})
  it('trocar proporção não muda tempo nem locução',()=>{const d=fixture(),t=buildVideoTimeline(d);d.formats=['horizontal'];expect(buildVideoTimeline(d)).toEqual(t)})
+})
+
+describe('ajuste automático da duração da voz',()=>{
+ it('acelera áudio completo sem cortar e respeita os frames do contêiner',()=>{
+  const d=fixture(),durations={intro:3,[d.offers[0]!.id]:27,outro:3},scenes=buildVideoTimeline(d,durations)
+  expect(scenes.at(-1)!.from+scenes.at(-1)!.frames).toBeLessThanOrEqual(898)
+  expect(scenes[0]!.playbackRate).toBeGreaterThan(1)
+  for(const scene of scenes){expect(scene.speechFrames).toBe(Math.ceil(durations[scene.id]!/scene.playbackRate!*30));expect(scene.frames).toBeGreaterThanOrEqual(scene.speechFrames!)}
+ })
+ it('mantém a voz normal quando já cabe e recusa velocidade acima de 2x',()=>{
+  const d=fixture();expect(buildVideoTimeline(d,{intro:2,[d.offers[0]!.id]:4,outro:2})[0]!.playbackRate).toBe(1)
+  expect(()=>buildVideoTimeline(d,{intro:20,[d.offers[0]!.id]:80,outro:20})).toThrow('2×')
+ })
 })

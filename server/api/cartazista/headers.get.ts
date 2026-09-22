@@ -10,6 +10,8 @@ export default defineEventHandler(async event => {
     name: item.name,
     background: item.background ? `/video-studio/templates/${item.background}` : '',
     seal: `/video-studio/templates/${item.seal}`,
-    color: item.base
+    color: item.base,
+    ...('mascot' in item && item.mascot ? {mascot: `/video-studio/templates/${item.mascot}`} : {}),
+    ...('posterLayout' in item ? {layout: item.posterLayout} : {})
   })) }
 })

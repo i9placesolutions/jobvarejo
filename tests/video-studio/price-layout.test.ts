@@ -18,5 +18,6 @@ describe('Preço dinâmico em etiqueta cadastrada',()=>{
   expect(JSON.stringify(label)).toBe(snapshot)
  })
  it('exporta os números como curvas, sem métricas de texto que variam na entrada animada',()=>{const svg=renderToStaticMarkup(createElement(VideoPriceLabel,{label,price:'25,99',unit:'UN'}));expect(svg).toContain('<path');expect(svg).not.toContain('<text');expect(svg).toContain('aria-label="25"');expect(svg).toContain('aria-label=",99"')})
+ it('altera somente a cor dos glifos sem mutar a etiqueta',()=>{const before=JSON.stringify(label);const svg=renderToStaticMarkup(createElement(VideoPriceLabel,{label,price:'25,99',unit:'UN',colors:{priceColor:'#123456'}}));expect(svg).toContain('#123456');expect(JSON.stringify(label)).toBe(before)})
  it('não cria preço em uma arte sem campos dinâmicos',()=>expect(priceLayout({...label,nodes:[]},'25')).toBeUndefined())
 })

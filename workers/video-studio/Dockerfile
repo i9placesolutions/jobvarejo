@@ -5,7 +5,9 @@ COPY workers/video-studio/package*.json ./
 RUN npm ci --omit=dev
 COPY workers/video-studio/requirements.txt /tmp/video-requirements.txt
 RUN python3 -m venv /opt/video-python && /opt/video-python/bin/pip install --no-cache-dir -r /tmp/video-requirements.txt
-ENV VIDEO_STUDIO_PYTHON=/opt/video-python/bin/python VIDEO_RENDER_CONCURRENCY=2
+RUN /opt/video-python/bin/python -c "from faster_whisper import download_model; download_model('small', output_dir='/opt/video-alignment-model')"
+ENV VIDEO_ALIGNMENT_MODEL=/opt/video-alignment-model
+ENV VIDEO_STUDIO_PYTHON=/opt/video-python/bin/python
 COPY shared/video-studio ./shared/video-studio
 COPY workers/video-studio ./workers/video-studio
 COPY public/art-studio/fonts ./public/art-studio/fonts

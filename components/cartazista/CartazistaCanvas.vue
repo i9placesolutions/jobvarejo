@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ArtCanvas from '~/components/art-studio/ArtCanvas.client.vue'
+import ArtCanvas from '~/components/cartazista/CartazistaSurface.client.vue'
 import type { ArtComposition } from '~/types/art-studio'
 import { fitCartazistaComposition } from '~/utils/cartazista/render'
 const props=defineProps<{composition:ArtComposition;selectedId:string|null}>()

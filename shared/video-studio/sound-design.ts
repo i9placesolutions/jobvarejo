@@ -19,7 +19,7 @@ export const BOOM_OPENING_SOUNDS = [
 export function musicGain(frame: number, duration: number, doc: VideoDocument, scenes: VideoScene[]) {
   let duck = 0
   if (doc.voice.enabled && doc.audio.voiceVolume > 0) for (const scene of scenes) {
-    if (!scene.audio) continue
+    if (!scene.audio && !scene.speechFrames) continue
     const end = scene.from + (scene.speechFrames ?? scene.frames)
     const attack = Math.min(1, Math.max(0, (frame - scene.from + 6) / 6))
     const release = Math.min(1, Math.max(0, (end + 12 - frame) / 12))

@@ -5,6 +5,19 @@ from re import sub, escape, IGNORECASE
 def normalize(text, pronunciations=None):
     for item in sorted(pronunciations or [], key=lambda x: -len(x['from'])):
         text = sub(r'(?<!\w)' + escape(item['from']) + r'(?!\w)', lambda m: item['to'], text, flags=IGNORECASE)
+    # Orthography belongs to spoken text only; product labels stay untouched.
+    retail_words = {
+        'abobora': 'abóbora', 'cabotia': 'cabotiá', 'cabotiã': 'cabotiá',
+        'acucar': 'açúcar', 'mamao': 'mamão',
+        'limao': 'limão', 'pao': 'pão', 'linguica': 'linguiça',
+        'file': 'filé', 'pessego': 'pêssego', 'brocolis': 'brócolis',
+        'requeijao': 'requeijão', 'mucarela': 'muçarela',
+    }
+    for written, spoken in retail_words.items():
+        text = sub(r'(?<!\w)' + escape(written) + r'(?!\w)', spoken, text, flags=IGNORECASE)
+    # Shouted product names are ordinary words, not sequences of initials.
+    text = sub(r'(?<!\w)[^\W\d_]+(?!\w)', lambda m: m.group(0).lower() if m.group(0).isupper() else m.group(0), text)
+    text = sub(r',(?=[^\W\d_])', ', ', text)
     def money(m):
         raw = m.group(1).replace('.', '').replace(',', '.')
         cents = round(float(raw) * 100)
@@ -13,7 +26,7 @@ def normalize(text, pronunciations=None):
         if reais: parts.append(num2words(reais, lang='pt_BR') + (' real' if reais == 1 else ' reais'))
         if rest: parts.append(num2words(rest, lang='pt_BR') + (' centavo' if rest == 1 else ' centavos'))
         return ' e '.join(parts) or 'zero reais'
-    text = sub(r'R\$\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?)', money, text)
+    text = sub(r'R\$\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?)', money, text, flags=IGNORECASE)
     text = sub(r'/\s*kg\b', ' o quilo', text, flags=IGNORECASE)
     text = sub(r'/\s*un\b', ' a unidade', text, flags=IGNORECASE)
     units = {'kg': ('quilo','quilos'), 'g': ('grama','gramas'), 'ml': ('mililitro','mililitros'), 'l': ('litro','litros'), 'un': ('unidade','unidades')}

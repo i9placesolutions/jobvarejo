@@ -6,16 +6,19 @@ import { Player,type PlayerRef } from '@remotion/player'
 import { VideoComposition } from '~/shared/video-studio/composition'
 import { VIDEO_FORMATS, type VideoRenderProps } from '~/shared/video-studio/model'
 import { createPreviewImageCache } from '~/shared/video-studio/preview-media'
-const props=defineProps<{ composition:VideoRenderProps;editingFrame?:number }>()
+const props=defineProps<{ composition:VideoRenderProps;editingFrame?:number;previewRequest?:{frame:number;nonce:number} }>()
 const host=ref<HTMLElement|null>(null),preparing=ref(true),loadError=ref('')
 const cache=createPreviewImageCache()
 const player=createRef<PlayerRef>()
 const seekEdit=()=>{if(props.editingFrame!==undefined){player.current?.pause();player.current?.seekTo(props.editingFrame)}}
+let lastPreviewNonce=-1
+const seekRequested=()=>{const request=props.previewRequest;if(request&&player.current&&request.nonce!==lastPreviewNonce){player.current.pause();player.current.seekTo(request.frame);lastPreviewNonce=request.nonce}}
 let root:Root|undefined,generation=0,disposed=false,loadedKey='',media:Record<string,string>={}
 const render=()=>{
  if(!root||preparing.value||loadError.value)return
- const c={...props.composition,media},size=VIDEO_FORMATS[c.format],duration=c.scenes.reduce((n,s)=>Math.max(n,s.from+s.frames),1)
+ const c={...props.composition,document:JSON.parse(JSON.stringify(props.composition.document)),media},size=VIDEO_FORMATS[c.format],duration=c.scenes.reduce((n,s)=>Math.max(n,s.from+s.frames),1)
  root.render(createElement(Player<AnyZodObject, VideoRenderProps>,{ref:player,component:VideoComposition,inputProps:c,durationInFrames:duration,fps:30,compositionWidth:size.width,compositionHeight:size.height,controls:!c.editor?.enabled,numberOfSharedAudioTags:16,loop:true,autoPlay:false,initialFrame:props.editingFrame||0,style:{width:'100%',borderRadius:18}}))
+ requestAnimationFrame(()=>{if(!disposed)seekRequested()})
 }
 async function prepare(){
  const key=JSON.stringify(props.composition.media)
@@ -31,6 +34,7 @@ async function prepare(){
 onMounted(()=>{if(host.value){root=createRoot(host.value);prepare()}})
 watch(()=>props.composition,prepare,{deep:true})
 watch(()=>props.editingFrame,()=>nextTick(seekEdit))
+watch(()=>props.previewRequest,()=>nextTick(seekRequested))
 onBeforeUnmount(()=>{disposed=true;generation++;root?.unmount();cache.dispose()})
 </script>
 <template>

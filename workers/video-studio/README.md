@@ -19,7 +19,7 @@ para dispensar um segundo coordenador e manter a tarefa durável.
 
 Variáveis: POSTGRES_DATABASE_URL, WASABI_ENDPOINT, WASABI_REGION, WASABI_BUCKET,
 WASABI_ACCESS_KEY, WASABI_SECRET_KEY, MUSICGPT_API_KEY, MUSICGPT_DEFAULT_VOICE_ID.
-Opcionais: MUSICGPT_TTS_URL, MUSICGPT_API_URL, VIDEO_RENDER_CONCURRENCY (padrão 2),
+Opcionais: MUSICGPT_TTS_URL, MUSICGPT_API_URL, VIDEO_RENDER_CONCURRENCY (automático, 1 a 4 conforme CPU/memória), VIDEO_X264_PRESET (padrão veryfast),
 VIDEO_STUDIO_PYTHON. Contrato MusicGPT mantém consulta por task_id; não utiliza
 nem modifica o webhook da rádio. O worker faz polling persistindo task_id.
 
@@ -82,3 +82,44 @@ hierarquia das referências fornecidas. Não altera o relógio de áudio: sobrep
 visual usa oito frames antes do início da cena, mantendo o orçamento <=30s.
 `logoStyle` aceita sticker/clean; duplicação considera `imageAspectRatio < 0.9`,
 com margens removidas na preparação da imagem. A versão anterior continua disponível.
+
+## Sincronização da locução completa
+
+A locução é solicitada uma única vez para o roteiro inteiro. O MP3 é salvo e
+registrado antes da análise local com `faster-whisper` (modelo multilingual small,
+CPU int8, idioma português). `align_voice.py` relaciona as palavras reconhecidas
+com cada trecho do roteiro e grava os limites das cenas em segundos. A prévia e
+a exportação usam a mesma timeline, inclusive quando há aceleração para caber no
+limite. Nenhuma nova solicitação TTS é feita para encontrar esses tempos.
+
+Antes do alinhamento, `voice-pacing.mjs` encurta intervalos abaixo de -35 dB
+com pelo menos 400 ms, preservando 90 ms em cada borda. O áudio original fica
+salvo; a versão derivada registra cortes, duração e asset de origem. O alinhamento
+é executado novamente sobre essa versão, sem deslocar cenas por estimativas de
+texto. Pausas curtas são preservadas. O roteiro vai em um parágrafo contínuo.
+
+O cache também reconhece fingerprints antigos sem `speechVersion`/`sampleVersion`,
+mas apenas para a mesma referência e áudio criado após sua preparação atual.
+Isso evita repetir TTS ao aplicar ajustes locais a gravações legadas.
+
+O Docker baixa o modelo na construção da imagem. Fora do Docker,
+`VIDEO_ALIGNMENT_MODEL` aceita um caminho local; sem configuração, a primeira
+análise baixa `small` e as seguintes usam o cache. `VIDEO_STUDIO_PYTHON` deve apontar
+para o ambiente com as dependências de requirements.txt. Reserve memória/CPU para
+esse trabalho e valide capacidade antes de aumentar o número de workers.
+
+Correspondência insuficiente ou ausência de início de produto causa falha explícita
+na sincronização: não publica divisão estimada como resultado final. O áudio fica
+salvo para nova tentativa, que retoma o asset existente sem repetir o POST de TTS.
+Os tempos são estimados pelo reconhecimento de fala; a revisão audiovisual final
+continua necessária. Testes locais: `python -m unittest discover -s
+workers/video-studio -p 'test_*.py'`.
+
+
+## Perfil de renderizacao
+
+O padrao reserva metade dos processadores disponiveis, limitado a quatro abas e
+a uma aba por 3 GiB de memoria total. VIDEO_RENDER_CONCURRENCY permite ajuste do
+operador. H.264 usa preset veryfast, mantendo CRF 20, resolucao e FPS; arquivos
+podem crescer. VIDEO_X264_PRESET=medium restaura a codificacao anterior. O ganho
+de tempo depende da composicao e da disputa por CPU, nao sendo uma SLA.

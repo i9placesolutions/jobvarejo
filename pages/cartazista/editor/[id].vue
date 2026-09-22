@@ -3,6 +3,7 @@ import { ArrowLeft, Download, FileDown, Layers, Lock, Printer, Redo2, Save, Spar
 import ArtCanvas from '~/components/cartazista/CartazistaCanvas.vue'
 import CartazistaShell from '~/components/cartazista/CartazistaShell.vue'
 import CartazistaSheetPreview from '~/components/cartazista/CartazistaSheetPreview.vue'
+import { applyCartazistaTypography, CARTAZISTA_TYPE_STYLES } from '~/utils/cartazista/typography'
 import CartazistaLayerTools from '~/components/cartazista/CartazistaLayerTools.vue'
 import { newCartazistaLayer, moveCartazistaLayer, preserveCartazistaCustomLayers, syncCartazistaBoundText } from '~/utils/cartazista/editing'
 import { cartazistaDocumentSchema } from '~/utils/cartazista/schema'
@@ -17,6 +18,7 @@ import {
   type CartazistaThemeId
 } from '~/types/cartazista'
 import { normalizeBusinessProfile } from '~/utils/businessProfile'
+import { hydrateCartazistaBusiness } from '~/utils/cartazista/business-bindings'
 import {
   applyCartazistaProduct,
   applySettingsToCartazistaComposition,
@@ -51,6 +53,7 @@ const changeHeader = (event: Event) => {
   rebuild(next)
 }
 const brandName = ref('SUA LOJA')
+const brandProfile = ref(normalizeBusinessProfile({}))
 const designId = ref('')
 const revision = ref(0)
 const creationId = ref(crypto.randomUUID())
@@ -90,12 +93,7 @@ const saveDraft = () => {
 }
 
 const hydrateComposition = (source: ArtComposition): ArtComposition => {
-  const composition = cloneCartazista(source)
-  const company = composition.layers.find((layer) => layer.id === 'cartaz-company')
-  const logo = composition.layers.find((layer) => layer.id === 'cartaz-logo')
-  if (company) company.text = brandName.value
-  if (logo) { logo.src = doc.value.settings.showLogo ? logoSrc.value : ''; logo.visible = !!logo.src }
-  return composition
+  return hydrateCartazistaBusiness(cloneCartazista(source), brandProfile.value, logoSrc.value, doc.value.settings.showLogo)
 }
 
 const replaceDocument = (next: CartazistaDocument, record = true) => {
@@ -226,6 +224,7 @@ const removeProduct = (product: CartazistaProduct) => {
   replaceDocument(next)
 }
 
+const changeTypography=(style:string)=>{if(!doc.value)return;const next=cloneCartazista(doc.value);const chosen=CARTAZISTA_TYPE_STYLES.find(s=>s.id===style);if(!chosen)return;next.settings.typography=chosen.id;next.composition=applyCartazistaTypography(next.composition,style);replaceDocument(next)}
 const patchLayer = (key: 'text' | 'fill' | 'fontSize' | 'opacity' | 'visible' | 'locked', value: string | number | boolean) => {
   if (!selectedId.value) return
   const next = cloneCartazista(doc.value)
@@ -367,6 +366,7 @@ const hydrateBrand = async () => {
   try {
     const response = await $fetch<{ business_profile: unknown }>('/api/profile')
     const profile = normalizeBusinessProfile(response.business_profile)
+    brandProfile.value = profile
     logoSrc.value = profile.logo ? '/api/art-studio/brand-logo' : ''
     brandName.value = profile.companyName || 'SUA LOJA'
     const next = cloneCartazista(doc.value)
@@ -407,6 +407,10 @@ const load = async () => {
       if(route.query.header==='none')doc.value.settings.header=undefined
       else if(route.query.header && route.query.header!=='auto')doc.value.settings.header=headers.value.find(header=>header.id===String(route.query.header))
       doc.value=rebuildCartazistaComposition(doc.value)
+    }
+    if(String(route.params.id)==='new'){
+      const style=CARTAZISTA_TYPE_STYLES.find(s=>s.id===String(route.query.typography))
+      if(style){doc.value.settings.typography=style.id;doc.value.composition=applyCartazistaTypography(doc.value.composition,style.id)}
     }
     listInput.value = doc.value.products.map((product) => `${product.name} ${product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`).join('\n')
     historyPast.value = []
@@ -485,7 +489,7 @@ if (import.meta.client) window.onafterprint = closePrint
               <input :value="activeProduct[field.key] ?? ''" inputmode="decimal" @change="updateProduct(activeProduct!, field.key, ($event.target as HTMLInputElement).value)" />
             </label>
           </section>
-          <CartazistaLayerTools v-if="activePanel==='layers'" :layer="selectedLayer" @add="addLayer" @image="addImage" @patch="patchSelected" @duplicate="duplicateLayer" @remove="removeLayer" @order="orderLayer" />
+          <CartazistaLayerTools v-if="activePanel==='layers'" :layer="selectedLayer" @typography="changeTypography" @add="addLayer" @image="addImage" @patch="patchSelected" @duplicate="duplicateLayer" @remove="removeLayer" @order="orderLayer" />
         </aside>
 
         <main class="cartazista-canvas-area"><div class="cartazista-canvas-head"><div><span class="cartazista-model-category">{{ model.category }}</span><h1>{{ model.name }}</h1><p>{{ format.label }} · {{ doc.settings.orientation === 'landscape' ? 'paisagem' : 'retrato' }} · {{ doc.products.length }} produto(s)</p></div><div class="cartazista-canvas-head-actions"><button class="cartazista-button secondary" @click="openPrint"><Printer :size="17" /> Imprimir todos</button><button class="cartazista-button primary" @click="exportPng"><Download :size="17" /> PNG atual</button></div></div><div class="cartazista-canvas-frame"><ClientOnly><ArtCanvas ref="canvas" :composition="doc.composition" :selected-id="selectedId" @select="selectedId = $event" @change="updateComposition" @error="error = $event" /></ClientOnly></div><div class="cartazista-canvas-tip"><Sparkles :size="15" /><span>O cartaz atual mostra <b>{{ activeProduct?.name }}</b>. Para gerar todos, use “Imprimir todos”.</span></div></main>

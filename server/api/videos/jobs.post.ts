@@ -20,12 +20,12 @@ export default defineEventHandler(async event=>{
  if(input.kind==='voice'&&!doc.voice.enabled)throw createError({statusCode:422,statusMessage:'Ative a locução primeiro.'})
  const label=resolveVideoLabel((doc.priceLabel||flyerRecipe(doc.theme)?await listVideoLabels(u.id,doc.priceLabel||undefined):[]).filter((l):l is NonNullable<typeof l>=>!!l),doc.theme,doc.priceLabel)
  if((doc.priceLabel||flyerRecipe(doc.theme))&&!label)throw createError({statusCode:422,statusMessage:'Esta etiqueta não está disponível para este vídeo.'})
- trace('label');const audioHash=videoHash(videoAudioIdentity(doc));const fingerprint=videoHash(input.kind==='voice'?{audioHash,voice}:input.kind==='render'?{doc,label,revision:p.revision}: {prompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado',project:p.id})
+ trace('label');const audioHash=videoHash(videoAudioIdentity(doc));const fingerprint=videoHash(input.kind==='voice'?{audioHash,voice,voiceMode:'full-v1',speechVersion:2,pacingVersion:'retail-pauses-v1'}:input.kind==='render'?{doc,label,revision:p.revision,renderVersion:4}: {prompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado',project:p.id})
  return pgTx(async client=>{
   await client.query("SET LOCAL idle_in_transaction_session_timeout='30s'")
   await client.query("SET LOCAL statement_timeout='30s'")
   // Stage the large body before taking the account lock; assets can finish saving.
-  const stagedPayload={document:doc,label,audioHash,voice,voiceResult:null,musicPrompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado, sem voz'}
+  const stagedPayload={voiceMode:'full-v1',speechVersion:2,document:doc,label,audioHash,voice,voiceResult:null,musicPrompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado, sem voz'}
   await stageVideoPayload(client,videoJson(stagedPayload));trace('payload-staged')
   await client.query('SELECT id FROM public.profiles WHERE id=$1 FOR UPDATE',[u.id])
   trace('account-lock');const prior=await client.query("SELECT id,kind,status,result,progress,error,revision FROM public.video_studio_jobs WHERE user_id=$1 AND project_id=$2 AND kind=$3 AND fingerprint=$4 AND status IN ('queued','running','ready') LIMIT 1",[u.id,p.id,input.kind,fingerprint]);if(prior.rows[0])return prior.rows[0]
@@ -33,7 +33,13 @@ export default defineEventHandler(async event=>{
   const failed=await client.query("SELECT id,provider_state FROM public.video_studio_jobs WHERE user_id=$1 AND project_id=$2 AND kind=$3 AND fingerprint=$4 AND status='failed' ORDER BY created_at DESC LIMIT 1",[u.id,p.id,input.kind,fingerprint])
   if(failed.rows[0]&&input.kind!=='render'){
    const state=failed.rows[0].provider_state||{}
-   if(Object.values(state).some((v:any)=>v?.sending&&!v?.taskId))throw createError({statusCode:409,statusMessage:'Há uma solicitação de áudio com resposta incerta. O suporte precisa conferir no MusicGPT antes de repetir a cobrança.'})
+   const full=state['full-voice']
+   // A new paid attempt requires this explicit user action, never a worker retry.
+   if(input.kind==='voice'&&full?.taskId&&!full.asset&&['TIMEOUT','TIMED_OUT','FAILED','ERROR','CANCELLED','CANCELED','EXPIRED'].includes(full.status)){
+    state['full-voice']={previousTasks:[...(full.previousTasks||[]),{taskId:full.taskId,status:full.status}],sending:false}
+    return (await client.query("UPDATE public.video_studio_jobs SET status='queued',provider_state=$3::jsonb,attempts=0,error=NULL,progress=0,updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING id,kind,status,result,progress,error,revision",[failed.rows[0].id,u.id,JSON.stringify(state)])).rows[0]
+   }
+   if(Object.values(state).some((v:any)=>v?.sending&&!v?.taskId))throw createError({statusCode:409,statusMessage:'Sua solicitação de áudio precisa ser verificada. Os trechos prontos estão salvos. Entre em contato com o suporte.'})
    if(Object.values(state).some((v:any)=>v?.taskId))return (await client.query("UPDATE public.video_studio_jobs SET status='queued',attempts=0,error=NULL,progress=0,updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING id,kind,status,result,progress,error,revision",[failed.rows[0].id,u.id])).rows[0]
   }
   let voiceResult=null

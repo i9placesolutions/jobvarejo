@@ -18,12 +18,15 @@ const product = z.object({
 
 const settings = z.object({
   freeDesign:z.boolean().optional(),
+  typography:z.enum(['retail-hand','brush','marker','handwritten','original']).optional(),
   title: z.string().max(80).optional(),
   showCurrency: z.boolean().optional(),
   showEach: z.boolean().optional(),
   foldGuide: z.boolean().optional(),
   removeBackground: z.boolean().optional(),
   header: z.object({
+    mascot: z.string().regex(/^\/video-studio\/templates\/[a-zA-Z0-9/_\-.]+$/).optional(),
+    layout: z.enum(['suina-ouro','suina-rustica']).optional(),
     id: z.string().uuid(),
     name: z.string().max(180),
     background: z.string().regex(/^(?:|\/video-studio\/templates\/[a-zA-Z0-9/_\-.]+)$/),

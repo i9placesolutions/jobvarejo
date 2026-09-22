@@ -14,7 +14,7 @@ import {
 import { useResponsive } from '~/composables/useResponsive'
 
 const props = withDefaults(defineProps<{
-  activeNav?: 'library' | 'musicgpt' | 'storage' | 'art-studio'
+  activeNav?: 'library' | 'musicgpt' | 'storage' | 'art-studio' | 'videos' | 'cartazista' | 'cartazes'
   showSearch?: boolean
 }>(), {
   activeNav: 'library',
@@ -55,7 +55,9 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   if (props.activeNav === key) return true
   if (key === 'musicgpt') return route.path.startsWith('/admin/musicgpt')
   if (key === 'storage') return route.path.startsWith('/admin/storage')
+  if (key === 'videos') return route.path.startsWith('/videos')
   if (key === 'art-studio') return route.path.startsWith('/art-studio')
+  if (key === 'cartazista' || key === 'cartazes') return route.path.startsWith('/cartazista')
   return route.path === '/'
 }
 </script>
@@ -111,8 +113,8 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
             </NuxtLink>
             <p class="admin-shell__section">Soluções</p>
             <NuxtLink to="/flyer-templates" class="admin-shell__nav-item" @click="closeDrawer"><LayoutTemplate class="h-3.5 w-3.5 text-indigo-500" /> Encartes</NuxtLink>
-            <NuxtLink to="/cartazista" class="admin-shell__nav-item" @click="closeDrawer"><Sparkles class="h-3.5 w-3.5 text-blue-500" /> Cartazes</NuxtLink>
-            <NuxtLink to="/videos" class="admin-shell__nav-item" @click="closeDrawer"><Clapperboard class="h-3.5 w-3.5 text-emerald-600" /> Vídeos</NuxtLink>
+            <NuxtLink to="/cartazista" class="admin-shell__nav-item" :class="{ active: isActive('cartazista') }" @click="closeDrawer"><Sparkles class="h-3.5 w-3.5 text-blue-500" /> Cartazes</NuxtLink>
+            <NuxtLink to="/videos" class="admin-shell__nav-item" :class="{ active: isActive('videos') }" @click="closeDrawer"><Clapperboard class="h-3.5 w-3.5 text-emerald-600" /> Vídeos</NuxtLink>
             <NuxtLink to="/radio-indoor" class="admin-shell__nav-item" @click="closeDrawer"><Radio class="h-3.5 w-3.5 text-orange-500" /> Rádio Indoor</NuxtLink>
             <NuxtLink to="/art-studio" class="admin-shell__nav-item" :class="{ active: isActive('art-studio') }" @click="closeDrawer"><Sparkles class="h-3.5 w-3.5 text-violet-500" /> Estúdio de Artes</NuxtLink>
             <div class="admin-shell__spacer" />
@@ -134,8 +136,8 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
             </NuxtLink>
             <p class="admin-shell__section">Soluções</p>
             <NuxtLink to="/flyer-templates" class="admin-shell__nav-item"><LayoutTemplate class="h-4 w-4 text-indigo-500" /> Encartes</NuxtLink>
-            <NuxtLink to="/cartazista" class="admin-shell__nav-item"><Sparkles class="h-4 w-4 text-blue-500" /> Cartazes</NuxtLink>
-            <NuxtLink to="/videos" class="admin-shell__nav-item"><Clapperboard class="h-4 w-4 text-emerald-600" /> Vídeos</NuxtLink>
+            <NuxtLink to="/cartazista" class="admin-shell__nav-item" :class="{ active: isActive('cartazista') }"><Sparkles class="h-4 w-4 text-blue-500" /> Cartazes</NuxtLink>
+            <NuxtLink to="/videos" class="admin-shell__nav-item" :class="{ active: isActive('videos') }"><Clapperboard class="h-4 w-4 text-emerald-600" /> Vídeos</NuxtLink>
             <NuxtLink to="/radio-indoor" class="admin-shell__nav-item"><Radio class="h-4 w-4 text-orange-500" /> Rádio Indoor</NuxtLink>
             <NuxtLink to="/art-studio" class="admin-shell__nav-item" :class="{ active: isActive('art-studio') }"><Sparkles class="h-4 w-4 text-violet-500" /> Estúdio de Artes</NuxtLink>
           </nav>

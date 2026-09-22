@@ -3,6 +3,8 @@ import { productSuggestionFamily, scoreProductFamilySuggestion } from '~/utils/p
 import { collectAssetSearchPages } from '~/utils/collectAssetSearchPages'
 import { ref, computed, watch, nextTick } from 'vue'
 import Dialog from './ui/Dialog.vue'
+import EmbeddedProductReview from './EmbeddedProductReview.vue'
+import '~/assets/css/video-review-palette.css'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
 import { Sparkles, X, Check, AlertCircle, Loader2, Upload, Plus, Play, RefreshCw, ChevronDown, SlidersHorizontal, Settings2, Wand2 } from 'lucide-vue-next'
@@ -58,6 +60,11 @@ type ReviewFilter = 'all' | 'approved' | 'suspect' | 'blocked' | 'pending'
 type ReviewDecisionState = 'approved' | 'ambiguous' | 'blocked' | 'pending'
 
 const props = defineProps<{
+    embedded?: boolean
+    maxImportProducts?: number
+    destination?: 'video' | 'flyer'
+    importHandler?: (products: SmartProduct[]) => Promise<void>
+    validateImport?: (products: SmartProduct[]) => string
     initialAutoFillImages?: boolean
     initialOneProductPerPage?: boolean
     modelValue: boolean
@@ -101,6 +108,17 @@ const lockedTargetZoneId = ref<string>('')
 const imageBgPolicy = ref<ImageBgPolicy>('always')
 const autoLayoutEnabled = ref(true)
 const isSubmittingImport = ref(false)
+const submissionError = ref('')
+const importValidation = computed(() => props.validateImport?.(productsForImport.value) || '')
+const videoSelectionIssue = computed(() => {
+    if (props.destination !== 'video') return ''
+    const pending = productsForImport.value.find(product => getReviewDecisionState(product) !== 'approved')
+    if (!pending) return ''
+    return pending.status === 'processing'
+        ? `Buscando a imagem de ${pending.name}…`
+        : `Confira a imagem de ${pending.name} para continuar.`
+})
+const importActionLabel = computed(() => props.destination === 'video' ? 'Adicionar no vídeo' : 'Adicionar no encarte')
 const appendBaseProducts = ref<SmartProduct[] | null>(null)
 const reviewFilter = ref<ReviewFilter>('all')
 const zoneFilterId = ref<string | null>(null)
@@ -654,7 +672,7 @@ const oneProductPerPage = ref(props.initialOneProductPerPage === true)
 watch(() => props.modelValue, (open) => { if (open) oneProductPerPage.value = props.initialOneProductPerPage === true })
 const autoFillImages = ref(props.initialAutoFillImages === true)
 watch(() => props.modelValue, (open) => { if (open) autoFillImages.value = props.initialAutoFillImages === true })
-const handleImport = () => {
+const handleImport = async () => {
     if (isSubmittingImport.value || importButtonDisabled.value) return
     isSubmittingImport.value = true
 
@@ -688,10 +706,18 @@ const handleImport = () => {
         }))
     }
 
-    const importedProducts = (JSON.parse(JSON.stringify(products.value)) as SmartProduct[])
+    const importedProducts = (JSON.parse(JSON.stringify(productsForImport.value)) as SmartProduct[])
         .map((product) => ({ ...normalizeProductForImport(product), autoFillImages: autoFillImages.value }))
-    emit('import', importedProducts, opts)
-    emit('update:modelValue', false)
+    submissionError.value = ''
+    try {
+        if (props.importHandler) await props.importHandler(importedProducts)
+        else emit('import', importedProducts, opts)
+        emit('update:modelValue', false)
+    } catch (error: any) {
+        submissionError.value = error?.data?.message || error?.data?.statusMessage || error?.message || 'Não foi possível adicionar os produtos. Tente novamente.'
+    } finally {
+        isSubmittingImport.value = false
+    }
 }
 
 const quickReviewConfirmed = ref(false)
@@ -1025,6 +1051,23 @@ const productRows = computed(() => {
         productId: getStableProductId(product, index)
     }))
 })
+
+const excludedImportIds = ref(new Set<string>())
+const productsForImport = computed(() => props.destination === 'video'
+    ? productRows.value.filter(row => !excludedImportIds.value.has(row.productId)).map(row => row.product)
+    : products.value)
+function toggleImportProduct(id: string) {
+    const next = new Set(excludedImportIds.value)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    excludedImportIds.value = next
+    quickReviewConfirmed.value = false
+    submissionError.value = ''
+}
+function clearImportSelection() {
+    excludedImportIds.value = new Set(productRows.value.map(row => row.productId))
+    quickReviewConfirmed.value = false
+}
 
 const filteredProducts = computed(() => {
     const list = products.value || []
@@ -2409,7 +2452,10 @@ const hasInvalidMultiFrameAssignments = computed(() => {
 })
 
 const importButtonDisabled = computed(() => {
-    if (isSubmittingImport.value) return true
+    if (isSubmittingImport.value || importValidation.value || !productsForImport.value.length) return true
+    if (props.destination === 'video') {
+        return productsForImport.value.some(product => !hasCommercialPrice(product) || getReviewDecisionState(product) !== 'approved')
+    }
     if (isProcessingProducts.value) return true
     if (isImageQueueLocked.value) return true
     if (missingCommercialPriceCount.value > 0) return true
@@ -3042,8 +3088,11 @@ const getAssetDisplayName = (asset: any): string => {
 </script>
 
 <template>
-    <Dialog
+    <component
+        :is="embedded ? EmbeddedProductReview : Dialog"
+        :surface-class="destination === 'video' ? 'video-review-palette' : undefined"
         :model-value="modelValue"
+        :before-close="() => !isSubmittingImport"
         @update:model-value="$emit('update:modelValue', $event)"
         title="Importação Inteligente"
         :width="isQrofertasPresentation ? 'min(386px, calc(100vw - 1rem))' : 'min(1456px, calc(100vw - 4rem))'"
@@ -3070,6 +3119,17 @@ const getAssetDisplayName = (asset: any): string => {
                     <Button variant="ghost" size="sm" @click="backToReviewWithoutAppending">Voltar para revisão</Button>
                 </div>
 
+                <form v-if="isQrofertasPresentation" class="quick-list-input flex flex-col gap-3" @submit.prevent="handleParse">
+                    <h3 v-if="destination !== 'video'" class="text-lg font-semibold text-white">Cole sua lista</h3>
+                    <p class="text-sm leading-relaxed text-zinc-400">Depois você confere os nomes, preços e imagens.</p>
+                    <textarea v-model="textInput" :disabled="isParsing" aria-label="Cole ou escreva uma lista de produtos" placeholder="Ex.: Arroz 5 kg 24,90&#10;Feijão 1 kg 7,99" :rows="destination === 'video' ? 4 : 7" maxlength="60000" class="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 text-sm leading-relaxed text-white" />
+                    <p v-if="destination !== 'video'" class="text-center text-xs text-zinc-500">ou</p>
+                    <input ref="listFileInput" type="file" class="hidden" :accept="LIST_FILE_ACCEPT" :disabled="isParsing" @change="handleFileSelected" />
+                    <button type="button" class="rounded-xl border border-zinc-600 p-3 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50" :disabled="isParsing" @click="triggerFilePicker">Enviar arquivo</button>
+                    <p class="text-xs leading-relaxed text-zinc-400">Planilha, PDF com texto ou TXT · até 12 MB.</p>
+                    <button type="submit" class="mt-2 rounded-xl bg-sky-600 p-3 text-sm font-semibold text-white disabled:opacity-50" :disabled="isParsing || !textInput.trim()">{{ isParsing ? 'Buscando produtos…' : 'Buscar produtos' }}</button>
+                </form>
+                <template v-else>
                 <!-- Hero compacto -->
                 <div class="text-center pt-1 pb-2">
                     <div class="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-200 mb-3">
@@ -3134,6 +3194,8 @@ const getAssetDisplayName = (asset: any): string => {
                     </div>
                 </div>
 
+                </template>
+
                 <p v-if="parsingError" class="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2.5 text-[11px] text-rose-200">
                     {{ parsingError }}
                 </p>
@@ -3169,7 +3231,7 @@ const getAssetDisplayName = (asset: any): string => {
                     <div :class="['flex items-center justify-between gap-2', isQrofertasPresentation ? 'flex-nowrap' : 'flex-wrap']">
                         <div class="flex items-center gap-1.5 min-w-0">
                             <h2 :class="[isQrofertasPresentation ? 'text-base' : 'text-lg', 'font-semibold text-white shrink-0']">Revisão</h2>
-                              <label class="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                              <label v-if="destination !== 'video'" class="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
                                 <input v-model="autoFillImages" type="checkbox" class="accent-violet-500" />
                                 Preenchimento automático de imagens
                                 <span class="text-zinc-500" title="Usa até 4 imagens conforme o espaço do card. Você pode ajustar depois.">ⓘ</span>
@@ -3291,12 +3353,13 @@ const getAssetDisplayName = (asset: any): string => {
                      os resultados aparecem como cards compactos. Os controles
                      do produto só entram em cena após um clique no card. -->
                 <section v-if="isQrofertasPresentation" class="quick-mode-results-view flex flex-col gap-3">
-                    <div class="quick-mode-results-search rounded-2xl border border-zinc-700/70 bg-zinc-800/90 p-3 shadow-lg shadow-black/20">
-                        <div class="flex items-center justify-between gap-2">
+                    <component :is="destination === 'video' ? 'details' : 'div'" class="quick-mode-results-search rounded-2xl border border-zinc-700/70 bg-zinc-800/90 p-3 shadow-lg shadow-black/20">
+                        <summary v-if="destination === 'video'" class="cursor-pointer text-sm font-semibold">Editar lista</summary>
+                        <div v-if="destination !== 'video'" class="flex items-center justify-between gap-2">
                             <h2 class="text-base font-semibold tracking-tight text-white">Digite ou cole uma lista de produtos</h2>
                             <span class="rounded-full border border-zinc-600 bg-zinc-900/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Busca</span>
                         </div>
-                        <p class="mt-1 text-[11px] font-semibold text-white">
+                        <p v-if="destination !== 'video'" class="mt-1 text-[11px] font-semibold text-white">
                             Exemplo:
                             <button type="button" class="font-normal text-zinc-200 underline decoration-zinc-500 underline-offset-2 hover:text-white" @click="textInput = 'Cerveja Brahma Lata de R$'">
                                 Cerveja Brahma Lata de R$
@@ -3318,7 +3381,7 @@ const getAssetDisplayName = (asset: any): string => {
                             <Loader2 v-if="isParsing" class="h-4 w-4 animate-spin" />
                             <span>{{ isParsing ? 'Buscando produtos...' : 'Buscar Produtos' }}</span>
                         </button>
-                    </div>
+                    </component>
 
                     <section class="quick-mode-search-results rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
                         <div class="flex items-start justify-between gap-2">
@@ -3329,7 +3392,7 @@ const getAssetDisplayName = (asset: any): string => {
                                     <p class="mt-1 text-[11px] leading-relaxed text-zinc-400">Você pode trocar as imagens após a escolha dos produtos.</p>
                                 </div>
                             </div>
-                            <span class="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[9px] font-bold uppercase text-white">Novo</span>
+                            <span v-if="destination !== 'video'" class="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[9px] font-bold uppercase text-white">Novo</span>
                         </div>
 
                         <div v-if="isParsing" class="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-6 text-center text-[11px] text-zinc-500">
@@ -3339,13 +3402,19 @@ const getAssetDisplayName = (asset: any): string => {
                             Faça uma busca para ver os produtos encontrados.
                         </div>
                         <div v-else class="mt-3 grid gap-2">
+                            <div v-if="destination === 'video'" class="video-selection-toolbar flex items-center justify-between gap-2 text-xs">
+                                <strong>{{ productsForImport.length }}/{{ maxImportProducts }} selecionados</strong>
+                                <button type="button" class="underline" :disabled="isSubmittingImport" @click="clearImportSelection">Limpar</button>
+                            </div>
                             <div
                                 v-for="row in reviewRowsWithMeta"
                                 :key="row.productId"
-                                role="button"
+                                :role="destination === 'video' ? 'group' : 'button'"
                                 tabindex="0"
                                 :aria-expanded="isQuickProductExpanded(row.index)"
                                 :class="[
+                                    destination === 'video' && 'video-compact-product',
+                                    destination === 'video' && !excludedImportIds.has(row.productId) && 'video-product-selected',
                                     'quick-mode-result-card group grid grid-cols-[76px_minmax(0,1fr)] items-center gap-3 rounded-xl border p-2.5 text-left transition-all',
                                     isQuickProductExpanded(row.index)
                                         ? 'border-sky-400/60 bg-sky-500/10 shadow-md shadow-sky-950/20'
@@ -3355,7 +3424,10 @@ const getAssetDisplayName = (asset: any): string => {
                                 @keydown.enter.prevent="toggleQuickProductOptions(row)"
                                 @keydown.space.prevent="toggleQuickProductOptions(row)"
                             >
-                                <div class="flex h-[76px] w-[76px] items-center justify-center overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/80">
+                                <label v-if="destination === 'video'" class="video-product-selection flex items-center justify-center" @click.stop @keydown.stop>
+                                    <input type="checkbox" :checked="!excludedImportIds.has(row.productId)" :disabled="isSubmittingImport" :aria-label="`Incluir ${row.product.name} no vídeo`" @change="toggleImportProduct(row.productId)" />
+                                </label>
+                                <div class="quick-product-thumbnail flex h-[76px] w-[76px] items-center justify-center overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/80">
                                     <img
                                         v-if="row.product?.imageUrl"
                                         :src="resolveProductImageUrl(row.product.imageUrl)"
@@ -3365,7 +3437,7 @@ const getAssetDisplayName = (asset: any): string => {
                                     <Loader2 v-else-if="row.product?.status === 'processing'" class="h-5 w-5 animate-spin text-sky-300" />
                                     <span v-else class="text-xl text-zinc-700">?</span>
                                 </div>
-                                <div class="min-w-0 self-stretch py-1">
+                                <div class="quick-product-description min-w-0 self-stretch py-1">
                                     <h3 class="line-clamp-2 text-sm font-semibold leading-tight text-white">
                                         {{ row.product.name || `Produto ${row.index + 1}` }}
                                     </h3>
@@ -3873,7 +3945,7 @@ const getAssetDisplayName = (asset: any): string => {
 
                                     <!-- A etiqueta acompanha o tipo de preço do produto. No modo
                                          rápido só mostramos modelos compatíveis com este card. -->
-                                    <label v-if="isQrofertasPresentation" class="grid gap-1 rounded-lg border border-violet-500/20 bg-violet-500/5 px-2 py-1.5">
+                                    <label v-if="isQrofertasPresentation && destination !== 'video'" class="grid gap-1 rounded-lg border border-violet-500/20 bg-violet-500/5 px-2 py-1.5">
                                         <span class="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-widest text-violet-200">
                                             <span>Trocar etiqueta</span>
                                             <span class="font-normal tracking-normal text-violet-200/60">
@@ -4114,7 +4186,7 @@ const getAssetDisplayName = (asset: any): string => {
                                     >
                                         <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="h-3 w-3 mr-1 animate-spin" />
                                         <Check v-else class="h-3 w-3 mr-1" />
-                                        <span class="text-[10px] font-bold">{{ isQrofertasPresentation ? 'Adicionar no encarte' : `Importar ${products.length}` }}</span>
+                                        <span class="text-[10px] font-bold">{{ isQrofertasPresentation ? importActionLabel : `Importar ${products.length}` }}</span>
                                     </Button>
                                 </div>
                             </div>
@@ -4130,9 +4202,11 @@ const getAssetDisplayName = (asset: any): string => {
             </div>
 
         </div>
-        <template v-if="isQrofertasPresentation" #footer>
+        <template v-if="isQrofertasPresentation && step === 'review'" #footer>
           <div class="flex w-full min-w-0 flex-col gap-3">
-            <details v-if="quickReviewConfirmed" open class="rounded-xl border border-white/10 text-sm text-zinc-300">
+            <p v-if="destination === 'video'" class="text-sm font-semibold">{{ productsForImport.length }} de {{ maxImportProducts }} ofertas selecionadas</p>
+            <p v-if="submissionError || importValidation || videoSelectionIssue" role="alert" class="text-sm text-red-300">{{ submissionError || importValidation || videoSelectionIssue }}</p>
+            <details v-if="quickReviewConfirmed && destination !== 'video'" open class="rounded-xl border border-white/10 text-sm text-zinc-300">
               <summary class="cursor-pointer px-3 py-2">Opções de aplicação</summary>
               <div class="space-y-3 p-3">
                 <label v-if="props.existingCount" class="block">
@@ -4152,18 +4226,18 @@ const getAssetDisplayName = (asset: any): string => {
                 type="button"
                 class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-lg shadow-emerald-950/30 transition-colors hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-50"
                 :disabled="importButtonDisabled"
-                :aria-label="quickReviewConfirmed ? 'Adicionar todos os produtos no encarte' : 'Confirmar conferência dos produtos'"
+                :aria-label="quickReviewConfirmed ? importActionLabel : 'Confirmar conferência dos produtos'"
                 @click="addAllQuickProductsToEncarte"
             >
                 <Loader2 v-if="isProcessingProducts || isSubmittingImport" class="h-4 w-4 animate-spin" />
                 <Check v-else class="h-4 w-4" />
-                {{ isSubmittingImport ? 'Adicionando...' : quickReviewConfirmed ? 'Adicionar no encarte' : 'Conferi os produtos · Continuar' }}
+                {{ isSubmittingImport ? 'Adicionando...' : quickReviewConfirmed ? (destination === 'video' ? `Adicionar ${productsForImport.length} ofertas no vídeo` : importActionLabel) : 'Conferi os produtos · Continuar' }}
             </button>
           </div>
         </template>
-    </Dialog>
+    </component>
 
-    <Dialog
+    <Dialog :surface-class="destination === 'video' ? 'video-review-palette' : undefined"
         v-if="isQrofertasPresentation && activeReviewRowMeta"
         v-model="showQuickProductProperties"
         title="Propriedades do produto"
@@ -4256,7 +4330,7 @@ const getAssetDisplayName = (asset: any): string => {
                     </div>
                 </div>
 
-                <label class="mt-3 grid gap-1 rounded-xl border border-violet-500/20 bg-violet-500/5 px-2.5 py-2">
+                <label v-if="destination !== 'video'" class="mt-3 grid gap-1 rounded-xl border border-violet-500/20 bg-violet-500/5 px-2.5 py-2">
                     <span class="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-widest text-violet-200">
                         <span>Trocar etiqueta</span>
                         <span class="font-normal tracking-normal text-violet-200/60">{{ activeProductOfferSummary }}</span>
@@ -4368,7 +4442,7 @@ const getAssetDisplayName = (asset: any): string => {
         </div>
     </Dialog>
 
-    <Dialog
+    <Dialog :surface-class="destination === 'video' ? 'video-review-palette' : undefined"
         v-model="showReviewUploadOptions"
         title="Enviar imagem"
         width="min(360px, calc(100vw - 2rem))"
@@ -4407,7 +4481,7 @@ const getAssetDisplayName = (asset: any): string => {
         </div>
     </Dialog>
 
-    <Dialog v-model="showAssetPicker" title="Selecionar imagens" width="720px">
+    <Dialog :surface-class="destination === 'video' ? 'video-review-palette' : undefined" v-model="showAssetPicker" title="Selecionar imagens" width="720px">
         <div class="flex flex-col gap-3">
             <div v-if="selectedProductForAssetPicker" class="text-xs text-zinc-400 leading-relaxed">
                 Produto inicial: <span class="text-zinc-200 font-medium">{{ selectedProductForAssetPicker.name }}</span>
@@ -4494,7 +4568,7 @@ const getAssetDisplayName = (asset: any): string => {
     </Dialog>
 
     <!-- Label Preview Fullscreen Modal -->
-    <Dialog v-model="showLabelPreview" title="Preview da Etiqueta" fullscreen>
+    <Dialog :surface-class="destination === 'video' ? 'video-review-palette' : undefined" v-model="showLabelPreview" title="Preview da Etiqueta" fullscreen>
         <div class="flex flex-col items-center justify-center w-full h-full">
             <img
                 v-if="selectedLabelTemplate?.previewDataUrl"

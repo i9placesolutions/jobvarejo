@@ -1,3 +1,7 @@
+import {videoValidityText} from './validity'
+import {productLayers} from './product-layout'
+import {VideoBackgroundImage} from './background-image'
+import {personalizedRecipe} from './personalization'
 import {EditableElement} from './editable-element'
 import {StickerLogo} from './sticker-logo'
 import {OPENING_SOUNDS, musicGain} from './sound-design'
@@ -10,6 +14,7 @@ import {elementMotion,cameraMotion,transitionMotion} from './catalog-motion'
 import {motionSettings,soundAsset,SOUND_EFFECTS} from './effect-catalog'
 import {CatalogAtmosphere,CatalogTransition,AnimatedRetailText} from './catalog-effects'
 import {productEffects} from './native-effects'
+import {flyerRecipe} from './flyer-recipes'
 
 const div=(style:React.CSSProperties,...children:React.ReactNode[])=>h('div',{style},...children)
 const box=(left:number,top:number,width:number,height?:number):React.CSSProperties=>({position:'absolute',left,top,width,height})
@@ -17,7 +22,7 @@ const clamp={extrapolateLeft:'clamp' as const,extrapolateRight:'clamp' as const}
 const curve=Easing.bezier(.16,1,.3,1)
 const mix=(f:number,a:number,b:number,x:number,y:number)=>interpolate(f,[a,b],[x,y],{...clamp,easing:curve})
 const rand=(i:number)=>{const x=Math.sin(i*91.17+37.4)*41789.43;return x-Math.floor(x)}
-const type:React.CSSProperties={fontFamily:'ShowcaseCondensed',fontWeight:800,lineHeight:1.02,color:'#fff',textAlign:'center'}
+const type:React.CSSProperties={fontFamily:'ShowcaseCondensed',fontWeight:800,lineHeight:1.02,color:'var(--video-text-color, #fff)',textAlign:'center'}
 const fit=(s:string,max:number,limit:number)=>Math.max(max*.55,Math.min(max,max*Math.sqrt(limit/Math.max(limit,s.length))))
 const line=(text:string,x:number,y:number,w:number,size:number,style:React.CSSProperties={})=>div({...box(x,y,w),...type,fontSize:size,...style},text)
 const phone=(v:string)=>{const n=v.replace(/\D/g,'');return n.length===11?`${n.slice(0,2)} ${n.slice(2,7)} ${n.slice(7)}`:n.length===10?`${n.slice(0,2)} ${n.slice(2,6)} ${n.slice(6)}`:v}
@@ -34,7 +39,7 @@ export function Logo({props,width,height}:{props:VideoRenderProps;width:number;h
  div({...type,fontSize:fit(props.document.brand.name,92,22),height,display:'grid',placeItems:'center',textShadow:'0 4px 8px #001d14'},props.document.brand.name)
 }
 function Badge({props,width,height}:{props:VideoRenderProps;width:number;height:number}){
- return /fecha\s*m[eê]s/i.test(props.document.campaign)?h(Img,{src:(props.templateBase||'/video-studio/templates')+'/fecha-mes-emerald-v2.png',style:{width,height,objectFit:'contain',filter:'drop-shadow(0 16px 12px #001e1ca0)'}}):div({width,height,display:'grid',placeItems:'center',...type,fontSize:fit(props.document.campaign,180,18),color:'#ffda35',textShadow:'0 6px #8c5810, 0 12px #503008, 0 18px 18px #0008'},props.document.campaign)
+ return props.document.campaign.trim().toLocaleUpperCase('pt-BR')==='FECHA MÊS'?h(Img,{src:(props.templateBase||'/video-studio/templates')+'/fecha-mes-emerald-v2.png',style:{width,height,objectFit:'contain',filter:'drop-shadow(0 16px 12px #001e1ca0)'}}):div({width,height,display:'grid',placeItems:'center',...type,fontSize:fit(props.document.campaign,180,18),color:'#ffda35',textShadow:'0 6px #8c5810, 0 12px #503008, 0 18px 18px #0008'},props.document.campaign)
 }
 
 // A cena permanece viva entre as ofertas; curvas e partículas dependem apenas do frame.
@@ -60,14 +65,15 @@ function Environment({props}:{props:VideoRenderProps}){
  }
  // Moedas em planos próximos às bordas, sem competir com a descrição.
  for(let i=0;i<4;i++){const x=(i%2?w*.98:-w*.005)+Math.sin(f/20+i)*26,y=ht*(.16+i*.24)+Math.sin(f/26+i)*52;items.push(div({...box(x-55,y,110,110),borderRadius:'50%',border:'5px solid #d7e280',background:'radial-gradient(circle at 35% 25%,#95c76d,#197052 60%,#074935)',boxShadow:'inset 0 0 0 5px #114a2e,0 8px 0 #062e20',...type,fontSize:70,color:'#f8df69',display:'grid',placeItems:'center',rotate:`${i*23-15+Math.sin(f/23)*18}deg`,filter:i===3?'blur(2px)':'none',opacity:.8},i%2?'%':'$'))}
- return h(AbsoluteFill,{style:{background:'radial-gradient(ellipse at 49% 58%,#83ad20 0%,#396624 40%,#173b25 76%,#0b271e 100%)',overflow:'hidden'}},...items,props.document.motion?h(CatalogAtmosphere,{props}):null,div({position:'absolute',inset:0,background:'radial-gradient(ellipse,transparent 38%,#02180c77 100%)'}))
+ return h(AbsoluteFill,{style:{background:'radial-gradient(ellipse at 49% 58%,#83ad20 0%,#396624 40%,#173b25 76%,#0b271e 100%)',overflow:'hidden'}},h(VideoBackgroundImage,{props}),...items,props.document.motion?h(CatalogAtmosphere,{props}):null,div({position:'absolute',inset:0,background:'radial-gradient(ellipse,transparent 38%,#02180c77 100%)'}))
 }
 
 function Validity({props,opening=false,compact=false}:{props:VideoRenderProps;opening?:boolean;compact?:boolean}){
- const v=props.document.validity.trim(),demo=/demonstra|ilustrativ/i.test(v)
- if(compact)return div({...type,display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontSize:fit(v,20,52),lineHeight:1.15,color:'#edf4d5',padding:'5px 10px',textShadow:'0 1px 3px #082717'},h(SocialIcon,{kind:'calendar',size:20}),v||'INFORME A VALIDADE')
- if(!opening)return div({display:'flex',alignItems:'center',justifyContent:'center',gap:13,...type,color:'#f4f8d2',padding:'12px 22px',borderRadius:18,background:'#092b2470',border:'1px solid #d4eb8133'},h(SocialIcon,{kind:'calendar',size:34}),div({textAlign:'left'},!demo?div({fontSize:18,letterSpacing:1.5,color:'#dbeaa2',marginBottom:5},'OFERTAS VÁLIDAS'):null,div({fontSize:fit(v,32,36),lineHeight:1.13},v||'INFORME A VALIDADE')))
- return div({...type},!demo?div({fontSize:30,color:'#fff'},'OFERTAS VÁLIDAS'):null,div({fontSize:fit(v,46,36),color:'#fff',marginTop:8},v||'INFORME A VALIDADE'),!demo?div({fontSize:24,color:'#e2ed74',marginTop:14},'OU ENQUANTO DURAREM OS ESTOQUES'):null)
+ const v=videoValidityText(props.document),demo=/demonstra|ilustrativ/i.test(v)
+ if(!v)return null
+ if(compact)return div({...type,display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontSize:fit(v,20,52),lineHeight:1.15,color:'var(--video-validity-color, #edf4d5)',padding:'5px 10px',textShadow:'0 1px 3px #082717'},h(SocialIcon,{kind:'calendar',size:20}),v)
+ if(!opening)return div({display:'flex',alignItems:'center',justifyContent:'center',gap:13,...type,color:'var(--video-validity-color, #f4f8d2)',padding:'12px 22px',borderRadius:18,background:'#092b2470',border:'1px solid #d4eb8133'},h(SocialIcon,{kind:'calendar',size:34}),div({textAlign:'left'},!demo&&!/^ofertas válidas/i.test(v)?div({fontSize:18,letterSpacing:1.5,color:'#dbeaa2',marginBottom:5},'OFERTAS VÁLIDAS'):null,div({fontSize:fit(v,32,36),lineHeight:1.13},v)))
+ return div({...type},!demo&&!/^ofertas válidas/i.test(v)?div({fontSize:30,color:'var(--video-text-color, #fff)'},'OFERTAS VÁLIDAS'):null,div({fontSize:fit(v,46,36),color:'var(--video-text-color, #fff)',marginTop:8},v),!demo?div({fontSize:24,color:'#e2ed74',marginTop:14},'OU ENQUANTO DURAREM OS ESTOQUES'):null)
 }
 
 function Identity({props}:{props:VideoRenderProps}){
@@ -76,56 +82,58 @@ function Identity({props}:{props:VideoRenderProps}){
  const move=mix(f,first-5,first+5,0,1),ending=mix(f,outro-5,outro+7,0,1)
  const intro=retailEntrance(f,p?12:split).scale,settle=retailEntrance(f,4).scale
  const blend=(a:number,b:number,c:number)=>a+(b-a)*move+(c-b)*ending
- const logo=p?{x:blend(45,115,70),y:blend(1180,1555,370),w:blend(990,850,940),h:blend(480,275,450)}:{x:blend(400,70,65),y:blend(225,775,205),w:blend(1120,630,820),h:blend(630,265,450)}
+ const logo=p?{x:blend(45,115,70),y:blend(1180,1555,370),w:blend(990,850,940),h:blend(480,200,450)}:{x:blend(400,70,65),y:blend(225,775,205),w:blend(1120,630,820),h:blend(630,175,450)}
  const badge=p?{x:blend(20,145,145),y:blend(190,170,160),w:blend(1040,790,790),h:blend(1140,695,695)}:{x:blend(455,110,110),y:blend(30,170,170),w:blend(1010,540,540),h:blend(980,610,610)}
  const logoOpacity=mix(f,p?12:split,p?16:split+4,0,1)
  const badgeOpacity=(1-ending)*mix(f,4,9,0,1)*(p?1:(1-move)*(1-swap)+move)
  return h(AbsoluteFill,{style:{pointerEvents:'none'}},
   div({...box(badge.x,badge.y,badge.w,badge.h),translate:`0px ${(1-settle)*230}px`,scale:settle*(1+(p?0:swap*(1-move)*.14)),rotate:`${(1-settle)*-9+Math.sin(f/65)*.75}deg`,opacity:badgeOpacity},h(Badge,{props,width:badge.w,height:badge.h})),
   div({...box(logo.x,logo.y,logo.w,logo.h),translate:`0px ${(1-intro)*120}px`,scale:intro,opacity:logoOpacity},h(Logo,{props,width:logo.w,height:logo.h})),
-  p?div({...box(85,1730,910),opacity:1-move,translate:`0px ${mix(f,18,27,38,0)}px`},h(Validity,{props,opening:true})):null,
-  !p?div({...box(85,55,590),opacity:mix(f,0,5,0,1)*(1-move)},h(Validity,{props})):null,
   !p&&f>=split-3&&f<split+5?div({position:'absolute',inset:0,background:'#e9ffb7',mixBlendMode:'screen',opacity:Math.max(0,1-Math.abs(f-split)/4)*.22}):null)
 }
 
 function Price({props,price,unit}:{props:VideoRenderProps;price:string;unit:string}){
- if(props.label)return h(VideoPriceLabel,{label:props.label,price,unit})
+ if(props.label)return h(VideoPriceLabel,{label:props.label,price,unit,colors:props.document.appearance})
  const [integer,cents]=displayPrice(price).split(',')
- return div({boxSizing:'border-box',width:'100%',height:'100%',borderRadius:'50%',padding:16,background:'linear-gradient(145deg,#edf899,#87bf4c 22%,#235d36 44%,#d6ed89 71%,#588b35)',boxShadow:'0 14px 14px #072d213f'},div({boxSizing:'border-box',height:'100%',borderRadius:'50%',border:'4px solid #b4dc65',background:'radial-gradient(circle at 35% 25%,#9bd02e,#64a223 63%,#2e6a26)',boxShadow:'inset 0 0 20px #123f3655',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',...type},div({fontSize:43,color:'#f4ffdf',marginTop:-8},'R$'),div({display:'flex',justifyContent:'center',alignItems:'baseline',color:'#fff22b',marginTop:9,textShadow:'0 3px 1px #4a762322'},div({fontSize:Math.min(230,485/Math.max(2,integer!.length)),lineHeight:.96,letterSpacing:-6},integer),div({display:'flex',flexDirection:'column',alignSelf:'stretch',justifyContent:'center',marginLeft:2},div({fontSize:94,lineHeight:.9},','+cents),div({fontSize:32,color:'#f4ffdb',textAlign:'right',marginTop:21},unit||'UN')))))
+ return div({boxSizing:'border-box',width:'100%',height:'100%',borderRadius:'50%',padding:16,background:'linear-gradient(145deg,#edf899,#87bf4c 22%,#235d36 44%,#d6ed89 71%,#588b35)',boxShadow:'0 14px 14px #072d213f'},div({boxSizing:'border-box',height:'100%',borderRadius:'50%',border:'4px solid #b4dc65',background:'radial-gradient(circle at 35% 25%,#9bd02e,#64a223 63%,#2e6a26)',boxShadow:'inset 0 0 20px #123f3655',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',...type},div({fontSize:43,color:'var(--video-currency-color, #f4ffdf)',marginTop:-8},'R$'),div({display:'flex',justifyContent:'center',alignItems:'baseline',color:'var(--video-price-color, #fff22b)',marginTop:9,textShadow:'0 3px 1px #4a762322'},div({fontSize:Math.min(230,485/Math.max(2,integer!.length)),lineHeight:.96,letterSpacing:-6},integer),div({display:'flex',flexDirection:'column',alignSelf:'stretch',justifyContent:'center',marginLeft:2},div({fontSize:94,lineHeight:.9},','+cents),div({fontSize:32,color:'var(--video-unit-color, #f4ffdb)',textAlign:'right',marginTop:21},unit||'UN')))))
 }
 
 function Product({props,scene,index}:{props:VideoRenderProps;scene:VideoScene;index:number}){
  const f=useCurrentFrame(),{width:w,height:ht}=useVideoConfig(),p=ht>w,offer=props.document.offers[index]!,src=props.media[offer.image],d=props.document
  const m=motionSettings(d.motion),exit=retailExit(f,scene.frames),a=elementMotion(f,m.product,0,m.speed),price=elementMotion(f-5,m.price,0,m.speed),copy=elementMotion(f,m.product,1,m.speed)
- const product=p?{x:55,y:840,w:590,h:755}:{x:735,y:165,w:610,h:745}
- const paired=d.duplicateProducts!==false&&(offer.imageAspectRatio||1)<.9
+ const product=p?{x:55,y:840,w:590,h:755}:{x:735,y:210,w:610,h:700}
+ const layers=productLayers([product.x,product.y,product.w,product.h],p,d.duplicateProducts!==false,offer.imageAspectRatio||1,offer.copies)
  const float=f>16&&d.effects.includes('pulse')?Math.sin((f-16)/22)*4:0
  const imageStyle:React.CSSProperties={width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 19px 14px #002c2066)'}
  const productImage=src?(d.motion&&m.finish!=='clean'?h(CanvasImage,{src,width:650,height:850,fit:'contain',effects:productEffects(f,m.finish,d.intensity),style:imageStyle}):h(Img,{src,style:imageStyle})):div({...imageStyle,...type,fontSize:45,display:'grid',placeItems:'center'},'ADICIONE A FOTO')
  const name=offer.name.toLocaleUpperCase('pt-BR'),weight=name.match(/\s+(\d+(?:[.,]\d+)?\s*(?:KG|G|ML|L))$/),title=weight?name.slice(0,-weight[0].length):name
  return h(AbsoluteFill,{style:{opacity:exit.opacity,scale:exit.scale,filter:exit.blur?`blur(${exit.blur}px)`:undefined,pointerEvents:'none'}},
- div({...box(p?100:745,p?835:950,p?510:580),opacity:mix(f,4,9,0,1)},h(Validity,{props,compact:true})),
- paired?div({...box(product.x+product.w*.085,product.y+65,product.w*.69,product.h*.86),translate:`${copy.x}px ${copy.y+float}px`,rotate:`${-8+copy.rotation}deg`,scale:copy.scale,opacity:copy.opacity},productImage):null,
- div({...box(product.x+(paired?product.w*.19:0),product.y,product.w*(paired?.83:1),product.h),translate:`${a.x}px ${a.y+float}px`,rotate:`${(paired?3:-2)+a.rotation}deg`,scale:d.effects.includes('zoom')?a.scale:1,opacity:a.opacity},productImage),
- div({...box(p?660:1340,p?880:220,p?350:490,p?245:235),...type,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:13,fontSize:fit(title,p?64:72,26),textShadow:'0 3px 0 #164b25,0 7px 9px #16371760',},h(AnimatedRetailText,{text:title,mode:m.text,speed:m.speed}),weight?div({fontSize:p?43:48,color:'#e8f7ad',lineHeight:1,letterSpacing:1},weight[1]):null),
+ div({...box(p?85:70,p?1780:975,p?910:630),opacity:mix(f,4,9,0,1)},h(Validity,{props,compact:true})),
+ ...layers.map(layer=>{const motion=elementMotion(f,m.product,layer.motionIndex,m.speed);return h('div',{key:layer.motionIndex,style:{...box(...layer.box),translate:`${motion.x}px ${motion.y+float}px`,rotate:`${layer.rotation+motion.rotation}deg`,scale:d.effects.includes('zoom')?motion.scale:1,opacity:motion.opacity}},productImage)}),
+ div({...box(p?660:715,p?880:60,p?350:650,p?245:120),...type,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:13,color:'var(--video-name-color, var(--video-text-color, white))',fontSize:fit(title,p?64:50,26),textShadow:'0 3px 0 #164b25,0 7px 9px #16371760',},h(AnimatedRetailText,{text:title,mode:m.text,speed:m.speed}),weight?div({fontSize:p?43:30,color:'#e8f7ad',lineHeight:1,letterSpacing:1},weight[1]):null),
  div({...box(p?610:1325,p?1150:485,p?380:445,p?395:445),translate:`${price.x}px ${price.y}px`,scale:price.scale,rotate:`${price.rotation}deg`,opacity:price.opacity},h(Price,{props,price:offer.price,unit:offer.unit}),f>=8&&f<19?div({position:'absolute',inset:-20,border:'4px solid #eaff9755',borderRadius:'50%',scale:1+(f-8)*.035,opacity:(19-f)/11,pointerEvents:'none'}):null),
- offer.condition?line(offer.condition,p?600:1310,p?1590:950,p?430:470,p?29:28,{color:'#f8ffd2',opacity:price.opacity}):null)
+ offer.condition?line(offer.condition,p?600:1310,p?1590:950,p?430:470,p?29:28,{color:'var(--video-condition-color, #f8ffd2)',opacity:price.opacity}):null)
 }
 
 export function Ending({props}:{props:VideoRenderProps}){
  const f=useCurrentFrame(),{width:w,height:ht}=useVideoConfig(),p=ht>w,b=props.document.brand
+ const sourceRecipe=flyerRecipe(props.document.theme),recipe=sourceRecipe?personalizedRecipe(sourceRecipe,props.document):undefined,accent=recipe?.emptyOutroSeal?recipe.accent:'#deeda5'
  const socials=[...(b.instagram?[{kind:'instagram' as const,value:b.instagram.startsWith('@')?b.instagram:'@'+b.instagram}]:[]),...(b.facebook?[{kind:'web' as const,value:b.facebook}]:[])]
  const phones=[b.whatsapp,...(b.whatsappNumbers||[])].filter(Boolean)
  const addresses=[b.address,...(b.addresses||[])].filter(Boolean)
  const extras=[b.website,b.phone,b.hours,b.paymentNotes,b.slogan].filter((v):v is string=>!!v)
+ if(recipe?.emptyOutroSeal&&recipe.seal&&!socials.length&&!phones.length&&!addresses.length&&!extras.length){
+  const enter=retailEntrance(f,3,.015)
+  return h(AbsoluteFill,null,h(EditableElement,{props,scene:'outro',id:'seal',style:{...box(p?155:1030,p?860:230,p?770:710,p?680:620),opacity:enter.opacity,scale:enter.scale}},h(Img,{src:(props.templateBase||'/video-studio/templates')+'/'+recipe.seal,style:{width:'100%',height:'100%',objectFit:'contain'}})))
+ }
  const x=p?65:895,width=p?950:910
  const row=(delay:number,y:number,children:React.ReactNode)=>{const enter=retailEntrance(f,delay,.015);return h(EditableElement,{props,scene:'outro',id:delay===3?'outro-social':delay===7?'outro-phone':'outro-address',style:{...box(x,y,width),opacity:enter.opacity,translate:`0px ${enter.travel*45}px`,scale:.94+.06*enter.scale}},children)}
- const pill=(txt:string)=>div({...type,fontSize:p?34:30,color:'#f4f47a',padding:'14px 25px',background:'#174e3655',borderRadius:40,width:'fit-content',margin:'0 auto'},txt)
+ const pill=(txt:string)=>div({...type,fontSize:p?34:30,color:recipe?.emptyOutroSeal?accent:'#f4f47a',padding:'14px 25px',background:recipe?.emptyOutroSeal?'#18131199':'#174e3655',borderRadius:40,width:'fit-content',margin:'0 auto'},txt)
  const socialY=p?940:240,phoneY=p?1175:460,addressY=p?1490:745
  return h(AbsoluteFill,null,
- socials.length?row(3,socialY,div({},pill('SIGA-NOS NAS REDES SOCIAIS'),...socials.map(s=>div({display:'flex',justifyContent:'center',alignItems:'center',gap:17,marginTop:20,...type,fontSize:fit(s.value,p?55:51,30)},div({display:'grid',placeItems:'center',padding:10,borderRadius:17,background:s.kind==='instagram'?'linear-gradient(35deg,#ffc662,#dc327d,#6f4bcb)':'#237047'},h(SocialIcon,{kind:s.kind,size:46})),s.value)))):null,
- phones.length?row(7,phoneY,div({},pill('SALVE NOSSO CONTATO PARA RECEBER AS OFERTAS'),...phones.map((v,i)=>div({display:'flex',justifyContent:'center',alignItems:'center',gap:17,marginTop:i?12:22,...type,fontSize:fit(phone(v),i?54:p?112:98,17)},div({color:'#d8ffa1'},h(SocialIcon,{kind:'whatsapp',size:i?50:90})),phone(v))))):null,
- row(11,addressY,div({},div({height:3,background:'#deeda5',width:170,margin:'0 auto 28px'}),...addresses.map(a=>div({display:'flex',justifyContent:'center',alignItems:'center',gap:12,margin:'10px auto',...type,fontSize:fit(a,p?37:34,63),lineHeight:1.13},h(SocialIcon,{kind:'pin',size:40}),a)),...extras.map(v=>div({...type,fontSize:p?30:27,marginTop:13,color:'#e0efc9'},v)))))
+ socials.length?row(3,socialY,div({},pill('SIGA-NOS NAS REDES SOCIAIS'),...socials.map(s=>div({display:'flex',justifyContent:'center',alignItems:'center',gap:17,marginTop:20,...type,color:'var(--video-contact-color, var(--video-text-color, white))',fontSize:fit(s.value,p?55:51,30)},div({display:'grid',placeItems:'center',padding:10,borderRadius:17,background:recipe?.emptyOutroSeal?'#181311':s.kind==='instagram'?'linear-gradient(35deg,#ffc662,#dc327d,#6f4bcb)':'#237047'},h(SocialIcon,{kind:s.kind,size:46})),s.value)))):null,
+ phones.length?row(7,phoneY,div({},pill('SALVE NOSSO CONTATO PARA RECEBER AS OFERTAS'),...phones.map((v,i)=>div({display:'flex',justifyContent:'center',alignItems:'center',gap:17,marginTop:i?12:22,...type,color:'var(--video-contact-color, var(--video-text-color, white))',fontSize:fit(phone(v),i?54:p?112:98,17)},div({color:recipe?.emptyOutroSeal?accent:'#d8ffa1'},h(SocialIcon,{kind:'whatsapp',size:i?50:90})),phone(v))))):null,
+ row(11,addressY,div({},div({height:3,background:accent,width:170,margin:'0 auto 28px'}),...addresses.map(a=>div({display:'flex',justifyContent:'center',alignItems:'center',gap:12,margin:'10px auto',...type,color:'var(--video-contact-color, var(--video-text-color, white))',fontSize:fit(a,p?37:34,63),lineHeight:1.13},h(SocialIcon,{kind:'pin',size:40}),a)),...extras.map(v=>div({...type,fontSize:p?30:27,marginTop:13,color:props.document.appearance?.contactColor||(recipe?.emptyOutroSeal?'#fff8ed':'#e0efc9')},v)))))
 }
 
 export function RetailCamera({props,children}:{props:VideoRenderProps;children?:React.ReactNode}){
@@ -152,7 +160,7 @@ export function ShowcaseComposition(props:VideoRenderProps){
  ...props.scenes.map(s=>{
   const m=motionSettings(d.motion),base=props.audioBase||'/video-studio/audio',swipe=d.motion?base+'/'+soundAsset(m.transitionSound):props.whoosh,hit=d.motion?base+'/'+soundAsset(m.accentSound):props.impact
   const length=(id:string)=>Math.ceil((SOUND_EFFECTS.find(x=>x.id===id)?.seconds||.7)*30)
-  return h(Sequence,{key:'audio-'+s.id,from:s.from,durationInFrames:s.frames},s.audio&&d.voice.enabled?h(Audio,{src:s.audio,volume:d.audio.voiceVolume}):null,
+  return h(Sequence,{key:'audio-'+s.id,from:s.from,durationInFrames:s.frames},s.audio&&d.voice.enabled?h(Audio,{src:s.audio,playbackRate:s.playbackRate||1,volume:d.audio.voiceVolume}):null,
    d.audio.sounds&&s.id!=='intro'&&swipe?h(Sequence,{durationInFrames:Math.min(s.frames,d.motion?length(m.transitionSound):23)},h(Audio,{src:swipe,volume:d.audio.effectsVolume*.48})):null,
    d.audio.sounds&&s.id!=='intro'&&hit?h(Sequence,{from:5,durationInFrames:Math.min(s.frames-5,d.motion?length(m.accentSound):25)},h(Audio,{src:hit,volume:d.audio.effectsVolume*.65})):null)
  }),

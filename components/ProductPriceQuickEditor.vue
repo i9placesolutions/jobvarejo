@@ -24,12 +24,14 @@ const showCensored = ref(false)
 const alcoholBadgeEnabled = ref(false)
 const visibleFields = computed(() => fields.filter(field => !field.key.startsWith('price') || priceCount.value === '4' || field.key === 'pricePack' || (priceCount.value === '2' && field.key === 'priceSpecial')))
 const error = reactive({ message: '' })
+let initialValues: Record<string, any> = {}
 watch(() => [props.modelValue, props.product], () => {
   if (!props.modelValue) return
   for (const field of fields) draft[field.key] = String(props.product[field.key] ?? '')
   priceCount.value = String(props.product.priceCount || (props.product.priceUnit || props.product.priceSpecialUnit ? 4 : props.product.priceSpecial ? 2 : 1))
   showCensored.value = !!props.product.showCensored
   alcoholBadgeEnabled.value = !!props.product.alcoholBadgeEnabled
+  initialValues = { ...draft, priceCount: Number(priceCount.value), showCensored: showCensored.value, alcoholBadgeEnabled: alcoholBadgeEnabled.value }
   error.message = ''
 }, { immediate: true })
 const save = () => {
@@ -48,7 +50,11 @@ const save = () => {
   const payload: Record<string, any> = Object.fromEntries(fields.map(field => [field.key, String(draft[field.key] ?? '').trim()]))
   if (priceCount.value !== '4') { payload.priceUnit = ''; payload.priceSpecialUnit = '' }
   if (priceCount.value === '1') payload.priceSpecial = ''
-  emit('save', { ...payload, priceCount: Number(priceCount.value), showCensored: showCensored.value, alcoholBadgeEnabled: alcoholBadgeEnabled.value })
+  const values = { ...payload, priceCount: Number(priceCount.value), showCensored: showCensored.value, alcoholBadgeEnabled: alcoholBadgeEnabled.value }
+  // Compare antes de limpar preços ocultos: abrir o formulário não é uma edição.
+  const entered: Record<string, any> = { ...draft, priceCount: Number(priceCount.value), showCensored: showCensored.value, alcoholBadgeEnabled: alcoholBadgeEnabled.value }
+  const changedFields = Object.keys(entered).filter(key => String(entered[key] ?? '').trim() !== String(initialValues[key] ?? '').trim())
+  emit('save', { ...values, changedFields })
 }
 </script>
 

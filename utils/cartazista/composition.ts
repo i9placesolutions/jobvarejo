@@ -1,3 +1,4 @@
+import { applyCartazistaTypography } from './typography'
 import type { ArtComposition, ArtLayer } from '~/types/art-studio'
 import {
   CARTAZISTA_FORMATS,
@@ -105,7 +106,7 @@ const baseComposition = (
   const logo = composition.layers.find(l => l.id === 'cartaz-logo')!
   logo.src = settings.showLogo ? logoSrc : ''
   logo.visible = !!logo.src
-  return updatePosterLettering(applyCartazistaHeader(composition, settings.header), modelId, product, settings)
+  return updatePosterLettering(applyCartazistaHeader(settings.typography ? applyCartazistaTypography(composition, settings.typography) : composition, settings.header), modelId, product, settings)
 }
 
 export const applyCartazistaProduct = (

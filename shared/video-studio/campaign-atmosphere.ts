@@ -7,7 +7,7 @@ const rand=(i:number)=>{const x=Math.sin(i*127.1+71)*43758.54;return x-Math.floo
 /** Semantic motifs remain behind the offer; impact settles while the perimeter stays alive. */
 export function CampaignAtmosphere({props}:{props:VideoRenderProps}){
  const frame=useCurrentFrame(),{width:w,height:ht}=useVideoConfig(),family=campaignFamily(props.document.theme),r=flyerRecipe(props.document.theme),seed=r?.seed||0
- if(!family||family==='boom')return null
+ if(!family||family==='boom'||r?.semanticMotifs===false)return null
  const scene=props.scenes.find(s=>frame>=s.from&&frame<s.from+s.frames),age=frame-(scene?.from||0)-(scene?.id==='intro'?8:5),hit=age>=0?Math.max(0,1-age/24):0,accent=r?.accent||'#ffd864',intensity=props.document.intensity,items:React.ReactNode[]=[]
  const svg=(key:string,x:number,y:number,size:number,rotation:number,opacity:number,...children:React.ReactNode[])=>h('svg',{key,viewBox:'0 0 100 100',style:{position:'absolute',left:x,top:y,width:size,height:size,rotate:rotation+'deg',opacity:opacity*intensity,overflow:'visible'}},...children)
  const path=(d:string,fill:string,extra={})=>h('path',{d,fill,...extra})

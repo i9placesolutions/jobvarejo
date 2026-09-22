@@ -1,6 +1,11 @@
 import unittest
 from normalize import normalize
 class SpeechTests(unittest.TestCase):
+ def test_retail_portuguese(self):
+  self.assertEqual(normalize('ABOBORA CABOTIA QUILO, UM E NOVENTA E NOVE'), 'abóbora cabotiá quilo, um e noventa e nove')
+  self.assertEqual(normalize('LARANJA QUILO,UM E NOVENTA E OITO'), 'laranja quilo, um e noventa e oito')
+  self.assertEqual(normalize('aboboras e macaco'), 'aboboras e macaco')
+  self.assertEqual(normalize('CABOTIA', [{'from':'CABOTIA','to':'cabô tiá'}]), 'cabô tiá')
  def test_currency(self):
   self.assertEqual(normalize('R$ 19,90'), 'dezenove reais e noventa centavos')
   self.assertEqual(normalize('R$ 1,01'), 'um real e um centavo')

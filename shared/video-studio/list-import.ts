@@ -1,4 +1,5 @@
 import {inferUnitLabelFromProduct} from '../../utils/priceTagText'
+import {isAlcoholicProduct} from '../../utils/product-card-configuration'
 import {parseOfferPrice,type VideoOffer} from './model'
 const condition=(p:Record<string,any>)=>[...new Set([p.limit,p.limitText,p.condition,p.specialCondition].filter(Boolean).map(String))].join(' · ')
 export function videoListIssue(p:Record<string,any>):string {
@@ -10,5 +11,14 @@ export function videoListIssue(p:Record<string,any>):string {
 }
 export function videoOfferFromList(p:Record<string,any>,id:string):VideoOffer {
  const issue=videoListIssue(p);if(issue)throw Error(issue)
- return {id,name:String(p.name).slice(0,120),price:String(p.price||p.priceUnit),unit:inferUnitLabelFromProduct(p)||'UN',condition:condition(p),image:''}
+ return {id,name:String(p.name).slice(0,120),price:String(p.price||p.priceUnit),unit:inferUnitLabelFromProduct(p)||'UN',condition:condition(p),image:'',alcoholBadgeEnabled:typeof p.alcoholBadgeEnabled==='boolean'?p.alcoholBadgeEnabled:isAlcoholicProduct(p)}
+}
+
+export function videoListBatchIssue(products: Record<string, any>[], remaining: number): string {
+ if (products.length > remaining) return `Você selecionou ${products.length} produtos. Este vídeo tem espaço para ${remaining} ofertas. Desmarque ${products.length - remaining} para continuar.`
+ for (const product of products) {
+  const issue = videoListIssue(product)
+  if (issue) return `${product.name || 'Produto'}: ${issue}`
+ }
+ return ''
 }

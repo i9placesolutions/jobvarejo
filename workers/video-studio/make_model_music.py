@@ -4,8 +4,13 @@ from pathlib import Path
 import numpy as np
 ROOT=Path(__file__).resolve().parents[2]; RATE=44100;DURATION=30
 recipes=json.loads((ROOT/'shared/video-studio/generated-flyer-recipes.json').read_text())
+only=next((a.split('=',1)[1] for a in sys.argv if a.startswith('--only=')),None)
+if only:
+ recipes=[r for r in recipes if r['id']==only]
+ if not recipes: raise SystemExit('Modelo não encontrado: '+only)
 records=[]
-prior=json.loads((ROOT/'docs/video-studio/model-music-provenance.json').read_text()) if '--changed' in sys.argv else []
+prior=json.loads((ROOT/'docs/video-studio/model-music-provenance.json').read_text()) if '--changed' in sys.argv or only else []
+if only: records=[p for p in prior if p['id'] not in {r['music'] for r in recipes}]
 def hz(n):return 440*2**((n-69)/12)
 for idx,r in enumerate(recipes):
  old=next((p for p in prior if p['id']==r['music'] and p['style']==r['musicStyle'] and p['bpm']==r['bpm']),None)

@@ -1,5 +1,5 @@
 import type { ArtComposition } from '~/types/art-studio'
-import { loadArtFonts } from '~/utils/art-studio/fonts'
+import { loadCartazistaFonts as loadArtFonts } from './fonts'
 
 export async function fitCartazistaComposition(source: ArtComposition): Promise<ArtComposition> {
   const { Textbox } = await import('fabric')

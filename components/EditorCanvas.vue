@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hasProductPricingChanges, preserveUneditedProductData } from '~/utils/productEditPatch'
 import { positionProductLimitBelowName } from '~/utils/productLimitLayout'
 import { prepareProductCollectionRelayout } from '~/utils/productCollectionRelayout'
 import { captureFormatDynamicContent, restoreFormatDynamicContent } from '~/utils/quickFormatContent'
@@ -21512,7 +21513,9 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
         const normalized = String(value ?? '').trim()
         return normalized || null
     }
-    const nextProduct = {
+    const changedFields = new Set<string>(Array.isArray(payload.changedFields) ? payload.changedFields : Object.keys(payload))
+    const pricingChanged = hasProductPricingChanges(changedFields)
+    const proposedProduct = {
         ...currentProduct,
         limit: normalizeLimitText(payload.limit),
         limitText: normalizeLimitText(payload.limit),
@@ -21532,7 +21535,9 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
         priceSpecialUnit: normalizeOptionalValue(payload?.priceSpecialUnit),
         specialCondition: normalizeOptionalValue(payload?.specialCondition)
     }
+    const nextProduct = preserveUneditedProductData(currentProduct, proposedProduct, changedFields)
     card._productData = nextProduct
+    if (changedFields.has('limit')) {
     card.limit = nextProduct.limit
     let limitObject = card.getObjects?.().find((object: any) =>
         ['smart_limit', 'limitText', 'product_limit'].includes(object.name) || object.data?.smartType === 'product-limit')
@@ -21551,7 +21556,9 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
     }
     limitObject?.set?.({ text: nextProduct.limit || '', visible: !!nextProduct.limit, dirty: true })
 
+    }
     let priceGroup = getPriceGroupFromAny(card)
+    if (pricingChanged) {
     const priceNodes = collectObjectsDeep(priceGroup)
     const requiresExpandedLabel = (nextProduct.priceCount > 1 && !priceNodes.some((o: any) => o.name === 'atac_retail_bg')) || (nextProduct.showCensored && !priceNodes.some((o: any) => o.name === WHOLESALE_REFERENCE_MARKER))
     if (requiresExpandedLabel) {
@@ -21583,6 +21590,8 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
         priceGroup.set?.({ dirty: true })
         priceGroup.setCoords?.()
     }
+    }
+    if (changedFields.has('alcoholBadgeEnabled')) {
     let alcoholBadge = card.getObjects?.().find((o: any) => o.name === 'smart_alcohol_badge')
     if (nextProduct.alcoholBadgeEnabled && !alcoholBadge) {
         alcoholBadge = await productCardConfiguration.createProductAlcoholBadgeObject('+18', 48)
@@ -21596,7 +21605,8 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
     }
     alcoholBadge?.set?.({ visible: nextProduct.alcoholBadgeEnabled, dirty: true })
     alcoholBadge?.setCoords?.()
-    reapplyProductCardConfigurationLayout(card)
+    }
+    if (pricingChanged) reapplyProductCardConfigurationLayout(card)
     positionProductLimitBelowName(card, Number(card._cardWidth || card.width), Number(card._cardHeight || card.height))
     if (priceGroup) {
         setPriceGroupInteractionMode(priceGroup, 'move')

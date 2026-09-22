@@ -1,0 +1,420 @@
+[
+  {
+    "id": "flyer-d6e5df76-0d63-41fa-8cbd-edd5bf29a259",
+    "name": "Ofertas do Açougue — Vermelho, Preto e Dourado",
+    "campaign": "OFERTAS DO AÇOUGUE",
+    "sourceProject": "d6e5df76-0d63-41fa-8cbd-edd5bf29a259",
+    "accent": "#e5b950",
+    "base": "#a40000",
+    "ink": "#221611",
+    "label": "bolt",
+    "labelNames": [
+      "Ofertas do Açougue — Ouro e Brasa"
+    ],
+    "background": "ofertas-acougue-background.png",
+    "seal": "ofertas-acougue-seal.png",
+    "music": "model-d6e5df76-0d63-41fa-8cbd-edd5bf29a259",
+    "transition": "smoke",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "slam",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "embers",
+        "smoke-plumes"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "metal-hit"
+    },
+    "vertical": {
+      "seal": [
+        100,
+        70,
+        880,
+        650
+      ],
+      "logo": [
+        130,
+        1655,
+        820,
+        140
+      ],
+      "product": [
+        60,
+        730,
+        960,
+        540
+      ],
+      "name": [
+        180,
+        1308,
+        720,
+        100
+      ],
+      "condition": [
+        180,
+        1261,
+        720,
+        35
+      ],
+      "price": [
+        180,
+        1420,
+        720,
+        230
+      ],
+      "validity": [
+        120,
+        1818,
+        840,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        35,
+        40,
+        575,
+        505
+      ],
+      "logo": [
+        75,
+        680,
+        510,
+        285
+      ],
+      "product": [
+        690,
+        155,
+        1120,
+        480
+      ],
+      "name": [
+        960,
+        678,
+        660,
+        100
+      ],
+      "condition": [
+        960,
+        631,
+        660,
+        35
+      ],
+      "price": [
+        960,
+        790,
+        660,
+        195
+      ],
+      "validity": [
+        780,
+        1010,
+        1040,
+        28
+      ]
+    },
+    "revision": 20,
+    "backgroundVariant": 2,
+    "nativeTitle": "",
+    "sealAspect": 1.1727115716753023,
+    "backgroundKind": "embers",
+    "seed": 220926,
+    "layoutName": "Açougue · escudo e brasa dourada",
+    "musicStyle": "rock",
+    "bpm": 112,
+    "semanticMotifs": false,
+    "emptyOutroSeal": true
+  },
+  {
+    "id": "flyer-e092b15b-fb4b-4f32-8978-dc023c1f8c2d",
+    "name": "Quarta Suína — Ouro e Madeira",
+    "campaign": "QUARTA SUÍNA",
+    "sourceProject": "e092b15b-fb4b-4f32-8978-dc023c1f8c2d",
+    "accent": "#fff000",
+    "base": "#382006",
+    "ink": "#111111",
+    "label": "bolt",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "quarta-suina-ouro-bg.png",
+    "seal": "quarta-suina-ouro-seal.png",
+    "music": "model-e092b15b-fb4b-4f32-8978-dc023c1f8c2d",
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "snap"
+    },
+    "vertical": {
+      "seal": [
+        30,
+        70,
+        650,
+        580
+      ],
+      "logo": [
+        100,
+        1530,
+        880,
+        210
+      ],
+      "product": [
+        45,
+        660,
+        990,
+        490
+      ],
+      "name": [
+        145,
+        1133,
+        790,
+        100
+      ],
+      "condition": [
+        185,
+        1120,
+        710,
+        30
+      ],
+      "price": [
+        145,
+        1245,
+        790,
+        290
+      ],
+      "validity": [
+        70,
+        1800,
+        940,
+        80
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        255,
+        45,
+        390,
+        500
+      ],
+      "logo": [
+        65,
+        700,
+        550,
+        210
+      ],
+      "product": [
+        710,
+        230,
+        1100,
+        460
+      ],
+      "name": [
+        855,
+        618,
+        930,
+        100
+      ],
+      "condition": [
+        950,
+        697,
+        760,
+        30
+      ],
+      "price": [
+        855,
+        730,
+        930,
+        320
+      ],
+      "validity": [
+        700,
+        997,
+        1120,
+        60
+      ]
+    },
+    "revision": 1,
+    "backgroundVariant": 2,
+    "nativeTitle": "",
+    "sealAspect": 1.5,
+    "backgroundKind": "embers",
+    "seed": 22092601,
+    "layoutName": "Quarta Suína — Ouro e Madeira",
+    "musicStyle": "funk",
+    "bpm": 108,
+    "semanticMotifs": false,
+    "emptyOutroSeal": true,
+    "mascot": "quarta-suina-ouro-pig.png",
+    "posterLayout": "suina-ouro",
+    "mascotVertical": [
+      655,
+      80,
+      395,
+      530
+    ],
+    "mascotHorizontal": [
+      30,
+      45,
+      230,
+      490
+    ]
+  },
+  {
+    "id": "flyer-443b0c73-91f5-4053-898e-fa47854139b8",
+    "name": "Quarta Suína — Rústica Vermelha",
+    "campaign": "QUARTA SUÍNA",
+    "sourceProject": "443b0c73-91f5-4053-898e-fa47854139b8",
+    "accent": "#fff000",
+    "base": "#201309",
+    "ink": "#111111",
+    "label": "bolt",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "quarta-suina-rustica-bg.png",
+    "seal": "quarta-suina-rustica-seal.png",
+    "music": "model-443b0c73-91f5-4053-898e-fa47854139b8",
+    "transition": "slide",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "word-pop",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "pop"
+    },
+    "vertical": {
+      "seal": [
+        380,
+        65,
+        660,
+        580
+      ],
+      "logo": [
+        100,
+        1530,
+        880,
+        210
+      ],
+      "product": [
+        45,
+        660,
+        990,
+        490
+      ],
+      "name": [
+        145,
+        1133,
+        790,
+        100
+      ],
+      "condition": [
+        185,
+        1120,
+        710,
+        30
+      ],
+      "price": [
+        145,
+        1245,
+        790,
+        290
+      ],
+      "validity": [
+        70,
+        1800,
+        940,
+        80
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        255,
+        45,
+        390,
+        500
+      ],
+      "logo": [
+        65,
+        700,
+        550,
+        210
+      ],
+      "product": [
+        710,
+        230,
+        1100,
+        460
+      ],
+      "name": [
+        855,
+        618,
+        930,
+        100
+      ],
+      "condition": [
+        950,
+        697,
+        760,
+        30
+      ],
+      "price": [
+        855,
+        730,
+        930,
+        320
+      ],
+      "validity": [
+        700,
+        997,
+        1120,
+        60
+      ]
+    },
+    "revision": 1,
+    "backgroundVariant": 2,
+    "nativeTitle": "",
+    "sealAspect": 0.9374517374517375,
+    "backgroundKind": "embers",
+    "seed": 22092602,
+    "layoutName": "Quarta Suína — Rústica Vermelha",
+    "musicStyle": "tropical",
+    "bpm": 118,
+    "semanticMotifs": false,
+    "emptyOutroSeal": true,
+    "mascot": "quarta-suina-rustica-pig.png",
+    "posterLayout": "suina-rustica",
+    "mascotVertical": [
+      25,
+      95,
+      360,
+      515
+    ],
+    "mascotHorizontal": [
+      30,
+      45,
+      230,
+      490
+    ]
+  }
+]

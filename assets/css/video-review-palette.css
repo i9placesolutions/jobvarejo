@@ -1,0 +1,72 @@
+/* Opt-in palette for video review, including its teleported image dialogs. */
+.video-review-palette {
+  --review-ink: #203c60;
+  --review-muted: #64748b;
+  --review-line: #dce6f2;
+  --review-accent: #655bab;
+  color: var(--review-ink);
+  background: #fff;
+  border-color: var(--review-line);
+  color-scheme: light;
+}
+.video-review-palette [class*="bg-zinc-"],
+.video-review-palette [class*="bg-black/"] { background-color: #f5f7fb; }
+.video-review-palette [class*="border-zinc-"],
+.video-review-palette [class*="border-white/"] { border-color: var(--review-line); }
+.video-review-palette [class*="text-white"],
+.video-review-palette [class*="text-zinc-1"],
+.video-review-palette [class*="text-zinc-2"],
+.video-review-palette [class*="text-zinc-3"] { color: var(--review-ink); }
+.video-review-palette [class*="text-zinc-4"],
+.video-review-palette [class*="text-zinc-5"],
+.video-review-palette [class*="text-zinc-6"],
+.video-review-palette [class*="text-zinc-7"] { color: var(--review-muted); }
+.video-review-palette [class*="text-sky-"],
+.video-review-palette [class*="text-violet-"] { color: #655bab; }
+.video-review-palette [class*="border-sky-"],
+.video-review-palette [class*="border-violet-"] { border-color: #c8c2e6; }
+.video-review-palette [class*="bg-sky-500/"],
+.video-review-palette [class*="bg-violet-500/"] { background-color: #f0edf9; }
+.video-review-palette [class*="text-emerald-"],
+.video-review-palette [class*="text-green-"] { color: #237453; }
+.video-review-palette [class*="text-amber-"] { color: #90620c; }
+.video-review-palette [class*="text-red-"],
+.video-review-palette [class*="text-rose-"] { color: #a2384c; }
+.video-review-palette [class*="bg-sky-600"],
+.video-review-palette button[class*="bg-emerald-600"] {
+  background: var(--review-accent);
+  color: #fff;
+  box-shadow: 0 3px 10px #655bab1c;
+}
+.video-review-palette button[class*="bg-sky-600"]:hover,
+.video-review-palette button[class*="bg-emerald-600"]:hover { background: #554b98; }
+.video-review-palette input:not([type="checkbox"]):not([type="file"]),
+.video-review-palette textarea,
+.video-review-palette select { background: #fff; color: var(--review-ink); border-color: #d5e1ef; }
+.video-review-palette input::placeholder,
+.video-review-palette textarea::placeholder { color: #8291a5; }
+.video-review-palette input[type="checkbox"] { accent-color: var(--review-accent); }
+.video-review-palette [class*="shadow-black/"],
+.video-review-palette [class*="shadow-sky-"],
+.video-review-palette [class*="shadow-emerald-"] { --tw-shadow-color: #2539580a; }
+.video-review-palette button:focus-visible,
+.video-review-palette [role="button"]:focus-visible { outline: 3px solid #aaa0d7; outline-offset: 2px; }
+.video-review-palette .quick-mode-result-card:hover { background: #eef2f9; border-color: #a9a1d0; }
+
+/* Compact video-only intake; shared flyer review keeps its existing layout. */
+.video-review-palette .quick-list-input { gap: 8px; }
+.video-review-palette .quick-list-input > p { font-size: 12px; }
+.video-review-palette .quick-list-input > button { padding: 9px 12px; margin-top: 0; }
+.video-review-palette .quick-list-input textarea { min-height: 112px; resize: vertical; }
+.video-review-palette .quick-mode-results-search { padding: 10px 12px; border-radius: 10px; box-shadow: none; }
+.video-review-palette .quick-mode-search-results { padding: 0; border: 0; background: transparent; }
+.video-review-palette .quick-mode-search-results h2 { font-size: 14px; }
+.video-review-palette .video-selection-toolbar { padding: 4px 0; }
+.video-review-palette .video-compact-product { grid-template-columns: 22px 44px minmax(0, 1fr); gap: 8px; padding: 7px 8px; border-radius: 9px; }
+.video-review-palette .video-product-selected { background: #f4f1fb; border-color: #c8c2e6; }
+.video-review-palette .video-product-selection { min-height: 44px; cursor: pointer; }
+.video-review-palette .video-product-selection input { width: 17px; height: 17px; }
+.video-review-palette .video-compact-product .quick-product-thumbnail { width: 44px; height: 44px; background: #fff; border: 0; }
+.video-review-palette .video-compact-product .quick-product-description { align-self: center; padding: 0; }
+.video-review-palette .video-compact-product h3 { font-size: 12px; line-height: 1.35; }
+.video-review-palette .video-compact-product p { margin-top: 3px; font-size: 11px; }

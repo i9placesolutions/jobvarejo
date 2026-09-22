@@ -9,7 +9,8 @@ import {isBuiltinMusic,ATMOSPHERE_EFFECTS} from '../../shared/video-studio/effec
 describe('Cobertura do catálogo de encartes',()=>{
  const recipes=Object.values(FLYER_RECIPES)
  it('identifica cada encarte por ID e mantém uma trilha própria por modelo',()=>{
-  expect(recipes).toHaveLength(102)
+  expect(recipes.length).toBeGreaterThanOrEqual(103)
+  expect(recipes.some(r=>r.sourceProject==='d6e5df76-0d63-41fa-8cbd-edd5bf29a259')).toBe(true)
   expect(new Set(recipes.map(r=>r.sourceProject)).size).toBe(recipes.length)
   expect(new Set(recipes.map(r=>r.music)).size).toBe(recipes.length)
   const hashes=recipes.map(r=>{expect(isBuiltinMusic(r.music)).toBe(true);return createHash('sha256').update(readFileSync(`public/video-studio/audio/${r.music}.mp3`)).digest('hex')})

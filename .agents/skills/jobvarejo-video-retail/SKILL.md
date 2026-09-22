@@ -25,11 +25,14 @@ description: Criar e refinar modelos reutilizáveis de vídeos de varejo no JobV
 2. Publicar/configurar modelos sem `--render`. Conferir quadros de ambos os formatos, incluindo nome, produto, etiqueta e validade. Verificar abertura/fechamento e extremos de proporção do selo.
 3. Renderizar clipes curtos abrangendo a entrada completa e o período de leitura. Um still ou clipe que começa depois da entrada não detecta o defeito de métricas SVG. Conferir som e transições, além do frame parado.
 4. Corrigir achados, executar testes do módulo e build se código do aplicativo mudou. Distinguir erro preexistente de regressão. Não dizer que todos os frames foram vistos ao revisar amostras.
-5. Nesta sessão o usuário determinou revisão primeiro e lote final depois de aprovação. Não retomar o lote enquanto essa orientação estiver vigente. `--approved-review` registra aprovação recebida; não a substitui.
+5. O lote histórico de 102 modelos de 20/09/2026 foi suspenso para revisão e não deve ser retomado sem aprovação. Essa decisão pertence àquele lote; não impõe uma aprovação extra a uma nova campanha cuja criação/exportação o usuário já solicitou. `--approved-review` registra aprovação recebida; não a substitui.
 6. Após aprovação, publicar a revisão e renderizar. `--resume --render --approved-review` só quando o ledger corresponder à versão aprovada. Preservar resultados anteriores; nunca apagar assets para disfarçar falhas.
 7. Conclusão é o total de jobs da revisão prontos mais arquivos verificados, não simplesmente processos rodando. Separar modelos configurados, quadros revisados, MP4s renderizados, arquivos conferidos e deploy. Registrar no Vault conforme AGENTS.md.
 
 ## Pontos de entrada
+
+- `shared/video-studio/custom-flyer-recipes.json`: direções específicas de campanhas, preservadas por `build-all-recipes.mjs`. Definir geometria, paleta, etiqueta cadastrada, trilha e efeitos intencionalmente; não sobrescrever essas escolhas com sorteio por índice.
+- Para pedidos de família completa, coordenar encarte, cartaz e vídeo pelo UUID do modelo. Conferir a foto real de qualquer oferta ilustrativa; o nome no cache não prova que a imagem corresponde ao produto. Identificar preços de demonstração e manter dados comerciais fora do modelo compartilhado.
 
 - `scripts/video-studio/render-all-model-stills.mjs`: quadros por modelo/formato; usar diretório próprio por revisão. Não executar duas instâncias no mesmo diretório de assets.
 - `scripts/video-studio/publish-all-flyer-demos.mjs`: demonstrações na conta explicitamente selecionada; sem locução fixa; enfileiramento final condicionado à revisão.

@@ -1,13 +1,14 @@
 import type {VideoLayoutEdits,VideoEditorState} from './layout-editing'
 import type {VideoBackground} from './backgrounds'
 import {FLYER_RECIPES} from './flyer-recipes'
+import {videoTemplateCopy} from './template-copy'
 import type {VideoMotionSettings, SceneTransition} from './effect-catalog'
 export const VIDEO_FPS = 30
 export const VIDEO_VERSION = 1
 export const VIDEO_FORMATS = { vertical: { width: 1080, height: 1920, label: 'Reels e Stories' }, horizontal: { width: 1920, height: 1080, label: 'TV' } } as const
 export type VideoFormat = keyof typeof VIDEO_FORMATS
 export const VIDEO_THEMES = [
-  ...Object.values(FLYER_RECIPES).map(r=>({id:r.id,name:r.name,description:r.layoutName||'Composição própria do encarte.',accent:r.accent,base:r.base,title:r.campaign})),
+  ...Object.values(FLYER_RECIPES).map(r=>({id:r.id,...videoTemplateCopy(r),description:r.layoutName||'Composição própria do encarte.',accent:r.accent,base:r.base})),
   { id: 'impact', name: 'Fecha Mês • Profissional', description: 'Selo 3D, cenário cinematográfico e efeitos de impacto.', accent: '#ffce45', base: '#230b13', title: 'FECHA MÊS' },
   { id: 'fresh', name: 'Feira de ofertas', description: 'Verde fresco, luz e movimento suave.', accent: '#d1fa74', base: '#082e25', title: 'FEIRA DE OFERTAS' },
   { id: 'grill', name: 'Festival do churrasco', description: 'Fumaça, brasas e um toque de impacto.', accent: '#ffb566', base: '#251816', title: 'FESTIVAL DO CHURRASCO' },
@@ -26,23 +27,24 @@ export const VIDEO_EFFECTS = [
   { id: 'pulse', name: 'Pulso', description: 'Um movimento suave para chamar atenção.' }
 ] as const
 export type VideoEffect = typeof VIDEO_EFFECTS[number]['id']
-export interface VideoOffer { copies?: 1|2|3; imageAspectRatio?: number; id: string; name: string; price: string; unit: string; image: string; condition: string }
+export interface VideoOffer { alcoholBadgeEnabled?: boolean; copies?: 1|2|3; imageAspectRatio?: number; id: string; name: string; price: string; unit: string; image: string; condition: string }
 export interface VideoScript { id: string; text: string }
 export interface VideoDocument {
+  appearance?: {textColor?:string;accent?:string;nameColor?:string;priceColor?:string;currencyColor?:string;unitColor?:string;conditionColor?:string;validityColor?:string;contactColor?:string};
   validityRange?: {start:string;end:string};
   layoutEdits?: VideoLayoutEdits;
   templateRevision?: number; background?: VideoBackground;
   layoutVersion?: 2; duplicateProducts?: boolean; version: 1; title: string; theme: typeof VIDEO_THEMES[number]['id']; campaign: string
-  formats: VideoFormat[]; duration: 15 | 20 | 30
+  autoFitVoice?: boolean; formats: VideoFormat[]; duration: 15 | 20 | 30
   brand: { logoStyle?: 'sticker' | 'clean'; name: string; logo: string; address: string; whatsapp: string; instagram: string; phone?:string; facebook?:string; website?:string; slogan?:string; hours?:string; paymentNotes?:string; addresses?:string[]; whatsappNumbers?:string[] }
   priceLabel?: string; validity: string; offers: VideoOffer[]; scripts: VideoScript[]
   voice: { enabled: boolean; id: string; pronunciations: { from: string; to: string }[] }
   effects: VideoEffect[]; intensity: number; transition: SceneTransition; motion?: VideoMotionSettings
   audio: { music: string; musicVolume: number; voiceVolume: number; effectsVolume: number; sounds: boolean }
 }
-export interface VideoScene { id: string; from: number; frames: number; audio?: string; speechFrames?: number }
+export interface VideoScene { id: string; from: number; frames: number; audio?: string; playbackRate?: number; speechFrames?: number }
 import type { VideoLabel } from './labels'
-export interface VideoRenderProps extends Record<string, unknown> { editor?: VideoEditorState; document: VideoDocument; scenes: VideoScene[]; media: Record<string, string>; format: VideoFormat; music?: string; impact?: string; whoosh?: string; audioBase?: string; fontBase?: string; templateBase?: string; label?: VideoLabel }
+export interface VideoRenderProps extends Record<string, unknown> { editor?: VideoEditorState; document: VideoDocument; scenes: VideoScene[]; media: Record<string, string>; format: VideoFormat; voiceAudio?: string; music?: string; impact?: string; whoosh?: string; audioBase?: string; fontBase?: string; templateBase?: string; label?: VideoLabel }
 export function newVideoDocument(): VideoDocument {
   return { layoutVersion:2,duplicateProducts:true,priceLabel:'',version: 1, title: 'Meu vídeo de ofertas', theme: 'impact', campaign: 'FECHA MÊS', formats: ['vertical','horizontal'], duration: 30,
     brand: { logoStyle:'sticker',name: '', logo: '', address: '', whatsapp: '', instagram: '' }, validity: '', offers: [], scripts: [],
@@ -67,15 +69,24 @@ export function estimateSpeechSeconds(text: string): number { return Math.max(1.
 export function buildVideoTimeline(doc: VideoDocument, durations?: Record<string, number>): VideoScene[] {
   const ids = ['intro', ...doc.offers.map(o=>o.id), 'outro']
   const minimums = ids.map((id,i)=> i===0 ? 2 : i===ids.length-1 ? 4.5 : 3)
-  const lengths = ids.map((id,i)=>Math.max(minimums[i]!, doc.voice.enabled ? (durations ? (durations[id] ?? NaN) : estimateSpeechSeconds(doc.scripts.find(s=>s.id===id)?.text||'')) + .25 : minimums[i]!))
-  if (lengths.some(n=>!Number.isFinite(n))) throw new Error('A locução de uma das cenas ainda não está pronta.')
+  const speech = ids.map(id=>doc.voice.enabled ? (durations ? (durations[id] ?? NaN) : estimateSpeechSeconds(doc.scripts.find(s=>s.id===id)?.text||'')) : 0)
+  if (speech.some(n=>!Number.isFinite(n)||n<0)) throw new Error('A locução de uma das cenas ainda não está pronta.')
   const budget = doc.duration * VIDEO_FPS - 2 // margem para a duração do contêiner AAC/MP4
-  const frames = lengths.map(n=>Math.ceil(n*VIDEO_FPS))
-  if (frames.reduce((a,b)=>a+b,0)>budget) throw new Error(`O conteúdo ultrapassa ${doc.duration} segundos. Encurte a locução ou use menos produtos.`)
+  const atRate=(rate:number)=>minimums.map((minimum,i)=>Math.ceil(Math.max(minimum,doc.voice.enabled?speech[i]!/rate+.25:minimum)*VIDEO_FPS))
+  const total=(values:number[])=>values.reduce((a,b)=>a+b,0)
+  let playbackRate=1
+  if(total(atRate(1))>budget&&doc.voice.enabled&&doc.autoFitVoice!==false){
+    if(total(atRate(2))>budget)throw new Error(`Mesmo acelerando a locução em 2×, o conteúdo ultrapassa ${doc.duration} segundos. Encurte o roteiro ou use menos produtos.`)
+    let low=1,high=2
+    for(let i=0;i<32;i++){const middle=(low+high)/2;if(total(atRate(middle))<=budget)high=middle;else low=middle}
+    playbackRate=Math.ceil(high*1000)/1000
+  }
+  const frames=atRate(playbackRate)
+  if(total(frames)>budget)throw new Error(`O conteúdo ultrapassa ${doc.duration} segundos. Ative o ajuste automático da locução ou use menos produtos.`)
   // Distribui tempo livre entre ofertas para leitura, sem alongar aberturas.
   if (!doc.voice.enabled) { let spare=budget-frames.reduce((a,b)=>a+b,0); for(let i=1;i<frames.length-1;i++){const add=Math.min(60,Math.floor(spare/(frames.length-1-i))); frames[i]!+=add; spare-=add} }
   let from=0
-  return ids.map((id,i)=>{const result={id,from,frames:frames[i]!,speechFrames:durations?.[id] ? Math.ceil(durations[id]!*VIDEO_FPS) : undefined};from+=frames[i]!;return result})
+  return ids.map((id,i)=>{const result={id,from,frames:frames[i]!,playbackRate:doc.voice.enabled?playbackRate:undefined,speechFrames:durations?.[id] ? Math.ceil(durations[id]!/playbackRate*VIDEO_FPS) : undefined};from+=frames[i]!;return result})
 }
 export function validateVideoForGeneration(doc: VideoDocument): string[] {
   const errors: string[]=[]

@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { Search, Plus, ArrowUpRight, Sparkles, SlidersHorizontal } from 'lucide-vue-next'
+import { Search, Plus, ArrowUpRight, Sparkles, SlidersHorizontal, Layers, Check, Printer, FileText, LayoutGrid } from 'lucide-vue-next'
+import AdminWorkspaceShell from '~/components/AdminWorkspaceShell.vue'
 import ArtPreview from '~/components/cartazista/CartazistaPreview.vue'
 import { cartazistaSample } from '~/utils/cartazista/samples'
 import type { CartazistaHeader } from '~/types/cartazista'
 import CartazistaShell from '~/components/cartazista/CartazistaShell.vue'
 import type { CartazistaDesign, CartazistaModel, CartazistaTemplateSummary } from '~/types/cartazista'
 import { createCartazistaDocument } from '~/utils/cartazista/composition'
-import { CARTAZISTA_FORMATS, CARTAZISTA_THEMES } from '~/types/cartazista'
 
 definePageMeta({ layout: false, middleware: 'auth', ssr: false })
-useHead({ title: 'Cartazes online • JobVarejo' })
+useHead({ title: 'Cartazes de oferta • JobVarejo' })
 
+const auth = useAuth()
 const route = useRoute()
 const active = computed<'catalog' | 'mine'>(() => route.query.tab === 'mine' ? 'mine' : 'catalog')
 const templates = ref<CartazistaTemplateSummary[]>([])
@@ -73,84 +74,838 @@ const modelById = (id: string) => templates.value.find((template) => template.id
 </script>
 
 <template>
-  <CartazistaShell :active="active">
-    <main class="cartazista-catalog">
-      <div v-if="error" class="cartazista-alert" role="alert">{{ error }} <button @click="load">Tentar novamente</button></div>
-      <div v-if="!databaseReady" class="cartazista-alert" role="status">Os modelos iniciais estão disponíveis. A migração do catálogo persistido ainda não foi aplicada.</div>
-
-      <section class="cartazista-hero">
-        <div>
-          <p class="cartazista-eyebrow"><Sparkles :size="15" /> NOVO EDITOR DO JOBVAREJO</p>
-          <h1>{{ active === 'mine' ? 'Seus cartazes, sempre prontos.' : 'Cartazes de oferta em poucos cliques.' }}</h1>
-          <p>{{ active === 'mine' ? 'Reabra um cartaz, troque a lista e imprima novamente.' : 'Escolha o modelo, cole a lista de produtos e gere peças prontas para a loja.' }}</p>
+  <component
+    :is="auth.isSuperAdmin.value ? AdminWorkspaceShell : 'div'"
+    v-bind="auth.isSuperAdmin.value ? { activeNav: 'cartazista' } : {}"
+  >
+    <CartazistaShell :active="active" :embedded="auth.isSuperAdmin.value">
+      <main class="cartazista-catalog">
+        <div v-if="error" class="cartazista-alert" role="alert">
+          {{ error }} <button @click="load">Tentar novamente</button>
         </div>
-        <button class="cartazista-button primary" @click="newBlank"><Plus :size="18" /> Criar do zero</button>
-      </section>
-
-      <section v-if="active === 'catalog'" class="cartazista-workflow" aria-label="Como criar um cartaz">
-        <div><strong>1</strong><span><b>Escolha o modelo</b><small>Preço, clube, pack ou gôndola</small></span></div>
-        <div><strong>2</strong><span><b>Cole a lista</b><small>Uma linha por produto e preço</small></span></div>
-        <div><strong>3</strong><span><b>Confira e imprima</b><small>A1 a A7 e modo paisagem</small></span></div>
-      </section>
-
-      <section class="cartazista-toolbar">
-        <div class="cartazista-search"><Search :size="19" /><input v-model="search" type="search" placeholder="Buscar por tipo de cartaz…" aria-label="Buscar modelos" /></div>
-        <div class="cartazista-filter"><SlidersHorizontal :size="17" /><select v-model="category" aria-label="Filtrar por categoria"><option v-for="item in categories" :key="item" :value="item">{{ item }}</option></select></div>
-        <div class="cartazista-format-filter"><button :class="{ selected: format === 'all' }" @click="format = 'all'">Todos</button><button :class="{ selected: format === 'portrait' }" @click="format = 'portrait'">Retrato</button><button :class="{ selected: format === 'landscape' }" @click="format = 'landscape'">Paisagem</button></div>
-      </section>
-
-      <template v-if="active === 'catalog'">
-        <div class="cartazista-section-heading"><div><h2>Modelos de cartaz</h2><span>{{ visibleTemplates.length }} modelos · layout e campos editáveis</span></div><span class="cartazista-badge">A1 · A2 · A3 · A4 · A5 · A6 · A7 · Faixa 2 m</span></div>
-        <div v-if="loading" class="cartazista-empty">Carregando modelos…</div>
-        <div v-else-if="!visibleTemplates.length" class="cartazista-empty">Nenhum modelo combina com a busca. <button @click="search = ''; category = 'Todos'">Limpar filtros</button></div>
-        <section v-else class="cartazista-model-grid">
-          <article v-for="template in visibleTemplates" :key="template.id" class="cartazista-model-card">
-            <button class="cartazista-model-preview" :aria-label="`Pré-visualizar ${template.name}`" @click="openPreview(template)"><ArtPreview :composition="samples[template.id]!" :label="template.name" /></button>
-            <div class="cartazista-model-content"><div><span class="cartazista-model-category">{{ template.category }}</span><h3>{{ template.name }}</h3><p>{{ template.description }}</p></div><button class="cartazista-icon-button" :aria-label="`Usar ${template.name}`" @click="openPreview(template)"><ArrowUpRight :size="20" /></button></div>
-            <div class="cartazista-tags"><span v-for="tag in template.tags.slice(0, 3)" :key="tag">#{{ tag }}</span></div>
-          </article>
-        </section>
-      </template>
-
-      <template v-else>
-        <div class="cartazista-section-heading"><div><h2>Meus cartazes</h2><span>{{ designs.length }} trabalhos salvos</span></div><button class="cartazista-button primary" @click="newBlank"><Plus :size="17" /> Novo cartaz</button></div>
-        <div v-if="loading" class="cartazista-empty">Carregando seus cartazes…</div>
-        <div v-else-if="!designs.length" class="cartazista-empty">Você ainda não salvou um cartaz. Comece por um dos modelos.</div>
-        <section v-else class="cartazista-model-grid">
-          <article v-for="design in designs" :key="design.id" class="cartazista-model-card">
-            <NuxtLink class="cartazista-model-preview" :to="`/cartazista/editor/${design.id}`"><ArtPreview :composition="design.state.composition" :label="design.name" /></NuxtLink>
-            <div class="cartazista-model-content"><div><span class="cartazista-model-category">{{ modelById(design.state.modelId)?.category || 'Cartaz' }}</span><h3>{{ design.name }}</h3><p>{{ design.state.products.length }} produto(s) · {{ design.state.formatId.toUpperCase() }}</p></div><NuxtLink class="cartazista-icon-button" :to="`/cartazista/editor/${design.id}`" aria-label="Abrir cartaz"><ArrowUpRight :size="20" /></NuxtLink></div>
-          </article>
-        </section>
-      </template>
-
-      <dialog ref="previewDialog" class="cartazista-dialog">
-        <div class="cartazista-dialog-body" v-if="picked">
-          <div class="cartazista-dialog-preview"><ArtPreview v-if="previewComposition" :composition="previewComposition" :label="picked.name" /></div>
-          <div class="cartazista-dialog-copy"><span class="cartazista-model-category">{{ picked.category }}</span><h2>{{ picked.name }}</h2><p>{{ picked.description }}</p><ul><li>Lista de produtos colada em bloco</li><li>Validade e limite por cliente</li><li>Temas, logo e impressão A1 a A7</li></ul><div class="cartazista-dialog-actions"><button class="cartazista-button ghost" @click="previewDialog?.close()">Voltar</button><button class="cartazista-button primary" @click="start">Usar este modelo <ArrowUpRight :size="17" /></button></div></div>
+        <div v-if="!databaseReady" class="cartazista-alert info" role="status">
+          Os modelos iniciais estão disponíveis. A migração do catálogo persistido ainda não foi aplicada.
         </div>
-      </dialog>
-    </main>
-  </CartazistaShell>
+
+        <!-- Hero Section com estilo refinado do painel admin -->
+        <section class="cartazista-hero-card">
+          <div class="cartazista-hero-bg-glow" aria-hidden="true" />
+          <div class="cartazista-hero-content">
+            <div class="cartazista-eyebrow">
+              <Sparkles :size="14" class="text-blue-500" />
+              <span>CARTAZES DE OFERTA DO JOBVAREJO</span>
+            </div>
+            <h1>{{ active === 'mine' ? 'Seus cartazes, sempre prontos para imprimir.' : 'Cartazes profissionais prontos para a loja.' }}</h1>
+            <p>{{ active === 'mine' ? 'Reabra um cartaz salvo, atualize os preços ou produtos e imprima na hora em qualquer tamanho.' : 'Escolha o modelo de preço, cole sua lista de ofertas e imprima de A1 a A7 em folhas A4 ou no tamanho real.' }}</p>
+
+            <div class="cartazista-hero-actions">
+              <button class="cartazista-btn primary" @click="newBlank">
+                <Plus :size="18" /> Criar cartaz do zero
+              </button>
+              <span class="cartazista-hero-pill">
+                <Check :size="14" class="text-emerald-500" /> A1 a A7 · Paisagem ou Retrato
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Etapas do Workflow (visual elegante com sombras suaves) -->
+        <section v-if="active === 'catalog'" class="cartazista-workflow" aria-label="Como criar um cartaz">
+          <div class="cartazista-step-item">
+            <div class="cartazista-step-badge">1</div>
+            <div class="cartazista-step-copy">
+              <b>Escolha o modelo</b>
+              <small>Preço simples, atacarejo, clube ou gôndola</small>
+            </div>
+          </div>
+          <div class="cartazista-step-item">
+            <div class="cartazista-step-badge">2</div>
+            <div class="cartazista-step-copy">
+              <b>Cole a lista</b>
+              <small>Uma linha por produto com preço e unidade</small>
+            </div>
+          </div>
+          <div class="cartazista-step-item">
+            <div class="cartazista-step-badge">3</div>
+            <div class="cartazista-step-copy">
+              <b>Confira e imprima</b>
+              <small>PDF em folhas A4 agrupadas ou tamanho real</small>
+            </div>
+          </div>
+        </section>
+
+        <!-- Toolbar de Busca e Filtros estilo Admin -->
+        <section class="cartazista-toolbar">
+          <div class="cartazista-search">
+            <Search :size="17" class="cartazista-search-icon" />
+            <input v-model="search" type="search" placeholder="Buscar por tipo de cartaz ou produto…" aria-label="Buscar modelos" />
+          </div>
+
+          <div class="cartazista-filter-group">
+            <div class="cartazista-filter">
+              <SlidersHorizontal :size="15" class="text-slate-400" />
+              <select v-model="category" aria-label="Filtrar por categoria">
+                <option v-for="item in categories" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+
+            <div class="cartazista-format-tabs" role="group" aria-label="Filtrar por formato">
+              <button :class="{ active: format === 'all' }" @click="format = 'all'">Todos</button>
+              <button :class="{ active: format === 'portrait' }" @click="format = 'portrait'">Retrato</button>
+              <button :class="{ active: format === 'landscape' }" @click="format = 'landscape'">Paisagem</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Grade de Modelos (Catálogo) -->
+        <template v-if="active === 'catalog'">
+          <div class="cartazista-section-heading">
+            <div>
+              <h2>Modelos disponíveis</h2>
+              <p>{{ visibleTemplates.length }} modelos para diferentes tipos de campanha e área de loja</p>
+            </div>
+            <div class="cartazista-badge-capsule">
+              <Printer :size="13" />
+              <span>A1 · A2 · A3 · A4 · A5 · A6 · A7 · Faixas</span>
+            </div>
+          </div>
+
+          <div v-if="loading" class="cartazista-empty">
+            <p>Carregando modelos de cartaz…</p>
+          </div>
+          <div v-else-if="!visibleTemplates.length" class="cartazista-empty">
+            <p>Nenhum modelo combina com os filtros aplicados.</p>
+            <button class="cartazista-btn ghost" @click="search = ''; category = 'Todos'; format = 'all'">Limpar filtros</button>
+          </div>
+          <section v-else class="cartazista-model-grid">
+            <article v-for="template in visibleTemplates" :key="template.id" class="cartazista-card">
+              <button class="cartazista-card-preview" :aria-label="`Pré-visualizar ${template.name}`" @click="openPreview(template)">
+                <ArtPreview :composition="samples[template.id]!" :label="template.name" />
+                <div class="cartazista-card-hover-action" aria-hidden="true">
+                  <span>Ver detalhes e usar</span>
+                </div>
+              </button>
+              <div class="cartazista-card-body">
+                <div class="cartazista-card-meta">
+                  <span class="cartazista-card-tag">{{ template.category }}</span>
+                  <button class="cartazista-card-btn" :aria-label="`Usar ${template.name}`" @click="openPreview(template)">
+                    <ArrowUpRight :size="17" />
+                  </button>
+                </div>
+                <h3>{{ template.name }}</h3>
+                <p>{{ template.description }}</p>
+                <div class="cartazista-card-footer-tags">
+                  <span v-for="tag in template.tags.slice(0, 3)" :key="tag">#{{ tag }}</span>
+                </div>
+              </div>
+            </article>
+          </section>
+        </template>
+
+        <!-- Meus Cartazes Salvos -->
+        <template v-else>
+          <div class="cartazista-section-heading">
+            <div>
+              <h2>Meus cartazes</h2>
+              <p>{{ designs.length }} trabalhos salvos nesta conta</p>
+            </div>
+            <button class="cartazista-btn primary" @click="newBlank">
+              <Plus :size="16" /> Novo cartaz
+            </button>
+          </div>
+
+          <div v-if="loading" class="cartazista-empty">
+            <p>Carregando seus cartazes…</p>
+          </div>
+          <div v-else-if="!designs.length" class="cartazista-empty">
+            <FileText :size="38" class="text-slate-300 mx-auto mb-2" />
+            <p>Você ainda não tem cartazes salvos.</p>
+            <small class="text-slate-400">Comece escolhendo um modelo pronto no catálogo ou crie um modelo em branco.</small>
+            <div class="mt-4">
+              <NuxtLink to="/cartazista" class="cartazista-btn primary">
+                Explorar catálogo
+              </NuxtLink>
+            </div>
+          </div>
+          <section v-else class="cartazista-model-grid">
+            <article v-for="design in designs" :key="design.id" class="cartazista-card">
+              <NuxtLink class="cartazista-card-preview" :to="`/cartazista/editor/${design.id}`">
+                <ArtPreview :composition="design.state.composition" :label="design.name" />
+                <div class="cartazista-card-hover-action" aria-hidden="true">
+                  <span>Abrir no editor</span>
+                </div>
+              </NuxtLink>
+              <div class="cartazista-card-body">
+                <div class="cartazista-card-meta">
+                  <span class="cartazista-card-tag">{{ modelById(design.state.modelId)?.category || 'Cartaz' }}</span>
+                  <NuxtLink class="cartazista-card-btn" :to="`/cartazista/editor/${design.id}`" aria-label="Abrir cartaz">
+                    <ArrowUpRight :size="17" />
+                  </NuxtLink>
+                </div>
+                <h3>{{ design.name }}</h3>
+                <p>{{ design.state.products.length }} produto(s) · Formato {{ design.state.formatId.toUpperCase() }}</p>
+              </div>
+            </article>
+          </section>
+        </template>
+
+        <!-- Modal de Pré-visualização do Modelo -->
+        <dialog ref="previewDialog" class="cartazista-modal">
+          <div v-if="picked" class="cartazista-modal-grid">
+            <div class="cartazista-modal-left">
+              <ArtPreview v-if="previewComposition" :composition="previewComposition" :label="picked.name" />
+            </div>
+            <div class="cartazista-modal-right">
+              <div>
+                <span class="cartazista-card-tag">{{ picked.category }}</span>
+                <h2>{{ picked.name }}</h2>
+                <p class="cartazista-modal-desc">{{ picked.description }}</p>
+                <div class="cartazista-modal-features">
+                  <div class="feature-item"><Check :size="15" class="text-emerald-500" /> Lista de produtos colada em bloco</div>
+                  <div class="feature-item"><Check :size="15" class="text-emerald-500" /> Preço com centavos, unidade e limite por cliente</div>
+                  <div class="feature-item"><Check :size="15" class="text-emerald-500" /> Cabeçalhos de campanha e logo da sua loja</div>
+                  <div class="feature-item"><Check :size="15" class="text-emerald-500" /> Impressão direta de A1 a A7 ou folhas A4</div>
+                </div>
+              </div>
+              <div class="cartazista-modal-actions">
+                <button type="button" class="cartazista-btn ghost" @click="previewDialog?.close()">Cancelar</button>
+                <button type="button" class="cartazista-btn primary" @click="start">
+                  Usar este modelo <ArrowUpRight :size="17" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </dialog>
+      </main>
+    </CartazistaShell>
+  </component>
 </template>
 
 <style scoped>
-.cartazista-catalog { width: min(1380px, calc(100% - 36px)); margin: 0 auto; padding: 52px 0 96px; }
-.cartazista-alert { border: 1px solid #b9d5f8; background: #edf6ff; color: #18579e; padding: 12px 15px; border-radius: 12px; margin-bottom: 18px; font-size: 13px; }
-.cartazista-alert button, .cartazista-empty button { border: 0; background: transparent; color: inherit; font-weight: 800; cursor: pointer; text-decoration: underline; }
-.cartazista-hero { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding: 12px 0 40px; }
-.cartazista-eyebrow { display: flex; align-items: center; gap: 7px; color: #1b69ca; font-size: 12px; font-weight: 900; letter-spacing: .12em; }
-.cartazista-hero h1 { max-width: 700px; margin: 11px 0 12px; font-size: clamp(34px, 5vw, 68px); line-height: .98; letter-spacing: -.06em; }
-.cartazista-hero p:not(.cartazista-eyebrow) { max-width: 610px; margin: 0; color: var(--cartaz-muted); font-size: 17px; line-height: 1.5; }
-.cartazista-workflow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 18px; margin-bottom: 34px; border: 1px solid #d9e6f2; border-radius: 18px; background: linear-gradient(135deg,#fff,#f3f8ff); }
-.cartazista-workflow > div { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.cartazista-workflow strong { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; color: #fff; background: #2780e9; flex: 0 0 auto; }
-.cartazista-workflow b, .cartazista-workflow small { display: block; }.cartazista-workflow b { font-size: 14px; }.cartazista-workflow small { color: var(--cartaz-muted); font-size: 12px; margin-top: 3px; }
-.cartazista-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 35px; }.cartazista-search, .cartazista-filter { display: flex; align-items: center; gap: 9px; min-height: 46px; padding: 0 14px; border: 1px solid #dbe4ed; border-radius: 12px; background: #fff; color: #8290a0; }.cartazista-search { flex: 1; }.cartazista-search input, .cartazista-filter select { border: 0; outline: 0; background: transparent; color: #314255; font: inherit; font-size: 13px; width: 100%; }.cartazista-filter select { min-width: 120px; }.cartazista-format-filter { display: flex; padding: 4px; background: #eaf0f6; border-radius: 12px; gap: 2px; }.cartazista-format-filter button { border: 0; border-radius: 9px; background: transparent; color: #778697; padding: 9px 12px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }.cartazista-format-filter button.selected { background: #fff; color: #1c64c1; box-shadow: 0 3px 10px #153a6310; }
-.cartazista-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 0 0 18px; }.cartazista-section-heading h2 { margin: 0 0 5px; font-size: 25px; letter-spacing: -.04em; }.cartazista-section-heading span { color: var(--cartaz-muted); font-size: 13px; }.cartazista-badge { align-self: center; padding: 9px 12px; color: #1d5eaf !important; background: #e8f2ff; border-radius: 999px; font-size: 11px !important; font-weight: 800; }
-.cartazista-model-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }.cartazista-model-card { min-width: 0; overflow: hidden; border: 1px solid #dfe6ed; border-radius: 17px; background: #fff; box-shadow: 0 14px 35px #14304d08; transition: transform .2s ease, box-shadow .2s ease; }.cartazista-model-card:hover { transform: translateY(-3px); box-shadow: 0 18px 42px #14304d18; }.cartazista-model-preview { display: block; border: 0; width: 100%; aspect-ratio: 842 / 1191; padding: 0; background: #edf1f4; cursor: pointer; }.cartazista-model-preview :deep(.art-preview) { display: block; width: 100%; height: 100%; }.cartazista-model-content { display: flex; align-items: start; justify-content: space-between; gap: 9px; padding: 15px 15px 8px; }.cartazista-model-category { color: #2476e8; font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }.cartazista-model-content h3 { margin: 6px 0 5px; font-size: 15px; line-height: 1.15; letter-spacing: -.02em; }.cartazista-model-content p { margin: 0; color: var(--cartaz-muted); font-size: 12px; line-height: 1.35; }.cartazista-icon-button { display: grid; place-items: center; width: 35px; height: 35px; flex: 0 0 auto; border: 0; border-radius: 10px; color: #1b65c3; background: #eaf3ff; cursor: pointer; }.cartazista-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 7px 15px 16px; }.cartazista-tags span { color: #7d8c9c; background: #f1f4f7; border-radius: 999px; padding: 4px 8px; font-size: 10px; }
-.cartazista-empty { padding: 55px 24px; border: 1px dashed #cddae6; border-radius: 16px; text-align: center; color: var(--cartaz-muted); background: #fff; }.cartazista-dialog { width: min(900px, calc(100% - 28px)); padding: 0; border: 0; border-radius: 20px; overflow: hidden; box-shadow: 0 30px 90px #10233e40; }.cartazista-dialog::backdrop { background: #0d1c2c80; backdrop-filter: blur(4px); }.cartazista-dialog-body { display: grid; grid-template-columns: minmax(0, .9fr) minmax(300px, 1.1fr); background: #fff; }.cartazista-dialog-preview { min-height: 440px; padding: 28px; background: #edf3f8; }.cartazista-dialog-copy { display: flex; flex-direction: column; justify-content: center; padding: 42px; }.cartazista-dialog-copy h2 { margin: 9px 0 10px; font-size: 32px; line-height: 1.05; letter-spacing: -.05em; }.cartazista-dialog-copy p { color: var(--cartaz-muted); line-height: 1.55; }.cartazista-dialog-copy ul { padding-left: 19px; color: #52657a; font-size: 14px; line-height: 1.8; }.cartazista-dialog-actions { display: flex; justify-content: end; gap: 10px; margin-top: 18px; }
-@media (max-width: 1050px) { .cartazista-model-grid { grid-template-columns: repeat(3, minmax(0,1fr)); } }
-@media (max-width: 760px) { .cartazista-catalog { width: min(100% - 24px, 620px); padding-top: 30px; }.cartazista-hero { align-items: start; flex-direction: column; }.cartazista-hero h1 { font-size: 42px; }.cartazista-workflow { grid-template-columns: 1fr; }.cartazista-toolbar { flex-wrap: wrap; }.cartazista-search { min-width: 100%; }.cartazista-filter { flex: 1; }.cartazista-format-filter { flex: 1; justify-content: space-between; }.cartazista-format-filter button { flex: 1; }.cartazista-model-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }.cartazista-model-content { padding: 11px; }.cartazista-model-content h3 { font-size: 13px; }.cartazista-tags { padding: 5px 11px 11px; }.cartazista-dialog-body { grid-template-columns: 1fr; }.cartazista-dialog-preview { min-height: 360px; }.cartazista-dialog-copy { padding: 25px; } }
-@media (max-width: 450px) { .cartazista-model-grid { grid-template-columns: 1fr 1fr; }.cartazista-badge { display: none; } }
+.cartazista-catalog {
+  width: min(1440px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 32px 0 80px;
+}
+
+/* Alertas */
+.cartazista-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 14px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.cartazista-alert.info {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.cartazista-alert button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Hero Card (padrão JobVarejo admin) */
+.cartazista-hero-card {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid var(--jv-border, rgba(190, 211, 233, 0.76));
+  border-radius: 24px;
+  padding: 36px 40px;
+  margin-bottom: 28px;
+  box-shadow: 0 10px 30px rgba(26, 68, 113, 0.04);
+}
+
+.cartazista-hero-bg-glow {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.cartazista-hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 820px;
+}
+
+.cartazista-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.15);
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 16px;
+}
+
+.cartazista-hero-card h1 {
+  font-size: clamp(26px, 3.2vw, 40px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: #16375f;
+  margin: 0 0 12px;
+}
+
+.cartazista-hero-card p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #475569;
+  margin: 0 0 24px;
+  max-width: 700px;
+}
+
+.cartazista-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cartazista-hero-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+/* Workflow Steps */
+.cartazista-workflow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.cartazista-step-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: #ffffff;
+  border: 1px solid var(--jv-line, #d7e4f1);
+  border-radius: 18px;
+  box-shadow: 0 4px 14px rgba(26, 68, 113, 0.025);
+}
+
+.cartazista-step-badge {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 800;
+  font-size: 15px;
+  flex-shrink: 0;
+  border: 1px solid #dbeafe;
+}
+
+.cartazista-step-copy b {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #16375f;
+}
+
+.cartazista-step-copy small {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Toolbar de Busca e Filtros */
+.cartazista-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+
+.cartazista-search {
+  flex: 1;
+  min-width: 280px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cartazista-search-icon {
+  position: absolute;
+  left: 14px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.cartazista-search input {
+  width: 100%;
+  height: 44px;
+  padding: 0 16px 0 42px;
+  border: 1px solid #dbe7f5;
+  border-radius: 14px;
+  background: #ffffff;
+  font-size: 13px;
+  color: #1e293b;
+  box-shadow: 0 2px 6px rgba(26, 68, 113, 0.02);
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.cartazista-search input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.cartazista-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cartazista-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid #dbe7f5;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(26, 68, 113, 0.02);
+}
+
+.cartazista-filter select {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cartazista-format-tabs {
+  display: flex;
+  padding: 4px;
+  background: rgba(235, 243, 252, 0.8);
+  border: 1px solid #dbe7f5;
+  border-radius: 14px;
+  gap: 3px;
+}
+
+.cartazista-format-tabs button {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #64748b;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cartazista-format-tabs button.active {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.1);
+}
+
+/* Headings e Badges */
+.cartazista-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 20px;
+}
+
+.cartazista-section-heading h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #16375f;
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+}
+
+.cartazista-section-heading p {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+
+.cartazista-badge-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Grid de Modelos & Cards */
+.cartazista-model-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.cartazista-card {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(26, 68, 113, 0.04);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+
+.cartazista-card:hover {
+  transform: translateY(-4px);
+  border-color: #93c5fd;
+  box-shadow: 0 16px 36px rgba(29, 78, 216, 0.1);
+}
+
+.cartazista-card-preview {
+  position: relative;
+  display: block;
+  border: 0;
+  width: 100%;
+  aspect-ratio: 842 / 1191;
+  padding: 0;
+  background: #f1f5f9;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.cartazista-card-preview :deep(.art-preview) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cartazista-card-hover-action {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.cartazista-card-preview:hover .cartazista-card-hover-action {
+  opacity: 1;
+}
+
+.cartazista-card-hover-action span {
+  padding: 8px 16px;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+
+.cartazista-card-body {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.cartazista-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.cartazista-card-tag {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cartazista-card-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 0;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cartazista-card-btn:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.cartazista-card-body h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #16375f;
+  line-height: 1.25;
+}
+
+.cartazista-card-body p {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.45;
+  flex: 1;
+}
+
+.cartazista-card-footer-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: auto;
+}
+
+.cartazista-card-footer-tags span {
+  font-size: 10px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+/* Empty State */
+.cartazista-empty {
+  padding: 64px 24px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 20px;
+  text-align: center;
+  background: #ffffff;
+  color: #64748b;
+}
+
+.cartazista-empty p {
+  font-size: 15px;
+  font-weight: 600;
+  color: #334155;
+  margin: 0 0 12px;
+}
+
+/* Modal Dialog */
+.cartazista-modal {
+  width: min(940px, calc(100% - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 25px 60px rgba(15, 23, 42, 0.25);
+}
+
+.cartazista-modal::backdrop {
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(6px);
+}
+
+.cartazista-modal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 1.05fr);
+  background: #ffffff;
+}
+
+.cartazista-modal-left {
+  padding: 28px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #e2e8f0;
+}
+
+.cartazista-modal-right {
+  padding: 36px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.cartazista-modal-right h2 {
+  font-size: 26px;
+  font-weight: 800;
+  color: #16375f;
+  margin: 10px 0 8px;
+  line-height: 1.15;
+}
+
+.cartazista-modal-desc {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.55;
+  margin: 0 0 20px;
+}
+
+.cartazista-modal-features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.cartazista-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Botões Globais desta página */
+.cartazista-btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.cartazista-btn.primary {
+  color: white;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+}
+
+.cartazista-btn.primary:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
+.cartazista-btn.ghost {
+  color: #475569;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.cartazista-btn.ghost:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* Responsividade */
+@media (max-width: 1180px) {
+  .cartazista-model-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .cartazista-catalog {
+    width: min(100% - 32px, 640px);
+    padding: 24px 0 60px;
+  }
+  .cartazista-hero-card {
+    padding: 24px 20px;
+  }
+  .cartazista-workflow {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .cartazista-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .cartazista-filter-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .cartazista-format-tabs {
+    justify-content: space-between;
+  }
+  .cartazista-format-tabs button {
+    flex: 1;
+  }
+  .cartazista-model-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .cartazista-modal-grid {
+    grid-template-columns: 1fr;
+  }
+  .cartazista-modal-left {
+    min-height: 280px;
+  }
+  .cartazista-modal-right {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .cartazista-model-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
