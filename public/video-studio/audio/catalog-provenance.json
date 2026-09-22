@@ -1,5 +1,5 @@
 {
-  "description": "Síntese original do projeto; sem samples externos ou material nativo do CapCut.",
+  "description": "Efeitos originais, CC0 e recortes da referência solicitada; origem e condições registradas por arquivo.",
   "assets": [
     {
       "id": "air-swipe",
@@ -249,6 +249,138 @@
       "origin": "original-procedural-synthesis",
       "source": "workers/video-studio/make_thematic_audio.py",
       "sha256": "02f97bf64bcf3081907ef6b7e53a0691bbb6705f9dc97bb61eda0fc946c3d1b3"
+    },
+    {
+      "id": "retail-whoosh-v1",
+      "path": "sfx/retail-whoosh-v1.wav",
+      "seconds": 0.544875283446712,
+      "sha256": "197b773fae9b0fede30198ef583c5d707cd9611b6b12bb61c88a67052dfb0c82",
+      "origin": "cc0-adaptation",
+      "license": "CC0-1.0",
+      "author": "Kinoton",
+      "source": "https://freesound.org/people/Kinoton/sounds/351259/",
+      "processing": "Recorte 0.22 a 1.82 s, atempo 3x, passa-altas 100 Hz, passa-baixas 6500 Hz, fades e pico limitado a 0.5",
+      "reference": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "downloadUrl": "https://cdn.freesound.org/previews/351/351259_2247456-hq.mp3",
+      "inputSha256": "4382dec7022310c326137fbf7ce3fbb86579db80312a8c2ba62287c4d904811c"
+    },
+    {
+      "id": "retail-pop-v1",
+      "path": "sfx/retail-pop-v1.wav",
+      "seconds": 0.24253968253968253,
+      "sha256": "54802011a2fc3de1be0553acdf92245e53e4d18095e45803c9b671844fce94b9",
+      "origin": "cc0-adaptation",
+      "license": "CC0-1.0",
+      "author": "Breviceps",
+      "source": "https://freesound.org/people/Breviceps/sounds/447910/",
+      "processing": "Passa-altas 110 Hz, passa-baixas 6500 Hz, fades e pico limitado a 0.5",
+      "reference": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "downloadUrl": "https://cdn.freesound.org/previews/447/447910_9159316-hq.mp3",
+      "inputSha256": "111dffa2efb3e0fbac32f7228f8815de33d46e319c5d36c79c16d5bf513fa067"
+    },
+    {
+      "id": "reference-whoosh",
+      "path": "sfx/reference-whoosh.wav",
+      "seconds": 0.5821541950113379,
+      "sha256": "f6c4d294bd9c0bf48f4cb26f11d531ddd7c0e0a062b4919d4d5eb32320aea6e0",
+      "origin": "user-requested-video-extract",
+      "source": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "sourceSha256": "d3737e769abf9a7ff0da5272588b5338634358a0bfde36cff3c37c2a245a29ae",
+      "sourceStart": 1.454396,
+      "sourceEnd": 2.036542,
+      "license": "not-specified-by-source",
+      "treatment": "volume=-3.0dB,afade=t=in:d=0.003,afade=t=out:st=0.5571459999999998:d=0.025"
+    },
+    {
+      "id": "reference-click",
+      "path": "sfx/reference-click.wav",
+      "seconds": 0.28816326530612246,
+      "sha256": "b4e266b428d7671822950bbef49240de66cf09bc170f73ea6f6f83e00f4bada6",
+      "origin": "user-requested-video-extract",
+      "source": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "sourceSha256": "d3737e769abf9a7ff0da5272588b5338634358a0bfde36cff3c37c2a245a29ae",
+      "sourceStart": 3.793771,
+      "sourceEnd": 4.081937,
+      "license": "not-specified-by-source",
+      "treatment": "volume=-2.5dB,afade=t=in:d=0.003,afade=t=out:st=0.2631659999999999:d=0.025"
+    },
+    {
+      "id": "reference-pop",
+      "path": "sfx/reference-pop.wav",
+      "seconds": 0.3388888888888889,
+      "sha256": "f268e1bebd9202f6a074f32533fe1800d93ce69ee3da2291ad1591af8891e223",
+      "origin": "user-requested-video-extract",
+      "source": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "sourceSha256": "d3737e769abf9a7ff0da5272588b5338634358a0bfde36cff3c37c2a245a29ae",
+      "sourceStart": 4.913771,
+      "sourceEnd": 5.252667,
+      "license": "not-specified-by-source",
+      "treatment": "volume=1.7000000000000002dB,afade=t=in:d=0.003,afade=t=out:st=0.31389600000000006:d=0.025"
+    },
+    {
+      "id": "reference-cash",
+      "path": "sfx/reference-cash.wav",
+      "seconds": 1.0491383219954649,
+      "sha256": "528022816685c6130db58bb5059cb1c5dc860d463705d784c4f46cfd50a6cea9",
+      "origin": "user-requested-video-extract",
+      "source": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "sourceSha256": "d3737e769abf9a7ff0da5272588b5338634358a0bfde36cff3c37c2a245a29ae",
+      "sourceStart": 6.161625,
+      "sourceEnd": 7.210771,
+      "license": "not-specified-by-source",
+      "treatment": "volume=0.7000000000000002dB,afade=t=in:d=0.003,afade=t=out:st=1.0241460000000004:d=0.025"
+    },
+    {
+      "id": "reference-fire-whoosh",
+      "path": "sfx/reference-fire-whoosh.wav",
+      "seconds": 1.7155102040816326,
+      "sha256": "9be37af9302f6fbc090a578c90863c713ee2674ee5bab3fee5cdfdf37f4faa11",
+      "origin": "user-requested-video-extract",
+      "source": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "sourceSha256": "d3737e769abf9a7ff0da5272588b5338634358a0bfde36cff3c37c2a245a29ae",
+      "sourceStart": 11.422354,
+      "sourceEnd": 13.137875,
+      "license": "not-specified-by-source",
+      "treatment": "volume=-3.0dB,afade=t=in:d=0.003,afade=t=out:st=1.690520999999999:d=0.025"
+    },
+    {
+      "id": "reference-short-whoosh",
+      "path": "sfx/reference-short-whoosh.wav",
+      "seconds": 0.34170068027210887,
+      "sha256": "6ac55fff91e741004bb67f65f1eea8d0bc04da2652a4743e5baffaa87fc85a43",
+      "origin": "user-requested-video-extract",
+      "source": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "sourceSha256": "d3737e769abf9a7ff0da5272588b5338634358a0bfde36cff3c37c2a245a29ae",
+      "sourceStart": 26.612646,
+      "sourceEnd": 26.954354000000002,
+      "license": "not-specified-by-source",
+      "treatment": "volume=-0.10000000000000009dB,afade=t=in:d=0.003,afade=t=out:st=0.31670800000000054:d=0.025"
+    },
+    {
+      "id": "reference-in-out",
+      "path": "sfx/reference-in-out.wav",
+      "seconds": 0.8885714285714286,
+      "sha256": "3683ca2ec64643bddb5cd29738a66e04d482ffe6a72779b39daa5e88b35b7efb",
+      "origin": "user-requested-video-extract",
+      "source": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "sourceSha256": "d3737e769abf9a7ff0da5272588b5338634358a0bfde36cff3c37c2a245a29ae",
+      "sourceStart": 44.944396000000005,
+      "sourceEnd": 45.832958,
+      "license": "not-specified-by-source",
+      "treatment": "volume=0.7999999999999998dB,afade=t=in:d=0.003,afade=t=out:st=0.8635619999999932:d=0.025"
+    },
+    {
+      "id": "reference-ding",
+      "path": "sfx/reference-ding.wav",
+      "seconds": 1.0926530612244898,
+      "sha256": "c66bbd71132c6926578b36276a8a04cd02af92a6366a79eb6c23cf3d4e694a37",
+      "origin": "user-requested-video-extract",
+      "source": "https://www.youtube.com/watch?v=2aoLsF3-2gI",
+      "sourceSha256": "d3737e769abf9a7ff0da5272588b5338634358a0bfde36cff3c37c2a245a29ae",
+      "sourceStart": 57.843,
+      "sourceEnd": 58.935646,
+      "license": "not-specified-by-source",
+      "treatment": "volume=2.5dB,afade=t=in:d=0.003,afade=t=out:st=1.067645999999995:d=0.025"
     }
   ]
 }

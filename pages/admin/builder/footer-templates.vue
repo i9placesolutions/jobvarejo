@@ -328,7 +328,8 @@ onMounted(fetchData)
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <AdminWorkspaceShell>
+  <div class="admin-page admin-page--builder">
 
     <!-- ═════════════════════════��══════════════════════ -->
     <!-- MODO LISTA -->
@@ -409,7 +410,6 @@ onMounted(fetchData)
         </div>
       </div>
     </template>
-
     <!-- ═════════════════════════════���══════════════════ -->
     <!-- MODO EDITOR VISUAL -->
     <!-- ════════════════════════════════════════════════ -->
@@ -704,4 +704,5 @@ onMounted(fetchData)
       </div>
     </template>
   </div>
+  </AdminWorkspaceShell>
 </template>

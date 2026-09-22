@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { Check, ChevronDown, DollarSign, ListChecks, MousePointer2, Move, Tag } from 'lucide-vue-next'
 
 type LabelInteractionMode = 'move' | 'edit'
@@ -33,7 +33,100 @@ const emit = defineEmits<{
   (e: 'manage-templates'): void
 }>()
 
+const rootEl = ref<HTMLElement | null>(null)
+const templateMenuEl = ref<HTMLElement | null>(null)
 const templateMenuOpen = ref(false)
+const templateMenuReady = ref(false)
+const templateMenuPlacement = ref({
+  top: 4,
+  left: 4,
+  maxHeight: 320
+})
+
+const MENU_EDGE_GAP = 8
+const MENU_MIN_HEIGHT = 160
+const TOOLBAR_WIDTH = 132
+const TOOLBAR_OFFSET_TOP = 34
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max))
+
+const repositionTemplateMenu = async () => {
+  if (!templateMenuOpen.value || !rootEl.value) {
+    templateMenuReady.value = false
+    return
+  }
+
+  await nextTick()
+
+  const host = rootEl.value
+  const menu = templateMenuEl.value
+  if (!menu) return
+
+  const hostRect = host.getBoundingClientRect()
+  const hostWidth = Math.max(0, Number(host.clientWidth || hostRect.width || 0))
+  const hostHeight = Math.max(0, Number(host.clientHeight || hostRect.height || 0))
+  if (hostWidth <= 0 || hostHeight <= 0) return
+
+  const menuWidth = Math.min(
+    Math.max(180, Number(menu.offsetWidth || 240)),
+    Math.max(180, hostWidth - (MENU_EDGE_GAP * 2))
+  )
+  const menuHeight = Math.max(MENU_MIN_HEIGHT, Number(menu.offsetHeight || 320))
+  const selectionLeft = Number(props.left) || 0
+  const selectionTop = Number(props.top) || 0
+  const selectionWidth = Math.max(0, Number(props.width) || 0)
+  const selectionHeight = Math.max(0, Number(props.height) || 0)
+  const toolbarLeft = selectionLeft + Math.max(0, (selectionWidth - TOOLBAR_WIDTH) / 2)
+  const toolbarTop = Math.max(MENU_EDGE_GAP, selectionTop - TOOLBAR_OFFSET_TOP)
+
+  type Candidate = {
+    top: number
+    left: number
+    availableHeight: number
+  }
+
+  const candidates: Candidate[] = [
+    // Keep the menu beside the selected label whenever possible. This avoids
+    // hiding the label and the next product card, which was the reported bug.
+    {
+      top: toolbarTop,
+      left: selectionLeft + selectionWidth + MENU_EDGE_GAP,
+      availableHeight: hostHeight - toolbarTop - MENU_EDGE_GAP
+    },
+    {
+      top: toolbarTop,
+      left: toolbarLeft - menuWidth - MENU_EDGE_GAP,
+      availableHeight: hostHeight - toolbarTop - MENU_EDGE_GAP
+    },
+    {
+      top: selectionTop + selectionHeight + MENU_EDGE_GAP,
+      left: selectionLeft,
+      availableHeight: hostHeight - selectionTop - selectionHeight - (MENU_EDGE_GAP * 2)
+    },
+    {
+      top: selectionTop - menuHeight - MENU_EDGE_GAP,
+      left: selectionLeft,
+      availableHeight: selectionTop - (MENU_EDGE_GAP * 2)
+    }
+  ]
+
+  const fitsHorizontally = (candidate: Candidate) => (
+    candidate.left >= MENU_EDGE_GAP && candidate.left + menuWidth <= hostWidth - MENU_EDGE_GAP
+  )
+  const hasUsefulHeight = (candidate: Candidate) => candidate.availableHeight >= MENU_MIN_HEIGHT
+  const chosen: Candidate = candidates.find((candidate) => fitsHorizontally(candidate) && hasUsefulHeight(candidate))
+    || candidates.find((candidate) => fitsHorizontally(candidate))
+    || candidates[0]!
+
+  const maxLeft = Math.max(MENU_EDGE_GAP, hostWidth - menuWidth - MENU_EDGE_GAP)
+  const maxHeight = Math.max(MENU_MIN_HEIGHT, Math.min(menuHeight, chosen.availableHeight))
+  templateMenuPlacement.value = {
+    top: clamp(chosen.top, MENU_EDGE_GAP, Math.max(MENU_EDGE_GAP, hostHeight - maxHeight - MENU_EDGE_GAP)),
+    left: clamp(chosen.left, MENU_EDGE_GAP, maxLeft),
+    maxHeight
+  }
+  templateMenuReady.value = true
+}
 
 const toolbarStyle = computed(() => {
   const toolbarWidth = 132
@@ -47,23 +140,40 @@ const toolbarStyle = computed(() => {
 })
 
 const templateMenuStyle = computed(() => ({
-  top: `${Math.max(4, Math.round((Number(props.top) || 0) - 2))}px`,
-  left: `${Math.round(Number(props.left) || 0)}px`
+  top: `${Math.round(templateMenuPlacement.value.top)}px`,
+  left: `${Math.round(templateMenuPlacement.value.left)}px`,
+  maxHeight: `${Math.round(templateMenuPlacement.value.maxHeight)}px`,
+  visibility: templateMenuReady.value ? ('visible' as const) : ('hidden' as const)
 }))
 
 const selectTemplate = (templateId: string) => {
   templateMenuOpen.value = false
+  templateMenuReady.value = false
   if (templateId) emit('template', templateId)
 }
 
 watch(() => props.visible, (visible) => {
-  if (!visible) templateMenuOpen.value = false
+  if (!visible) {
+    templateMenuOpen.value = false
+    templateMenuReady.value = false
+  }
 })
+
+watch(
+  [templateMenuOpen, () => props.top, () => props.left, () => props.width, () => props.height, () => props.templates?.length || 0],
+  () => {
+    if (!templateMenuOpen.value) return
+    templateMenuReady.value = false
+    void repositionTemplateMenu()
+  },
+  { flush: 'post' }
+)
 </script>
 
 <template>
   <div
     v-if="visible"
+    ref="rootEl"
     class="pointer-events-none absolute inset-0 z-[117]"
     @keydown.esc="templateMenuOpen = false"
   >
@@ -134,7 +244,8 @@ watch(() => props.visible, (visible) => {
 
     <div
       v-if="templateMenuOpen"
-      class="pointer-events-auto absolute w-60 max-w-[calc(100vw-20px)] overflow-hidden rounded-lg border border-white/15 bg-[#18181b]/98 p-1.5 shadow-2xl backdrop-blur-md"
+      ref="templateMenuEl"
+      class="pointer-events-auto absolute w-60 max-w-[calc(100vw-20px)] overflow-y-auto overflow-x-hidden rounded-lg border border-white/15 bg-[#18181b]/98 p-1.5 shadow-2xl backdrop-blur-md"
       :style="templateMenuStyle"
       role="menu"
       @mousedown.stop

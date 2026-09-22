@@ -1,3 +1,4 @@
+import { positionProductLimitBelowName } from './productLimitLayout'
 import { applyWholesaleReferenceCardLayout } from './wholesaleReferenceLayout'
 import { fitResponsiveProductTypography } from './productCardResponsiveTypography'
 import { autoTrimFabricImage } from './fabricImageHelpers'
@@ -14,6 +15,10 @@ import { collectObjectsDeep } from './fabricObjectClassifiers'
 import { collectDirectProductCardImages } from './productImageComposition'
 import { clamp } from './mathHelpers'
 import { DEFAULT_EDITOR_FONT_FAMILY } from './font-catalog'
+import {
+  clearManualPricePosition,
+  isExplicitManualPricePosition
+} from './pricePositionPolicy'
 
 const trimmedProductElements = new WeakMap<object, object>()
 
@@ -72,6 +77,13 @@ type ProductCardConfigurationDeps = {
   enableCardElementRotationControl: (object: any, enabled?: boolean) => void
   safeRequestRenderAll: () => void
   getPriceGroupFromAny: (object: any) => any
+  normalizePriceGroupPlacementInCard?: (
+    priceGroup: any,
+    cardWidth: number,
+    cardHeight: number,
+    placement?: any,
+    options?: { preserveScale?: boolean }
+  ) => boolean
 }
 
 export const createProductCardConfigurationLayout = (deps: ProductCardConfigurationDeps) => {
@@ -263,11 +275,37 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
       ? styles.cardLayout
       : null
     if (!group) return
+
+    // Uma atualização explícita da configuração/perfil deve vencer uma âncora
+    // manual antiga. Movimentos normais no canvas continuam preservados; este
+    // marcador só é armado pelos fluxos que realmente trocaram a receita.
+    const configuredPriceGroup = deps.getPriceGroupFromAny(group)
+    // Projetos anteriores persistiam apenas o booleano manual. Como ele também
+    // era armado por eventos de relayout, não é prova de uma movimentação feita
+    // pelo usuário. A posição externa volta a ser governada pela receita; os
+    // marcadores internos de arte/tipografia continuam preservados.
+    if (
+      configuredPriceGroup &&
+      configuredPriceGroup.__manualPricePosition === true &&
+      !isExplicitManualPricePosition(configuredPriceGroup)
+    ) {
+      clearManualPricePosition(configuredPriceGroup)
+    }
+
+    const forceCardConfigurationLayout = (group as any).__forceCardConfigurationLayout === true
+    if (forceCardConfigurationLayout) {
+      if (configuredPriceGroup) clearManualPricePosition(configuredPriceGroup)
+      delete (group as any).__forceCardConfigurationLayout
+    }
+
     deps.syncTemplateStyle?.(deps.getPriceGroupFromAny(group))
     const badgeOverride = group?._productData?.alcoholBadgeEnabled
     const currentBadge = group.getObjects?.().find((obj: any) => obj.name === 'smart_alcohol_badge')
     if (typeof badgeOverride === 'boolean') currentBadge?.set?.({ visible: badgeOverride })
-    if (applyWholesaleReferenceCardLayout(group, w, h)) return
+    if (applyWholesaleReferenceCardLayout(group, w, h)) {
+      positionProductLimitBelowName(group, w, h)
+      return
+    }
     if (!rawConfiguration) {
       fitResponsiveProductTypography(group, w, h, styles?.prodNameScale ?? 1)
       return
@@ -279,13 +317,17 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
     ))
     const cardProfile = selectedProfile && configuration.profiles?.[selectedProfile]
       ? configuration.profiles[selectedProfile]
-      : resolveProductCardConfigurationProfile(
+        : resolveProductCardConfigurationProfile(
           configuration,
           w,
           h,
           {
             role: String((styles as any)?.role || ''),
-            isHighlighted: !!(group as any).__isHighlighted
+            // `_cardHighlighted` is the persisted/runtime flag used by the
+            // grid controller. Older cards do not have the transient
+            // `__isHighlighted` alias, so ignoring it makes Destaque cards
+            // fall back to the standard recipe during reload.
+            isHighlighted: !!((group as any).__isHighlighted || (group as any)._cardHighlighted)
           }
         )
     const cardElements = cardProfile.elements
@@ -365,7 +407,7 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
       // da posição externa deve impedir que a receita configurada em Cards
       // reposicione a etiqueta no card. O tamanho continua sendo controlado
       // pela receita, inclusive depois de um movimento manual.
-      const preservesManualPosition = key === 'price' && !!(object as any).__manualPricePosition
+      const preservesManualPosition = key === 'price' && isExplicitManualPricePosition(object)
       const preservesManualChildTransform = key !== 'price' && !!(object as any).__manualTransform
       object.set?.('visible', shouldShow)
       // A drag/resize made directly on a child of the card is an explicit user
@@ -441,7 +483,18 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
             ? measuredHeight / objectScaleY
             : rawHeight
         if (baseWidth > 0 && baseHeight > 0) {
-          const scale = Math.min(targetWidth / baseWidth, targetHeight / baseHeight)
+          // A largura da receita vale para qualquer formato de etiqueta. Uma
+          // arte com cabeçalho precisa de mais altura que uma pílula simples.
+          // Cresce para cima, mantendo a borda inferior configurada no card.
+          const priceBottom = Number(object.top || 0) + targetHeight / 2
+          const textBottom = isNestedPriceGroup
+            ? Math.max(-h / 2, ...[title, limit].filter(text => text && text.visible !== false && String(text.text || '').trim())
+              .map(text => Number(text.top || 0) + Math.abs(Number(text.height || 0) * Number(text.scaleY || 1)) / 2 + h * 0.02))
+            : -h / 2
+          const availableHeight = isNestedPriceGroup && !preservesManualPosition
+            ? Math.max(targetHeight, Math.min(h * 0.44, priceBottom - textBottom))
+            : targetHeight
+          const scale = Math.min(targetWidth / baseWidth, availableHeight / baseHeight)
           if (Number.isFinite(scale) && scale > 0) {
             object.set?.({
               // Recalcular a escala a partir da geometria base evita acumular
@@ -449,6 +502,9 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
               scaleX: (Number(object.scaleX || 1) < 0 ? -1 : 1) * scale,
               scaleY: (Number(object.scaleY || 1) < 0 ? -1 : 1) * scale
             })
+            if (isNestedPriceGroup && !preservesManualPosition && baseHeight * scale > targetHeight) {
+              object.set?.({ top: priceBottom - baseHeight * scale / 2 })
+            }
           }
         }
       }
@@ -499,8 +555,23 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
       })
     }
 
-    applyElement(price, 'price')
     applyElement(limit, 'limit', { textLike: true })
+    positionProductLimitBelowName(group, w, h)
+    applyElement(price, 'price')
+    // O tamanho serializado de um grupo aninhado pode não representar os
+    // limites visíveis dos filhos (principalmente após reabrir o projeto).
+    // Recalcular a contenção com a bbox real impede que o valor escape pela
+    // direita do Largo. Uma posição manual mantém a escala escolhida, mas
+    // ainda é reancorada dentro do card.
+    if (price && deps.normalizePriceGroupPlacementInCard) {
+      deps.normalizePriceGroupPlacementInCard(
+        price,
+        w,
+        h,
+        null,
+        { preserveScale: isExplicitManualPricePosition(price) }
+      )
+    }
     applyElement(alcoholBadge, 'alcoholBadge', {
       forceVisible: typeof badgeOverride === 'boolean' ? badgeOverride : configuration.alcoholBadgeEnabled && cardElements.alcoholBadge.visible && alcoholic
     })

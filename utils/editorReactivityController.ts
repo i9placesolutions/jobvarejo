@@ -1,3 +1,4 @@
+import { positionProductLimitBelowName } from './productLimitLayout'
 import { resolveFabricTarget } from './fabricTarget'
 import { syncProductPriceFromText } from './productPriceTextSync'
 
@@ -1904,6 +1905,34 @@ const setupReactivity = () => {
             return;
         }
         if (obj) {
+            const modifiedAction = String(e?.transform?.action || '').trim().toLowerCase();
+            const isExplicitTransform = modifiedAction.includes('drag') ||
+                modifiedAction.includes('move') ||
+                modifiedAction.includes('scale') ||
+                modifiedAction.includes('resize') ||
+                modifiedAction.includes('rotate') ||
+                modifiedAction.includes('skew');
+            const isFooterCompositionObject = (candidate: any): boolean => {
+                if (!candidate) return false;
+                const name = String(candidate.name || '').trim();
+                const field = String(candidate.businessProfileField || candidate.quickDataField || '').trim();
+                return isDynamicBusinessFieldObject(candidate) ||
+                    /^footer-(dynamic|reference)-/.test(name) ||
+                    /^footer-column-divider-/.test(name) ||
+                    name === 'footer-social-divider' ||
+                    /^icon-(address|whatsapp|instagram|facebook)$/.test(name) ||
+                    ['address', 'whatsapp', 'instagram', 'facebook'].includes(field);
+            };
+            const markFooterCompositionObject = (candidate: any) => {
+                if (!isExplicitTransform || !isFooterCompositionObject(candidate)) return;
+                candidate.__manualTransform = true;
+                candidate.dirty = true;
+                candidate.setCoords?.();
+            };
+            markFooterCompositionObject(obj);
+            if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
+                (obj.getObjects() || []).forEach((member: any) => markFooterCompositionObject(member));
+            }
             if (isQuickLogoImageObject(obj)) syncQuickLogoBackdrop(obj);
             if (isDynamicBusinessFieldObject(obj)) {
                 configureDynamicBusinessTextObject(obj, fabric)
@@ -1916,7 +1945,6 @@ const setupReactivity = () => {
             // a fast drag, the snapping composable's RAF may not have run yet,
             // so establish the manual marker synchronously from the transform
             // action before any legacy centering/relayout code can run.
-            const modifiedAction = String(e?.transform?.action || '').trim().toLowerCase();
             const isCardTextbox = ['textbox', 'image'].includes(String(obj?.type || '').toLowerCase()) &&
                 obj.group &&
                 (obj.group.isSmartObject || obj.group.isProductCard || isLikelyProductCard(obj.group));
@@ -1950,7 +1978,18 @@ const setupReactivity = () => {
 
             if (String(obj?.type || '').toLowerCase() === 'group' && String(obj?.name || '') === 'priceGroup') {
                 const transformAction = String(e?.transform?.action || '').trim().toLowerCase();
-                markPriceGroupTransformAsManual(obj);
+                // `object:modified` também pode chegar de sincronizações e
+                // relayouts internos. Só uma ação de transformação real do
+                // bloco pelo usuário pode congelar sua âncora horizontal;
+                // eventos automáticos não devem gravar `manual` no JSON.
+                const isExplicitPriceGroupTransform = (
+                    transformAction.includes('drag') ||
+                    transformAction.includes('move') ||
+                    transformAction.includes('scale') ||
+                    transformAction.includes('rotate') ||
+                    transformAction.includes('skew')
+                );
+                if (isExplicitPriceGroupTransform) markPriceGroupTransformAsManual(obj);
                 const cardSize = getCardSizeForPriceGroup(obj);
                 // Arrastar já fornece a posição final escolhida pelo usuário.
                 // O encaixe automático pode mudar a origem e prender a etiqueta
@@ -2040,6 +2079,13 @@ const setupReactivity = () => {
         target.dirty = true;
         safeRequestRenderAll();
     };
+    const syncLimitAfterTextChange = (target: any) => {
+        if (!target || (!isProductNameText(target) && !['smart_limit', 'limitText', 'product_limit'].includes(target.name) && target.data?.smartType !== 'product-limit')) return;
+        const card = findProductCardParentGroup(target);
+        if (!card) return;
+        positionProductLimitBelowName(card, Number(card._cardWidth || card.width), Number(card._cardHeight || card.height));
+        safeRequestRenderAll();
+    };
     const handleTextChanged = (e: any) => {
         syncProductPriceFromText(e?.target);
         syncTextSelectionSnapshot(e);
@@ -2057,6 +2103,7 @@ const setupReactivity = () => {
         markPriceGroupAsManuallyCustomized(target, { captureSnapshot: false });
         const didSyncCardName = syncCardProductDataNameFromTitleTarget(target, { normalizeDisplayedText: false });
         const didSyncCardTitleWidth = syncCardProductDataTitleWidthFromTarget(target);
+        syncLimitAfterTextChange(target);
         if (didSyncCardName || didSyncCardTitleWidth || isTextTargetObject(target)) {
             queueTextEditSave('text-edit');
         }
@@ -2079,6 +2126,7 @@ const setupReactivity = () => {
         markPriceGroupAsManuallyCustomized(target);
         const didSyncCardName = syncCardProductDataNameFromTitleTarget(target, { normalizeDisplayedText: true });
         const didSyncCardTitleWidth = syncCardProductDataTitleWidthFromTarget(target);
+        syncLimitAfterTextChange(target);
         if (didSyncCardName || didSyncCardTitleWidth || isTextTargetObject(target)) {
             flushTextEditSave('text-edit-exit');
         }

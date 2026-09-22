@@ -616,6 +616,7 @@ onBeforeUnmount(() => {
         </button>
       </nav>
       <div class="sidebar-bottom">
+        <NuxtLink to="/" class="nav-item"><ChevronLeft :size="18" /><span>Todas as soluções</span></NuxtLink>
         <div class="private-badge"><LockKeyhole :size="14" /><span>Player interno protegido</span></div>
         <div class="cache-badge" :class="{ ready: radio.cacheReady.value }"><Zap :size="14" /><span>{{ radio.cacheReady.value ? 'Cache offline ativo' : 'Ativando cache...' }}</span></div>
       </div>

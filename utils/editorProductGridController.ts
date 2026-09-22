@@ -1,3 +1,4 @@
+import { prepareProductCollectionRelayout } from './productCollectionRelayout'
 import { quickGridRows } from './quickGridPreset'
 import { isProductLabelTemplateCompatible } from './productLabelCompatibility'
 import { resolveProductNameColor, syncProductNameColor } from './productNameColors'
@@ -9,6 +10,11 @@ type ApplyLabelTemplateToZoneOptions = any
 type RecalculateZoneLayoutOptions = any
 
 import { DEFAULT_EDITOR_FONT_FAMILY } from './font-catalog'
+import {
+    clearManualPricePosition,
+    isExplicitManualPricePosition,
+    markExplicitManualPricePosition
+} from './pricePositionPolicy'
 
 export type EditorProductGridContext = Record<string, any>
 
@@ -1371,6 +1377,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
                 // We pass smartObjects explicitly so it doesn't have to search
                 try {
                     const cache = (mode === 'append') ? [...existingCards, ...smartObjects] : smartObjects;
+                    if (mode === 'append' && opts.autoLayout !== false) prepareProductCollectionRelayout(cache);
                     syncZoneCardFrameBindings(targetZone, cache);
                     cache.forEach((card: any) => {
                         card.__forceCardRelayout = true;
@@ -1770,7 +1777,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             // Ajustes internos da etiqueta usam __manualTransform, mas não devem
             // bloquear a posição/tamanho definidos no perfil de Cards. Só um
             // movimento explícito do priceGroup inteiro fixa a âncora externa.
-            const splashManual = (priceGroup as any).__manualPricePosition === true;
+            const splashManual = isExplicitManualPricePosition(priceGroup);
             const preserveTV = shouldPreserveManualTemplateVisual(priceGroup);
 
             // Propagar splashTextScale como metadado (garante que layoutPriceGroup o leia).
@@ -2386,7 +2393,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
         // A troca de modelo deve voltar a usar a posição/área definidas em Cards.
         // Só carregamos a âncora antiga quando o usuário moveu explicitamente o
         // priceGroup (marcador separado dos ajustes internos da etiqueta).
-        const preserveManualPricePosition = (oldPg as any).__manualPricePosition === true;
+        const preserveManualPricePosition = isExplicitManualPricePosition(oldPg);
         const desiredLeft = preserveManualPricePosition ? (oldPg.left ?? 0) : 0;
         const desiredTop = preserveManualPricePosition ? (oldPg.top ?? 0) : 0;
         const cardW = card._cardWidth ?? card.width ?? card.getScaledWidth?.() ?? 0;
@@ -2409,9 +2416,9 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             interactive: true
         });
         if (preserveManualPricePosition) {
-            (newPg as any).__manualPricePosition = true;
+            markExplicitManualPricePosition(newPg);
         } else {
-            delete (newPg as any).__manualPricePosition;
+            clearManualPricePosition(newPg);
         }
         setPriceGroupInteractionMode(newPg, 'move');
 
@@ -4100,6 +4107,21 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
                 return id && validZoneIds.has(id);
             });
 
+            // Fabric pode reativar o cache dos grupos filhos durante o
+            // loadFromJSON. A etiqueta então aparece deslocada/menor até o
+            // primeiro clique, que por acaso marca a árvore como dirty. Faça
+            // essa invalidação recursiva no rehydrate, sem alterar a geometria
+            // persistida do card.
+            const invalidateCardRenderTree = (object: any, visited = new Set<any>()): void => {
+                if (!object || visited.has(object)) return;
+                visited.add(object);
+                object.set?.({ objectCaching: false, statefullCache: false, dirty: true });
+                object.setCoords?.();
+                if (typeof object.getObjects === 'function') {
+                    for (const child of object.getObjects() || []) invalidateCardRenderTree(child, visited);
+                }
+            };
+
             // CRITICAL: Ensure all product cards are visible and have valid properties
             cards.forEach((card: any) => {
                 if (!card.isProductCard && !card.isSmartObject && isLikelyProductCard(card)) {
@@ -4169,6 +4191,8 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
                         bg.set('fill', 'transparent');
                     }
                 }
+
+                invalidateCardRenderTree(card);
 
                 // Ensure the card is properly initialized
                 if (typeof card.setCoords === 'function') card.setCoords();

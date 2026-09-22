@@ -138,8 +138,12 @@ const start = () => {
 }
 </script>
 <template>
-  <ArtShell :active="active">
-    <main class="art-catalog">
+  <component
+    :is="auth.isSuperAdmin.value ? AdminWorkspaceShell : 'div'"
+    v-bind="auth.isSuperAdmin.value ? { activeNav: 'art-studio' } : {}"
+  >
+    <ArtShell :active="active" :embedded="auth.isSuperAdmin.value">
+      <main class="art-catalog">
       <div v-if="error" role="alert" class="art-alert">
         {{ error }} <button @click="load">Tentar novamente</button>
       </div>
@@ -406,7 +410,8 @@ const start = () => {
         </section>
       </div>
     </dialog>
-  </ArtShell>
+    </ArtShell>
+  </component>
 </template>
 <style scoped>
 .format-checks {
@@ -427,7 +432,7 @@ const start = () => {
   margin: 0;
 }
 .format-checks input {
-  accent-color: #315d42;
+  accent-color: #2160b4;
 }
 
 .art-catalog {
@@ -446,7 +451,7 @@ const start = () => {
   font-size: 11px;
   letter-spacing: 2px;
   font-weight: 700;
-  color: #7b896e;
+  color: #60758f;
   margin: 0 0 14px;
 }
 h1 {
@@ -455,9 +460,10 @@ h1 {
   letter-spacing: -1.7px;
   font-weight: 600;
   margin: 0;
+  color: #172b45;
 }
 .hero-description {
-  color: #7d887e;
+  color: #60758f;
   font-size: 17px;
   margin-top: 12px;
 }
@@ -466,10 +472,11 @@ h1 {
   align-items: center;
   gap: 14px;
   background: white;
-  border: 1px solid #dce3d6;
+  border: 1px solid #d7e4f1;
   border-radius: 12px;
   padding: 18px 22px;
-  color: #6a7a68;
+  color: #60758f;
+  box-shadow: 0 8px 24px rgba(26, 68, 113, 0.04);
 }
 .catalog-search input {
   flex: 1;
@@ -478,11 +485,12 @@ h1 {
   border: 0;
   font-size: 16px;
   outline: none;
+  color: #172b45;
 }
 .catalog-search span {
   font-size: 9px;
   letter-spacing: 1.3px;
-  color: #8b9586;
+  color: #8093a9;
 }
 .category-tabs {
   display: flex;
@@ -494,16 +502,16 @@ h1 {
   white-space: nowrap;
   padding: 10px 19px;
   border-radius: 25px;
-  border: 1px solid #dce2d7;
-  color: #677863;
+  border: 1px solid #d7e4f1;
+  color: #60758f;
   background: transparent;
   font-size: 13px;
   font-weight: 500;
 }
 .category-tabs button.selected {
-  background: #254f39;
+  background: #2160b4;
   color: white;
-  border-color: #254f39;
+  border-color: #2160b4;
 }
 .section-heading {
   display: flex;
@@ -517,10 +525,11 @@ h1 {
   font-weight: 600;
   letter-spacing: -0.4px;
   margin: 0;
+  color: #172b45;
 }
 .section-heading span {
   font-size: 12px;
-  color: #83907f;
+  color: #8093a9;
 }
 .collection-grid {
   display: grid;
@@ -538,7 +547,7 @@ h1 {
   min-height: 112px;
 }
 .collection-card.chosen {
-  border-color: #254f39;
+  border-color: #2160b4;
 }
 .collection-card > svg {
   margin-left: auto;
@@ -547,7 +556,7 @@ h1 {
 .collection-icon {
   width: 42px;
   height: 42px;
-  border: 1px solid #65795230;
+  border: 1px solid rgba(33, 96, 180, 0.18);
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -566,8 +575,8 @@ h1 {
   display: block;
 }
 .tone-0 {
-  background: #edf1df;
-  color: #586a38;
+  background: #eaf3ff;
+  color: #173d70;
 }
 .tone-1 {
   background: #f1e8ee;
@@ -598,7 +607,7 @@ h1 {
   font: inherit;
   font-size: 12px;
   border: 0;
-  color: #73806e;
+  color: #60758f;
 }
 .design-grid {
   display: grid;
@@ -617,8 +626,8 @@ h1 {
   aspect-ratio: 4/5;
   overflow: hidden;
   border-radius: 12px;
-  border: 1px solid #203a3010;
-  background: #e8ece3;
+  border: 1px solid rgba(23, 61, 112, 0.08);
+  background: #eaf3ff;
   padding: 0;
 }
 .design-image :deep(svg) {
@@ -630,7 +639,7 @@ h1 {
   left: 12px;
   font-size: 8px;
   letter-spacing: 1.1px;
-  color: #3b5745;
+  color: #173d70;
   background: #ffffffde;
   padding: 6px 9px;
   border-radius: 5px;
@@ -643,7 +652,7 @@ h1 {
   background: #ffffffee;
   border-radius: 8px;
   padding: 12px;
-  color: #234333;
+  color: #173d70;
   font-size: 13px;
   font-weight: 600;
   display: flex;
@@ -671,25 +680,26 @@ h1 {
   display: block;
   font-size: 14px;
   font-weight: 600;
+  color: #172b45;
 }
 .design-card small {
   display: block;
-  color: #87907f;
+  color: #8093a9;
   font-size: 11px;
   margin-top: 5px;
 }
 .manage-link {
   font-size: 11px;
-  color: #306744;
+  color: #2160b4;
 }
 .catalog-footer {
   margin-top: 55px;
   padding: 24px 0;
-  border-top: 1px solid #dce2d7;
+  border-top: 1px solid #d7e4f1;
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #8b9586;
+  color: #8093a9;
 }
 .catalog-footer span:last-child {
   font-size: 9px;
@@ -702,11 +712,11 @@ h1 {
   max-width: 900px;
   width: 92vw;
   background: #fff;
-  color: #203c30;
+  color: #172b45;
   max-height: 90vh;
 }
 .art-template-dialog::backdrop {
-  background: #17291e99;
+  background: rgba(23, 61, 112, 0.55);
   backdrop-filter: blur(4px);
 }
 .template-detail {
@@ -715,7 +725,7 @@ h1 {
 }
 .detail-preview {
   padding: 28px;
-  background: #edf0e8;
+  background: #eaf3ff;
   max-height: 80vh;
 }
 .detail-preview :deep(svg) {
@@ -737,7 +747,7 @@ h1 {
 }
 .template-detail p:not(.eyebrow) {
   font-size: 14px;
-  color: #788478;
+  color: #60758f;
   line-height: 1.6;
   margin: 18px 0;
 }
@@ -756,7 +766,7 @@ h1 {
 }
 .template-detail small {
   display: block;
-  color: #87917e;
+  color: #8093a9;
   font-size: 11px;
   margin-top: 12px;
 }

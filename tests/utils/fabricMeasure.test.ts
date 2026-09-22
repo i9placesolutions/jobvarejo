@@ -300,6 +300,40 @@ describe('normalizePriceGroupPlacementInCard', () => {
     expect(group.scaleX).toBe(1.8)
     expect(group.scaleY).toBe(1.8)
   })
+
+  it('reancora uma etiqueta persistida fora do card sem redimensiona-la', () => {
+    const child = obj({
+      left: -50,
+      top: -25,
+      width: 100,
+      height: 50,
+      originX: 'left',
+      originY: 'top'
+    })
+    const group: any = {
+      type: 'group',
+      name: 'priceGroup',
+      scaleX: 1.8,
+      scaleY: 1.8,
+      left: 240,
+      top: 0,
+      originX: 'center',
+      originY: 'center',
+      getObjects: () => [child],
+      set(values: Record<string, any>) {
+        Object.assign(this, values)
+      },
+      setCoords() {}
+    }
+
+    normalizePriceGroupPlacementInCard(group, 200, 200, null, () => false, { preserveScale: true })
+
+    expect(group.scaleX).toBe(1.8)
+    expect(group.scaleY).toBe(1.8)
+    expect(group.left).toBe(10)
+    expect(group.left - (50 * group.scaleX)).toBeGreaterThanOrEqual(-100)
+    expect(group.left + (50 * group.scaleX)).toBeLessThanOrEqual(100)
+  })
 })
 
 describe('getObjectAbsoluteCenter', () => {

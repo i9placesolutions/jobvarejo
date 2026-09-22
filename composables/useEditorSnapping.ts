@@ -18,6 +18,7 @@ import {
     SNAP_FAST_MOVE_SUPPRESSION_PX_RECT_IMAGE,
 } from '~/utils/snapConstants'
 import { clamp } from '~/utils/mathHelpers'
+import { markExplicitManualPricePosition } from '~/utils/pricePositionPolicy'
 
 type SnapBounds = {
     left: number
@@ -569,7 +570,7 @@ export function useEditorSnapping(deps: EditorSnappingDeps): EditorSnappingApi {
                 if (String((obj as any)?.name || '').trim() === 'priceGroup') {
                     // Move/resize do bloco da etiqueta é uma escolha externa;
                     // edição de seus filhos não deve receber este marcador.
-                    ;(obj as any).__manualPricePosition = true
+                    markExplicitManualPricePosition(obj)
                 }
                 ;(obj as any).__manualTransformCardW = Number(cardW) || (obj as any).__manualTransformCardW
                 ;(obj as any).__manualTransformCardH = Number(cardH) || (obj as any).__manualTransformCardH

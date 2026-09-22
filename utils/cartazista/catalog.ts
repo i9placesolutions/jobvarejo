@@ -1,6 +1,8 @@
 import type { CartazistaModel, CartazistaModelKey, CartazistaTemplateSummary } from '~/types/cartazista'
 
 export const CARTAZISTA_STARTER_MODELS: CartazistaTemplateSummary[] = [
+  { id: 'leve-pague', name: 'Leve/Pague', category: 'Leve e pague', description: 'Leve uma quantidade e pague outra. Exemplo: leve 4 e pague 3.', tags: ['leve', 'pague', 'quantidade'], example: 'SABÃO EM PÓ 500G | 4 | 3', published: true, revision: 1 },
+  { id: 'banner-2m', name: 'Faixa de 2 Metros', category: 'Preço', description: 'Faixa horizontal de 200 × 62 cm com chamada lateral e preço grande.', tags: ['faixa', 'horizontal', 'vitrine'], example: 'ARROZ CAMIL 5KG 29,99', published: true, revision: 1 },
   { id: 'gondola', name: 'Etiqueta de Gôndola', category: 'Gôndola', description: 'Preço compacto para imprimir vários por folha.', tags: ['gôndola', 'etiqueta', 'preço'], example: 'PRODUTO 9,99', published: true, revision: 1 },
   { id: 'standard', name: 'Cartaz de Oferta Padrão', category: 'Preço', description: 'O cartaz direto: oferta, produto e preço grande.', tags: ['oferta', 'preço', 'padrão'], example: 'OFERTA PRODUTO 9,99', published: true, revision: 1 },
   { id: 'second-unit', name: 'Desconto a partir da segunda unidade', category: 'Desconto', description: 'Comunica a condição especial na compra de duas unidades.', tags: ['segunda unidade', 'desconto'], example: 'A PARTIR DA 2ª UNIDADE', published: true, revision: 1 },
@@ -18,7 +20,7 @@ export const CARTAZISTA_STARTER_MODELS: CartazistaTemplateSummary[] = [
 ]
 
 export const getCartazistaModel = (id: string | undefined): CartazistaModel =>
-  CARTAZISTA_STARTER_MODELS.find((model) => model.id === id) || CARTAZISTA_STARTER_MODELS[1]!
+  CARTAZISTA_STARTER_MODELS.find((model) => model.id === id) || CARTAZISTA_STARTER_MODELS.find(model => model.id === 'standard')!
 
 export const isCartazistaModelKey = (id: string): id is CartazistaModelKey =>
   CARTAZISTA_STARTER_MODELS.some((model) => model.id === id)

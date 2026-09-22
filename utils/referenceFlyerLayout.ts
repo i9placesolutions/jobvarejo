@@ -50,22 +50,27 @@ export const layoutReferenceFooter = (background: any, objects: any[]): boolean 
   if(divider)assign(divider,{visible:phoneActive&&rightActive})
   const fit=(o:any,x:number,y:number,w:number,h:number,size:number,single=false)=>{
     if(!active(o))return
+    // A posição/escala de um campo movido no editor pertence ao encarte, não
+    // à receita automática do rodapé. O texto já foi atualizado pela
+    // hidratação do campo; não reencaixe esse objeto ao reabrir o projeto.
+    if (o.__manualTransform) return
     assign(o,{originX:'left',originY:'top',lineHeight:1.03})
-    const manual = o.__manualTransform
-    o.__manualTransform = false
     fitQuickBusinessFooterText(o,{width:w*s,height:h*verticalScale,maxFontSize:size*verticalScale,singleLine:single})
-    o.__manualTransform = manual
     assign(o,{left:area.left+x*s,top:area.top+y*verticalScale+(h*verticalScale-bounds(o).height)/2})
   }
   const icon=(field:string,x:number,y:number,size:number,visible:boolean)=>{
     const o=byName('icon-'+field);if(!o)return
+    if (o.__manualTransform) {
+      assign(o,{visible})
+      return
+    }
     const scale=size*verticalScale/Math.max(o.width,o.height)
     assign(o,{visible,originX:'left',originY:'top',left:area.left+x*s,top:area.top+y*verticalScale,scaleX:scale,scaleY:scale})
   }
   const rightX=phoneActive?(addressLabel?550:528):112, rightWidth=phoneActive?(addressLabel?498:520):900
   fit(phone,112,54,rightActive?304:900,48,42,true)
-  if(label){assign(label,{left:area.left+112*s,top:area.top+26*verticalScale,width:(rightActive?308:900)*s,fontSize:22*verticalScale,scaleX:1,scaleY:1})}
-  if(addressLabel)assign(addressLabel,{originX:'left',originY:'top',left:area.left+rightX*s,top:area.top+26*verticalScale,width:rightWidth*s,fontSize:22*verticalScale,scaleX:1,scaleY:1})
+  if(label && !label.__manualTransform){assign(label,{left:area.left+112*s,top:area.top+26*verticalScale,width:(rightActive?308:900)*s,fontSize:22*verticalScale,scaleX:1,scaleY:1})}
+  if(addressLabel && !addressLabel.__manualTransform)assign(addressLabel,{originX:'left',originY:'top',left:area.left+rightX*s,top:area.top+26*verticalScale,width:rightWidth*s,fontSize:22*verticalScale,scaleX:1,scaleY:1})
   fit(address,rightX,addressLabel?55:22,rightWidth,addressLabel?(instagramActive?32:54):(instagramActive?54:94),29)
   fit(instagram,rightX+29,91,rightWidth-29,25,22,true)
   icon('whatsapp',30,37,68,phoneActive)

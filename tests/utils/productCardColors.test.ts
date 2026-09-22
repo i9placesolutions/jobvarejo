@@ -21,3 +21,34 @@ describe('cores dos cards', () => {
     expect(findFlyerAccent([{ fill: '#ffffff' }])).toBeNull()
   })
 })
+
+import { resolveFlyerProductStyles } from '../../utils/productCardColors'
+it('troca amarelo legado pela arte de cada modelo e reage à troca da paleta', () => {
+  const styles = { cardColorMode: 'auto' as const, highlightCardColor: '#ffcc00' }
+  for (const fill of ['#135ab4', '#7f228a', '#198b42']) {
+    const resolved = resolveFlyerProductStyles(styles, [{ width: 1000, height: 1000, fill }])
+    expect(resolveProductCardColor(resolved, true)).toBe(fill)
+    expect(resolveProductCardColor(resolved, false)).toBe('#ffffff')
+  }
+})
+it('paleta configurada e escolhas explícitas prevalecem sobre amostragem', () => {
+  const roots = [{ fill: '#135ab4', width: 1000, height: 1000 }]
+  const configured = resolveFlyerProductStyles({ templateProductPalette: { highlightCardColor: '#228833' } }, roots)
+  expect(resolveProductCardColor(configured, true)).toBe('#228833')
+  const custom = resolveFlyerProductStyles({ productPalette: { highlightCardColor: '#ffcc00' } }, roots)
+  expect(resolveProductCardColor(custom, true)).toBe('#ffcc00')
+  const manual = { cardColorMode: 'manual' as const, cardColor: '#ffffff' }
+  expect(resolveFlyerProductStyles(manual, roots)).toBe(manual)
+})
+it('ignora a cor amarela da etiqueta e mantém a cor dos cards comuns legados', () => {
+  const roots = [{ fill: '#135ab4', width: 500, height: 500 }, { name: 'priceGroup', fill: '#ffcc00', width: 2000, height: 2000 }]
+  const resolved = resolveFlyerProductStyles({ cardColor: '#eeeeee', highlightCardColor: '#ffcc00' }, roots)
+  expect(resolveProductCardColor(resolved, true)).toBe('#135ab4')
+  expect(resolveProductCardColor(resolved, false)).toBe('#eeeeee')
+})
+it('respeita destaque escolhido no painel e reconhece paleta de gradientes', () => {
+  const roots = [{ width: 1000, height: 1000, fill: { colorStops: [{ color: '#135ab4' }, { color: '#135ab4' }] } }]
+  expect(resolveProductCardColor(resolveFlyerProductStyles({}, roots), true)).toBe('#135ab4')
+  const selected = resolveFlyerProductStyles({ highlightCardColor: '#ffcc00' }, roots, { highlightCardColor: true })
+  expect(resolveProductCardColor(selected, true)).toBe('#ffcc00')
+})

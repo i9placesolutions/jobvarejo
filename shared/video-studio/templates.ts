@@ -26,6 +26,6 @@ export function newVideoFromTemplate(id: VideoDocument['theme'] = 'impact'): Vid
   const doc = newVideoDocument()
   applyVideoTemplate(doc, id)
   doc.voice.enabled = false
-  doc.audio = {music:flyerRecipe(id)?.music||'retail-drive',musicVolume:.45,voiceVolume:1,effectsVolume:.8,sounds:true}
+  doc.audio = {music:flyerRecipe(id)?.music||'retail-drive',musicVolume:.36,voiceVolume:1,effectsVolume:.45,sounds:true}
   return doc
 }

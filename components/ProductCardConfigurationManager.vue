@@ -530,9 +530,9 @@ onBeforeUnmount(() => {
   <div class="card-config-page">
     <header class="card-config-page__topbar">
       <div class="card-config-page__topbar-inner">
-        <NuxtLink to="/" class="card-config-page__back" aria-label="Voltar para o dashboard">
+        <NuxtLink to="/flyer-templates" class="card-config-page__back" aria-label="Voltar para Encartes">
           <ArrowLeft class="h-4 w-4" />
-          <span>Dashboard</span>
+          <span>Encartes</span>
         </NuxtLink>
         <div class="card-config-page__brand">
           <span class="card-config-page__brand-mark"><SlidersHorizontal class="h-4 w-4" /></span>

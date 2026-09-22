@@ -1,33 +1,53 @@
 <script setup lang="ts">
+defineProps<{
+  active?: string
+  /** Quando true, usa só o conteúdo (a Central/AdminWorkspaceShell já traz a chrome). */
+  embedded?: boolean
+}>()
+
 const auth = useAuth()
-defineProps<{ active?: string }>()
 </script>
+
 <template>
-  <div class="art-shell">
-    <header class="art-header">
-      <NuxtLink to="/art-studio" class="art-brand"
-        ><span class="art-mark">a<span>✳</span></span
-        ><span>JobVarejo <b>Estúdio de Artes</b></span></NuxtLink
-      >
+  <div :class="['art-shell', { 'art-shell--embedded': embedded }]">
+    <header v-if="!embedded" class="art-header">
+      <NuxtLink to="/art-studio" class="art-brand" aria-label="Estúdio de Artes">
+        <img src="/img/jobvarejo-logo-trim.png" alt="JobVarejo" width="142" height="45">
+        <span class="art-brand-copy">
+          <strong>Estúdio de Artes</strong>
+          <small>Designs editáveis</small>
+        </span>
+      </NuxtLink>
       <nav aria-label="Estúdio de Artes">
-        <NuxtLink to="/art-studio" :class="{ current: active === 'catalog' }"
-          >Explorar designs</NuxtLink
-        ><NuxtLink
-          to="/art-studio?tab=mine"
-          :class="{ current: active === 'mine' }"
-          >Minhas artes</NuxtLink
-        ><NuxtLink
+        <NuxtLink to="/art-studio" :class="{ current: active === 'catalog' }">Explorar designs</NuxtLink>
+        <NuxtLink to="/art-studio?tab=mine" :class="{ current: active === 'mine' }">Minhas artes</NuxtLink>
+        <NuxtLink
           v-if="auth.isSuperAdmin.value"
           to="/art-studio?tab=admin"
           :class="{ current: active === 'admin' }"
-          >Administrar</NuxtLink
         >
+          Administrar
+        </NuxtLink>
       </nav>
-      <NuxtLink to="/" class="art-back">Voltar ao sistema ↗</NuxtLink>
+      <NuxtLink to="/" class="art-back">Voltar à Central</NuxtLink>
     </header>
+
+    <nav v-else class="art-tabs" aria-label="Estúdio de Artes">
+      <NuxtLink to="/art-studio" :class="{ current: active === 'catalog' }">Explorar designs</NuxtLink>
+      <NuxtLink to="/art-studio?tab=mine" :class="{ current: active === 'mine' }">Minhas artes</NuxtLink>
+      <NuxtLink
+        v-if="auth.isSuperAdmin.value"
+        to="/art-studio?tab=admin"
+        :class="{ current: active === 'admin' }"
+      >
+        Administrar
+      </NuxtLink>
+    </nav>
+
     <slot />
   </div>
 </template>
+
 <style>
 @font-face {
   font-family: 'Art Anton';
@@ -91,80 +111,125 @@ defineProps<{ active?: string }>()
 }
 
 .art-shell {
-  --art-ink: #203c30;
-  --art-muted: #728077;
-  --art-line: #dce2d9;
-  --art-accent: #245c43;
+  --jv-navy: #173d70;
+  --jv-blue: #2160b4;
+  --jv-sky: #eaf3ff;
+  --jv-ink: #172b45;
+  --jv-muted: #60758f;
+  --jv-line: #d7e4f1;
+  --art-ink: var(--jv-ink);
+  --art-muted: var(--jv-muted);
+  --art-line: var(--jv-line);
+  --art-accent: var(--jv-blue);
   min-height: 100vh;
-  background: #f9faf6;
   color: var(--art-ink);
-  font-family: 'Art Barlow', Barlow, Arial, sans-serif;
+  background:
+    radial-gradient(circle at 8% -12%, rgba(58, 131, 213, .18), transparent 31rem),
+    radial-gradient(circle at 104% 24%, rgba(33, 96, 180, .1), transparent 27rem),
+    linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+  font-family: "Plus Jakarta Sans", "Barlow", "Art Barlow", ui-sans-serif, system-ui, sans-serif;
 }
+
+.art-shell--embedded {
+  min-height: 100%;
+  background: transparent;
+}
+
 .art-shell * {
   box-sizing: border-box;
 }
+
 .art-header {
-  height: 88px;
-  border-bottom: 1px solid var(--art-line);
+  height: 72px;
+  border-bottom: 1px solid rgba(190, 211, 233, .76);
   display: flex;
   align-items: center;
-  gap: 38px;
-  padding: 0 4vw;
-  background: #fff;
+  gap: 28px;
+  padding: 0 24px;
+  background: rgba(255, 255, 255, .84);
+  box-shadow: 0 8px 28px rgba(26, 68, 113, .045);
+  backdrop-filter: blur(18px);
 }
+
 .art-brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 12px;
   color: inherit;
   text-decoration: none;
-  font-size: 13px;
 }
-.art-brand b {
+
+.art-brand img {
   display: block;
-  font-size: 18px;
-  letter-spacing: -0.4px;
+  height: 36px;
+  width: auto;
 }
-.art-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: #254c3a;
-  color: #e9f4bd;
-  font-size: 34px;
-  line-height: 40px;
-  text-align: center;
+
+.art-brand-copy {
+  display: grid;
+  gap: 2px;
+  padding-left: 12px;
+  border-left: 1px solid var(--jv-line);
+  line-height: 1.1;
+}
+
+.art-brand-copy strong {
+  color: #1d3f69;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.art-brand-copy small {
+  color: #8093a9;
+  font-size: 9px;
   font-weight: 700;
-  position: relative;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
-.art-mark span {
-  font-size: 19px;
-  position: absolute;
-  right: 3px;
-  top: -8px;
-}
-.art-header nav {
+
+.art-header nav,
+.art-tabs {
   display: flex;
-  gap: 26px;
+  gap: 8px;
   margin: auto;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
 }
-.art-header nav a {
-  padding: 10px 0;
-  color: #758177;
+
+.art-tabs {
+  margin: 0;
+  padding: 16px 24px 0;
+  max-width: 1600px;
+  width: 100%;
+}
+
+.art-header nav a,
+.art-tabs a {
+  padding: 8px 14px;
+  color: var(--jv-muted);
   text-decoration: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 999px;
+  border: 1px solid transparent;
 }
-.art-header nav a.current {
-  color: #234c38;
-  border-color: #234c38;
+
+.art-header nav a.current,
+.art-tabs a.current {
+  color: var(--jv-blue);
+  background: var(--jv-sky);
+  border-color: #c5daf3;
 }
+
 .art-back {
   font-size: 13px;
-  color: #67756b;
+  font-weight: 700;
+  color: var(--jv-muted);
   text-decoration: none;
 }
+
+.art-back:hover {
+  color: var(--jv-blue);
+}
+
 .art-shell button,
 .art-shell a,
 .art-shell input,
@@ -172,84 +237,102 @@ defineProps<{ active?: string }>()
 .art-shell textarea {
   outline-offset: 4px;
 }
+
 .art-shell button {
   cursor: pointer;
-  transition:
-    background 0.15s,
-    transform 0.15s;
+  transition: background 0.15s, transform 0.15s, border-color 0.15s;
 }
+
 .art-shell button:disabled {
   opacity: 0.5;
   cursor: wait;
 }
+
 .art-button {
   border: 1px solid var(--art-line);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px 16px;
   background: white;
   color: var(--art-ink);
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 13px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   text-decoration: none;
 }
+
 .art-button:hover {
-  background: #edf1e8;
+  background: var(--jv-sky);
 }
+
 .art-button.primary {
   background: var(--art-accent);
   border-color: var(--art-accent);
   color: #fff;
+  box-shadow: 0 8px 18px rgba(33, 96, 180, 0.22);
 }
+
 .art-button.primary:hover {
-  background: #183e2c;
+  background: #1a4f96;
 }
+
 .art-input {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--art-line);
-  border-radius: 8px;
-  background: white;
+  border-radius: 12px;
+  background: #f7fbff;
   font: inherit;
   font-size: 14px;
   color: var(--art-ink);
 }
+
+.art-input:focus {
+  outline: none;
+  border-color: #8fb8e6;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(55, 119, 194, 0.11);
+}
+
 .art-alert {
   padding: 12px 16px;
-  background: #fff1da;
-  color: #775323;
-  border: 1px solid #edd4aa;
-  border-radius: 10px;
+  background: rgba(254, 243, 199, 0.75);
+  color: #92400e;
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  border-radius: 14px;
   font-size: 14px;
 }
+
 .art-empty {
   padding: 65px 20px;
   text-align: center;
   color: var(--art-muted);
 }
+
 @media (max-width: 760px) {
   .art-header {
     height: auto;
-    min-height: 76px;
+    min-height: 64px;
     flex-wrap: wrap;
-    padding: 16px 20px;
-    gap: 14px;
+    padding: 14px 16px;
+    gap: 12px;
   }
-  .art-header nav {
+  .art-header nav,
+  .art-tabs {
     order: 3;
     width: 100%;
-    gap: 24px;
+    margin: 0;
+    gap: 8px;
     overflow: auto;
-    font-size: 13px;
+    font-size: 12px;
+  }
+  .art-tabs {
+    padding: 12px 16px 0;
   }
   .art-back {
     margin-left: auto;
-  }
-  .art-brand b {
-    font-size: 16px;
   }
 }
 </style>

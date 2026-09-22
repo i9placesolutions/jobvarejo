@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ArrowLeft, Download, FileDown, Layers, Lock, Printer, Redo2, Save, Sparkles, Trash2, Undo2, Unlock } from 'lucide-vue-next'
-import ArtCanvas from '~/components/art-studio/ArtCanvas.client.vue'
+import ArtCanvas from '~/components/cartazista/CartazistaCanvas.vue'
 import CartazistaShell from '~/components/cartazista/CartazistaShell.vue'
 import CartazistaSheetPreview from '~/components/cartazista/CartazistaSheetPreview.vue'
+import CartazistaLayerTools from '~/components/cartazista/CartazistaLayerTools.vue'
+import { newCartazistaLayer, moveCartazistaLayer, preserveCartazistaCustomLayers, syncCartazistaBoundText } from '~/utils/cartazista/editing'
+import { cartazistaDocumentSchema } from '~/utils/cartazista/schema'
 import type { ArtComposition, ArtLayer } from '~/types/art-studio'
 import {
   CARTAZISTA_FORMATS,
@@ -26,20 +29,31 @@ import {
 } from '~/utils/cartazista/composition'
 import { getCartazistaModel } from '~/utils/cartazista/catalog'
 import { CARTAZISTA_STARTER_MODELS } from '~/utils/cartazista/catalog'
+import type { CartazistaHeader } from '~/types/cartazista'
+import { CARTAZISTA_CAMPAIGN_MODELS } from '~/utils/cartazista/headers'
 
 definePageMeta({ layout: false, middleware: 'auth', ssr: false, key: (route) => route.fullPath })
 useHead({ title: 'Editor de cartazes • JobVarejo' })
 
 const route = useRoute()
+const { user } = useAuth()
+const recovery = ref<{document:CartazistaDocument;revision:number;designId?:string}|null>(null)
 const doc = ref<CartazistaDocument>(createCartazistaDocument({ modelId: (String(route.query.model || 'standard') as CartazistaModelKey) }))
 const selectedId = ref<string | null>(null)
 const activePanel = ref<'setup' | 'review' | 'layers'>('setup')
 const listInput = ref('')
 const logoSrc = ref('')
+const headers = ref<CartazistaHeader[]>([])
+const headerError = ref('')
+const changeHeader = (event: Event) => {
+  const next=cloneCartazista(doc.value)
+  next.settings.header=headers.value.find(h=>h.id===(event.target as HTMLSelectElement).value)
+  rebuild(next)
+}
 const brandName = ref('SUA LOJA')
 const designId = ref('')
 const revision = ref(0)
-const creationId = crypto.randomUUID()
+const creationId = ref(crypto.randomUUID())
 const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
@@ -48,20 +62,31 @@ const printDialog = ref<HTMLDialogElement>()
 const canvas = ref<{ exportPng: () => Promise<string>; refreshImages: () => Promise<void> }>()
 const historyPast = ref<string[]>([])
 const historyFuture = ref<string[]>([])
-const draftKey = computed(() => `jobvarejo:cartazista:${String(route.params.id)}:${creationId}`)
+const draftKey = computed(() => `jobvarejo:cartazista:draft:${user.value?.id || 'guest'}:${String(route.params.id)}:${String(route.query.model || 'standard')}:${route.query.blank==='1'?'blank':'model'}`)
 
 const model = computed(() => getCartazistaModel(doc.value.modelId))
 const format = computed(() => CARTAZISTA_FORMATS.find((item) => item.id === doc.value.formatId) || CARTAZISTA_FORMATS[2]!)
 const theme = computed(() => CARTAZISTA_THEMES.find((item) => item.id === doc.value.themeId) || CARTAZISTA_THEMES[0])
 const activeProduct = computed(() => doc.value.products.find((item) => item.id === doc.value.activeProductId) || doc.value.products[0])
 const selectedLayer = computed(() => doc.value.composition.layers.find((item) => item.id === selectedId.value))
+const conditionFields = computed(() => {
+  const fields: { key: keyof CartazistaProduct; label: string }[] = [{ key:'copies', label:'Cópias deste cartaz' }]
+  if (doc.value.modelId === 'second-unit') fields.push({ key: 'secondPrice', label: 'Preço a partir da 2ª unidade' })
+  if (doc.value.modelId === 'wholesale-retail') fields.push({ key: 'wholesalePrice', label: 'Preço de atacado' })
+  if (['pack', 'leve-x-y', 'leve-por-legacy', 'leve-pague'].includes(doc.value.modelId)) fields.push({ key: 'packQuantity', label: 'Quantidade que leva' })
+  if (['pack', 'leve-x-y', 'leve-por-legacy', 'leve-3-2'].includes(doc.value.modelId)) fields.push({ key: 'packPrice', label: doc.value.modelId === 'leve-3-2' ? 'Preço das 3 unidades' : 'Preço do conjunto' })
+  if (doc.value.modelId === 'leve-3-2') fields.push({ key: 'secondPrice', label: 'Preço das 2 unidades' })
+  if (doc.value.modelId === 'leve-pague') fields.push({ key: 'payQuantity', label: 'Quantidade que paga' })
+  return fields
+})
 const printableCompositions = computed(() => cartazistaPrintableCompositions(doc.value, logoSrc.value).map((composition) => hydrateComposition(composition)))
 const dirty = computed(() => saveState.value !== 'Salvo' && saveState.value !== 'Salvo como cópia')
 
 const documentFingerprint = (value: CartazistaDocument) => JSON.stringify(value)
 const saveDraft = () => {
   if (!import.meta.client) return
-  try { localStorage.setItem(draftKey.value, JSON.stringify({ document: doc.value, revision: revision.value, at: Date.now() })) } catch { /* armazenamento local é apenas fallback */ }
+  try { localStorage.setItem(draftKey.value, JSON.stringify({ document: doc.value, revision: revision.value, designId:designId.value, at: Date.now() })) }
+  catch { error.value='O rascunho não coube no navegador. Salve na conta ou baixe o arquivo editável.' }
 }
 
 const hydrateComposition = (source: ArtComposition): ArtComposition => {
@@ -69,7 +94,7 @@ const hydrateComposition = (source: ArtComposition): ArtComposition => {
   const company = composition.layers.find((layer) => layer.id === 'cartaz-company')
   const logo = composition.layers.find((layer) => layer.id === 'cartaz-logo')
   if (company) company.text = brandName.value
-  if (logo) logo.src = doc.value.settings.showLogo ? logoSrc.value : ''
+  if (logo) { logo.src = doc.value.settings.showLogo ? logoSrc.value : ''; logo.visible = !!logo.src }
   return composition
 }
 
@@ -84,26 +109,26 @@ const replaceDocument = (next: CartazistaDocument, record = true) => {
 }
 
 const updateComposition = (composition: ArtComposition) => {
-  const next = cloneCartazista(doc.value)
-  next.composition = hydrateComposition(composition)
+  const next = syncCartazistaBoundText(doc.value,hydrateComposition(composition))
   replaceDocument(next)
 }
 
 const rebuild = (next: CartazistaDocument) => {
-  next.composition = hydrateComposition(rebuildCartazistaComposition(next, logoSrc.value).composition)
+  next.composition = hydrateComposition(preserveCartazistaCustomLayers(cloneCartazista(next.composition),rebuildCartazistaComposition(next, logoSrc.value).composition))
   replaceDocument(next)
 }
 
-const updateSetting = (key: 'validity' | 'limitPerCustomer' | 'nearExpiryLabel', event: Event) => {
+const updateSetting = (key: 'validity' | 'limitPerCustomer' | 'nearExpiryLabel' | 'title', event: Event) => {
   const next = cloneCartazista(doc.value)
   next.settings[key] = (event.target as HTMLInputElement).value
   next.composition = hydrateComposition(applySettingsToCartazistaComposition(next.composition, next))
   replaceDocument(next)
 }
 
-const toggleSetting = (key: 'highlightNearExpiry' | 'showLogo') => {
+const toggleSetting = (key: 'highlightNearExpiry' | 'showLogo' | 'showCurrency' | 'showEach' | 'foldGuide' | 'removeBackground') => {
   const next = cloneCartazista(doc.value)
-  next.settings[key] = !next.settings[key]
+  next.settings[key] = !(next.settings[key] ?? (key === 'showEach'))
+  if (key === 'removeBackground') { rebuild(next); return }
   next.composition = hydrateComposition(applySettingsToCartazistaComposition(next.composition, next))
   replaceDocument(next)
 }
@@ -111,13 +136,19 @@ const toggleSetting = (key: 'highlightNearExpiry' | 'showLogo') => {
 const changeModel = (event: Event) => {
   const next = cloneCartazista(doc.value)
   next.modelId = (event.target as HTMLSelectElement).value as CartazistaModelKey
-  if (next.modelId === 'landscape') next.settings.orientation = 'landscape'
+  next.settings.freeDesign=false
+  if (next.modelId === 'banner-2m') { next.formatId = 'banner-2m'; next.settings.orientation = 'landscape' }
+  else if (next.formatId === 'banner-2m') next.formatId = 'a4'
+  if (next.modelId === 'landscape' || next.modelId === 'gondola') next.settings.orientation = 'landscape'
+  if (CARTAZISTA_CAMPAIGN_MODELS.includes(next.modelId) && !next.settings.header) next.settings.header=headers.value.find(h=>/hort/i.test(h.name))||headers.value[0]
   rebuild(next)
 }
 
 const changeFormat = (event: Event) => {
   const next = cloneCartazista(doc.value)
   next.formatId = (event.target as HTMLSelectElement).value as CartazistaFormatId
+  if(next.formatId === 'banner-2m'){next.modelId='banner-2m';next.settings.orientation='landscape'}
+  else if(next.modelId === 'banner-2m')next.modelId='landscape'
   rebuild(next)
 }
 
@@ -134,7 +165,7 @@ const changeOrientation = (orientation: 'portrait' | 'landscape') => {
 }
 
 const importProducts = () => {
-  const parsed = parseCartazistaProductList(listInput.value)
+  const parsed = parseCartazistaProductList(listInput.value, doc.value.modelId)
   if (!parsed.length) { error.value = 'Não encontrei produtos com preço. Use uma linha por item, por exemplo: ARROZ CAMIL 5KG 29,99.'; return }
   error.value = ''
   const next = cloneCartazista(doc.value)
@@ -156,11 +187,21 @@ const updateProduct = (product: CartazistaProduct, key: keyof CartazistaProduct,
   const next = cloneCartazista(doc.value)
   const target = next.products.find((item) => item.id === product.id)
   if (!target) return
+  next.activeProductId = target.id
   if (key === 'name' || key === 'unit') target[key] = value as never
   else if (key === 'nearExpiry') target.nearExpiry = value === 'true'
   else {
     const numberValue = Number(value.replace(',', '.'))
-    if (Number.isFinite(numberValue)) target[key] = numberValue as never
+    if (value.trim() && ['packQuantity','payQuantity','copies'].includes(key) && (!Number.isInteger(numberValue) || numberValue < 1 || numberValue > (key === 'copies' ? 100 : 999))) {
+      error.value='Informe uma quantidade inteira válida (cópias: 1 a 100; unidades: 1 a 999).'
+      return
+    }
+    if (!value.trim() && key !== 'price') delete target[key]
+    else if (Number.isFinite(numberValue) && numberValue >= 0) target[key] = numberValue as never
+  }
+  if(next.modelId==='leve-pague' && (target.payQuantity??3)>=(target.packQuantity??4)){
+    error.value='No Leve/Pague, a quantidade paga precisa ser menor que a quantidade levada.'
+    return
   }
   next.composition = hydrateComposition(applyCartazistaProduct(next.composition, next.modelId, target, next.settings, next.themeId))
   replaceDocument(next)
@@ -191,7 +232,54 @@ const patchLayer = (key: 'text' | 'fill' | 'fontSize' | 'opacity' | 'visible' | 
   const layer = next.composition.layers.find((item) => item.id === selectedId.value)
   if (!layer) return
   ;(layer as any)[key] = value
-  replaceDocument(next)
+  if(key==='visible')(layer as ArtLayer & {cartazistaHidden?:boolean}).cartazistaHidden=!value
+  replaceDocument(syncCartazistaBoundText(doc.value,next.composition))
+}
+
+const patchSelected = (patch: Partial<ArtLayer>) => {
+  if(!selectedLayer.value || selectedLayer.value.locked)return
+  const next=cloneCartazista(doc.value), layer=next.composition.layers.find(l=>l.id===selectedId.value)!
+  for(const [key,value] of Object.entries(patch)){
+    if(typeof value==='number' && (!Number.isFinite(value)||Math.abs(value)>10000))return
+    if((key==='width'||key==='height') && Number(value)<1)return
+    if(key==='opacity' && (Number(value)<0||Number(value)>1))return
+  }
+  Object.assign(layer,patch);replaceDocument(next)
+}
+const addLayer = (kind:'text'|'rect'|'ellipse'|'image',src='') => {
+  if(doc.value.composition.layers.length>=80){error.value='Limite de 80 camadas por cartaz.';return}
+  const next=cloneCartazista(doc.value), layer=newCartazistaLayer(next.composition,kind,src)
+  next.composition.layers.push(layer);replaceDocument(next);selectedId.value=layer.id
+}
+const addImage = async (file:File) => {
+  if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>1_000_000){error.value='Use PNG, JPG ou WebP de até 1 MB.';return}
+  try{const src=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=reject;reader.readAsDataURL(file)});addLayer('image',src)}catch{error.value='Não foi possível abrir a imagem.'}
+}
+const duplicateLayer = () => {
+  if(!selectedLayer.value||selectedLayer.value.locked||doc.value.composition.layers.length>=80)return
+  const next=cloneCartazista(doc.value), layer={...cloneCartazista(selectedLayer.value),id:`custom-${crypto.randomUUID()}`,name:`${selectedLayer.value.name} · cópia`,x:selectedLayer.value.x+12,y:selectedLayer.value.y+12}
+  next.composition.layers.push(layer);replaceDocument(next);selectedId.value=layer.id
+}
+const removeLayer = () => {
+  if(!selectedLayer.value||selectedLayer.value.locked)return
+  const next=cloneCartazista(doc.value);next.composition.layers=next.composition.layers.filter(l=>l.id!==selectedId.value);replaceDocument(next);selectedId.value=null
+}
+const orderLayer = (direction:-1|1) => {if(selectedId.value)updateComposition(moveCartazistaLayer(cloneCartazista(doc.value.composition),selectedId.value,direction))}
+const restoreDraft = () => {
+  if(!recovery.value)return
+  const saved=recovery.value;replaceDocument(saved.document);revision.value=saved.revision;designId.value=saved.designId||designId.value;saveDraft();recovery.value=null
+}
+const downloadEditable = () => {
+  const url=URL.createObjectURL(new Blob([JSON.stringify(doc.value)],{type:'application/json'}));download(url,'cartaz-jobvarejo.json');setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+const importEditable = async (event:Event) => {
+  const input=event.target as HTMLInputElement,file=input.files?.[0];input.value='';if(!file)return
+  try{
+    if(file.size>8_000_000)throw new Error('Arquivo maior que 8 MB.')
+    const parsed=cartazistaDocumentSchema.safeParse(JSON.parse(await file.text()))
+    if(!parsed.success)throw new Error('Arquivo de cartaz inválido.')
+    replaceDocument(parsed.data as CartazistaDocument);creationId.value=crypto.randomUUID();designId.value='';revision.value=0;selectedId.value=null;saveDraft()
+  }catch(cause:any){error.value=cause?.message||'Não foi possível abrir o arquivo.'}
 }
 
 const undo = () => {
@@ -230,10 +318,25 @@ const exportPng = async () => {
   } catch (cause: any) { error.value = cause?.message || 'Não foi possível exportar o PNG.' }
 }
 
+const exportPdf = async (mode: 'actual' | 'a4') => {
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const count=doc.value.products.reduce((sum,p)=>sum+(p.copies || 1),0)
+    if(count>500) throw new Error('Exporte no máximo 500 cartazes por lote.')
+    const [{createCartazistaPdf},{renderCartazistaPng}]=await Promise.all([import('~/utils/cartazista/pdf'),import('~/utils/cartazista/render')])
+    const compositions=doc.value.products.flatMap((product)=>Array.from({length:Math.max(1,Math.min(100,Math.floor(product.copies||1)))},()=>hydrateComposition(product.id===doc.value.activeProductId?cloneCartazista(doc.value.composition):applyCartazistaProduct(doc.value.composition,doc.value.modelId,product,doc.value.settings,doc.value.themeId))))
+    const bytes=await createCartazistaPdf(compositions,doc.value.formatId,renderCartazistaPng,mode)
+    const url=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:'application/pdf'}))
+    download(url,`cartazes-${mode==='a4'?'folhas-a4':'tamanho-real'}.pdf`)
+    setTimeout(()=>URL.revokeObjectURL(url),60_000)
+  } catch(cause:any) {error.value=cause?.message||'Não foi possível gerar o PDF.'}
+  finally {busy.value=false}
+}
+
 const openPrint = async () => {
-  printDialog.value?.showModal()
-  await nextTick()
-  window.setTimeout(() => window.print(), 100)
+  await exportPdf('a4')
 }
 
 const save = async (asCopy = false) => {
@@ -241,15 +344,18 @@ const save = async (asCopy = false) => {
   busy.value = true
   error.value = ''
   try {
-    const body = { id: asCopy ? crypto.randomUUID() : (designId.value || creationId), name: doc.value.name.trim() || `${model.value.name} · novo cartaz`, state: cloneCartazista(doc.value), ...(asCopy ? {} : { revision: revision.value || undefined }) }
+    const snapshot=cloneCartazista(doc.value)
+    snapshot.name=snapshot.name.trim()||`${model.value.name} · novo cartaz`
+    const body = { id: asCopy ? crypto.randomUUID() : (designId.value || creationId.value), name: snapshot.name, state: snapshot, ...(asCopy ? {} : { revision: revision.value || undefined }) }
     const result = designId.value && !asCopy
       ? await $fetch<any>(`/api/cartazista/designs/${designId.value}`, { method: 'PUT', body })
       : await $fetch<any>('/api/cartazista/designs', { method: 'POST', body })
     designId.value = result.id
     revision.value = Number(result.revision || 1)
-    saveState.value = asCopy ? 'Salvo como cópia' : 'Salvo'
-    localStorage.removeItem(draftKey.value)
-    if (asCopy) await navigateTo(`/cartazista/editor/${result.id}`)
+    const changed=JSON.stringify(doc.value)!==JSON.stringify(snapshot)
+    saveState.value = changed ? 'Alterações pendentes' : asCopy ? 'Salvo como cópia' : 'Salvo'
+    if(changed)saveDraft()
+    else {localStorage.removeItem(draftKey.value);await navigateTo(`/cartazista/editor/${result.id}`)}
   } catch (cause: any) {
     error.value = cause?.data?.statusMessage || cause?.statusMessage || cause?.message || 'Não foi possível salvar o cartaz.'
     saveState.value = 'Rascunho local'
@@ -273,6 +379,12 @@ const hydrateBrand = async () => {
 
 const load = async () => {
   try {
+    const raw=JSON.parse(localStorage.getItem(draftKey.value)||'null')
+    if(raw){const parsed=cartazistaDocumentSchema.safeParse(raw.document);if(parsed.success)recovery.value={document:parsed.data as CartazistaDocument,revision:Number(raw.revision)||0,designId:typeof raw.designId==='string'?raw.designId:undefined}}
+  }catch{ /* Rascunho inválido nunca substitui o remoto. */ }
+  try {
+    try { headers.value=(await $fetch<{headers:CartazistaHeader[]}>('/api/cartazista/headers')).headers }
+    catch { headerError.value='Não foi possível carregar os cabeçalhos cadastrados.' }
     if (String(route.params.id) !== 'new') {
       const result = await $fetch<any>(`/api/cartazista/designs/${String(route.params.id)}`)
       doc.value = result.state as CartazistaDocument
@@ -281,6 +393,20 @@ const load = async () => {
       saveState.value = 'Salvo'
     } else if (route.query.model) {
       doc.value = createCartazistaDocument({ modelId: String(route.query.model) as CartazistaModelKey })
+    }
+    if(String(route.params.id)==='new' && CARTAZISTA_CAMPAIGN_MODELS.includes(doc.value.modelId) && headers.value.length) {
+      doc.value.settings.header=headers.value.find(h=>/hort/i.test(h.name))||headers.value[0]
+      doc.value=rebuildCartazistaComposition(doc.value)
+    }
+    if(String(route.params.id)==='new' && route.query.blank==='1'){
+      doc.value.settings.freeDesign=true;doc.value.name='Meu cartaz';doc.value=rebuildCartazistaComposition(doc.value);activePanel.value='layers'
+    }
+    if(String(route.params.id)==='new' && (route.query.theme||route.query.header)){
+      const palette=CARTAZISTA_THEMES.find(theme=>theme.id===String(route.query.theme))
+      if(palette)doc.value.themeId=palette.id
+      if(route.query.header==='none')doc.value.settings.header=undefined
+      else if(route.query.header && route.query.header!=='auto')doc.value.settings.header=headers.value.find(header=>header.id===String(route.query.header))
+      doc.value=rebuildCartazistaComposition(doc.value)
     }
     listInput.value = doc.value.products.map((product) => `${product.name} ${product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`).join('\n')
     historyPast.value = []
@@ -291,6 +417,10 @@ const load = async () => {
 }
 
 const closePrint = () => printDialog.value?.close()
+const warnBeforeUnload=(event:BeforeUnloadEvent)=>{if(dirty.value){event.preventDefault();event.returnValue=''}}
+onBeforeRouteLeave(()=>!dirty.value||window.confirm('Há alterações locais. Deseja sair? O rascunho ficará disponível ao voltar.'))
+onMounted(()=>window.addEventListener('beforeunload',warnBeforeUnload))
+onBeforeUnmount(()=>window.removeEventListener('beforeunload',warnBeforeUnload))
 onMounted(async () => { await load(); await hydrateBrand() })
 onBeforeUnmount(() => { window.onafterprint = null })
 if (import.meta.client) window.onafterprint = closePrint
@@ -299,6 +429,7 @@ if (import.meta.client) window.onafterprint = closePrint
 <template>
   <CartazistaShell active="editor">
     <div class="cartazista-editor-page">
+      <div v-if="recovery" class="cartazista-editor-error" role="status">Há um rascunho recuperável neste navegador. <button @click="restoreDraft">Recuperar rascunho</button><button @click="recovery=null">Continuar sem recuperar</button></div>
       <header class="cartazista-editor-toolbar">
         <NuxtLink to="/cartazista" class="cartazista-back-link"><ArrowLeft :size="17" /> Modelos</NuxtLink>
         <div class="cartazista-title-field"><input v-model="doc.name" aria-label="Nome do cartaz" @change="saveState = 'Alterações pendentes'; saveDraft()" /><span>{{ saveState }}</span></div>
@@ -313,6 +444,31 @@ if (import.meta.client) window.onafterprint = closePrint
           <div class="cartazista-panel-tabs"><button :class="{ active: activePanel === 'setup' }" @click="activePanel = 'setup'">Configurar</button><button :class="{ active: activePanel === 'review' }" @click="activePanel = 'review'">Produtos <span>{{ doc.products.length }}</span></button><button :class="{ active: activePanel === 'layers' }" @click="activePanel = 'layers'">Camadas</button></div>
 
           <div v-if="activePanel === 'setup'" class="cartazista-panel-content">
+            <section class="cartazista-control-section"><div class="cartazista-control-heading"><span>ARQUIVO EDITÁVEL</span></div><button class="cartazista-button secondary" @click="downloadEditable">Baixar arquivo editável</button><label class="cartazista-field-label">Abrir arquivo de cartaz<input type="file" accept=".json,application/json" @change="importEditable" /></label><p class="cartazista-help">Contém produtos e camadas para continuar a edição depois.</p></section>
+            <section class="cartazista-control-section">
+              <div class="cartazista-control-heading"><span>EXPORTAÇÃO PDF</span></div>
+              <button class="cartazista-button secondary cartazista-full-button" :disabled="busy" @click="exportPdf('actual')">PDF no tamanho real</button>
+              <button class="cartazista-button secondary cartazista-full-button" :disabled="busy" @click="exportPdf('a4')">PDF em folhas A4</button>
+              <p class="cartazista-help">Tamanho real para gráfica; folhas A4 agrupam cartazes pequenos ou dividem os grandes em mosaico. Imprima a 100%, sem ajustar à página.</p>
+            </section>
+            <section class="cartazista-control-section">
+              <div class="cartazista-control-heading"><span>ACABAMENTO DO CARTAZ</span></div>
+              <label class="cartazista-field-label">Título<input :value="doc.settings.title ?? 'OFERTA'" maxlength="80" @change="updateSetting('title', $event)" /></label>
+              <label class="cartazista-toggle"><input type="checkbox" :checked="doc.settings.showCurrency" @change="toggleSetting('showCurrency')" />Mostrar R$</label>
+              <label class="cartazista-toggle"><input type="checkbox" :checked="doc.settings.showEach !== false" @change="toggleSetting('showEach')" />Mostrar CADA / unidade</label>
+              <label class="cartazista-toggle"><input type="checkbox" :checked="doc.settings.foldGuide" @change="toggleSetting('foldGuide')" />Adicionar “Dobre aqui”</label>
+              <label class="cartazista-toggle"><input type="checkbox" :checked="doc.settings.removeBackground" @change="toggleSetting('removeBackground')" />Remover fundo para papel colorido</label>
+            </section>
+            <section class="cartazista-control-section">
+              <div class="cartazista-control-heading"><span>Cabeçalho do JobVarejo</span></div>
+              <select class="cartazista-select" aria-label="Cabeçalho cadastrado" :value="doc.settings.header?.id || ''" @change="changeHeader">
+                <option value="">Oferta em lettering</option>
+                <option v-for="header in headers" :key="header.id" :value="header.id">{{ header.name }}</option>
+              </select>
+              <p v-if="headerError" role="alert">{{ headerError }}</p>
+              <p class="cartazista-help">Use as campanhas já cadastradas nos encartes da loja.</p>
+              <button v-if="!doc.composition.layers.some(l=>l.id==='cartaz-price-cents')" class="cartazista-button secondary" @click="rebuild(cloneCartazista(doc))">Aplicar novo visual de cartaz</button>
+            </section>
             <section class="cartazista-control-section"><div class="cartazista-control-heading"><span>MODELO</span><Sparkles :size="15" /></div><select class="cartazista-select" :value="doc.modelId" @change="changeModel"><option v-for="item in CARTAZISTA_STARTER_MODELS" :key="item.id" :value="item.id">{{ item.name }}</option></select><p class="cartazista-help">{{ model.description }}</p></section>
             <section class="cartazista-control-section"><div class="cartazista-control-heading"><span>TAMANHO E ORIENTAÇÃO</span></div><select class="cartazista-select" :value="doc.formatId" @change="changeFormat"><option v-for="item in CARTAZISTA_FORMATS" :key="item.id" :value="item.id">{{ item.label }} · {{ item.description }}</option></select><div class="cartazista-segmented"><button :class="{ active: doc.settings.orientation === 'portrait' }" @click="changeOrientation('portrait')">Retrato</button><button :class="{ active: doc.settings.orientation === 'landscape' }" @click="changeOrientation('landscape')">Paisagem</button></div></section>
             <section class="cartazista-control-section"><div class="cartazista-control-heading"><span>TEMA GLOBAL</span></div><select class="cartazista-select" :value="doc.themeId" @change="changeTheme"><option v-for="item in CARTAZISTA_THEMES" :key="item.id" :value="item.id">{{ item.name }}</option></select><div class="cartazista-theme-row"><span v-for="item in CARTAZISTA_THEMES" :key="item.id" :class="['cartazista-theme-dot', { active: doc.themeId === item.id }]" :style="{ background: item.background, borderColor: item.accent }" :title="item.name" @click="changeTheme({ target: { value: item.id } } as unknown as Event)" /></div></section>
@@ -322,6 +478,14 @@ if (import.meta.client) window.onafterprint = closePrint
           <div v-else-if="activePanel === 'review'" class="cartazista-panel-content"><section class="cartazista-control-section"><div class="cartazista-control-heading"><span>COLE A LISTA DE PRODUTOS</span></div><textarea v-model="listInput" class="cartazista-list-input" placeholder="ARROZ CAMIL 5KG 29,99&#10;FEIJÃO KICALDO 1KG 7,99&#10;BANANA PRATA KG 5,99" /><button class="cartazista-button primary cartazista-full-button" @click="importProducts">Importar lista</button><p class="cartazista-help">Aceita preço no fim da linha, separado por espaço, vírgula, ponto e vírgula ou “R$”.</p></section><section class="cartazista-control-section"><div class="cartazista-control-heading"><span>CONFERÊNCIA · {{ doc.products.length }}</span><button class="cartazista-link-button" @click="addProduct">+ adicionar</button></div><article v-for="product in doc.products" :key="product.id" :class="['cartazista-product-row', { selected: product.id === doc.activeProductId }]" @click="selectProduct(product)"><div class="cartazista-product-row-head"><strong>{{ product.name }}</strong><button class="cartazista-remove-button" :disabled="doc.products.length <= 1" aria-label="Remover produto" @click.stop="removeProduct(product)"><Trash2 :size="15" /></button></div><div class="cartazista-product-fields"><label>Nome<input :value="product.name" @change="updateProduct(product, 'name', ($event.target as HTMLInputElement).value)" /></label><label>Preço<input :value="product.price" inputmode="decimal" @change="updateProduct(product, 'price', ($event.target as HTMLInputElement).value)" /></label></div><div class="cartazista-product-fields"><label>De (opcional)<input :value="product.oldPrice || ''" inputmode="decimal" @change="updateProduct(product, 'oldPrice', ($event.target as HTMLInputElement).value)" /></label><label>Unidade<input :value="product.unit || 'un'" @change="updateProduct(product, 'unit', ($event.target as HTMLInputElement).value)" /></label></div><label class="cartazista-toggle compact"><input type="checkbox" :checked="product.nearExpiry" @change="updateProduct(product, 'nearExpiry', String(($event.target as HTMLInputElement).checked))" /><span>Próximo da validade</span></label></article></section></div>
 
           <div v-else class="cartazista-panel-content"><section class="cartazista-control-section"><div class="cartazista-control-heading"><span>CAMADAS EDITÁVEIS</span><Layers :size="15" /></div><p class="cartazista-help">Arraste textos e formas no canvas. O histórico deste editor é separado dos encartes de oferta.</p><button v-for="layer in doc.composition.layers.slice().reverse()" :key="layer.id" :class="['cartazista-layer-row', { selected: selectedId === layer.id }]" @click="selectedId = layer.id"><span :class="{ muted: !layer.visible }">{{ layer.name.replace(/^cartaz-/, '').replaceAll('-', ' ') }}</span><Lock v-if="layer.locked" :size="13" /><span v-else class="cartazista-layer-kind">{{ layer.kind }}</span></button></section><section v-if="selectedLayer" class="cartazista-control-section"><div class="cartazista-control-heading"><span>INSPECTOR</span></div><label v-if="selectedLayer.kind === 'text'" class="cartazista-field-label">Texto<textarea :value="selectedLayer.text" @change="patchLayer('text', ($event.target as HTMLTextAreaElement).value)" /></label><label class="cartazista-field-label">Cor<input type="color" :value="selectedLayer.fill" @input="patchLayer('fill', ($event.target as HTMLInputElement).value)" /></label><label v-if="selectedLayer.kind === 'text'" class="cartazista-field-label">Tamanho<input type="number" min="6" max="1000" :value="selectedLayer.fontSize || 48" @change="patchLayer('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><div class="cartazista-inspector-actions"><button class="cartazista-button ghost" @click="patchLayer('visible', !selectedLayer.visible)">{{ selectedLayer.visible ? 'Ocultar' : 'Mostrar' }}</button><button class="cartazista-button ghost" @click="patchLayer('locked', !selectedLayer.locked)">{{ selectedLayer.locked ? 'Desbloquear' : 'Bloquear' }}</button></div></section></div>
+          <section v-if="activePanel === 'review' && activeProduct && conditionFields.length" class="cartazista-control-section" style="padding: 18px">
+            <div class="cartazista-control-heading"><span>CONDIÇÃO DA PROMOÇÃO</span></div>
+            <p class="cartazista-help">{{ activeProduct.name }} · selecione outro produto na lista para editar sua condição.</p>
+            <label v-for="field in conditionFields" :key="field.key" class="cartazista-field-label">{{ field.label }}
+              <input :value="activeProduct[field.key] ?? ''" inputmode="decimal" @change="updateProduct(activeProduct!, field.key, ($event.target as HTMLInputElement).value)" />
+            </label>
+          </section>
+          <CartazistaLayerTools v-if="activePanel==='layers'" :layer="selectedLayer" @add="addLayer" @image="addImage" @patch="patchSelected" @duplicate="duplicateLayer" @remove="removeLayer" @order="orderLayer" />
         </aside>
 
         <main class="cartazista-canvas-area"><div class="cartazista-canvas-head"><div><span class="cartazista-model-category">{{ model.category }}</span><h1>{{ model.name }}</h1><p>{{ format.label }} · {{ doc.settings.orientation === 'landscape' ? 'paisagem' : 'retrato' }} · {{ doc.products.length }} produto(s)</p></div><div class="cartazista-canvas-head-actions"><button class="cartazista-button secondary" @click="openPrint"><Printer :size="17" /> Imprimir todos</button><button class="cartazista-button primary" @click="exportPng"><Download :size="17" /> PNG atual</button></div></div><div class="cartazista-canvas-frame"><ClientOnly><ArtCanvas ref="canvas" :composition="doc.composition" :selected-id="selectedId" @select="selectedId = $event" @change="updateComposition" @error="error = $event" /></ClientOnly></div><div class="cartazista-canvas-tip"><Sparkles :size="15" /><span>O cartaz atual mostra <b>{{ activeProduct?.name }}</b>. Para gerar todos, use “Imprimir todos”.</span></div></main>

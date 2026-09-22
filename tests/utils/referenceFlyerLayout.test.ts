@@ -90,3 +90,17 @@ it('mantém contatos e ícones dentro do rodapé com altura reduzida',()=>{
  expect(address.text).toContain('CIDADE - UF')
  expect(compactBusinessFooter(nodes)).toBe(false)
 })
+
+it('preserva a posição manual dos elementos do rodapé de referência ao reabrir',()=>{
+ const bg=object({name:'footer-premium-background',footerLayout:'reference-contacts',top:1228,width:1080,height:122})
+ const phone=text({name:'footer-dynamic-whatsapp',text:'(64) 99618-5163'})
+ const address=text({name:'footer-dynamic-address',text:'OFERTAS VÁLIDAS SOMENTE NAS LOJAS DE RIO VERDE - GO',__manualTransform:true,left:701,top:1268,width:420,height:48,scaleX:.82,scaleY:.82})
+ const label=text({name:'footer-reference-address-label',text:'ENDEREÇO',__manualTransform:true,left:701,top:1240,width:420,height:24})
+ const pin=object({name:'icon-address',width:16,height:22,__manualTransform:true,left:612,top:1243,scaleX:3,scaleY:3})
+ const divider=object({name:'footer-column-divider-1',__manualTransform:true,left:580,top:1236,width:2,height:98})
+ const nodes=[bg,phone,address,label,pin,divider]
+ const snapshot=JSON.stringify({address:[address.left,address.top,address.width,address.height,address.scaleX,address.scaleY],label:[label.left,label.top,label.width],pin:[pin.left,pin.top,pin.scaleX,pin.scaleY],divider:[divider.left,divider.top,divider.width,divider.height]})
+ compactBusinessFooter(nodes)
+ expect(JSON.stringify({address:[address.left,address.top,address.width,address.height,address.scaleX,address.scaleY],label:[label.left,label.top,label.width],pin:[pin.left,pin.top,pin.scaleX,pin.scaleY],divider:[divider.left,divider.top,divider.width,divider.height]})).toBe(snapshot)
+ expect(compactBusinessFooter(nodes)).toBe(false)
+})

@@ -155,6 +155,7 @@ const emit = defineEmits<{
   (event: 'select-zone', zoneId: string): void
   (event: 'select-zone-structure', payload: { zoneId: string; variantId: string }): void
   (event: 'select-product', productId: string): void
+  (event: 'edit-product', productId: string): void
   (event: 'open-product-image-picker', productId: string): void
   (event: 'clear-products'): void
   (event: 'delete-product', productId: string): void
@@ -1031,7 +1032,7 @@ const useTemplateModel = (modelId: string) => {
               <button type="button" class="quick-mode-product-card__image-action" @click="emit('open-product-image-picker', product.id)">
                 {{ product.imageUrl && !productImageErrors[product.id] ? 'Trocar imagem' : 'Escolher imagem' }}
               </button>
-              <button type="button" @click="emit('select-product', product.id)">Abrir card</button>
+              <button type="button" @click="emit('edit-product', product.id)">Editar produto</button>
               <button type="button" :disabled="productIndex === 0" aria-label="Mover produto para cima" title="Mover para cima" @click="emit('move-product', { productId: product.id, direction: 'up' })">↑</button>
               <button type="button" :disabled="productIndex === products.length - 1" aria-label="Mover produto para baixo" title="Mover para baixo" @click="emit('move-product', { productId: product.id, direction: 'down' })">↓</button>
               <button type="button" class="quick-mode-product-card__delete" @click="requestDeleteProduct(product.id)">
@@ -1144,17 +1145,17 @@ const useTemplateModel = (modelId: string) => {
 
           <div class="quick-mode-offer-scope">
             <label class="quick-mode-offer-scope__mode">
-              <span>Onde a oferta é válida</span>
+              <span>Disponível</span>
               <select v-model="offerScope.mode" @change="updateValidity">
                 <option value="all">Todas as lojas</option>
-                <option value="city_only">Somente em uma cidade</option>
-                <option value="city">Todas as lojas de uma cidade</option>
+                <option value="city_only">Somente nesta localidade</option>
+                <option value="city">Todas as lojas desta localidade</option>
                 <option value="store">Somente uma loja específica</option>
               </select>
             </label>
             <div v-if="offerScope.mode !== 'all'" class="quick-mode-offer-scope__fields">
               <label>
-                <span>Cidade</span>
+                <span>Localidade</span>
                 <input v-model="offerScope.city" type="text" maxlength="100" placeholder="Rio Verde" @change="updateValidity" />
               </label>
               <label>

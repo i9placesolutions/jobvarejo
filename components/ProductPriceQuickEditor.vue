@@ -9,6 +9,7 @@ const emit = defineEmits<{
   (event: 'save', payload: Record<string, any>): void
 }>()
 const fields = [
+  { key: 'limit', label: 'Limite por cliente', placeholder: 'Ex.: 5 UN POR CLIENTE (vazio para remover)', numeric: false },
   { key: 'pricePack', label: 'Preço avulso da embalagem', placeholder: 'Ex.: 34,38', numeric: true },
   { key: 'priceUnit', label: 'Preço avulso por unidade', placeholder: 'Ex.: 5,73', numeric: true },
   { key: 'priceSpecial', label: 'Preço promocional da embalagem', placeholder: 'Ex.: 31,74', numeric: true },
@@ -52,7 +53,7 @@ const save = () => {
 </script>
 
 <template>
-  <Dialog :model-value="modelValue" title="Editar preços e embalagem" width="min(620px, calc(100vw - 2rem))" content-class="p-0" @update:model-value="value => emit('update:modelValue', !!value)">
+  <Dialog :model-value="modelValue" title="Editar produto" width="min(620px, calc(100vw - 2rem))" content-class="p-0" @update:model-value="value => emit('update:modelValue', !!value)">
     <form class="space-y-4 px-6 py-5" @submit.prevent="save">
       <p class="text-sm font-semibold text-white">{{ product.name }}</p>
       <label class="block text-xs text-zinc-300">Quantidade de preços
@@ -75,7 +76,7 @@ const save = () => {
     </form>
     <template #footer>
       <Button variant="ghost" size="sm" @click="emit('update:modelValue', false)">Cancelar</Button>
-      <Button size="sm" @click="save">Aplicar na etiqueta</Button>
+      <Button size="sm" @click="save">Aplicar no produto</Button>
     </template>
   </Dialog>
 </template>

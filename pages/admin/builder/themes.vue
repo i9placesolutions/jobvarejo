@@ -522,13 +522,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-zinc-950 text-zinc-100">
+  <AdminWorkspaceShell>
+  <div class="admin-page admin-page--builder">
     <div class="mx-auto max-w-6xl px-6 py-10">
       <!-- Header -->
       <div class="mb-8">
         <NuxtLink
           to="/admin/builder"
-          class="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+          class="admin-page__back inline-flex items-center gap-1.5 text-sm text-[color:var(--jv-muted)] hover:text-[color:var(--jv-blue)] transition-colors"
         >
           <ArrowLeft class="h-4 w-4" />
           Voltar
@@ -538,7 +539,7 @@ onMounted(() => {
       <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-semibold tracking-tight">Temas do Builder</h1>
         <button
-          class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 transition-colors"
+          class="inline-flex items-center gap-2 rounded-lg bg-[color:var(--jv-blue)] px-4 py-2 text-sm font-medium text-[color:var(--jv-navy)] hover:bg-[#1a4f96] transition-colors"
           @click="openCreate"
         >
           <Plus class="h-4 w-4" />
@@ -547,61 +548,61 @@ onMounted(() => {
       </div>
 
       <!-- Error -->
-      <div v-if="error" class="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+      <div v-if="error" class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
         {{ error }}
       </div>
 
       <!-- Loading -->
-      <div v-if="isLoading" class="text-center py-12 text-zinc-500">Carregando...</div>
+      <div v-if="isLoading" class="text-center py-12 text-[color:var(--jv-muted)]">Carregando...</div>
 
       <!-- Theme Table -->
-      <div v-else-if="themes.length && !showForm" class="overflow-x-auto rounded-lg border border-zinc-800" role="region" aria-label="Tabela de registros — deslize para ver todas as colunas" tabindex="0">
+      <div v-else-if="themes.length && !showForm" class="overflow-x-auto rounded-lg border border-[color:var(--jv-line)]" role="region" aria-label="Tabela de registros — deslize para ver todas as colunas" tabindex="0">
         <table class="w-full text-left text-sm">
-          <thead class="bg-zinc-900">
+          <thead class="bg-[#f3f8fd]">
             <tr>
-              <th class="px-4 py-3 font-medium text-zinc-300">Preview</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Nome</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Slug</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Categoria</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Formatos</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Status</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Ordem</th>
-              <th class="px-4 py-3 font-medium text-zinc-300 text-right">Acoes</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Preview</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Nome</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Slug</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Categoria</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Formatos</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Status</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Ordem</th>
+              <th class="px-4 py-3 font-medium text-slate-600 text-right">Acoes</th>
             </tr>
           </thead>
-          <tbody class="bg-zinc-900/50">
+          <tbody class="bg-white">
             <tr
               v-for="theme in themes"
               :key="theme.id"
-              class="border-t border-zinc-800"
+              class="border-t border-[color:var(--jv-line)]"
             >
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
                   <img
                     v-if="hasImageValue(theme.thumbnail)"
                     :src="storageProxyUrl(theme.thumbnail)"
-                    class="h-10 w-10 rounded border border-zinc-700 object-cover"
+                    class="h-10 w-10 rounded border border-[color:var(--jv-line)] object-cover"
                     @error="onImageError"
                   />
                   <div v-else class="flex gap-1">
                     <div
-                      class="h-6 w-6 rounded border border-zinc-700"
+                      class="h-6 w-6 rounded border border-[color:var(--jv-line)]"
                       :style="{ backgroundColor: theme.css_config?.bgColor || '#fff' }"
                       :title="'Fundo: ' + (theme.css_config?.bgColor || '-')"
                     />
                     <div
-                      class="h-6 w-6 rounded border border-zinc-700"
+                      class="h-6 w-6 rounded border border-[color:var(--jv-line)]"
                       :style="{ backgroundColor: theme.css_config?.primaryColor || '#10b981' }"
                       :title="'Primaria: ' + (theme.css_config?.primaryColor || '-')"
                     />
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 font-medium text-zinc-100">{{ theme.name }}</td>
-              <td class="px-4 py-3 font-mono text-xs text-zinc-400">{{ theme.slug }}</td>
-              <td class="px-4 py-3 text-zinc-300">{{ theme.category_name || '-' }}</td>
-              <td class="px-4 py-3 text-xs text-zinc-400 max-w-56">
-                <span class="inline-flex rounded-md bg-zinc-800 px-2 py-1 leading-tight">
+              <td class="px-4 py-3 font-medium text-[color:var(--jv-ink)]">{{ theme.name }}</td>
+              <td class="px-4 py-3 font-mono text-xs text-[color:var(--jv-muted)]">{{ theme.slug }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ theme.category_name || '-' }}</td>
+              <td class="px-4 py-3 text-xs text-[color:var(--jv-muted)] max-w-56">
+                <span class="inline-flex rounded-md bg-[color:var(--jv-sky)] px-2 py-1 leading-tight">
                   {{ themeFormats(theme) }}
                 </span>
               </td>
@@ -611,7 +612,7 @@ onMounted(() => {
                     class="inline-flex items-center rounded-full px-2 py-0.5 text-xs"
                     :class="theme.is_active
                       ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
-                      : 'bg-zinc-800 text-zinc-500 border border-zinc-700'"
+                      : 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border border-[color:var(--jv-line)]'"
                   >
                     {{ theme.is_active ? 'Ativo' : 'Inativo' }}
                   </span>
@@ -623,18 +624,18 @@ onMounted(() => {
                   </span>
                 </div>
               </td>
-              <td class="px-4 py-3 text-zinc-400">{{ theme.sort_order }}</td>
+              <td class="px-4 py-3 text-[color:var(--jv-muted)]">{{ theme.sort_order }}</td>
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1">
                   <button
-                    class="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                    class="rounded-md p-1.5 text-[color:var(--jv-muted)] hover:bg-[color:var(--jv-sky)] hover:text-[color:var(--jv-navy)] transition-colors"
                     title="Editar"
                     @click="openEdit(theme)"
                   >
                     <Pencil class="h-4 w-4" />
                   </button>
                   <button
-                    class="rounded-md p-1.5 text-zinc-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                    class="rounded-md p-1.5 text-[color:var(--jv-muted)] hover:bg-red-500/10 hover:text-red-600 transition-colors"
                     title="Excluir"
                     @click="showDeleteConfirm = theme.id"
                   >
@@ -647,7 +648,7 @@ onMounted(() => {
         </table>
       </div>
 
-      <div v-else-if="!themes.length && !showForm && !isLoading" class="text-center py-12 text-zinc-500">
+      <div v-else-if="!themes.length && !showForm && !isLoading" class="text-center py-12 text-[color:var(--jv-muted)]">
         Nenhum tema cadastrado.
       </div>
 
@@ -657,18 +658,18 @@ onMounted(() => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
         @click.self="showDeleteConfirm = null"
       >
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl max-w-sm w-full mx-4">
-          <h3 class="text-lg font-medium text-zinc-100">Confirmar exclusao</h3>
-          <p class="mt-2 text-sm text-zinc-400">Tem certeza que deseja excluir este tema? Esta acao nao pode ser desfeita.</p>
+        <div class="rounded-xl border border-[color:var(--jv-line)] bg-[#f3f8fd] p-6 shadow-xl max-w-sm w-full mx-4">
+          <h3 class="text-lg font-medium text-[color:var(--jv-ink)]">Confirmar exclusao</h3>
+          <p class="mt-2 text-sm text-[color:var(--jv-muted)]">Tem certeza que deseja excluir este tema? Esta acao nao pode ser desfeita.</p>
           <div class="mt-4 flex justify-end gap-2">
             <button
-              class="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+              class="rounded-lg bg-[color:var(--jv-sky)] px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 transition-colors"
               @click="showDeleteConfirm = null"
             >
               Cancelar
             </button>
             <button
-              class="rounded-lg bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-500 transition-colors"
+              class="rounded-lg bg-red-600 px-4 py-2 text-sm text-[color:var(--jv-navy)] hover:bg-red-500 transition-colors"
               @click="deleteTheme(showDeleteConfirm!)"
             >
               Excluir
@@ -678,13 +679,13 @@ onMounted(() => {
       </div>
 
       <!-- Create/Edit Form -->
-      <div v-if="showForm" class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+      <div v-if="showForm" class="rounded-xl border border-[color:var(--jv-line)] bg-white p-6">
         <div class="flex items-center justify-between mb-6">
           <h2 class="text-lg font-medium">
             {{ editingId ? 'Editar Tema' : 'Novo Tema' }}
           </h2>
           <button
-            class="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            class="rounded-md p-1.5 text-[color:var(--jv-muted)] hover:bg-[color:var(--jv-sky)] hover:text-[color:var(--jv-navy)]"
             @click="showForm = false; resetForm()"
           >
             <X class="h-5 w-5" />
@@ -694,62 +695,62 @@ onMounted(() => {
         <form @submit.prevent="saveTheme" class="space-y-8">
           <!-- Basic Info -->
           <div>
-            <h3 class="text-sm font-medium text-zinc-300 mb-4 uppercase tracking-wider">Informacoes Basicas</h3>
+            <h3 class="text-sm font-medium text-slate-600 mb-4 uppercase tracking-wider">Informacoes Basicas</h3>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Nome *</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Nome *</label>
                 <input
                   v-model="form.name"
                   type="text"
                   required
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   placeholder="Ex: Moderno Verde"
                 />
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Slug</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Slug</label>
                 <input
                   v-model="form.slug"
                   type="text"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   placeholder="auto-gerado"
                 />
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Categoria</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Categoria</label>
                 <input
                   v-model="form.category_name"
                   type="text"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   placeholder="Ex: Supermercado"
                 />
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Ordem</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Ordem</label>
                 <input
                   v-model.number="form.sort_order"
                   type="number"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Thumbnail</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Thumbnail</label>
                 <div class="space-y-2">
                   <div
                     v-if="hasImageValue(form.thumbnail)"
-                    class="relative w-full h-24 rounded-lg border border-zinc-700 overflow-hidden bg-zinc-900"
+                    class="relative w-full h-24 rounded-lg border border-[color:var(--jv-line)] overflow-hidden bg-[#f3f8fd]"
                   >
                     <img :src="storageProxyUrl(form.thumbnail)" class="w-full h-full object-cover" @error="onImageError" />
                     <button
                       type="button"
-                      class="absolute top-1 right-1 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
+                      class="absolute top-1 right-1 rounded-full bg-black/60 p-1 text-[color:var(--jv-navy)] hover:bg-black/80"
                       @click="form.thumbnail = ''"
                     >
                       <X class="h-3 w-3" />
                     </button>
                   </div>
                   <label
-                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 cursor-pointer transition-colors"
+                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-[#f3f8fd] px-3 py-2.5 text-sm text-[color:var(--jv-muted)] hover:border-emerald-500 hover:text-[color:var(--jv-blue)] cursor-pointer transition-colors"
                     :class="{ 'opacity-50 pointer-events-none': uploadingField === 'thumbnail' }"
                   >
                     <Upload v-if="uploadingField !== 'thumbnail'" class="h-4 w-4" />
@@ -759,23 +760,23 @@ onMounted(() => {
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Imagem de Fundo</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Imagem de Fundo</label>
                 <div class="space-y-2">
                   <div
                     v-if="hasImageValue(form.background_image)"
-                    class="relative w-full h-24 rounded-lg border border-zinc-700 overflow-hidden bg-zinc-900"
+                    class="relative w-full h-24 rounded-lg border border-[color:var(--jv-line)] overflow-hidden bg-[#f3f8fd]"
                   >
                     <img :src="storageProxyUrl(form.background_image)" class="w-full h-full object-cover" @error="onImageError" />
                     <button
                       type="button"
-                      class="absolute top-1 right-1 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
+                      class="absolute top-1 right-1 rounded-full bg-black/60 p-1 text-[color:var(--jv-navy)] hover:bg-black/80"
                       @click="form.background_image = ''"
                     >
                       <X class="h-3 w-3" />
                     </button>
                   </div>
                   <label
-                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 cursor-pointer transition-colors"
+                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-[#f3f8fd] px-3 py-2.5 text-sm text-[color:var(--jv-muted)] hover:border-emerald-500 hover:text-[color:var(--jv-blue)] cursor-pointer transition-colors"
                     :class="{ 'opacity-50 pointer-events-none': uploadingField === 'background_image' }"
                   >
                     <Upload v-if="uploadingField !== 'background_image'" class="h-4 w-4" />
@@ -785,25 +786,25 @@ onMounted(() => {
                 </div>
               </div>
               <div class="sm:col-span-2 lg:col-span-3">
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Tags (separadas por virgula)</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Tags (separadas por virgula)</label>
                 <input
                   v-model="form.tags_text"
                   type="text"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   placeholder="supermercado, moderno, verde"
                 />
               </div>
               <div class="flex items-center gap-6 sm:col-span-2 lg:col-span-3">
-                <label class="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                  <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                  <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                   Ativo
                 </label>
-                <label class="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                  <input v-model="form.is_premium" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                  <input v-model="form.is_premium" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                   Premium
                 </label>
-                <label class="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                  <input v-model="form.is_public" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                  <input v-model="form.is_public" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                   Publico
                 </label>
               </div>
@@ -814,8 +815,8 @@ onMounted(() => {
           <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
             <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 class="text-sm font-medium text-zinc-200 uppercase tracking-wider">Formatos disponíveis para o cliente</h3>
-                <p class="mt-1 text-xs text-zinc-400">
+                <h3 class="text-sm font-medium text-[color:var(--jv-navy)] uppercase tracking-wider">Formatos disponíveis para o cliente</h3>
+                <p class="mt-1 text-xs text-[color:var(--jv-muted)]">
                   Defina em quais modelos este tema aparece no Builder. A opção todos também inclui formatos adicionados no futuro.
                 </p>
               </div>
@@ -824,15 +825,15 @@ onMounted(() => {
               </span>
             </div>
 
-            <label class="mt-4 flex items-center gap-2 text-sm text-zinc-200 cursor-pointer">
+            <label class="mt-4 flex items-center gap-2 text-sm text-[color:var(--jv-navy)] cursor-pointer">
               <input
                 :checked="form.all_formats"
                 type="checkbox"
-                class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50"
+                class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50"
                 @change="toggleAllFormats(($event.target as HTMLInputElement).checked)"
               />
               Todos os formatos
-              <span class="text-xs text-zinc-500">(recomendado para temas universais)</span>
+              <span class="text-xs text-[color:var(--jv-muted)]">(recomendado para temas universais)</span>
             </label>
 
             <div v-if="models.length" class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -842,22 +843,22 @@ onMounted(() => {
                 class="flex items-start gap-2 rounded-lg border px-3 py-2 transition-colors"
                 :class="isModelSelected(model.id)
                   ? 'border-emerald-500/40 bg-emerald-500/10'
-                  : 'border-zinc-800 bg-zinc-900/60'"
+                  : 'border-[color:var(--jv-line)] bg-[#f3f8fd]/60'"
               >
                 <input
                   :checked="isModelSelected(model.id)"
                   :disabled="form.all_formats"
                   type="checkbox"
-                  class="mt-0.5 rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50 disabled:opacity-50"
+                  class="mt-0.5 rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50 disabled:opacity-50"
                   @change="toggleModel(model.id, ($event.target as HTMLInputElement).checked)"
                 />
                 <span class="min-w-0">
-                  <span class="block truncate text-xs font-medium text-zinc-200">{{ model.name }}</span>
-                  <span class="block text-[10px] text-zinc-500">{{ model.width }} × {{ model.height }} · {{ model.aspect_ratio || model.type }}</span>
+                  <span class="block truncate text-xs font-medium text-[color:var(--jv-navy)]">{{ model.name }}</span>
+                  <span class="block text-[10px] text-[color:var(--jv-muted)]">{{ model.width }} × {{ model.height }} · {{ model.aspect_ratio || model.type }}</span>
                 </span>
               </label>
             </div>
-            <p v-else-if="isLoadingModels" class="mt-3 text-xs text-zinc-500">Carregando formatos...</p>
+            <p v-else-if="isLoadingModels" class="mt-3 text-xs text-[color:var(--jv-muted)]">Carregando formatos...</p>
             <p v-else class="mt-3 text-xs text-amber-300">
               O catálogo de formatos ainda não carregou. "Todos os formatos" continuará disponível.
             </p>
@@ -868,70 +869,70 @@ onMounted(() => {
 
           <!-- CSS Config -->
           <div>
-            <h3 class="text-sm font-medium text-zinc-300 mb-4 uppercase tracking-wider">Configuracao Visual (CSS)</h3>
+            <h3 class="text-sm font-medium text-slate-600 mb-4 uppercase tracking-wider">Configuracao Visual (CSS)</h3>
             <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Cor Primaria</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor Primaria</label>
                 <div class="flex items-center gap-2">
-                  <input v-model="form.css_config.primaryColor" type="color" class="h-8 w-10 rounded border border-zinc-700 bg-zinc-900 cursor-pointer" />
-                  <input v-model="form.css_config.primaryColor" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.primaryColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
+                  <input v-model="form.css_config.primaryColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Cor Secundaria</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor Secundaria</label>
                 <div class="flex items-center gap-2">
-                  <input v-model="form.css_config.secondaryColor" type="color" class="h-8 w-10 rounded border border-zinc-700 bg-zinc-900 cursor-pointer" />
-                  <input v-model="form.css_config.secondaryColor" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.secondaryColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
+                  <input v-model="form.css_config.secondaryColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Cor de Fundo</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor de Fundo</label>
                 <div class="flex items-center gap-2">
-                  <input v-model="form.css_config.bgColor" type="color" class="h-8 w-10 rounded border border-zinc-700 bg-zinc-900 cursor-pointer" />
-                  <input v-model="form.css_config.bgColor" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.bgColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
+                  <input v-model="form.css_config.bgColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Cor do Texto</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor do Texto</label>
                 <div class="flex items-center gap-2">
-                  <input v-model="form.css_config.textColor" type="color" class="h-8 w-10 rounded border border-zinc-700 bg-zinc-900 cursor-pointer" />
-                  <input v-model="form.css_config.textColor" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.textColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
+                  <input v-model="form.css_config.textColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Cor Destaque</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor Destaque</label>
                 <div class="flex items-center gap-2">
-                  <input v-model="form.css_config.accentColor" type="color" class="h-8 w-10 rounded border border-zinc-700 bg-zinc-900 cursor-pointer" />
-                  <input v-model="form.css_config.accentColor" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.accentColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
+                  <input v-model="form.css_config.accentColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Header Bg</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Header Bg</label>
                 <div class="flex items-center gap-2">
-                  <input v-model="form.css_config.headerBg" type="color" class="h-8 w-10 rounded border border-zinc-700 bg-zinc-900 cursor-pointer" />
-                  <input v-model="form.css_config.headerBg" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.headerBg" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
+                  <input v-model="form.css_config.headerBg" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Body Bg</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Body Bg</label>
                 <div class="flex items-center gap-2">
-                  <input v-model="form.css_config.bodyBg" type="color" class="h-8 w-10 rounded border border-zinc-700 bg-zinc-900 cursor-pointer" />
-                  <input v-model="form.css_config.bodyBg" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.bodyBg" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
+                  <input v-model="form.css_config.bodyBg" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Footer Bg</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Footer Bg</label>
                 <div class="flex items-center gap-2">
-                  <input v-model="form.css_config.footerBg" type="color" class="h-8 w-10 rounded border border-zinc-700 bg-zinc-900 cursor-pointer" />
-                  <input v-model="form.css_config.footerBg" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.footerBg" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
+                  <input v-model="form.css_config.footerBg" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Border Radius</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Border Radius</label>
                 <input
                   v-model="form.css_config.borderRadius"
                   type="text"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   placeholder="8px"
                 />
               </div>
@@ -940,13 +941,13 @@ onMounted(() => {
 
           <!-- Header Config -->
           <div>
-            <h3 class="text-sm font-medium text-zinc-300 mb-4 uppercase tracking-wider">Configuracao do Header</h3>
+            <h3 class="text-sm font-medium text-slate-600 mb-4 uppercase tracking-wider">Configuracao do Header</h3>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Layout</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Layout</label>
                 <select
                   v-model="form.header_config.layout"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 >
                   <option value="center">Center</option>
                   <option value="left">Left</option>
@@ -954,31 +955,31 @@ onMounted(() => {
                 </select>
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Altura (px)</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Altura (px)</label>
                 <input
                   v-model.number="form.header_config.height"
                   type="number"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Imagem de Fundo do Header</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Imagem de Fundo do Header</label>
                 <div class="space-y-2">
                   <div
                     v-if="hasImageValue(form.header_config.backgroundImage)"
-                    class="relative w-full h-20 rounded-lg border border-zinc-700 overflow-hidden bg-zinc-900"
+                    class="relative w-full h-20 rounded-lg border border-[color:var(--jv-line)] overflow-hidden bg-[#f3f8fd]"
                   >
                     <img :src="storageProxyUrl(form.header_config.backgroundImage)" class="w-full h-full object-cover" @error="onImageError" />
                     <button
                       type="button"
-                      class="absolute top-1 right-1 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
+                      class="absolute top-1 right-1 rounded-full bg-black/60 p-1 text-[color:var(--jv-navy)] hover:bg-black/80"
                       @click="form.header_config.backgroundImage = ''"
                     >
                       <X class="h-3 w-3" />
                     </button>
                   </div>
                   <label
-                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 cursor-pointer transition-colors"
+                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-[#f3f8fd] px-3 py-2 text-xs text-[color:var(--jv-muted)] hover:border-emerald-500 hover:text-[color:var(--jv-blue)] cursor-pointer transition-colors"
                     :class="{ 'opacity-50 pointer-events-none': uploadingField === 'header_bg' }"
                   >
                     <Upload v-if="uploadingField !== 'header_bg'" class="h-3.5 w-3.5" />
@@ -988,16 +989,16 @@ onMounted(() => {
                 </div>
               </div>
               <div class="flex items-end gap-4">
-                <label class="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                  <input v-model="form.header_config.showLogo" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                  <input v-model="form.header_config.showLogo" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                   Logo
                 </label>
-                <label class="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                  <input v-model="form.header_config.showDates" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                  <input v-model="form.header_config.showDates" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                   Datas
                 </label>
-                <label class="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                  <input v-model="form.header_config.showTitle" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                  <input v-model="form.header_config.showTitle" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                   Titulo
                 </label>
               </div>
@@ -1006,29 +1007,29 @@ onMounted(() => {
 
           <!-- Body Config -->
           <div>
-            <h3 class="text-sm font-medium text-zinc-300 mb-4 uppercase tracking-wider">Configuracao do Body</h3>
+            <h3 class="text-sm font-medium text-slate-600 mb-4 uppercase tracking-wider">Configuracao do Body</h3>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Padding</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Padding</label>
                 <input
                   v-model.number="form.body_config.padding"
                   type="number"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Gap</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Gap</label>
                 <input
                   v-model.number="form.body_config.gap"
                   type="number"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Estilo do Card</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Estilo do Card</label>
                 <select
                   v-model="form.body_config.productCardStyle"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 >
                   <option value="rounded">Rounded</option>
                   <option value="square">Square</option>
@@ -1040,27 +1041,27 @@ onMounted(() => {
 
           <!-- Footer Config -->
           <div>
-            <h3 class="text-sm font-medium text-zinc-300 mb-4 uppercase tracking-wider">Configuracao do Footer</h3>
+            <h3 class="text-sm font-medium text-slate-600 mb-4 uppercase tracking-wider">Configuracao do Footer</h3>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Estilo</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Estilo</label>
                 <input
                   v-model="form.footer_config.style"
                   type="text"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
               </div>
               <div>
-                <label class="block text-xs font-medium text-zinc-400 mb-1">Altura (px)</label>
+                <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Altura (px)</label>
                 <input
                   v-model.number="form.footer_config.height"
                   type="number"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
               </div>
               <div class="flex items-end">
-                <label class="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                  <input v-model="form.footer_config.showWatermark" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                  <input v-model="form.footer_config.showWatermark" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                   Marca d'agua
                 </label>
               </div>
@@ -1071,8 +1072,8 @@ onMounted(() => {
           <div>
             <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 class="text-sm font-medium uppercase tracking-wider text-zinc-300">Preview por formato</h3>
-                <p class="mt-1 text-[10px] text-zinc-500">Confira a mesma composição nos formatos disponíveis antes de publicar o tema.</p>
+                <h3 class="text-sm font-medium uppercase tracking-wider text-slate-600">Preview por formato</h3>
+                <p class="mt-1 text-[10px] text-[color:var(--jv-muted)]">Confira a mesma composição nos formatos disponíveis antes de publicar o tema.</p>
               </div>
               <div class="flex flex-wrap items-center gap-1">
                 <button
@@ -1081,8 +1082,8 @@ onMounted(() => {
                   type="button"
                   class="rounded-md px-2 py-1 text-[10px] font-medium transition-colors"
                   :class="previewFormatIdx === idx
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'"
+                    ? 'bg-[color:var(--jv-blue)] text-[color:var(--jv-navy)]'
+                    : 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] hover:bg-slate-200 hover:text-[color:var(--jv-navy)]'"
                   @click="previewFormatIdx = idx"
                 >
                   {{ fmt.label }}
@@ -1099,17 +1100,17 @@ onMounted(() => {
           </div>
 
           <!-- Actions -->
-          <div class="flex items-center gap-3 pt-4 border-t border-zinc-800">
+          <div class="flex items-center gap-3 pt-4 border-t border-[color:var(--jv-line)]">
             <button
               type="submit"
               :disabled="isSaving || !form.name || (!form.all_formats && !form.model_ids.length)"
-              class="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+              class="rounded-lg bg-[color:var(--jv-blue)] px-6 py-2 text-sm font-medium text-[color:var(--jv-navy)] hover:bg-[#1a4f96] disabled:opacity-50 transition-colors"
             >
               {{ isSaving ? 'Salvando...' : (editingId ? 'Atualizar' : 'Criar Tema') }}
             </button>
             <button
               type="button"
-              class="rounded-lg bg-zinc-800 px-6 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+              class="rounded-lg bg-[color:var(--jv-sky)] px-6 py-2 text-sm text-slate-600 hover:bg-slate-200 transition-colors"
               @click="showForm = false; resetForm()"
             >
               Cancelar
@@ -1119,4 +1120,5 @@ onMounted(() => {
       </div>
     </div>
   </div>
+  </AdminWorkspaceShell>
 </template>

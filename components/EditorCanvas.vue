@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { positionProductLimitBelowName } from '~/utils/productLimitLayout'
+import { prepareProductCollectionRelayout } from '~/utils/productCollectionRelayout'
+import { captureFormatDynamicContent, restoreFormatDynamicContent } from '~/utils/quickFormatContent'
 import { LOGO_STYLE_PROPERTIES, logoPreferenceFromFabric, applyLogoPreferenceToFabric } from "~/utils/logoPreference"
 import { createIsolatedDynamicTextbox } from '~/utils/isolatedDynamicTextbox'
 import { applyDynamicBusinessTextColor } from '~/utils/dynamicBusinessFields'
@@ -8,7 +11,7 @@ import { isSplitFooterValidity, splitFooterValidityText, hasSplitFooterValidityC
 import { applyWholesaleReferenceProductData, createWholesaleReferenceTemplateJson, reflowWholesaleReferencePriceLabel, WHOLESALE_REFERENCE_TEMPLATE_ID, WHOLESALE_REFERENCE_MARKER } from '~/utils/wholesaleReferenceLayout'
 import { updateIsolatedPageFields } from '~/utils/isolatedPageFields'
 import { registerCanvasImageLoadSession } from '~/utils/canvasImageLoadSession'
-import { findFlyerAccent, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
+import { findFlyerAccent, resolveFlyerProductStyles, resolveProductCardColor, flattenCardColorObjects } from '~/utils/productCardColors'
 import { confirmInSystem } from '~/utils/systemMessages'
 import { harmonizeProductCardTypography } from '~/utils/productCardResponsiveTypography'
 import { reconcileQuickPageFormatGeometry } from '~/utils/quickPageFormatGeometry'
@@ -500,6 +503,11 @@ import { syncPriceTemplateStyle } from '~/utils/priceTemplateStyleSync'
 import { createPriceTemplateFitting } from '~/utils/priceTemplateFitting'
 import { createResizeSmartObject } from '~/utils/editorResizeSmartObject'
 import { createProductCardConfigurationLayout } from '~/utils/editorProductCardConfiguration'
+import {
+    clearManualPricePosition,
+    isExplicitManualPricePosition,
+    markExplicitManualPricePosition
+} from '~/utils/pricePositionPolicy'
 import {
     applyRichPriceTextValue,
     isRichPriceTextObject,
@@ -5392,6 +5400,8 @@ const rebuildQuickModeProductsForSelectedFormat = async (products: any[]): Promi
                 excludeFromExport: false
             })
             applyCardFrameBinding(restored, getResolvedZoneFrameId(zone))
+            prepareProductCollectionRelayout([restored])
+            restored._zoneOrder = slot._zoneOrder
             resizeSmartObject(restored, width, height, {
                 ...visual.styles, ...getCardStyleOverrides(restored)
             })
@@ -5526,6 +5536,7 @@ const resizeQuickModePage = (formatId: string) => {
                     templateCompositionManaged: page.templateCompositionManaged,
                     templateSourcePageId: page.templateSourcePageId
                 }
+                const dynamicContent = captureFormatDynamicContent(canvas.value?.getObjects?.() || [])
                 const products = collectQuickModeProductsForFormatResize()
                 const sourceCardCount = flattenCardColorObjects(canvas.value?.getObjects?.() || [])
                     .filter(object => object._productData && (object.isProductCard || object.parentZoneId)).length
@@ -5536,7 +5547,9 @@ const resizeQuickModePage = (formatId: string) => {
                     show: quickShowValidity.value, dateFormat: quickValidityDateFormat.value,
                     scope: { ...quickOfferScope.value }
                 }
-                const profileForResize = getQuickBusinessProfilePayload(await $fetch<any>('/api/profile', { headers: await getApiAuthHeaders() }))
+                const profileForResize = getQuickBusinessProfilePayload(Object.keys(quickBusinessProfile.value || {}).length
+                    ? quickBusinessProfile.value
+                    : await $fetch<any>('/api/profile', { headers: await getApiAuthHeaders() }))
                 const modelName = getQuickPageModelName(page)
                 const restoreOriginalPage = async (): Promise<boolean> => {
                     if (!originalPageSource.canvasData) return false
@@ -5549,6 +5562,7 @@ const resizeQuickModePage = (formatId: string) => {
                     pageReloadToken.value += 1
                     const ready = await waitForTemplatePageReady(restored.id, previousSession)
                     if (ready) {
+                        restoreFormatDynamicContent(canvas.value?.getObjects?.() || [], dynamicContent)
                         await applyQuickBusinessProfileBindings(profileForResize, { persist: false })
                         handleQuickModeValidityUpdate(validity, { persist: false })
                     }
@@ -5591,6 +5605,7 @@ const resizeQuickModePage = (formatId: string) => {
                         if (collectQuickModeProductsForFormatResize().length !== products.length) {
                             throw new Error('A quantidade de produtos mudou durante o redimensionamento.')
                         }
+                        restoreFormatDynamicContent(canvas.value?.getObjects?.() || [], dynamicContent)
                         await applyQuickBusinessProfileBindings(profileForResize, { persist: false })
                         handleQuickModeValidityUpdate(validity, { persist: false })
 
@@ -6246,6 +6261,63 @@ const syncPreparedCanvasStateToPage = (
     page.lastSavedFingerprint = fingerprint
 };
 
+// A etiqueta pode aparecer menor/à esquerda na primeira pintura porque o
+// Fabric reativa o cache do grupo depois do loadFromJSON. Ao selecionar o
+// produto, setPriceGroupInteractionMode marca os mesmos nós como dirty e a
+// etiqueta "volta" ao lugar. Invalide a árvore visual logo no carregamento,
+// sem alterar left/top/scale persistidos, para a primeira pintura ser igual à
+// pintura após a seleção.
+const refreshLoadedPriceGroupRenderState = (canvasInstance: any) => {
+    if (!canvasInstance || typeof canvasInstance.getObjects !== 'function') return
+
+    const seen = new Set<any>()
+    const priceGroups = new Set<any>()
+    const stack: any[] = [...(canvasInstance.getObjects() || [])]
+
+    while (stack.length) {
+        const object = stack.pop()
+        if (!object || seen.has(object)) continue
+        seen.add(object)
+
+        const type = String(object.type || '').toLowerCase()
+        if (type === 'group' && (String(object.name || '').trim() === 'priceGroup' || object.priceGroup === true)) {
+            priceGroups.add(object)
+        }
+
+        // Some legacy JSON loses the group name until the post-load name
+        // repair. Let the existing classifier recover it from the card while
+        // keeping this pass harmless for unrelated groups.
+        if (type === 'group' && (object.isProductCard || object.isSmartObject || object._productData)) {
+            try {
+                const recovered = getPriceGroupFromAny(object)
+                if (recovered) priceGroups.add(recovered)
+            } catch {
+                // Best effort only; the normal rehydrate pass can still repair it.
+            }
+        }
+
+        if (typeof object.getObjects === 'function') {
+            for (const child of object.getObjects() || []) stack.push(child)
+        }
+    }
+
+    for (const priceGroup of priceGroups) {
+        const nodes = typeof priceGroup.getObjects === 'function'
+            ? collectObjectsDeep(priceGroup)
+            : []
+        for (const node of nodes) {
+            const nodeType = String(node?.type || '').toLowerCase()
+            if (nodeType === 'i-text' || nodeType === 'textbox' || nodeType === 'text') {
+                node.initDimensions?.()
+            }
+            node.set?.({ objectCaching: false, statefullCache: false, dirty: true })
+            node.setCoords?.()
+        }
+        priceGroup.set?.({ objectCaching: false, statefullCache: false, dirty: true })
+        priceGroup.setCoords?.()
+    }
+};
+
 const refreshLoadedCanvasTextMetrics = (canvasInstance: any) => {
     if (!canvasInstance) return
 
@@ -6260,6 +6332,7 @@ const refreshLoadedCanvasTextMetrics = (canvasInstance: any) => {
 
     canvasInstance.getObjects().forEach(recalcAllTextMetrics);
     refreshManualLabelTemplateMetricsAfterFontLoad(canvasInstance);
+    refreshLoadedPriceGroupRenderState(canvasInstance);
 };
 
 const pageSettings = ref({
@@ -8947,6 +9020,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
                 applyGlobalLibraries: false,
                 relayout: false
             });
+            refreshLoadedPriceGroupRenderState(canvas.value);
 
             if (repairedTemplateFrameClip && !degradedNewPage) {
                 // The repair changes persisted parentFrameId metadata, so keep it
@@ -10837,6 +10911,7 @@ onMounted(async () => {
                           applyGlobalLibraries: false,
                           relayout: false
                       });
+                      refreshLoadedPriceGroupRenderState(canvas.value);
                       requestAnimationFrame(() => { requestAnimationFrame(() => { nextTick(() => { _suppressGlobalStyleUpdates = false; }); }); });
 
                       // CRITICAL FIX: Restore lost object names in product cards after JSON load
@@ -10975,6 +11050,7 @@ onMounted(async () => {
                           if (!canvas.value || isCanvasDestroyed.value) return;
 
                           restoreProductCardNames();
+                          refreshLoadedPriceGroupRenderState(canvas.value);
 
                           // Clean up transient/orphaned control objects that might have been saved
                           const allObjsForCleanup = canvas.value.getObjects();
@@ -13205,15 +13281,8 @@ const relayoutProductZonesAfterCardRemoval = (zones: Iterable<any>): boolean => 
         const cards = getZoneChildren(zone);
         ensureZoneSanity(zone);
         if (cards.length > 0) {
-            // A remoção muda a estrutura selecionada por quantidade. Force o
-            // relayout dos cards restantes mesmo quando o slot calculado acaba
-            // com a mesma dimensão persistida; isso garante que imagens
-            // duplicadas e a etiqueta recebam a nova receita da zona.
-            cards.forEach((card: any) => {
-                (card as any).__forceCardRelayout = true;
-                (card as any).__lastCardRelayoutSignature = null;
-                (card as any).__lastCardRelayoutAt = 0;
-            });
+            prepareProductCollectionRelayout(sortCardsByZoneOrder(cards));
+            applyCurrentStructureRecipe(zone, cards.length);
             recalculateZoneLayout(zone, cards, {
                 save: false,
                 preserveStyles: true
@@ -14655,7 +14724,7 @@ const markInspectorTransformAsManual = (target: any, prop: string) => {
     // textos ou outros nós internos mantêm __manualTransform para preservar o
     // conteúdo, mas não congelam a etiqueta no centro do card.
     if (priceGroup && priceGroup === target) {
-        (priceGroup as any).__manualPricePosition = true;
+        markExplicitManualPricePosition(priceGroup)
     }
     if (priceGroup && priceGroup !== target) {
         markOne(priceGroup);
@@ -14665,7 +14734,7 @@ const markInspectorTransformAsManual = (target: any, prop: string) => {
 const markPriceGroupTransformAsManual = (group: any) => {
     if (!group || String(group?.type || '').toLowerCase() !== 'group') return;
     if (String(group?.name || '') !== 'priceGroup') return;
-    (group as any).__manualPricePosition = true;
+    markExplicitManualPricePosition(group)
     markInspectorTransformAsManual(group, 'top');
     markPriceGroupAsManuallyCustomized(group, { captureSnapshot: false });
 };
@@ -16008,6 +16077,7 @@ const loadCanvasData = async (data: any) => {
                           applyGlobalLibraries: false,
                           relayout: false
     });
+    refreshLoadedPriceGroupRenderState(canvas.value);
     requestAnimationFrame(() => { nextTick(() => { _suppressGlobalStyleUpdates = false; }); });
 
     // CRITICAL: Remove any artboard-bg that might have been incorrectly created from a Frame
@@ -20184,10 +20254,12 @@ const normalizeGlobalStyles = (styles?: Partial<GlobalStyles> | null): GlobalSty
     normalizeGlobalStylesHelper(styles, DEFAULT_GLOBAL_STYLES)
 
 function getZoneGlobalStyles(zone?: any): GlobalStyles {
-    if (zone && typeof (zone as any)._zoneGlobalStyles === 'object' && (zone as any)._zoneGlobalStyles !== null) {
-        return normalizeGlobalStyles((zone as any)._zoneGlobalStyles as Partial<GlobalStyles>);
-    }
-    return normalizeGlobalStyles(productZoneState.globalStyles.value);
+    const styles = normalizeGlobalStyles(zone?._zoneGlobalStyles || productZoneState.globalStyles.value);
+    const roots = canvas.value?.getObjects() || [];
+    // Cada frame pode pertencer a uma arte/paleta diferente na mesma página.
+    const frameId = zone?.parentFrameId;
+    const artwork = frameId ? roots.filter((node: any) => node.parentFrameId === frameId || node._customId === frameId) : roots;
+    return resolveFlyerProductStyles(styles, artwork, zone?._zoneStyleOverrides || {}) as GlobalStyles;
 }
 
 // === Overrides explicitos de estilo de etiqueta (modelo "ultima edicao vence") ===
@@ -20397,6 +20469,11 @@ const handleUpdateCardConfigurationProfile = async (profileValue: string, cardId
 
     if (nextProfile) (card as any).__cardConfigurationProfile = nextProfile;
     else delete (card as any).__cardConfigurationProfile;
+
+    // Trocar o perfil é uma nova receita de posição. A etiqueta pode ter sido
+    // movida manualmente no perfil anterior; não carregamos essa âncora para o
+    // Largo/Médio seguinte.
+    (card as any).__forceCardConfigurationLayout = true;
 
     const zoneId = String((card as any)?.parentZoneId || '').trim();
     const zone = zoneId ? findProductZoneById(zoneId) : null;
@@ -20982,6 +21059,7 @@ const productPriceEditorProduct = computed(() => {
         : card
     return {
         name: String(product?.name || card?.productName || 'Produto selecionado').trim() || 'Produto selecionado',
+        limit: product?.limit ?? product?.limitText ?? '',
         pricePack: product?.pricePack ?? product?.price ?? '',
         priceUnit: product?.priceUnit ?? '',
         packageLabel: product?.packageLabel ?? '',
@@ -21436,6 +21514,8 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
     }
     const nextProduct = {
         ...currentProduct,
+        limit: normalizeLimitText(payload.limit),
+        limitText: normalizeLimitText(payload.limit),
         pricePack: normalizeOptionalValue(payload.pricePack),
         priceUnit: normalizeOptionalValue(payload.priceUnit),
         price: normalizeOptionalValue(payload.pricePack || payload.priceUnit),
@@ -21453,6 +21533,23 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
         specialCondition: normalizeOptionalValue(payload?.specialCondition)
     }
     card._productData = nextProduct
+    card.limit = nextProduct.limit
+    let limitObject = card.getObjects?.().find((object: any) =>
+        ['smart_limit', 'limitText', 'product_limit'].includes(object.name) || object.data?.smartType === 'product-limit')
+    if (!limitObject && nextProduct.limit) {
+        const zone = findProductZoneById(card.parentZoneId)
+        const styles = getZoneGlobalStyles(zone)
+        limitObject = new fabric.Textbox(nextProduct.limit, {
+            name: 'smart_limit', data: { smartType: 'product-limit' },
+            width: Number(card._cardWidth || card.width) * 0.9,
+            fontFamily: styles.limitFont || styles.prodNameFont || DEFAULT_EDITOR_FONT_FAMILY,
+            fontSize: Math.max(8, Math.min(Number(card._cardWidth || card.width), Number(card._cardHeight || card.height)) * 0.045),
+            fontWeight: '900', fill: styles.limitColor || '#ef4444',
+            textAlign: 'center', originX: 'center', originY: 'top', left: 0, top: 0
+        })
+        card.add(limitObject)
+    }
+    limitObject?.set?.({ text: nextProduct.limit || '', visible: !!nextProduct.limit, dirty: true })
 
     let priceGroup = getPriceGroupFromAny(card)
     const priceNodes = collectObjectsDeep(priceGroup)
@@ -21500,6 +21597,7 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
     alcoholBadge?.set?.({ visible: nextProduct.alcoholBadgeEnabled, dirty: true })
     alcoholBadge?.setCoords?.()
     reapplyProductCardConfigurationLayout(card)
+    positionProductLimitBelowName(card, Number(card._cardWidth || card.width), Number(card._cardHeight || card.height))
     if (priceGroup) {
         setPriceGroupInteractionMode(priceGroup, 'move')
         selectedPriceGroupSubTarget.value = null
@@ -21512,6 +21610,7 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
 
     showProductPriceEditor.value = false
     productPriceEditorCard.value = null
+    invalidateQuickModeUi()
     refreshSelectedRef()
     updateSelection()
     refreshCanvasObjects({ immediate: true })
@@ -21523,7 +21622,7 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
         } else {
             await saveCurrentState({ reason: 'product-price-edit', skipIfUnchanged: false })
         }
-        notifyEditorInfo('Preços, embalagem e selos aplicados neste produto.')
+        notifyEditorInfo('Preços, limite e selo atualizados neste produto.')
     } catch (error) {
         console.warn('[product-price-editor] Falha ao salvar preço do produto', error)
         notifyEditorError('O preço foi aplicado na tela, mas não foi possível salvar. Tente salvar novamente.')
@@ -24514,7 +24613,7 @@ const syncCurrentPriceTemplateStyle = (group: any) => {
         }
         // Patterns dependem de imagens já carregadas; conserva o objeto vivo.
         return typeof paint === 'object' && paint !== null ? undefined : paint
-    })
+    }, fabric)
 }
 
 const priceGroupPricing = createPriceGroupPricing({
@@ -26949,7 +27048,8 @@ const productCardConfiguration = createProductCardConfigurationLayout({
     fabric: () => fabric,
     enableCardElementRotationControl,
     safeRequestRenderAll,
-    getPriceGroupFromAny
+    getPriceGroupFromAny,
+    normalizePriceGroupPlacementInCard
 });
 
 if (false) {
@@ -28953,13 +29053,14 @@ const handleQuickModeClearProducts = async () => {
 const handleQuickModeDeleteProduct = async (productId: string) => {
     const card = findQuickModeProductCard(productId)
     if (!card || !canvas.value) return
+    const ownerZone = findProductZoneById(card.parentZoneId) || quickModeTargetZone.value
     discardQuickModeCardSelection([card])
     try {
         canvas.value.remove(card)
     } catch {
         return
     }
-    const zone = quickModeTargetZone.value
+    const zone = ownerZone
     if (zone) {
         relayoutProductZonesAfterCardRemoval([zone])
     }
@@ -29227,21 +29328,111 @@ const applyGlobalProductCardConfigurationToCanvas = (reason = 'global-card-confi
     if (!canvas.value || !productCardConfigurationState.isLoaded.value) return;
 
     const cardLayout = normalizeProductCardConfiguration(productCardConfigurationState.configuration.value);
-    const zones = canvas.value.getObjects().filter((obj: any) => (
-        isLikelyProductZone(obj) &&
-        (includeTemplates || !(isTemplateCompositionManagedZone(obj) && hasPersistedCardLayout(obj)))
-    ));
+    const zones = canvas.value.getObjects().filter((obj: any) => isLikelyProductZone(obj));
     if (zones.length === 0) return;
 
+    // Modelos materializados preservam a receita própria da zona e, por isso,
+    // não passam pelo relayout global durante o boot. Ainda assim, uma etiqueta
+    // pode carregar o booleano legado de posição manual sem ter sido movida pelo
+    // usuário. Esse marcador antigo fazia o relayout seguinte manter o slot
+    // deslocado para a esquerda. Reancore esse caso e também qualquer etiqueta
+    // salva claramente fora do card; movimentos explícitos atuais permanecem.
+    const repairOutOfBoundsCardPriceGroup = (card: any, zone: any): boolean => {
+        if (!card || typeof card.getObjects !== 'function') return false;
+        const priceGroup = getPriceGroupFromAny(card);
+        if (!priceGroup) return false;
+
+        const cardWidth = Math.abs(Number((card as any)._cardWidth ?? card.width ?? 0) || 0);
+        const cardHeight = Math.abs(Number((card as any)._cardHeight ?? card.height ?? 0) || 0);
+        if (!(cardWidth > 0) || !(cardHeight > 0)) return false;
+
+        const visibleBounds = resolvePriceGroupVisibleBoundsLocal(priceGroup);
+        const scaleX = Math.abs(Number(priceGroup.scaleX ?? 1)) || 1;
+        const scaleY = Math.abs(Number(priceGroup.scaleY ?? 1)) || 1;
+        const fallbackWidth = Math.abs(Number(priceGroup.getScaledWidth?.() ?? priceGroup.width ?? 0) || 0);
+        const fallbackHeight = Math.abs(Number(priceGroup.getScaledHeight?.() ?? priceGroup.height ?? 0) || 0);
+        const bounds = visibleBounds
+            ? {
+                left: Number(visibleBounds.left || 0) * scaleX,
+                right: Number(visibleBounds.right || 0) * scaleX,
+                top: Number(visibleBounds.top || 0) * scaleY,
+                bottom: Number(visibleBounds.bottom || 0) * scaleY
+            }
+            : {
+                left: -(fallbackWidth / 2),
+                right: fallbackWidth / 2,
+                top: -(fallbackHeight / 2),
+                bottom: fallbackHeight / 2
+            };
+        const left = Number(priceGroup.left ?? 0) || 0;
+        const top = Number(priceGroup.top ?? 0) || 0;
+        const tolerance = 1;
+        const outside =
+            left + bounds.left < (-cardWidth / 2) - tolerance ||
+            left + bounds.right > (cardWidth / 2) + tolerance ||
+            top + bounds.top < (-cardHeight / 2) - tolerance ||
+            top + bounds.bottom > (cardHeight / 2) + tolerance;
+        const legacyManualAnchor = priceGroup.__manualPricePosition === true
+            && !isExplicitManualPricePosition(priceGroup);
+        if (!outside && !legacyManualAnchor) return false;
+
+        if (outside) {
+            normalizePriceGroupPlacementInCard(priceGroup, cardWidth, cardHeight, null, { preserveScale: true });
+            delete (priceGroup as any).__manualTransform;
+            delete (priceGroup as any).__manualTransformCardW;
+            delete (priceGroup as any).__manualTransformCardH;
+            delete (priceGroup as any).__manualScaleX;
+            delete (priceGroup as any).__manualScaleY;
+        }
+        clearManualPricePosition(priceGroup);
+
+        const zoneLayout = getZoneGlobalStyles(zone)?.cardLayout;
+        const effectiveStyles = normalizeGlobalStyles({
+            ...getEffectiveStylesForCard(card, zone),
+            cardLayout: zoneLayout && typeof zoneLayout === 'object' ? zoneLayout : cardLayout
+        });
+        (card as any).__forceCardConfigurationLayout = true;
+        productCardConfiguration.applyProductCardConfigurationLayout(card, cardWidth, cardHeight, effectiveStyles);
+        normalizePriceGroupPlacementInCard(priceGroup, cardWidth, cardHeight, null, { preserveScale: true });
+        card.dirty = true;
+        card.setCoords?.();
+        return true;
+    };
+
     zones.forEach((zone: any) => {
+        const cards = getZoneChildren(zone);
+        const repairedCardPriceLabels = cards.reduce(
+            (total: number, card: any) => total + (repairOutOfBoundsCardPriceGroup(card, zone) ? 1 : 0),
+            0
+        );
+        const preserveTemplateCardLayout = !includeTemplates
+            && isTemplateCompositionManagedZone(zone)
+            && hasPersistedCardLayout(zone);
+
+        // A composição materializada só precisava da contenção acima; não
+        // substitua a grade/receita persistida pelo catálogo global.
+        if (preserveTemplateCardLayout) {
+            if (repairedCardPriceLabels > 0) {
+                console.info(`[card-layout] ${repairedCardPriceLabels} etiqueta(s) foram reancoradas na receita do card.`);
+            }
+            syncZoneDerivedMetadata(zone);
+            return;
+        }
+
         const previousStyles = getZoneGlobalStyles(zone);
         const nextStyles = normalizeGlobalStyles({ ...previousStyles, cardLayout });
         (zone as any)._zoneGlobalStyles = nextStyles;
 
-        const cards = getZoneChildren(zone);
         if (cards.length > 0) {
             cards.forEach((card: any) => {
                 (card as any).__forceCardRelayout = true;
+                // A publicação da configuração global é uma nova receita,
+                // portanto não pode deixar a âncora antiga da etiqueta vencer
+                // o perfil atualizado. Movimentos manuais fora desse fluxo
+                // continuam preservados pelo renderer.
+                if (includeTemplates) {
+                    (card as any).__forceCardConfigurationLayout = true;
+                }
             });
             applyGlobalStylesToCards(nextStyles, zone, {
                 cards,
@@ -29881,6 +30072,7 @@ const handleAutoOfferLayout = async () => {
             @select-zone-structure="handleQuickModeZoneStructureChange"
             @restore-grid="handleQuickGridRestore"
             @select-product="handleQuickModeSelectProduct"
+            @edit-product="(id) => { productPriceEditorCard = findQuickModeProductCard(id); showProductPriceEditor = !!productPriceEditorCard }"
             @open-product-image-picker="handleQuickModeOpenProductImagePicker"
             @clear-products="handleQuickModeClearProducts"
             @delete-product="handleQuickModeDeleteProduct"

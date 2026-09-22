@@ -1,6 +1,7 @@
 import { resolveWholesalePackPriceState } from './wholesalePackOffer'
 import { applyRichPriceTextValue } from './priceRichText'
 import { formatPriceValue } from './priceTagText'
+import { isExplicitManualPricePosition } from './pricePositionPolicy'
 export const WHOLESALE_REFERENCE_TEMPLATE_ID = 'tpl_wholesale_reference_v1'
 export const WHOLESALE_REFERENCE_MARKER = 'wholesale_reference_packaging'
 export const CENSORED_PROMOTIONAL_HEADING_MARKER = 'censored_promotional_heading'
@@ -393,7 +394,7 @@ export const applyWholesaleReferenceCardLayout = (card:any,w:number,h:number): b
   if(image){const scale=Math.min(w*.43/Math.max(1,image.width),h*.79/Math.max(1,image.height));set(image,{left:-w*.245,top:h*.08,originX:'center',originY:'center',scaleX:scale,scaleY:scale})}
   // Ajustes explícitos da etiqueta prevalecem sobre o encaixe automático do card.
   // __manualTransform também marca textos internos; somente esta flag indica o grupo inteiro.
-  if (label.__manualPricePosition !== true) {
+  if (!isExplicitManualPricePosition(label)) {
     const contentBounds = getVisibleLabelVerticalBounds(label)
     const preferredTop = -h * 0.025
     const safeTop = -h * 0.5 + h * CARD_LABEL_VERTICAL_INSET

@@ -1,6 +1,7 @@
 import {CAMPAIGN_SOUNDS} from './campaign-direction'
+import {REFERENCE_SOUNDS} from './reference-sounds'
 import generatedFlyers from './generated-flyer-recipes.json'
-// Biblioteca própria. Nomes do CapCut ficam apenas na documentação de referência.
+// Origem dos áudios registrada em catalog-provenance.json.
 export const PRODUCT_ENTRANCES = [
   {id:'slam',name:'Pancada frontal'}, {id:'whip-left',name:'Disparo pela esquerda'},
   {id:'whip-right',name:'Disparo pela direita'}, {id:'rise',name:'Subida explosiva'},
@@ -37,7 +38,10 @@ export const ATMOSPHERE_EFFECTS = [
   {id:'orbit',name:'Órbitas luminosas'}, {id:'grid',name:'Túnel geométrico'},
 ] as const
 export const SOUND_EFFECTS = [
+  ...REFERENCE_SOUNDS,
   ...CAMPAIGN_SOUNDS,
+  {id:'retail-whoosh-v1',name:'Passagem curta · suave',seconds:.54},
+  {id:'retail-pop-v1',name:'Entrada de preço · suave',seconds:.25},
   {id:'explosion-retail',name:'Explosão de varejo',seconds:1.45},
   {id:'air-swipe',name:'Passagem de ar',seconds:.42}, {id:'whip',name:'Chicote',seconds:.24},
   {id:'suction',name:'Sucção',seconds:.55}, {id:'riser',name:'Crescente',seconds:.8},

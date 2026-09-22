@@ -1,6 +1,5 @@
 import {CampaignAtmosphere} from './campaign-atmosphere'
-import {campaignFamily,campaignSound} from './campaign-direction'
-import {BoomExplosion,isBoomTheme} from './boom-effects'
+import {BoomExplosion} from './boom-effects'
 import {useRetailFonts} from './font-readiness'
 import {videoBackground,backgroundAsset} from './backgrounds'
 import {productEffects} from './native-effects'
@@ -12,7 +11,7 @@ import {displayPrice,type VideoRenderProps,type VideoScene} from './model'
 import {elementMotion} from './catalog-motion'
 import {CatalogTransition,CatalogAtmosphere,AnimatedRetailText} from './catalog-effects'
 import {motionSettings,soundAsset,SOUND_EFFECTS} from './effect-catalog'
-import {musicGain,OPENING_SOUNDS,BOOM_OPENING_SOUNDS} from './sound-design'
+import {musicGain,flyerSoundCues} from './sound-design'
 import {VideoPriceLabel} from './label-renderer'
 import {productLayers} from './product-layout'
 import {EditableElement} from './editable-element'
@@ -25,11 +24,11 @@ const random=(n:number)=>{const x=Math.sin(n*93.17+21)*42817;return x-Math.floor
 function Backdrop({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
  const f=useCurrentFrame(),{width:w,height:ht}=useVideoConfig(),intensity=props.document.intensity,kind=r.backgroundKind||r.id,seed=r.seed||0,items:React.ReactNode[]=[]
  const asset=(props.templateBase||'/video-studio/templates')+'/'+r.background
- // Placa 3D vibrante + arte do encarte em planos independentes, com variação por modelo.
+ // A arte de origem mantém suas cores; fundos alternativos exigem escolha explícita.
  const variant=r.backgroundVariant||0,chosen=videoBackground(props.document.background),energy=chosen?backgroundAsset(chosen.id,props.format):ht>w?(r.energyBackgroundVertical||r.energyBackground):r.energyBackground
- if(energy)items.push(h(Img,{key:'energy-art',src:(props.templateBase||'/video-studio/templates')+'/'+energy,style:{position:'absolute',inset:'-7%',width:'114%',height:'114%',objectFit:'cover',transform:`translate(${Math.sin(f/(28+variant*3))*18}px,${Math.cos(f/(36+variant*4))*20}px) scale(${1.04+Math.sin(f/45)*.035}) rotate(${Math.sin(f/70+variant)*.6}deg)`,filter:`hue-rotate(${(variant-2)*5}deg) saturate(1.12)`,opacity:.98}}))
- if(r.background)items.push(h(Img,{key:'art',src:asset,style:{position:'absolute',inset:'-6%',width:'112%',height:'112%',objectFit:'cover',transform:`translate(${Math.sin(f/42)*14}px,${Math.cos(f/51)*18}px) scale(${1.02+Math.sin(f/65)*.025})`,opacity:r.energyBackground?.25:kind==='electric'?.55:.65,mixBlendMode:r.energyBackground?'soft-light':undefined}}))
- items.push(div({position:'absolute',inset:0,background:`radial-gradient(ellipse at 50% 55%,${r.base}11,${r.base}66 95%)`}))
+ if(energy)items.push(h(Img,{key:'energy-art',src:(props.templateBase||'/video-studio/templates')+'/'+energy,style:{position:'absolute',inset:'-7%',width:'114%',height:'114%',objectFit:'cover',transform:`translate(${Math.sin(f/(28+variant*3))*18}px,${Math.cos(f/(36+variant*4))*20}px) scale(${1.04+Math.sin(f/45)*.035}) rotate(${Math.sin(f/70+variant)*.6}deg)`,opacity:1}}))
+ if(r.background&&!chosen)items.push(h(Img,{key:'art',src:asset,style:{position:'absolute',inset:'-6%',width:'112%',height:'112%',objectFit:'cover',transform:`translate(${Math.sin(f/42)*14}px,${Math.cos(f/51)*18}px) scale(${1.02+Math.sin(f/65)*.025})`,opacity:1}}))
+ items.push(div({position:'absolute',inset:0,background:`radial-gradient(ellipse at 50% 55%,transparent,${r.base}22 95%)`}))
  if(props.document.effects.includes('rays')){
  if(kind==='alarm'||kind==='alerta'){
   for(let i=0;i<3;i++)items.push(div({position:'absolute',left:'50%',top:'25%',width:w*1.9,height:ht*.85,transformOrigin:'0% 0%',rotate:`${f*2.1+i*120}deg`,background:`conic-gradient(from -8deg at 0% 0%,#ffcf7066,transparent 18deg)`,opacity:.38*intensity}))
@@ -66,7 +65,7 @@ function Identity({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
  const seal=elementMotion(f-2,'slam',0,'fast'),logo=elementMotion(f-(p?13:split),'rise',0,'fast')
  const logoAlpha=mix(f,p?13:split,p?17:split+4,0,1),sealAlpha=seal.opacity*(1-end)*(p?1:progress+(1-progress)*(1-mix(f,split-3,split+2,0,1)))
  return h(AbsoluteFill,null,
- h(EditableElement,{props,scene:sceneId,id:'seal',style:{...box(sealBox),opacity:sealAlpha,scale:seal.scale,rotate:`${seal.rotation+Math.sin(f/39)*.65}deg`}},r.seal?h(CanvasImage,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,width:Math.round(1280*Math.max(.2,r.sealAspect||1)),height:1280,fit:'contain',effects:props.document.effects.includes('glow')?productEffects((f%95),'shine',props.document.intensity):[],style:{width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 14px 12px #0006)'}}):div({...font,fontSize:nativeSize(sealBox[2],sealBox[3]),height:'100%',display:'flex',alignItems:'center',justifyContent:'center',whiteSpace:'pre',color:r.accent,textShadow:'0 5px #573205,0 10px #382003,0 18px 20px #0008'},nativeLines.join('\n'))),
+ h(EditableElement,{props,scene:sceneId,id:'seal',style:{...box(sealBox),opacity:sealAlpha,scale:seal.scale,rotate:`${seal.rotation+Math.sin(f/39)*.65}deg`}},r.seal?h(CanvasImage,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,width:Math.round(1280*Math.max(.2,r.sealAspect||1)),height:1280,fit:'contain',effects:props.document.effects.includes('glow')?productEffects((f%95),'shine',props.document.intensity):[],style:{width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 14px 12px #0006)'}}):div({...font,fontSize:nativeSize(sealBox[2],sealBox[3]),height:'100%',display:'flex',alignItems:'center',justifyContent:'center',whiteSpace:'pre',color:r.nativeTitleColor||r.accent,textShadow:'0 5px #573205,0 10px #382003,0 18px 20px #0008'},nativeLines.join('\n'))),
  h(EditableElement,{props,scene:sceneId,id:'logo',style:{...box(logoBox),opacity:logoAlpha,scale:logo.scale,translate:`0px ${logo.y}px`}},h(Logo,{props,width:logoBox[2],height:logoBox[3]})),
  h(EditableElement,{props,scene:'intro',id:'validity',style:{...box(p?[100,1710,880,80]:[100,50,620,65]),opacity:1-progress}},h(DateLine,{props,large:p})))
 }
@@ -88,14 +87,12 @@ function Offer({props,r,scene,index}:{props:VideoRenderProps;r:FlyerRecipe;scene
 export function FlyerComposition(props:VideoRenderProps){
  const r=flyerRecipe(props.document.theme)!,d=props.document,{durationInFrames}=useVideoConfig(),f=useCurrentFrame(),m=motionSettings(d.motion),base=props.audioBase||'/video-studio/audio',fonts=props.fontBase||'/art-studio/fonts'
  useRetailFonts(fonts)
- const opening:ReadonlyArray<{sound:typeof m.accentSound;frame:number;gain:number}>=(campaignFamily(d.theme)?[{sound:m.transitionSound,frame:0,gain:.4},{sound:campaignSound(campaignFamily(d.theme)!),frame:8,gain:1}]:OPENING_SOUNDS)
  const cue=(id:typeof m.accentSound,from:number,gain:number,key:string)=>h(Sequence,{key,from,durationInFrames:Math.min(durationInFrames-from,Math.ceil((SOUND_EFFECTS.find(s=>s.id===id)?.seconds||1)*30))},h(Audio,{src:base+'/'+soundAsset(id),volume:d.audio.effectsVolume*gain}))
  return h(AbsoluteFill,{style:{background:r.base,overflow:'hidden',opacity:mix(f,durationInFrames-5,durationInFrames,1,0)}},
 
  h(RetailCamera,{props},h(Backdrop,{props,r}),h(Identity,{props,r}),...props.scenes.filter(s=>s.id!=='intro').map(s=>h(Sequence,{key:s.id,from:s.from,durationInFrames:s.frames},s.id==='outro'?h(Ending,{props}):h(Offer,{props,r,scene:s,index:d.offers.findIndex(o=>o.id===s.id)})))),
  h(CatalogTransition,{props}),
- ...props.scenes.flatMap(s=>[s.audio&&d.voice.enabled?h(Sequence,{key:'voice'+s.id,from:s.from,durationInFrames:s.frames},h(Audio,{src:s.audio,volume:d.audio.voiceVolume})):null,...(d.audio.sounds&&s.id!=='intro'?[cue(m.transitionSound,s.from,.45,'swipe'+s.id),cue(campaignFamily(d.theme)?campaignSound(campaignFamily(d.theme)!):m.accentSound,s.from+5,isBoomTheme(d.theme)?.95:.65,'hit'+s.id)]:[])]),
- ...(d.audio.sounds?opening.map(c=>cue(c.sound,c.frame,c.gain,'intro'+c.sound)):[]),
- ...(d.audio.sounds&&props.format==='horizontal'?[cue(m.transitionSound,Math.floor((props.scenes[1]?.from||60)*.48),.5,'logo-swipe')]:[]),
+ ...props.scenes.map(s=>s.audio&&d.voice.enabled?h(Sequence,{key:'voice'+s.id,from:s.from,durationInFrames:s.frames},h(Audio,{src:s.audio,volume:d.audio.voiceVolume})):null),
+ ...flyerSoundCues(d,props.scenes,props.format).filter(c=>c.frame<durationInFrames).map(c=>cue(c.sound,c.frame,c.gain,c.key)),
  props.music&&d.audio.music!=='none'?h(Audio,{src:props.music,loop:true,loopVolumeCurveBehavior:'extend',volume:(frame:number)=>musicGain(frame,durationInFrames,d,props.scenes)}):null)
 }

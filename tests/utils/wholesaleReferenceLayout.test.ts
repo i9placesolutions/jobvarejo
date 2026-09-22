@@ -1,6 +1,7 @@
 import { expect,it } from 'vitest'
 import {applyWholesaleReferenceProductData,CENSORED_PROMOTIONAL_HEADING_MARKER,CENSORED_STAMP_MARKER,createWholesaleReferenceTemplateJson,applyWholesaleReferenceCardLayout,reflowWholesaleReferencePriceLabel} from '~/utils/wholesaleReferenceLayout'
 import {isProductLabelTemplateCompatible} from '~/utils/productLabelCompatibility'
+import { MANUAL_PRICE_POSITION_SOURCE } from '~/utils/pricePositionPolicy'
 it('usa as formas, degradês e tipografia da referência do coquetel', () => {
  const template=createWholesaleReferenceTemplateJson()
  const find=(name:string):any=>template.objects.find(o=>o.name===name)
@@ -80,7 +81,7 @@ it('aplica imagem esquerda e etiqueta direita somente ao novo modelo',()=>{
 })
 
 it('preserva tamanho e posição manual da etiqueta em renderizações seguintes',()=>{
- const label:any={name:'priceGroup',width:240,height:320,left:120,top:14,scaleX:1.2,scaleY:1.1,__manualPricePosition:true,getObjects:()=>createWholesaleReferenceTemplateJson().objects,set(v:any){Object.assign(this,v)}}
+ const label:any={name:'priceGroup',width:240,height:320,left:120,top:14,scaleX:1.2,scaleY:1.1,__manualPricePosition:true,__manualPricePositionSource:MANUAL_PRICE_POSITION_SOURCE,getObjects:()=>createWholesaleReferenceTemplateJson().objects,set(v:any){Object.assign(this,v)}}
  const card={getObjects:()=>[label]}
  for(let i=0;i<3;i++) applyWholesaleReferenceCardLayout(card,500,400)
  expect([label.left,label.top,label.scaleX,label.scaleY]).toEqual([120,14,1.2,1.1])

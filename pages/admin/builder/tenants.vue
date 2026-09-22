@@ -120,11 +120,11 @@ const planLabel = (plan: string) => {
 
 const planBadgeClass = (plan: string) => {
   const map: Record<string, string> = {
-    free: 'bg-zinc-800 text-zinc-400 border-zinc-700',
+    free: 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border-[color:var(--jv-line)]',
     basic: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
     pro: 'bg-purple-500/10 text-purple-300 border-purple-500/20'
   }
-  return map[plan] || 'bg-zinc-800 text-zinc-400 border-zinc-700'
+  return map[plan] || 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border-[color:var(--jv-line)]'
 }
 
 onMounted(() => {
@@ -133,12 +133,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-zinc-950 text-zinc-100">
+  <AdminWorkspaceShell>
+  <div class="admin-page admin-page--builder">
     <div class="mx-auto max-w-6xl px-6 py-10">
       <div class="mb-8">
         <NuxtLink
           to="/admin/builder"
-          class="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+          class="admin-page__back inline-flex items-center gap-1.5 text-sm text-[color:var(--jv-muted)] hover:text-[color:var(--jv-blue)] transition-colors"
         >
           <ArrowLeft class="h-4 w-4" />
           Voltar
@@ -147,51 +148,51 @@ onMounted(() => {
 
       <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-semibold tracking-tight">Empresas (Tenants)</h1>
-        <span class="text-sm text-zinc-400">{{ filteredTenants.length }} empresa(s)</span>
+        <span class="text-sm text-[color:var(--jv-muted)]">{{ filteredTenants.length }} empresa(s)</span>
       </div>
 
       <!-- Search -->
       <div class="mb-6">
         <div class="relative">
-          <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--jv-muted)]" />
           <input
             v-model="searchQuery"
             type="text"
             placeholder="Buscar por nome ou email..."
-            class="w-full rounded-lg border border-zinc-700 bg-zinc-900 pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] pl-10 pr-4 py-2.5 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
           />
         </div>
       </div>
 
-      <div v-if="error" class="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+      <div v-if="error" class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
         {{ error }}
       </div>
 
-      <div v-if="isLoading" class="text-center py-12 text-zinc-500">Carregando...</div>
+      <div v-if="isLoading" class="text-center py-12 text-[color:var(--jv-muted)]">Carregando...</div>
 
       <!-- Table -->
-      <div v-else-if="filteredTenants.length" class="overflow-x-auto rounded-lg border border-zinc-800" role="region" aria-label="Tabela de registros — deslize para ver todas as colunas" tabindex="0">
+      <div v-else-if="filteredTenants.length" class="overflow-x-auto rounded-lg border border-[color:var(--jv-line)]" role="region" aria-label="Tabela de registros — deslize para ver todas as colunas" tabindex="0">
         <table class="w-full text-left text-sm">
-          <thead class="bg-zinc-900">
+          <thead class="bg-[#f3f8fd]">
             <tr>
-              <th class="px-4 py-3 font-medium text-zinc-300">Nome</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Email</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Telefone</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Plano</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Status</th>
-              <th class="px-4 py-3 font-medium text-zinc-300">Criado em</th>
-              <th class="px-4 py-3 font-medium text-zinc-300 text-right">Acoes</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Nome</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Email</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Telefone</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Plano</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Status</th>
+              <th class="px-4 py-3 font-medium text-slate-600">Criado em</th>
+              <th class="px-4 py-3 font-medium text-slate-600 text-right">Acoes</th>
             </tr>
           </thead>
-          <tbody class="bg-zinc-900/50">
-            <tr v-for="tenant in filteredTenants" :key="tenant.id" class="border-t border-zinc-800">
-              <td class="px-4 py-3 font-medium text-zinc-100">{{ tenant.name || '-' }}</td>
-              <td class="px-4 py-3 text-zinc-300">{{ tenant.email || '-' }}</td>
-              <td class="px-4 py-3 text-zinc-400">{{ tenant.phone || '-' }}</td>
+          <tbody class="bg-white">
+            <tr v-for="tenant in filteredTenants" :key="tenant.id" class="border-t border-[color:var(--jv-line)]">
+              <td class="px-4 py-3 font-medium text-[color:var(--jv-ink)]">{{ tenant.name || '-' }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ tenant.email || '-' }}</td>
+              <td class="px-4 py-3 text-[color:var(--jv-muted)]">{{ tenant.phone || '-' }}</td>
               <td class="px-4 py-3">
                 <select
                   :value="tenant.plan || 'free'"
-                  class="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="rounded-md border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   @change="changePlan(tenant, ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="free">Gratuito</option>
@@ -203,7 +204,7 @@ onMounted(() => {
                 <button
                   class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border cursor-pointer transition-colors"
                   :class="tenant.is_active
-                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20'
+                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20 hover:bg-[#1a4f96]/20'
                     : 'bg-red-500/10 text-red-300 border-red-500/20 hover:bg-red-500/20'"
                   @click="toggleActive(tenant)"
                   :title="tenant.is_active ? 'Clique para desativar' : 'Clique para ativar'"
@@ -211,10 +212,10 @@ onMounted(() => {
                   {{ tenant.is_active ? 'Ativo' : 'Inativo' }}
                 </button>
               </td>
-              <td class="px-4 py-3 text-zinc-400 text-xs">{{ formatDate(tenant.created_at) }}</td>
+              <td class="px-4 py-3 text-[color:var(--jv-muted)] text-xs">{{ formatDate(tenant.created_at) }}</td>
               <td class="px-4 py-3 text-right">
                 <button
-                  class="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                  class="rounded-md p-1.5 text-[color:var(--jv-muted)] hover:bg-[color:var(--jv-sky)] hover:text-[color:var(--jv-navy)] transition-colors"
                   title="Ver detalhes"
                   @click="viewDetails(tenant)"
                 >
@@ -226,7 +227,7 @@ onMounted(() => {
         </table>
       </div>
 
-      <div v-else-if="!isLoading" class="text-center py-12 text-zinc-500">
+      <div v-else-if="!isLoading" class="text-center py-12 text-[color:var(--jv-muted)]">
         {{ searchQuery ? 'Nenhuma empresa encontrada para esta busca.' : 'Nenhuma empresa cadastrada.' }}
       </div>
 
@@ -236,11 +237,11 @@ onMounted(() => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
         @click.self="showDetails = null"
       >
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl max-w-lg w-full mx-4">
+        <div class="rounded-xl border border-[color:var(--jv-line)] bg-[#f3f8fd] p-6 shadow-xl max-w-lg w-full mx-4">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-medium text-zinc-100">Detalhes da Empresa</h3>
+            <h3 class="text-lg font-medium text-[color:var(--jv-ink)]">Detalhes da Empresa</h3>
             <button
-              class="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              class="rounded-md p-1.5 text-[color:var(--jv-muted)] hover:bg-[color:var(--jv-sky)] hover:text-[color:var(--jv-navy)]"
               @click="showDetails = null"
             >
               <X class="h-5 w-5" />
@@ -248,20 +249,20 @@ onMounted(() => {
           </div>
 
           <div class="space-y-3 text-sm">
-            <div class="flex justify-between border-b border-zinc-800 pb-2">
-              <span class="text-zinc-400">Nome</span>
-              <span class="text-zinc-100 font-medium">{{ detailTenant.name || '-' }}</span>
+            <div class="flex justify-between border-b border-[color:var(--jv-line)] pb-2">
+              <span class="text-[color:var(--jv-muted)]">Nome</span>
+              <span class="text-[color:var(--jv-ink)] font-medium">{{ detailTenant.name || '-' }}</span>
             </div>
-            <div class="flex justify-between border-b border-zinc-800 pb-2">
-              <span class="text-zinc-400">Email</span>
-              <span class="text-zinc-100">{{ detailTenant.email || '-' }}</span>
+            <div class="flex justify-between border-b border-[color:var(--jv-line)] pb-2">
+              <span class="text-[color:var(--jv-muted)]">Email</span>
+              <span class="text-[color:var(--jv-ink)]">{{ detailTenant.email || '-' }}</span>
             </div>
-            <div class="flex justify-between border-b border-zinc-800 pb-2">
-              <span class="text-zinc-400">Telefone</span>
-              <span class="text-zinc-100">{{ detailTenant.phone || '-' }}</span>
+            <div class="flex justify-between border-b border-[color:var(--jv-line)] pb-2">
+              <span class="text-[color:var(--jv-muted)]">Telefone</span>
+              <span class="text-[color:var(--jv-ink)]">{{ detailTenant.phone || '-' }}</span>
             </div>
-            <div class="flex justify-between border-b border-zinc-800 pb-2">
-              <span class="text-zinc-400">Plano</span>
+            <div class="flex justify-between border-b border-[color:var(--jv-line)] pb-2">
+              <span class="text-[color:var(--jv-muted)]">Plano</span>
               <span
                 class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs"
                 :class="planBadgeClass(detailTenant.plan)"
@@ -269,8 +270,8 @@ onMounted(() => {
                 {{ planLabel(detailTenant.plan) }}
               </span>
             </div>
-            <div class="flex justify-between border-b border-zinc-800 pb-2">
-              <span class="text-zinc-400">Status</span>
+            <div class="flex justify-between border-b border-[color:var(--jv-line)] pb-2">
+              <span class="text-[color:var(--jv-muted)]">Status</span>
               <span
                 class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs"
                 :class="detailTenant.is_active
@@ -280,23 +281,23 @@ onMounted(() => {
                 {{ detailTenant.is_active ? 'Ativo' : 'Inativo' }}
               </span>
             </div>
-            <div v-if="detailTenant.flyer_count !== undefined" class="flex justify-between border-b border-zinc-800 pb-2">
-              <span class="text-zinc-400">Encartes</span>
-              <span class="text-zinc-100 font-medium">{{ detailTenant.flyer_count }}</span>
+            <div v-if="detailTenant.flyer_count !== undefined" class="flex justify-between border-b border-[color:var(--jv-line)] pb-2">
+              <span class="text-[color:var(--jv-muted)]">Encartes</span>
+              <span class="text-[color:var(--jv-ink)] font-medium">{{ detailTenant.flyer_count }}</span>
             </div>
-            <div class="flex justify-between border-b border-zinc-800 pb-2">
-              <span class="text-zinc-400">Criado em</span>
-              <span class="text-zinc-100">{{ formatDate(detailTenant.created_at) }}</span>
+            <div class="flex justify-between border-b border-[color:var(--jv-line)] pb-2">
+              <span class="text-[color:var(--jv-muted)]">Criado em</span>
+              <span class="text-[color:var(--jv-ink)]">{{ formatDate(detailTenant.created_at) }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-zinc-400">Ultimo login</span>
-              <span class="text-zinc-100">{{ formatDate(detailTenant.last_login_at) }}</span>
+              <span class="text-[color:var(--jv-muted)]">Ultimo login</span>
+              <span class="text-[color:var(--jv-ink)]">{{ formatDate(detailTenant.last_login_at) }}</span>
             </div>
           </div>
 
           <div class="mt-6 flex justify-end">
             <button
-              class="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+              class="rounded-lg bg-[color:var(--jv-sky)] px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 transition-colors"
               @click="showDetails = null"
             >
               Fechar
@@ -306,4 +307,5 @@ onMounted(() => {
       </div>
     </div>
   </div>
+  </AdminWorkspaceShell>
 </template>

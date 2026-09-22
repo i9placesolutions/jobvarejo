@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Users, Bell, ChevronDown, Check, User, Tag, SlidersHorizontal, Zap, Store, PenTool, Menu as MenuIcon, LayoutTemplate } from 'lucide-vue-next'
+import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Bell, ChevronDown, Check, User, Zap, Store, Menu as MenuIcon, LayoutTemplate, ShieldCheck, ArrowUpRight, Clapperboard, Radio, Mic2, HardDrive } from 'lucide-vue-next'
 	import FolderTreeItem from '~/components/FolderTreeItem.vue'
 	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
 	import FilterDropdown from '~/components/ui/FilterDropdown.vue'
@@ -304,7 +304,7 @@ onMounted(async () => {
   await auth.getSession()
   
   // Global click handlers
-  if (process.client) {
+  if (process.client && auth.isSuperAdmin.value) {
     document.addEventListener('click', handleContextMenusOutsideClick)
     document.addEventListener('click', handleNotificationsOutsideClick)
   }
@@ -317,9 +317,13 @@ onUnmounted(() => {
   }
 })
 
-// Watch for auth user changes (by id) to avoid duplicate bootstrap calls
-watch(() => auth.user.value?.id || null, async (userId) => {
-  if (userId) {
+// O painel de biblioteca continua reservado ao super admin. Clientes entram
+// diretamente no hub das soluções, sem carregar projetos/pastas desnecessários.
+watch(() => ({
+  userId: auth.user.value?.id || null,
+  isSuperAdmin: auth.isSuperAdmin.value
+}), async ({ userId, isSuperAdmin }) => {
+  if (userId && isSuperAdmin) {
     if (isDashboardBootstrapping.value) return
     // Guard against duplicate bootstrap runs for the same user id.
     if (lastBootstrappedUserId.value === userId && projects.value.length > 0) return
@@ -330,6 +334,10 @@ watch(() => auth.user.value?.id || null, async (userId) => {
     } finally {
       isDashboardBootstrapping.value = false
     }
+  } else if (userId) {
+    projects.value = []
+    notifications.value = []
+    lastBootstrappedUserId.value = null
   } else {
     if (auth.isLoading.value) return
     projects.value = []
@@ -1404,12 +1412,15 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 
 <template>
-  <div :class="['dash-root h-screen w-screen overflow-hidden flex flex-col', dashMobile ? 'dash-root-mobile' : '']">
+  <ClientWorkspace v-if="auth.isAuthenticated.value && !auth.isSuperAdmin.value" />
+
+  <template v-else-if="auth.isSuperAdmin.value">
+  <div :class="['dash-root dash-admin h-screen w-screen overflow-hidden flex flex-col', dashMobile ? 'dash-root-mobile' : '']">
     <div class="flex-1 w-full h-full max-w-480 mx-auto overflow-hidden flex flex-col relative">
 
       <!-- Top Bar -->
-      <header class="dash-topbar h-14 px-5 flex items-center justify-between shrink-0 relative z-30 safe-top">
-        <div class="flex items-center gap-2.5">
+      <header class="dash-topbar px-5 flex items-center justify-between shrink-0 relative z-30 safe-top">
+        <div class="dash-brand flex items-center gap-2.5">
           <!-- Mobile hamburger -->
           <button
             v-if="dashMobile"
@@ -1419,20 +1430,23 @@ const handleDropOnRoot = async (event: DragEvent) => {
           >
             <MenuIcon class="w-5 h-5" />
           </button>
-          <div class="w-8 h-8 rounded-xl flex items-center justify-center bg-indigo-50 border border-indigo-200">
-            <Sparkles class="w-4 h-4 text-indigo-500" />
-          </div>
-          <span v-if="!dashMobile" class="text-[14px] font-bold tracking-tight text-slate-800">Studio <span class="text-slate-400 font-normal">PRO</span></span>
+          <NuxtLink to="/" class="dash-brand-link" aria-label="JobVarejo, central administrativa">
+            <img src="/img/jobvarejo-logo-trim.png" alt="JobVarejo" width="176" height="56">
+            <span v-if="!dashMobile" class="dash-brand-copy">
+              <strong>Central administrativa</strong>
+              <small>Operação JobVarejo</small>
+            </span>
+          </NuxtLink>
         </div>
         <!-- Busca centralizada no desktop -->
         <div v-if="!dashMobile" class="flex-1 max-w-md mx-6">
-          <div class="relative">
+          <div class="dash-search relative">
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
               v-model="searchQuery"
               type="text"
               placeholder="Buscar projetos…"
-              class="w-full h-9 bg-slate-100 border border-slate-200 rounded-xl text-[13px] text-slate-800 pl-9 pr-4 focus:outline-none focus:border-indigo-400 focus:bg-white placeholder:text-slate-400 transition-all"
+              class="dash-search__input w-full h-10 rounded-xl text-[13px] text-slate-800 pl-9 pr-4 focus:outline-none placeholder:text-slate-400 transition-all"
             />
           </div>
         </div>
@@ -1440,19 +1454,20 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <button
             ref="notificationButtonRef"
             @click.stop="toggleNotifications"
-            class="notification-button w-11 h-11 sm:w-9 sm:h-9 flex items-center justify-center hover:bg-black/5 rounded-2xl sm:rounded-xl transition-all text-slate-400 hover:text-slate-700 relative active:scale-95"
+            class="notification-button dash-topbar-icon w-11 h-11 sm:w-9 sm:h-9 flex items-center justify-center rounded-2xl sm:rounded-xl transition-all relative active:scale-95"
             aria-label="Notificações"
           >
             <Bell class="w-[18px] h-[18px]" />
-            <span v-if="unreadCount > 0" class="absolute top-1.5 right-1.5 w-2 h-2 bg-indigo-500 rounded-full ring-2 ring-white"></span>
+            <span v-if="unreadCount > 0" class="dash-notification-dot absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-white"></span>
           </button>
-          <div v-if="user" class="flex items-center gap-2 px-1.5 sm:px-2.5 py-1.5 hover:bg-black/5 rounded-2xl sm:rounded-xl cursor-pointer transition-all group">
-            <div class="w-7 h-7 bg-linear-to-br from-indigo-500 to-violet-600 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden">
+          <div v-if="user" class="dash-user-menu flex items-center gap-2 px-1.5 sm:px-2.5 py-1.5 rounded-2xl sm:rounded-xl cursor-pointer transition-all group">
+            <div class="dash-user-avatar w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden">
               <img v-if="user.avatar_url" :src="user.avatar_url" :alt="user.name" class="w-full h-full object-cover" />
               <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
             </div>
-            <span v-if="!dashMobile" class="text-[13px] font-medium text-slate-500 group-hover:text-slate-700 max-w-35 truncate transition-colors">{{ formatUserName(user?.name) }}</span>
-            <ChevronDown v-if="!dashMobile" class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            <span v-if="!dashMobile" class="dash-user-role">Super admin</span>
+            <span v-if="!dashMobile" class="dash-user-name text-[13px] font-medium max-w-35 truncate transition-colors">{{ formatUserName(user?.name) }}</span>
+            <ChevronDown v-if="!dashMobile" class="w-3.5 h-3.5 transition-colors" />
           </div>
         </div>
       </header>
@@ -1490,102 +1505,33 @@ const handleDropOnRoot = async (event: DragEvent) => {
             </div>
             <!-- Nav -->
             <div class="px-2 pb-1 shrink-0">
-              <p class="sidebar-section-label px-2 mb-1">Explorar</p>
+              <p class="sidebar-section-label px-2 mb-1">Biblioteca</p>
               <button @click="activeView = 'recent'; showMobileDrawer = false" :class="['dash-nav-item w-full', activeView === 'recent' ? 'active' : '']">
                 <Clock class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Recentes</span>
               </button>
               <button @click="activeView = 'all'; setActiveFolder(null); filterFolderId = 'all'; showMobileDrawer = false" :class="['dash-nav-item w-full', activeView === 'all' && !activeFolderId ? 'active' : '']">
                 <FolderOpen class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Todos</span>
               </button>
-              <button @click="activeView = 'starred'; showMobileDrawer = false" :class="['dash-nav-item w-full', activeView === 'starred' ? 'active starred' : '']">
-                <Star class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Favoritos</span>
-              </button>
-              <button @click="activeView = 'shared'; showMobileDrawer = false" :class="['dash-nav-item w-full', activeView === 'shared' ? 'active' : '']">
-                <Users class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Compartilhados</span>
-              </button>
-              <button @click="navigateTo('/label-templates'); showMobileDrawer = false" class="dash-nav-item w-full">
-                <Tag class="w-3.5 h-3.5 shrink-0 text-amber-500" /><span class="flex-1 text-left">Etiquetas de preço</span>
-              </button>
-              <NuxtLink to="/videos" class="dash-nav-item w-full"><Sparkles class="w-4 h-4 shrink-0 text-emerald-600"/><span class="flex-1 text-left">Vídeos de ofertas</span></NuxtLink>
-            <NuxtLink to="/art-studio" class="dash-nav-item w-full"><Sparkles class="w-3.5 h-3.5 shrink-0 text-emerald-500"/><span class="flex-1 text-left">Estúdio de Artes</span></NuxtLink>
-            <NuxtLink to="/cartazista" class="dash-nav-item w-full"><Sparkles class="w-3.5 h-3.5 shrink-0 text-blue-500"/><span class="flex-1 text-left">Cartazes online</span></NuxtLink>
-              <button @click="navigateTo('/quick-editor'); showMobileDrawer = false" class="dash-nav-item w-full">
-                <Zap class="w-3.5 h-3.5 shrink-0 text-indigo-500" /><span class="flex-1 text-left">Edição rápida</span>
-              </button>
-              <button @click="navigateTo('/flyer-templates'); showMobileDrawer = false" class="dash-nav-item w-full">
-                <LayoutTemplate class="w-3.5 h-3.5 shrink-0 text-violet-500" /><span class="flex-1 text-left">Modelos de encarte</span>
-              </button>
-              <button @click="navigateTo('/business-profile'); showMobileDrawer = false" class="dash-nav-item w-full">
-                <Store class="w-3.5 h-3.5 shrink-0 text-emerald-500" /><span class="flex-1 text-left">Cadastro da loja</span>
-              </button>
-              <button @click="navigateTo('/zone-structures'); showMobileDrawer = false" class="dash-nav-item w-full">
-                <Grid class="w-3.5 h-3.5 shrink-0 text-cyan-500" /><span class="flex-1 text-left">Estruturas de zonas</span>
-              </button>
-              <button @click="navigateTo('/card-configurations'); showMobileDrawer = false" class="dash-nav-item w-full">
-                <SlidersHorizontal class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Configuração dos cards</span>
-              </button>
-            </div>
-            <div class="sidebar-divider mx-3 my-1"></div>
-            <div class="flex-1 min-h-0 overflow-y-auto px-2 py-2">
-              <div class="flex items-center justify-between px-2 mb-2">
-                <p class="sidebar-section-label">Pastas</p>
-                <button
-                  class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
-                  type="button"
-                  aria-label="Nova pasta"
-                  @click="showCreateFolder = true; showMobileDrawer = false"
-                >
-                  <FolderPlus class="w-4 h-4" />
-                </button>
-              </div>
-              <button
-                :class="['dash-nav-item dash-nav-item-mobile w-full', activeView === 'all' && !activeFolderId && !isNoFolderView ? 'active' : '']"
-                type="button"
-                @click="activeView = 'all'; setActiveFolder(null); filterFolderId = 'all'; showMobileDrawer = false"
-              >
-                <FolderOpen class="w-4 h-4 shrink-0 opacity-60" />
-                <span class="flex-1 text-left">Raiz</span>
-                <span class="nav-count">{{ safeProjects.length }}</span>
-              </button>
-              <button
-                :class="['dash-nav-item dash-nav-item-mobile w-full', isNoFolderView ? 'active' : '']"
-                type="button"
-                @click="goToNoFolder(); showMobileDrawer = false"
-              >
-                <Folder class="w-4 h-4 shrink-0 opacity-60" />
-                <span class="flex-1 text-left">Sem pasta</span>
-                <span v-if="rootProjects.length > 0" class="nav-count">{{ rootProjects.length }}</span>
-              </button>
-              <div class="folder-tree mt-1" v-if="isMounted">
-                <FolderTreeItem
-                  v-for="folder in folderTree"
-                  :key="folder.id"
-                  :folder="folder"
-                  :level="0"
-                  :is-active="activeFolderId === folder.id"
-                  :is-expanded="folder.isExpanded"
-                  :project-count="folder.projectCount"
-                  :is-editing="editingFolderId === folder.id"
-                  :editing-name="editingFolderName"
-                  :active-folder-id="activeFolderId"
-                  :editing-folder-id="editingFolderId"
-                  :expanded-folders="expandedFolders"
-                  @select="(id: string) => { openFolderFromSidebar(id); showMobileDrawer = false }"
-                  @toggle="(id: string) => toggleFolder(id)"
-                  @context-menu="(e: MouseEvent, id: string) => { e.stopPropagation(); showFolderContextMenu(id, e) }"
-                  @update-name="(name: string) => editingFolderName = name"
-                  @drop-on-folder="handleDropOnFolder"
-                  @save-edit="saveFolderName"
-                  @cancel-edit="cancelEditFolder"
-                />
-              </div>
+              <p class="sidebar-section-label px-2 mt-4 mb-1">Soluções</p>
+              <NuxtLink to="/flyer-templates" class="dash-nav-item w-full" @click="showMobileDrawer = false"><LayoutTemplate class="w-3.5 h-3.5 shrink-0 text-indigo-500"/><span class="flex-1 text-left">Encartes</span></NuxtLink>
+              <NuxtLink to="/cartazista" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Sparkles class="w-3.5 h-3.5 shrink-0 text-blue-500"/><span class="flex-1 text-left">Cartazes</span></NuxtLink>
+              <NuxtLink to="/videos" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Clapperboard class="w-3.5 h-3.5 shrink-0 text-emerald-600"/><span class="flex-1 text-left">Vídeos</span></NuxtLink>
+              <NuxtLink to="/radio-indoor" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Radio class="w-3.5 h-3.5 shrink-0 text-orange-500"/><span class="flex-1 text-left">Rádio Indoor</span></NuxtLink>
+              <NuxtLink to="/art-studio" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Sparkles class="w-3.5 h-3.5 shrink-0 text-violet-500"/><span class="flex-1 text-left">Estúdio de Artes</span></NuxtLink>
             </div>
             <!-- Bottom -->
             <div class="px-2 pb-3 mt-auto shrink-0">
               <div class="sidebar-divider mx-1 mb-2"></div>
+              <p class="sidebar-section-label px-2 mb-1">Configuração</p>
+              <NuxtLink to="/admin/musicgpt" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Mic2 class="w-3.5 h-3.5 shrink-0 text-violet-400"/><span class="flex-1 text-left">MusicGPT</span></NuxtLink>
+              <NuxtLink to="/admin/storage" class="dash-nav-item w-full" @click="showMobileDrawer = false"><HardDrive class="w-3.5 h-3.5 shrink-0 text-slate-400"/><span class="flex-1 text-left">Storage</span></NuxtLink>
+              <div class="sidebar-divider mx-1 my-2"></div>
               <button @click="navigateTo('/profile'); showMobileDrawer = false" class="dash-nav-item w-full">
                 <User class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Meu Perfil</span>
               </button>
+              <NuxtLink to="/business-profile" class="dash-nav-item w-full" @click="showMobileDrawer = false">
+                <Store class="w-3.5 h-3.5 shrink-0 text-emerald-500" /><span class="flex-1 text-left">Minha loja</span>
+              </NuxtLink>
               <button @click="handleSignOut" class="dash-nav-item signout w-full">
                 <LogOut class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Sair</span>
               </button>
@@ -1598,7 +1544,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
           <!-- Nav Section -->
           <div class="px-3 pt-4 pb-1 shrink-0 overflow-y-auto max-h-[78%]">
-            <p class="sidebar-section-label px-1 mb-2">Explorar</p>
+            <p class="sidebar-section-label px-1 mb-2">Biblioteca</p>
             <button
               @click="activeView = 'recent'"
               :class="['dash-nav-item w-full', activeView === 'recent' ? 'active' : '']"
@@ -1610,148 +1556,49 @@ const handleDropOnRoot = async (event: DragEvent) => {
             </button>
             <button
               @click="activeView = 'all'; setActiveFolder(null); filterFolderId = 'all'"
-              :class="['dash-nav-item w-full', activeView === 'all' && !isNoFolderView && !activeFolderId ? 'active' : '']"
+              :class="['dash-nav-item w-full', activeView === 'all' && !activeFolderId ? 'active' : '']"
               aria-label="Visualizar todos os projetos"
             >
               <FolderOpen class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Todos</span>
               <span class="nav-count">{{ safeProjects.length }}</span>
             </button>
-            <button
-              @click="goToNoFolder"
-              :class="['dash-nav-item w-full', isNoFolderView ? 'active' : '']"
-              title="Projetos sem pasta"
-            >
-              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                <line x1="9" y1="12" x2="15" y2="12" />
-              </svg>
-              <span class="flex-1 text-left">Sem pasta</span>
-              <span v-if="rootProjects.length > 0" class="nav-count">{{ rootProjects.length }}</span>
-            </button>
-            <button
-              @click="activeView = 'starred'"
-              :class="['dash-nav-item w-full', activeView === 'starred' ? 'active starred' : '']"
-            >
-              <Star class="w-4 h-4 shrink-0" :class="{ 'fill-current text-amber-400': activeView === 'starred' }" />
-              <span class="flex-1 text-left">Favoritos</span>
-              <span v-if="starredProjectsCount > 0" class="nav-count">{{ starredProjectsCount }}</span>
-            </button>
-            <button
-              @click="activeView = 'shared'"
-              :class="['dash-nav-item w-full', activeView === 'shared' ? 'active' : '']"
-              aria-label="Visualizar projetos compartilhados"
-            >
-              <Users class="w-4 h-4 shrink-0" />
-              <span class="flex-1 text-left">Compartilhados</span>
-            </button>
-            <button
-              @click="navigateTo('/label-templates')"
-              class="dash-nav-item w-full"
-              aria-label="Abrir etiquetas de preço"
-            >
-              <Tag class="w-4 h-4 shrink-0 text-amber-500" />
-              <span class="flex-1 text-left">Etiquetas de preço</span>
-            </button>
-            <NuxtLink to="/videos" class="dash-nav-item w-full"><Sparkles class="w-4 h-4 shrink-0 text-emerald-600"/><span class="flex-1 text-left">Vídeos de ofertas</span></NuxtLink>
-            <NuxtLink to="/art-studio" class="dash-nav-item w-full"><Sparkles class="w-4 h-4 shrink-0 text-emerald-500"/><span class="flex-1 text-left">Estúdio de Artes</span></NuxtLink>
-            <NuxtLink to="/cartazista" class="dash-nav-item w-full"><Sparkles class="w-4 h-4 shrink-0 text-blue-500"/><span class="flex-1 text-left">Cartazes online</span></NuxtLink>
-            <button
-              @click="navigateTo('/quick-editor')"
-              class="dash-nav-item w-full"
-              aria-label="Abrir edição rápida de encartes"
-            >
-              <Zap class="w-4 h-4 shrink-0 text-indigo-500" />
-              <span class="flex-1 text-left">Edição rápida</span>
-            </button>
-            <button
-              @click="navigateTo('/flyer-templates')"
-              class="dash-nav-item w-full"
-              aria-label="Abrir modelos de encarte"
-            >
-              <LayoutTemplate class="w-4 h-4 shrink-0 text-violet-500" />
-              <span class="flex-1 text-left">Modelos de encarte</span>
-            </button>
-            <button
-              @click="navigateTo('/business-profile')"
-              class="dash-nav-item w-full"
-              aria-label="Abrir cadastro da loja"
-            >
-              <Store class="w-4 h-4 shrink-0 text-emerald-500" />
-              <span class="flex-1 text-left">Cadastro da loja</span>
-            </button>
-            <button
-              @click="navigateTo('/zone-structures')"
-              class="dash-nav-item w-full"
-              aria-label="Configurar estruturas automáticas de zonas"
-            >
-              <Grid class="w-4 h-4 shrink-0 text-cyan-500" />
-              <span class="flex-1 text-left">Estruturas de zonas</span>
-            </button>
-            <button
-              @click="navigateTo('/card-configurations')"
-              class="dash-nav-item w-full"
-              aria-label="Configurar elementos internos dos cards"
-            >
-              <SlidersHorizontal class="w-4 h-4 shrink-0" />
-              <span class="flex-1 text-left">Configuração dos cards</span>
-            </button>
-          </div>
-
-          <!-- Divider -->
-          <div class="sidebar-divider mx-4 my-2"></div>
-
-          <!-- Folders -->
-          <div class="flex-1 min-h-0 overflow-y-auto px-3 pb-2">
-            <div class="flex items-center justify-between px-1 mb-2">
-              <p class="sidebar-section-label">Pastas</p>
-              <button
-                @click="showCreateFolder = true"
-                class="w-6 h-6 flex items-center justify-center hover:bg-slate-100 rounded-md text-slate-400 hover:text-slate-600 transition-all"
-                title="Nova pasta"
-              >
-                <FolderPlus class="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div
-              :class="['dash-nav-item w-full', !activeFolderId && activeView === 'all' && !isNoFolderView ? 'active' : '']"
-              @click="openFolderFromSidebar(null)"
-              @dragover="handleDragOver"
-              @drop="handleDropOnRoot"
-              style="cursor:pointer"
-            >
-              <FolderOpen class="w-4 h-4 shrink-0 opacity-50" />
-              <span class="flex-1 text-left font-medium truncate">Raiz</span>
-              <span class="nav-count">{{ safeProjects.length }}</span>
-            </div>
-            <div class="folder-tree" v-if="isMounted">
-              <FolderTreeItem
-                v-for="folder in folderTree"
-                :key="folder.id"
-                :folder="folder"
-                :level="0"
-                :is-active="activeFolderId === folder.id"
-                :is-expanded="folder.isExpanded"
-                :project-count="folder.projectCount"
-                :is-editing="editingFolderId === folder.id"
-                :editing-name="editingFolderName"
-                :active-folder-id="activeFolderId"
-                :editing-folder-id="editingFolderId"
-                :expanded-folders="expandedFolders"
-                @select="(id: string) => openFolderFromSidebar(id)"
-                @toggle="(id: string) => toggleFolder(id)"
-                @context-menu="(e: MouseEvent, id: string) => { e.stopPropagation(); showFolderContextMenu(id, e) }"
-                @update-name="(name: string) => editingFolderName = name"
-                @drop-on-folder="handleDropOnFolder"
-                @save-edit="saveFolderName"
-                @cancel-edit="cancelEditFolder"
-              />
-            </div>
+            <p class="sidebar-section-label px-1 mt-4 mb-2">Soluções</p>
+            <NuxtLink to="/flyer-templates" class="dash-nav-item w-full" aria-label="Abrir Encartes">
+              <LayoutTemplate class="w-4 h-4 shrink-0 text-indigo-500" />
+              <span class="flex-1 text-left">Encartes</span>
+            </NuxtLink>
+            <NuxtLink to="/cartazista" class="dash-nav-item w-full" aria-label="Abrir Cartazes">
+              <Sparkles class="w-4 h-4 shrink-0 text-blue-500" />
+              <span class="flex-1 text-left">Cartazes</span>
+            </NuxtLink>
+            <NuxtLink to="/videos" class="dash-nav-item w-full" aria-label="Abrir Vídeos">
+              <Clapperboard class="w-4 h-4 shrink-0 text-emerald-600" />
+              <span class="flex-1 text-left">Vídeos</span>
+            </NuxtLink>
+            <NuxtLink to="/radio-indoor" class="dash-nav-item w-full" aria-label="Abrir Rádio Indoor">
+              <Radio class="w-4 h-4 shrink-0 text-orange-500" />
+              <span class="flex-1 text-left">Rádio Indoor</span>
+            </NuxtLink>
+            <NuxtLink to="/art-studio" class="dash-nav-item w-full" aria-label="Abrir Estúdio de Artes">
+              <Sparkles class="w-4 h-4 shrink-0 text-violet-500" />
+              <span class="flex-1 text-left">Estúdio de Artes</span>
+            </NuxtLink>
           </div>
 
           <!-- Bottom -->
-          <div class="px-3 pb-3 shrink-0">
+          <div class="mt-auto px-3 pb-3 shrink-0">
             <div class="sidebar-divider mx-1 mb-2"></div>
+            <p class="sidebar-section-label px-1 mb-2">Configuração</p>
+            <NuxtLink to="/admin/musicgpt" class="dash-nav-item w-full" aria-label="Abrir MusicGPT">
+              <Mic2 class="w-4 h-4 shrink-0 text-violet-400" />
+              <span class="flex-1 text-left">MusicGPT</span>
+            </NuxtLink>
+            <NuxtLink to="/admin/storage" class="dash-nav-item w-full" aria-label="Abrir Storage">
+              <HardDrive class="w-4 h-4 shrink-0 text-slate-400" />
+              <span class="flex-1 text-left">Storage</span>
+            </NuxtLink>
+            <div class="sidebar-divider mx-1 my-2"></div>
             <button
               @click="navigateTo('/profile')"
               class="dash-nav-item w-full"
@@ -1760,6 +1607,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <User class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Meu Perfil</span>
             </button>
+            <NuxtLink to="/business-profile" class="dash-nav-item w-full" aria-label="Abrir dados da loja">
+              <Store class="w-4 h-4 shrink-0 text-emerald-500" />
+              <span class="flex-1 text-left">Minha loja</span>
+            </NuxtLink>
             <button
               @click="handleSignOut"
               class="dash-nav-item signout w-full"
@@ -1774,8 +1625,36 @@ const handleDropOnRoot = async (event: DragEvent) => {
         <!-- Main Content -->
         <main class="dash-main flex-1 flex flex-col overflow-hidden relative z-10">
 
+          <section v-if="!searchQuery && !activeFolderId" class="dash-admin-hero" aria-labelledby="admin-dashboard-title">
+            <div class="dash-admin-hero__copy">
+              <p class="dash-admin-hero__eyebrow"><ShieldCheck :size="15" /> Central de operação</p>
+              <h1 id="admin-dashboard-title">Biblioteca e campanhas<br><span>JobVarejo</span> em um só lugar.</h1>
+              <p>Organize projetos, modelos e ferramentas de criação sem perder a visão geral da operação.</p>
+            </div>
+
+            <div class="dash-admin-hero__overview">
+              <div class="dash-admin-metrics" aria-label="Resumo da biblioteca">
+                <div>
+                  <span>Projetos</span>
+                  <strong>{{ safeProjects.length }}</strong>
+                </div>
+                <div>
+                  <span>Pastas</span>
+                  <strong>{{ safeFolders.length }}</strong>
+                </div>
+                <div>
+                  <span>Favoritos</span>
+                  <strong>{{ starredProjectsCount }}</strong>
+                </div>
+              </div>
+              <button type="button" class="dash-admin-hero__create" @click="showCreateProject = true">
+                Criar projeto avançado <ArrowUpRight :size="16" />
+              </button>
+            </div>
+          </section>
+
           <!-- Page Header -->
-          <div :class="['flex items-center justify-between gap-4 shrink-0', dashMobile ? 'px-4 pt-3 pb-2' : 'px-7 pt-5 pb-4']">
+          <div :class="['dash-page-header flex items-center justify-between gap-4 shrink-0', dashMobile ? 'px-4 pt-3 pb-2' : 'px-7 pt-5 pb-4']">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <h1 :class="['dash-page-title font-bold leading-tight text-slate-800 tracking-tight truncate', dashMobile ? 'text-[18px]' : 'text-[22px]']">{{ dashboardTitle }}</h1>
@@ -1784,8 +1663,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
                   <span class="text-[13px] text-slate-500 truncate max-w-50 font-medium">{{ folders.find(f => f.id === activeFolderId)?.name }}</span>
                 </template>
               </div>
-              <p class="text-[12px] text-slate-400 mt-0.5">
-                <span class="text-slate-500 font-semibold">{{ filteredProjects.length }}</span>
+              <p class="dash-page-subtitle text-[12px] mt-0.5">
+                <span class="font-semibold">{{ filteredProjects.length }}</span>
                 {{ filteredProjects.length === 1 ? ' projeto' : ' projetos' }}
                 <span v-if="!dashMobile" class="mx-1.5 text-slate-300">·</span>
                 <span v-if="!dashMobile">{{ dashboardContextHint }}</span>
@@ -1795,25 +1674,25 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <div v-if="!dashMobile" class="flex items-center gap-2 shrink-0">
               <NuxtLink
                 to="/flyer-templates"
-                class="h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 border border-violet-200 bg-violet-50 text-violet-700 transition-all hover:bg-violet-100"
+                class="dash-secondary-cta h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all"
               >
                 <LayoutTemplate class="w-4 h-4" />
-                Modelos de encarte
+                Encartes
               </NuxtLink>
               <NuxtLink
-                to="/quick-editor"
+                to="/cartazista"
                 class="dash-cta h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all"
               >
-                <Zap class="w-4 h-4" />
-                Edição rápida
+                <Sparkles class="w-4 h-4" />
+                Cartazes
               </NuxtLink>
-              <button
-                @click="showCreateProject = true"
+              <NuxtLink
+                to="/videos"
                 class="dash-cta shrink-0 h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all"
               >
-                <PenTool class="w-4 h-4" />
-                Modo avançado
-              </button>
+                <Clapperboard class="w-4 h-4" />
+                Vídeos
+              </NuxtLink>
             </div>
           </div>
 
@@ -1822,8 +1701,6 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <div class="dash-tabs flex items-center gap-0.5 p-0.5 rounded-xl shrink-0">
               <button @click="activeView = 'recent'" :class="['dash-tab', activeView === 'recent' ? 'active' : '']">Recentes</button>
               <button @click="activeView = 'all'" :class="['dash-tab', activeView === 'all' ? 'active' : '']">Todos</button>
-              <button @click="activeView = 'starred'" :class="['dash-tab', activeView === 'starred' ? 'active' : '']">Favoritos</button>
-              <button @click="activeView = 'shared'" :class="['dash-tab', activeView === 'shared' ? 'active' : '']">Compartilhados</button>
             </div>
             <div class="flex-1 min-w-0"></div>
             <div class="flex items-center bg-slate-100 rounded-xl p-0.5 border border-slate-200 shrink-0">
@@ -1844,7 +1721,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
           <nav v-if="dashMobile" class="dash-mobile-bottom-nav fixed left-0 right-0 bottom-0 z-90 px-3 pt-2 pb-[calc(0.55rem+env(safe-area-inset-bottom,0px))]">
             <div class="mx-auto max-w-md rounded-3xl border border-slate-200/80 bg-white/94 shadow-2xl shadow-slate-900/12 backdrop-blur-xl">
-              <div class="grid grid-cols-4 gap-1 p-1.5">
+              <div class="grid grid-cols-3 gap-1 p-1.5">
                 <button @click="activeView = 'recent'" :class="['dash-mobile-nav-btn', activeView === 'recent' ? 'active' : '']">
                   <Clock class="w-[18px] h-[18px]" />
                   <span>Recentes</span>
@@ -1852,10 +1729,6 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <button @click="activeView = 'all'; setActiveFolder(null); filterFolderId = 'all'" :class="['dash-mobile-nav-btn', activeView === 'all' && !activeFolderId ? 'active' : '']">
                   <FolderOpen class="w-[18px] h-[18px]" />
                   <span>Todos</span>
-                </button>
-                <button @click="activeView = 'starred'" :class="['dash-mobile-nav-btn', activeView === 'starred' ? 'active starred' : '']">
-                  <Star class="w-[18px] h-[18px]" :class="{ 'fill-current': activeView === 'starred' }" />
-                  <span>Favoritos</span>
                 </button>
                 <button @click="showMobileDrawer = true" class="dash-mobile-nav-btn">
                   <MenuIcon class="w-[18px] h-[18px]" />
@@ -2261,6 +2134,12 @@ const handleDropOnRoot = async (event: DragEvent) => {
       </TransitionGroup>
     </div>
   </teleport>
+  </template>
+
+  <div v-else class="dashboard-auth-loading" aria-live="polite">
+    <img src="/img/jobvarejo-logo-trim.png" alt="JobVarejo" width="176" height="56">
+    <span>Preparando seu espaço…</span>
+  </div>
 </template>
 
 <style scoped>
@@ -2268,6 +2147,24 @@ const handleDropOnRoot = async (event: DragEvent) => {
 .dash-root {
   background: #f8f9fb;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+}
+
+.dashboard-auth-loading {
+  display: grid;
+  min-height: 100dvh;
+  place-content: center;
+  gap: 15px;
+  color: #60758f;
+  background: #f6f8fb;
+  font-family: "Plus Jakarta Sans", "Barlow", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.dashboard-auth-loading img {
+  width: 176px;
+  height: auto;
 }
 
 .dash-root-mobile {
@@ -2731,6 +2628,503 @@ button:focus-visible,
 input:focus-visible {
   outline: 2px solid rgba(99,102,241,0.6);
   outline-offset: 2px;
+}
+
+/* ─── JobVarejo administrative workspace ─────────────── */
+.dash-admin {
+  --jv-navy: #173d70;
+  --jv-blue: #2160b4;
+  --jv-sky: #eaf3ff;
+  --jv-ink: #172b45;
+  --jv-muted: #60758f;
+  --jv-line: #d7e4f1;
+  position: relative;
+  color: var(--jv-ink);
+  background:
+    radial-gradient(circle at 8% -12%, rgba(58, 131, 213, .18), transparent 31rem),
+    radial-gradient(circle at 104% 24%, rgba(72, 157, 128, .12), transparent 27rem),
+    linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+  font-family: "Plus Jakarta Sans", "Barlow", ui-sans-serif, system-ui, sans-serif;
+}
+
+.dash-admin::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  opacity: .32;
+  background-image: radial-gradient(rgba(62, 121, 184, .17) .75px, transparent .75px);
+  background-size: 18px 18px;
+  content: '';
+}
+
+.dash-admin > div {
+  z-index: 1;
+}
+
+.dash-admin .dash-topbar {
+  min-height: 72px;
+  height: 72px;
+  border-bottom: 1px solid rgba(190, 211, 233, .76);
+  background: rgba(255, 255, 255, .84);
+  box-shadow: 0 8px 28px rgba(26, 68, 113, .045);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.dash-brand-link {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+  color: inherit;
+}
+
+.dash-brand-link img {
+  display: block;
+  width: 142px;
+  height: auto;
+}
+
+.dash-brand-copy {
+  display: grid;
+  gap: 2px;
+  padding-left: 14px;
+  border-left: 1px solid #d8e4f0;
+  line-height: 1.1;
+}
+
+.dash-brand-copy strong {
+  color: #1d3f69;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+
+.dash-brand-copy small {
+  color: #8093a9;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.dash-search {
+  border: 1px solid #d7e4f1;
+  border-radius: 13px;
+  color: #7b92a9;
+  background: rgba(242, 247, 252, .92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+
+.dash-search:focus-within {
+  border-color: #8fb8e6;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(55, 119, 194, .11);
+}
+
+.dash-search__input {
+  border: 0;
+  background: transparent;
+}
+
+.dash-topbar-icon {
+  color: #7188a0;
+}
+
+.dash-topbar-icon:hover {
+  color: var(--jv-blue);
+  background: #edf5ff;
+}
+
+.dash-notification-dot {
+  background: #d86b45;
+}
+
+.dash-user-menu {
+  border: 1px solid transparent;
+}
+
+.dash-user-menu:hover {
+  border-color: #d8e6f4;
+  background: #f7faff;
+}
+
+.dash-user-avatar {
+  background: linear-gradient(135deg, #2160b4, #173d70);
+  box-shadow: 0 4px 10px rgba(23, 61, 112, .2);
+}
+
+.dash-user-role {
+  padding: 3px 7px;
+  color: #2160b4;
+  border: 1px solid #cde0f5;
+  border-radius: 999px;
+  background: #edf6ff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.dash-user-name {
+  color: #516a83;
+}
+
+.dash-user-menu:hover .dash-user-name,
+.dash-user-menu:hover .lucide-chevron-down {
+  color: #173d70;
+}
+
+.dash-admin .dash-mobile-search {
+  border-bottom: 1px solid rgba(215, 228, 241, .72);
+  background: rgba(248, 251, 255, .92);
+}
+
+.dash-admin .dash-sidebar {
+  border-right-color: rgba(210, 225, 239, .9);
+  background: rgba(255, 255, 255, .78);
+  box-shadow: 10px 0 30px rgba(26, 68, 113, .025);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.dash-admin .sidebar-section-label,
+.dash-admin .section-label {
+  color: #7a91a9;
+  font-weight: 800;
+}
+
+.dash-admin .sidebar-divider {
+  background: #e0eaf3;
+}
+
+.dash-admin .dash-nav-item {
+  color: #536a82;
+}
+
+.dash-admin .dash-nav-item:hover {
+  color: #173d70;
+  background: #eff6fd;
+}
+
+.dash-admin .dash-nav-item.active {
+  color: #1e5fac;
+  border-color: #d5e6f7;
+  background: linear-gradient(100deg, #edf6ff, #f8fbff);
+  box-shadow: inset 3px 0 0 #2160b4;
+}
+
+.dash-admin .dash-nav-item.active.starred {
+  color: #aa6228;
+  border-color: #f1d8b5;
+  background: #fff7ed;
+  box-shadow: inset 3px 0 0 #ca833e;
+}
+
+.dash-admin .nav-count {
+  color: #6e849b;
+  background: #eff4f9;
+}
+
+.dash-admin .dash-main {
+  background: transparent;
+}
+
+.dash-admin-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(348px, .72fr);
+  align-items: center;
+  gap: 34px;
+  min-height: 184px;
+  margin: 23px 28px 1px;
+  padding: 27px 31px;
+  overflow: hidden;
+  color: #eff7ff;
+  border: 1px solid rgba(161, 203, 246, .42);
+  border-radius: 22px;
+  background: linear-gradient(124deg, #173d70 0%, #1e579d 64%, #2f78c9 100%);
+  box-shadow: 0 22px 46px rgba(23, 61, 112, .17);
+}
+
+.dash-admin-hero::before,
+.dash-admin-hero::after {
+  position: absolute;
+  border: 1px solid rgba(203, 229, 255, .2);
+  border-radius: 50%;
+  content: '';
+}
+
+.dash-admin-hero::before {
+  width: 310px;
+  height: 310px;
+  top: -207px;
+  right: 13%;
+  box-shadow: 0 0 0 34px rgba(196, 226, 255, .06), 0 0 0 70px rgba(196, 226, 255, .035);
+}
+
+.dash-admin-hero::after {
+  width: 176px;
+  height: 176px;
+  right: -54px;
+  bottom: -103px;
+  border-width: 27px;
+  border-color: rgba(180, 220, 255, .12);
+}
+
+.dash-admin-hero__copy,
+.dash-admin-hero__overview {
+  position: relative;
+  z-index: 1;
+}
+
+.dash-admin-hero__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #b8dcff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.dash-admin-hero h1 {
+  margin: 12px 0 11px;
+  color: #fff;
+  font-size: clamp(25px, 2.5vw, 37px);
+  font-weight: 700;
+  letter-spacing: -.06em;
+  line-height: .99;
+}
+
+.dash-admin-hero h1 span {
+  color: #bfe2ff;
+}
+
+.dash-admin-hero__copy > p:last-child {
+  max-width: 540px;
+  margin: 0;
+  color: #d4e9ff;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.dash-admin-hero__overview {
+  display: grid;
+  gap: 12px;
+}
+
+.dash-admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dash-admin-metrics > div {
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid rgba(206, 231, 255, .25);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .12);
+  backdrop-filter: blur(8px);
+}
+
+.dash-admin-metrics span {
+  display: block;
+  overflow: hidden;
+  color: #d5eaff;
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-admin-metrics strong {
+  display: block;
+  margin-top: 4px;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.05em;
+}
+
+.dash-admin-hero__create {
+  display: inline-flex;
+  min-height: 39px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #194e8d;
+  border: 1px solid #d7eaff;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 9px 18px rgba(12, 47, 88, .12);
+  font-size: 11px;
+  font-weight: 800;
+  transition: transform .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.dash-admin-hero__create:hover {
+  background: #ecf6ff;
+  box-shadow: 0 12px 24px rgba(12, 47, 88, .18);
+  transform: translateY(-2px);
+}
+
+.dash-admin .dash-page-title {
+  color: #1a385b;
+  font-weight: 700;
+}
+
+.dash-page-subtitle {
+  color: #7890a8;
+}
+
+.dash-page-subtitle > span {
+  color: #315b86;
+}
+
+.dash-secondary-cta {
+  color: #1e5fac;
+  border: 1px solid #cce0f5;
+  background: #f3f9ff;
+  box-shadow: 0 6px 16px rgba(41, 102, 170, .07);
+}
+
+.dash-secondary-cta:hover {
+  color: #173d70;
+  border-color: #a9cceb;
+  background: #e9f4ff;
+  transform: translateY(-1px);
+}
+
+.dash-admin .dash-cta {
+  background: linear-gradient(135deg, #2160b4, #173d70);
+  box-shadow: 0 7px 18px rgba(31, 96, 180, .22);
+}
+
+.dash-admin .dash-cta:hover {
+  background: linear-gradient(135deg, #2d72ca, #1a4f8d);
+  box-shadow: 0 11px 25px rgba(31, 96, 180, .3);
+}
+
+.dash-admin .dash-tabs {
+  border-color: #d7e4f1;
+  background: rgba(255, 255, 255, .76);
+}
+
+.dash-admin .dash-tab {
+  color: #66809a;
+}
+
+.dash-admin .dash-tab:hover {
+  color: #1e5fac;
+}
+
+.dash-admin .dash-tab.active {
+  color: #1c548f;
+  border-color: #d6e5f3;
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(39, 96, 154, .08);
+}
+
+.dash-admin .dash-folder-card,
+.dash-admin .dash-project-card,
+.dash-admin .dash-project-list-item {
+  border-color: #d9e5f1;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 9px 22px rgba(31, 77, 125, .045);
+}
+
+.dash-admin .dash-folder-card:hover,
+.dash-admin .dash-project-card:hover,
+.dash-admin .dash-project-list-item:hover {
+  border-color: #a9cbe9;
+  background: #fff;
+  box-shadow: 0 18px 35px rgba(31, 77, 125, .12), 0 0 0 1px rgba(83, 146, 212, .06);
+}
+
+.dash-admin .dash-folder-card.active {
+  border-color: #91bee8;
+  background: #f0f7ff;
+}
+
+.dash-admin .dash-card-info {
+  border-top-color: #e6edf5;
+  background: rgba(255, 255, 255, .94);
+}
+
+.dash-admin .dash-mobile-fab {
+  background: linear-gradient(135deg, #2160b4, #173d70);
+  box-shadow: 0 14px 28px rgba(31, 96, 180, .3);
+}
+
+.dash-admin .dash-mobile-nav-btn.active {
+  color: #1e5fac;
+  background: #eaf4ff;
+}
+
+.dash-admin button:focus-visible,
+.dash-admin input:focus-visible,
+.dash-admin a:focus-visible {
+  outline-color: rgba(33, 96, 180, .78);
+}
+
+@media (max-width: 767px) {
+  .dash-admin .dash-topbar {
+    min-height: calc(64px + env(safe-area-inset-top, 0px));
+    height: auto;
+  }
+
+  .dash-brand-link img {
+    width: 121px;
+  }
+
+  .dash-admin-hero {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    min-height: 0;
+    margin: 12px 16px 0;
+    padding: 23px 21px 20px;
+    border-radius: 19px;
+  }
+
+  .dash-admin-hero h1 {
+    font-size: 29px;
+  }
+
+  .dash-admin-hero__copy > p:last-child {
+    font-size: 11px;
+  }
+
+  .dash-admin-metrics > div {
+    padding: 10px 9px;
+  }
+
+  .dash-admin-metrics strong {
+    font-size: 20px;
+  }
+
+  .dash-admin-hero__create {
+    width: 100%;
+  }
+
+  .dash-admin .dash-page-header {
+    padding-top: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-admin *,
+  .dash-admin *::before,
+  .dash-admin *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
 }
 
 /* ─── Toast ───────────────────────────────────────────── */

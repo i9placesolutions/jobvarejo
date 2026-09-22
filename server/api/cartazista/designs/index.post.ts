@@ -18,10 +18,11 @@ export default defineEventHandler(async (event) => {
     )
     if (row) return row
     const existing = await pgOneOrNull(
-      'select * from public.cartazista_designs where id = $1 and owner_id = $2',
-      [id, user.id]
+      'select *, state = $3::jsonb as same_state from public.cartazista_designs where id = $1 and owner_id = $2',
+      [id, user.id, parseAndStringifyJsonbParam(data.state, 'state')]
     )
     if (!existing) throw createError({ statusCode: 409, statusMessage: 'Não foi possível criar o cartaz.' })
+    if (!existing.same_state) throw createError({ statusCode: 409, statusMessage: 'Já existe uma versão diferente deste cartaz. Salve uma cópia para preservar suas alterações.' })
     return existing
   } catch (error: any) {
     if (error?.statusCode) throw error

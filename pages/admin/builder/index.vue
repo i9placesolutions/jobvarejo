@@ -8,7 +8,6 @@ import {
   Award,
   Type,
   Building2,
-  ArrowLeft,
   Image,
   CreditCard,
   PanelTop,
@@ -23,6 +22,13 @@ definePageMeta({
   middleware: ['auth', 'admin'],
   ssr: false
 })
+
+// Builder não faz parte da Central JobVarejo (fluxo de modelos de encarte).
+// Admins JobVarejo voltam para a Central; login do tenant builder continua válido.
+const jobvarejoAuth = useAuth()
+if (import.meta.client && jobvarejoAuth.isAdmin.value) {
+  await navigateTo('/', { replace: true })
+}
 
 const { getApiAuthHeaders } = useApiAuth()
 
@@ -61,8 +67,8 @@ const sections = ref<SectionItem[]>([
     count: null
   },
   {
-    title: 'Estilos de Preco',
-    description: 'Aparencia das etiquetas de preco nos encartes',
+    title: 'Estilos de Preço',
+    description: 'Aparência das etiquetas de preço nos encartes',
     href: '/admin/builder/price-tag-styles',
     icon: Tag,
     countKey: 'priceTagStyles',
@@ -78,7 +84,7 @@ const sections = ref<SectionItem[]>([
   },
   {
     title: 'Fontes',
-    description: 'Configuracoes de fontes e tipografia',
+    description: 'Configurações de fontes e tipografia',
     href: '/admin/builder/font-configs',
     icon: Type,
     countKey: 'fontConfigs',
@@ -102,7 +108,7 @@ const sections = ref<SectionItem[]>([
   },
   {
     title: 'Header Templates',
-    description: 'Templates de cabecalho do encarte',
+    description: 'Templates de cabeçalho do encarte',
     href: '/admin/builder/header-templates',
     icon: PanelTop,
     countKey: 'headerTemplates',
@@ -110,7 +116,7 @@ const sections = ref<SectionItem[]>([
   },
   {
     title: 'Footer Templates',
-    description: 'Templates de rodape do encarte',
+    description: 'Templates de rodapé do encarte',
     href: '/admin/builder/footer-templates',
     icon: PanelBottom,
     countKey: 'footerTemplates',
@@ -126,7 +132,7 @@ const sections = ref<SectionItem[]>([
   },
   {
     title: 'Segmentos',
-    description: 'Segmentos de mercado para recomendacao de temas (Supermercado, Padaria, etc)',
+    description: 'Segmentos de mercado para recomendação de temas',
     href: '/admin/builder/segments',
     icon: Target,
     countKey: 'segments',
@@ -142,7 +148,7 @@ const sections = ref<SectionItem[]>([
   },
   {
     title: 'MusicGPT / Banco de vozes',
-    description: 'Envie amostras autorizadas e gerencie as vozes usadas nas locuções da Rádio Indoor',
+    description: 'Envie amostras autorizadas e gerencie as vozes usadas nas locuções',
     href: '/admin/musicgpt',
     icon: Mic2,
     countKey: 'radioVoices',
@@ -198,59 +204,50 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-zinc-950 text-zinc-100">
-    <div class="mx-auto max-w-6xl px-6 py-10">
-      <div class="mb-8">
-        <NuxtLink
-          to="/"
-          class="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-        >
-          <ArrowLeft class="h-4 w-4" />
-          Voltar ao inicio
-        </NuxtLink>
-      </div>
-
-      <div class="mb-10">
-        <div class="flex items-center gap-3">
-          <LayoutDashboard class="h-7 w-7 text-emerald-400" />
-          <h1 class="text-2xl font-semibold tracking-tight">Administracao do Builder</h1>
-        </div>
-        <p class="mt-2 text-sm text-zinc-400">
-          Gerencie temas, modelos, grades, estilos e empresas do builder de encartes.
-        </p>
-      </div>
-
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <NuxtLink
-          v-for="section in sections"
-          :key="section.href"
-          :to="section.href"
-          class="group rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 transition-all hover:border-zinc-700 hover:bg-zinc-900"
-        >
-          <div class="flex items-start justify-between">
-            <component
-              :is="section.icon"
-              class="h-6 w-6 text-zinc-400 group-hover:text-emerald-400 transition-colors"
-            />
-            <span
-              v-if="section.count !== null"
-              class="rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-300"
-            >
-              {{ section.count }}
-            </span>
-            <span
-              v-else-if="isLoading"
-              class="h-5 w-8 animate-pulse rounded-full bg-zinc-800"
-            />
+  <AdminWorkspaceShell>
+    <div class="admin-page">
+      <div class="admin-page__inner">
+        <div class="mb-8 flex items-start gap-3">
+          <div class="rounded-xl border border-[color:var(--jv-line)] bg-[color:var(--jv-sky)] p-2.5 text-[color:var(--jv-blue)]">
+            <LayoutDashboard class="h-6 w-6" />
           </div>
-          <h2 class="mt-4 text-base font-medium text-zinc-100 group-hover:text-white">
-            {{ section.title }}
-          </h2>
-          <p class="mt-1 text-sm text-zinc-500 group-hover:text-zinc-400">
-            {{ section.description }}
-          </p>
-        </NuxtLink>
+          <div>
+            <p class="admin-page__eyebrow">Configuração · Builder</p>
+            <h1 class="admin-page__title">Temas, templates e empresas</h1>
+            <p class="admin-page__lead">
+              Configuração de temas, modelos, grades e empresas — mesma Central administrativa.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <NuxtLink
+            v-for="section in sections"
+            :key="section.href"
+            :to="section.href"
+            class="admin-link-card group"
+          >
+            <div class="flex items-start justify-between">
+              <component
+                :is="section.icon"
+                class="h-6 w-6 text-[color:var(--jv-muted)] transition-colors group-hover:text-[color:var(--jv-blue)]"
+              />
+              <span
+                v-if="section.count !== null"
+                class="rounded-full bg-[color:var(--jv-sky)] px-2.5 py-0.5 text-xs font-bold text-[color:var(--jv-navy)]"
+              >
+                {{ section.count }}
+              </span>
+              <span
+                v-else-if="isLoading"
+                class="h-5 w-8 animate-pulse rounded-full bg-slate-200"
+              />
+            </div>
+            <h2 class="admin-link-card__title">{{ section.title }}</h2>
+            <p class="admin-link-card__desc">{{ section.description }}</p>
+          </NuxtLink>
+        </div>
       </div>
     </div>
-  </div>
+  </AdminWorkspaceShell>
 </template>

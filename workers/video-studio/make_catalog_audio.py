@@ -81,12 +81,14 @@ def save(name, duration, sample, music_file=False):
 
 
 if __name__ == '__main__':
-    records=[]
+    manifest_path = OUT/'catalog-provenance.json'
+    previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else {'assets': []}
+    records=[asset for asset in previous['assets'] if asset.get('origin') in ('cc0-adaptation', 'user-requested-video-extract')]
     for name,duration in SFX.items():
         records.append(save(name,duration,lambda t,r,n=name,d=duration:effect(n,t,d,r)))
     for name in ['retail-drive','retail-bounce']:
         records.append(save(name,30,lambda t,r,n=name:music(n,t,r),True))
-    (OUT/'catalog-provenance.json').write_text(json.dumps({'description':'Síntese original do projeto; sem samples externos ou material nativo do CapCut.','assets':records},ensure_ascii=False,indent=2)+'\n')
+    (OUT/'catalog-provenance.json').write_text(json.dumps({'description':'Efeitos originais, CC0 e recortes solicitados; origem e condições registradas por arquivo.','assets':records},ensure_ascii=False,indent=2)+'\n')
     subprocess.run([sys.executable,str(Path(__file__).with_name('make_boom_audio.py'))],check=True)
     subprocess.run([sys.executable,str(Path(__file__).with_name('make_thematic_audio.py'))],check=True)
     print(f'{len(records)+17} arquivos originais preparados')

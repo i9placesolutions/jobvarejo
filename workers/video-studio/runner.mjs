@@ -12,6 +12,7 @@ import { tmpdir,hostname } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { renderVideo,probe,root } from './engine.mjs'
+import { createVideoCover } from './cover.mjs'
 import { renewVideoLease } from './lease.mjs'
 const pool=new pg.Pool({connectionString:process.env.POSTGRES_DATABASE_URL,max:3})
 const cfg=(name)=>process.env[name]||process.env['NUXT_'+name]||''
@@ -61,7 +62,24 @@ async function generate(job,dir){
  if(doc.audio.music!=='none'){if(isBuiltinMusic(doc.audio.music)){music='music.mp3';await cp(join(root,'public/video-studio/audio',doc.audio.music+'.mp3'),join(dir,music))}else{const asset=await assetFile(doc.audio.music,job.user_id,dir);const info=await probe(asset.file);if(!info.streams?.some(s=>s.codec_type==='audio'))throw Error('A música enviada não é um áudio válido.');music=asset.name}}
  for(const name of ['impact','whoosh'])await cp(join(root,'public/video-studio/audio',name+'.mp3'),join(dir,name+'.mp3'))
  const outputs=[]
- for(let i=0;i<doc.formats.length;i++){const format=doc.formats[i],output=join(dir,format+'.mp4');const recovered=(await pool.query("SELECT id,duration FROM video_studio_assets WHERE user_id=$1 AND kind='render' AND metadata->>'jobId'=$2 AND metadata->>'format'=$3 ORDER BY created_at DESC LIMIT 1",[job.user_id,job.id,format])).rows[0];if(recovered){outputs.push({format,assetId:recovered.id,duration:recovered.duration});continue}let previous=-1;const info=await renderVideo({document:doc,label:job.payload.label,media,scenes,format,music,impact:'impact.mp3',whoosh:'whoosh.mp3'},dir,output,p=>{const n=Math.floor((i+p)/doc.formats.length*95);if(n>previous+4){previous=n;pool.query('UPDATE public.video_studio_jobs SET progress=$1 WHERE id=$2 AND lease_token=$3 AND status=\'running\'',[n,job.id,job.lease_token]).catch(()=>{})}});const asset=await store(job,'render',doc.title+' — '+format,await readFile(output),'video/mp4','mp4',Number(info.format.duration),{jobId:job.id,revision:job.revision,format});outputs.push({format,assetId:asset.id,duration:asset.duration})}
+ for(let i=0;i<doc.formats.length;i++){
+  const format=doc.formats[i],output=join(dir,format+'.mp4')
+  const recovered=(await pool.query("SELECT id,duration FROM video_studio_assets WHERE user_id=$1 AND kind='render' AND metadata->>'jobId'=$2 AND metadata->>'format'=$3 ORDER BY created_at DESC LIMIT 1",[job.user_id,job.id,format])).rows[0]
+  if(recovered){outputs.push({format,assetId:recovered.id,duration:recovered.duration});continue}
+  let previous=-1
+  const info=await renderVideo({document:doc,label:job.payload.label,media,scenes,format,music,impact:'impact.mp3',whoosh:'whoosh.mp3'},dir,output,p=>{const n=Math.floor((i+p)/doc.formats.length*95);if(n>previous+4){previous=n;pool.query('UPDATE public.video_studio_jobs SET progress=$1 WHERE id=$2 AND lease_token=$3 AND status=\'running\'',[n,job.id,job.lease_token]).catch(()=>{})}})
+  const asset=await store(job,'render',doc.title+' — '+format,await readFile(output),'video/mp4','mp4',Number(info.format.duration),{jobId:job.id,revision:job.revision,format})
+  let coverAssetId
+  try{
+   const cover=await createVideoCover(output,join(dir,`cover-${format}.jpg`))
+   const coverAsset=await store(job,'image',`${doc.title} — capa ${format}`,cover,'image/jpeg','jpg',null,{role:'render-cover',jobId:job.id,revision:job.revision,format,renderAssetId:asset.id})
+   coverAssetId=coverAsset.id
+  }catch(error){
+   // A renderização principal continua disponível mesmo se uma capa derivada falhar.
+   console.error('[video-cover] Não foi possível gerar a capa',job.id,format,error?.message||error)
+  }
+  outputs.push({format,assetId:asset.id,duration:asset.duration,...(coverAssetId?{coverAssetId}:{})})
+ }
  return {outputs}
 }
 async function main(){await touch();const heartbeat=setInterval(()=>touch().catch(()=>{}),20000);try{while(!stopping){const job=await claim();if(!job){await sleep(2500);continue}const dir=await mkdtemp(join(tmpdir(),'jobvarejo-video-'));let lost=false;const lease=setInterval(()=>renewVideoLease(pool,job).then(state=>{if(state==='lost')lost=true}),20000);try{const result=await generate(job,dir);if(lost)throw Error('A geração foi assumida por outro processo.');const published=await pool.query("UPDATE public.video_studio_jobs SET status='ready',result=$1::jsonb,progress=100,error=NULL,updated_at=now(),lease_until=NULL WHERE id=$2 AND lease_token=$3 AND status='running'",[JSON.stringify(result),job.id,job.lease_token]);if(!published.rowCount)throw Error('A geração foi assumida por outro processo.');console.log('video job ready',job.id)}catch(e){if(stopping){await pool.query("UPDATE public.video_studio_jobs SET lease_until=now() WHERE id=$1 AND lease_token=$2",[job.id,job.lease_token])}else{const message=String(e.message||'Não foi possível gerar o vídeo.').slice(0,400);await pool.query("UPDATE public.video_studio_jobs SET status='failed',error=$1,updated_at=now(),lease_until=NULL WHERE id=$2 AND lease_token=$3 AND status='running'",[message,job.id,job.lease_token]);console.error('video job failed',job.id,message)}}finally{clearInterval(lease);await rm(dir,{recursive:true,force:true})}}}finally{clearInterval(heartbeat);await pool.query('DELETE FROM public.video_studio_workers WHERE id=$1',[workerId]);await pool.end()}}

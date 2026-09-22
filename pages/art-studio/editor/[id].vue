@@ -824,7 +824,11 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <ArtShell>
+  <component
+    :is="auth.isSuperAdmin.value ? AdminWorkspaceShell : 'div'"
+    v-bind="auth.isSuperAdmin.value ? { activeNav: 'art-studio' } : {}"
+  >
+  <ArtShell :embedded="auth.isSuperAdmin.value">
     <div class="studio-toolbar">
       <NuxtLink
         :to="managing ? '/art-studio?tab=admin' : '/art-studio'"
@@ -899,7 +903,11 @@ onBeforeUnmount(() => {
     <div v-if="loading" class="art-empty" role="status">
       Preparando seu espaço de criação…
     </div>
-    <div v-else-if="ready" class="studio-workspace">
+    <div
+      v-else-if="ready"
+      class="studio-workspace"
+      :class="{ 'studio-workspace--embedded': auth.isSuperAdmin.value }"
+    >
       <aside
         class="studio-layers"
         :class="{ 'mobile-open': mobilePanel === 'layers' }"
@@ -1700,6 +1708,7 @@ onBeforeUnmount(() => {
       </form>
     </dialog>
   </ArtShell>
+  </component>
 </template>
 <style scoped>
 .format-pages {
@@ -1708,14 +1717,14 @@ onBeforeUnmount(() => {
   overflow: auto;
   gap: 8px;
   padding: 12px 16px;
-  background: #f6f8f1;
-  border-top: 1px solid #d9e1d2;
+  background: #f7fbff;
+  border-top: 1px solid #d7e4f1;
 }
 .format-pages button {
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid #dce2d7;
+  border: 1px solid #d7e4f1;
   border-radius: 7px;
   background: #fff;
   padding: 9px 12px;
@@ -1723,7 +1732,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .format-pages button.active {
-  background: #264f38;
+  background: #2160b4;
   color: #fff;
 }
 .format-pages small {
@@ -1736,7 +1745,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   align-items: center;
   background: #fff;
-  border-bottom: 1px solid #dde2d8;
+  border-bottom: 1px solid #d7e4f1;
   padding: 14px 22px;
 }
 .art-name {
@@ -1748,14 +1757,14 @@ onBeforeUnmount(() => {
   max-width: 370px;
   border: 0;
   background: transparent;
-  color: #234230;
+  color: #172b45;
   font-weight: 600;
   font-size: 16px;
 }
 .art-name small {
   display: block;
   font-size: 10px;
-  color: #88947f;
+  color: #8093a9;
   margin-top: 4px;
 }
 .toolbar-history {
@@ -1768,6 +1777,11 @@ onBeforeUnmount(() => {
   height: calc(100vh - 166px);
   min-height: 650px;
 }
+.art-shell--embedded .studio-workspace,
+.studio-workspace--embedded {
+  height: calc(100vh - 220px);
+  min-height: 520px;
+}
 .studio-layers,
 .studio-properties {
   background: #fff;
@@ -1775,10 +1789,10 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 .studio-layers {
-  border-right: 1px solid #dde2d8;
+  border-right: 1px solid #d7e4f1;
 }
 .studio-properties {
-  border-left: 1px solid #dde2d8;
+  border-left: 1px solid #d7e4f1;
 }
 .panel-title {
   display: flex;
@@ -1792,11 +1806,11 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 .panel-title > svg {
-  color: #8a977f;
+  color: #8093a9;
 }
 .panel-title small {
   font-size: 10px;
-  color: #87927e;
+  color: #8093a9;
 }
 .add-grid {
   display: grid;
@@ -1805,7 +1819,7 @@ onBeforeUnmount(() => {
   margin-top: 18px;
 }
 .add-grid button {
-  border: 1px solid #e1e7dc;
+  border: 1px solid #d7e4f1;
   border-radius: 9px;
   padding: 15px 8px;
   display: flex;
@@ -1813,11 +1827,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   background: #fafbf7;
-  color: #436044;
+  color: #173d70;
   font-size: 11px;
 }
 .add-grid button:hover {
-  background: #e9f0df;
+  background: #eaf3ff;
 }
 .add-grid svg {
   width: 20px;
@@ -1835,7 +1849,7 @@ onBeforeUnmount(() => {
 .panel-help {
   font-size: 11px;
   line-height: 1.6;
-  color: #89917f;
+  color: #8093a9;
   margin: 10px 0 16px;
 }
 .layer-list {
@@ -1851,14 +1865,14 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
 }
 .layer-item.active {
-  background: #edf3e7;
-  border-color: #d6e2cc;
+  background: #eaf3ff;
+  border-color: #c5daf3;
 }
 .layer-item button {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #75836f;
+  color: #60758f;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1881,14 +1895,14 @@ onBeforeUnmount(() => {
 .layer-select small {
   font-size: 6px;
   letter-spacing: 0.3px;
-  color: #53804c;
+  color: #2160b4;
 }
 .brand-note {
   margin-top: 35px;
   padding: 18px;
   background: #f3f6ec;
   border-radius: 10px;
-  color: #718464;
+  color: #60758f;
 }
 .brand-note strong {
   font-size: 12px;
@@ -1902,7 +1916,7 @@ onBeforeUnmount(() => {
 }
 .brand-note a {
   font-size: 10px;
-  color: #3f6745;
+  color: #173d70;
 }
 .canvas-section {
   display: flex;
@@ -1916,8 +1930,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 10px;
   padding: 16px 22px;
-  color: #819079;
-  background: #edf0e9;
+  color: #8093a9;
+  background: #eaf3ff;
   font-size: 9px;
 }
 .canvas-topline b {
@@ -1933,7 +1947,7 @@ onBeforeUnmount(() => {
 .canvas-bottomline button {
   border: 0;
   background: transparent;
-  color: #527049;
+  color: #2160b4;
   text-decoration: underline;
 }
 .field {
@@ -1990,12 +2004,12 @@ onBeforeUnmount(() => {
 }
 .intro-panel {
   padding: 30px 4px 20px;
-  border-bottom: 1px solid #e4e8dd;
+  border-bottom: 1px solid #d7e4f1;
   text-align: center;
 }
 .intro-panel > span {
   font-size: 43px;
-  color: #8b9e65;
+  color: #2160b4;
 }
 .intro-panel h3 {
   font-size: 19px;
@@ -2005,32 +2019,32 @@ onBeforeUnmount(() => {
 .intro-panel p {
   font-size: 12px;
   line-height: 1.7;
-  color: #8c9681;
+  color: #60758f;
 }
 .dynamic-note {
   margin-top: 18px;
   padding: 11px;
-  background: #edf5e6;
+  background: #eaf3ff;
   border-radius: 8px;
   font-size: 11px;
   display: flex;
   gap: 7px;
-  color: #59774a;
+  color: #173d70;
 }
 .field input[type='range'] {
   display: block;
   width: 100%;
   margin-top: 9px;
-  accent-color: #315d42;
+  accent-color: #2160b4;
 }
 .admin-banner {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 22px;
-  background: #e8eedc;
+  background: #eaf3ff;
   font-size: 12px;
-  color: #4d6542;
+  color: #173d70;
 }
 .editor-alert {
   margin: 8px 16px;
@@ -2056,19 +2070,19 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 18px;
   background: #fff;
-  color: #24412f;
+  color: #172b45;
   width: 480px;
   max-width: 92vw;
   max-height: 90vh;
   padding: 28px;
 }
 .publish-dialog::backdrop {
-  background: #17291e99;
+  background: rgba(23, 61, 112, 0.55);
   backdrop-filter: blur(3px);
 }
 .publish-dialog form > p {
   font-size: 13px;
-  color: #7b8974;
+  color: #60758f;
   line-height: 1.7;
   margin-top: 15px;
 }
@@ -2080,7 +2094,7 @@ onBeforeUnmount(() => {
   margin: 22px 0;
 }
 .publish-check input {
-  accent-color: #305d40;
+  accent-color: #2160b4;
 }
 @media (max-width: 1150px) {
   .studio-workspace {
@@ -2141,7 +2155,7 @@ onBeforeUnmount(() => {
     display: flex;
     order: 2;
     background: #fff;
-    border-bottom: 1px solid #dce3d7;
+    border-bottom: 1px solid #d7e4f1;
   }
   .mobile-panel-tabs button {
     flex: 1;
@@ -2152,12 +2166,12 @@ onBeforeUnmount(() => {
     background: white;
     border: 0;
     border-bottom: 2px solid transparent;
-    color: #839079;
+    color: #8093a9;
     font-size: 13px;
   }
   .mobile-panel-tabs button.active {
-    border-color: #315d42;
-    color: #315d42;
+    border-color: #2160b4;
+    color: #2160b4;
   }
   .add-grid {
     grid-template-columns: repeat(4, 1fr);

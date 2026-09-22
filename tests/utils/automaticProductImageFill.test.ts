@@ -33,3 +33,11 @@ it('desenha a pilha de cima para baixo para as cópias inferiores ficarem à fre
     expect(plan[index]!.scale).toBe(plan[0]!.scale)
   }
 })
+it('abandona duas cópias quando o novo espaço pede uma imagem', () => {
+  const before = planAutomaticProductImageFill(200, 400, 100, 100)
+  const after = planAutomaticProductImageFill(200, 200, 100, 100)
+  expect(before.length).toBeGreaterThan(1)
+  expect(after).toHaveLength(1)
+  expect(after[0]).toEqual({ left: 0, top: 0, scale: 2 })
+  expect(new Set(before.map(image => image.scale)).size).toBe(1)
+})

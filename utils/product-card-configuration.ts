@@ -26,6 +26,22 @@ const DEFAULT_ELEMENTS: Record<ProductCardElementKey, ProductCardElementLayout> 
   limit: { visible: true, x: 50, y: 25, width: 78, height: 12, rotation: 0 }
 }
 
+// O Largo usa duas colunas visuais: produto à esquerda e informações à direita.
+// Nome, limite e etiqueta formam uma pilha curta no centro da coluna direita.
+// A receita anterior espalhava nome e preço pelo card e deixava a área da
+// imagem atravessar a etiqueta quando havia várias imagens preenchidas.
+const SAFE_WIDE_PROFILE_LAYOUT: Partial<Record<ProductCardElementKey, Partial<ProductCardElementLayout>>> = {
+  name: { x: 77, y: 36, width: 42, height: 16 },
+  // Use a taller image area so automatic copies can overlap slightly instead
+  // of being forced into a small side-by-side strip. The right column keeps a
+  // 2% breathing gap from the image column and the price no longer starts at
+  // the left edge of the information column.
+  image: { x: 27, y: 49, width: 54, height: 78 },
+  price: { x: 77, y: 67, width: 42, height: 22 },
+  alcoholBadge: { x: 9, y: 12, width: 18, height: 18 },
+  limit: { x: 77, y: 50, width: 38, height: 9 }
+}
+
 const PROFILE_OVERRIDES: Record<
   ProductCardConfigurationProfileKey,
   Partial<Record<ProductCardElementKey, Partial<ProductCardElementLayout>>>
@@ -45,13 +61,7 @@ const PROFILE_OVERRIDES: Record<
     limit: { y: 27, width: 88, height: 11 }
   },
   standard: {},
-  wide: {
-    name: { y: 12, width: 88, height: 15 },
-    image: { y: 51, width: 86, height: 52 },
-    price: { y: 84, width: 58, height: 24 },
-    alcoholBadge: { x: 88, y: 10, width: 16, height: 15 },
-    limit: { y: 27, width: 66, height: 11 }
-  },
+  wide: SAFE_WIDE_PROFILE_LAYOUT,
   featured: {
     name: { y: 10, width: 82, height: 14 },
     image: { y: 48, width: 72, height: 54 },
@@ -91,6 +101,101 @@ const cloneElements = (elements: Record<ProductCardElementKey, ProductCardElemen
     ProductCardElementKey,
     ProductCardElementLayout
   >
+
+const elementBoundsOverlap = (
+  first: ProductCardElementLayout,
+  second: ProductCardElementLayout
+) => {
+  const firstLeft = first.x - first.width / 2
+  const firstRight = first.x + first.width / 2
+  const firstTop = first.y - first.height / 2
+  const firstBottom = first.y + first.height / 2
+  const secondLeft = second.x - second.width / 2
+  const secondRight = second.x + second.width / 2
+  const secondTop = second.y - second.height / 2
+  const secondBottom = second.y + second.height / 2
+
+  return firstLeft < secondRight
+    && firstRight > secondLeft
+    && firstTop < secondBottom
+    && firstBottom > secondTop
+}
+
+const shouldRepairLegacyWideProfile = (
+  elements: Record<ProductCardElementKey, ProductCardElementLayout>
+) => {
+  const name = elements.name
+  const image = elements.image
+  const price = elements.price
+  const limit = elements.limit
+
+  // A receita Largo antiga persistia o nome no topo e o preço quase no
+  // rodapé. Mesmo sem sobreposição, isso deixa a coluna direita quebrada e
+  // não corresponde à prévia da configuração: os dois devem ficar próximos,
+  // alinhados pelo mesmo eixo horizontal.
+  const separatedRightColumn = name.x >= 60
+    && price.x >= 60
+    && name.y <= 24
+    && price.y >= 60
+
+  // Migra a última receita "segura" do Largo. Ela já corrigia a coluna
+  // direita, mas deixava a área de imagens baixa demais para dois produtos:
+  // as cópias ficavam lado a lado, pequenas e sem sobreposição.
+  const compactWideImageArea = image.x === 28
+    && image.y === 48
+    && image.width === 48
+    && image.height === 56
+
+  // Evolui a primeira receita equilibrada publicada nesta correção. Ela já
+  // mantinha a etiqueta dentro do card, porém ainda deixava o produto pequeno
+  // demais e o valor visualmente próximo da coluna esquerda.
+  const previousBalancedWideLayout = name.x === 76
+    && name.y === 36
+    && name.width === 44
+    && name.height === 16
+    && image.x === 27
+    && image.y === 48
+    && image.width === 50
+    && image.height === 68
+    && price.x === 76
+    && price.y === 67
+    && price.width === 46
+    && price.height === 22
+    && limit.x === 76
+    && limit.y === 50
+    && limit.width === 40
+    && limit.height === 9
+
+  // Cobre a receita persistida anteriormente (imagem 68x90 e preco 58x32),
+  // alem do default antigo em que imagem e preco compartilhavam a mesma area.
+  // Sobreposicoes pequenas continuam livres para ajustes manuais.
+  return separatedRightColumn
+    || compactWideImageArea
+    || previousBalancedWideLayout
+    || image.height >= 88
+    || price.height >= 28
+    || (
+      elementBoundsOverlap(image, price)
+      && (image.width >= 62 || price.width >= 54)
+    )
+    || (
+      elementBoundsOverlap(image, limit)
+      && image.width >= 62
+    )
+}
+
+const repairLegacyWideProfile = (
+  elements: Record<ProductCardElementKey, ProductCardElementLayout>,
+  fallback: Record<ProductCardElementKey, ProductCardElementLayout>
+) => Object.fromEntries(
+  ELEMENT_KEYS.map((key) => [
+    key,
+    normalizeProductCardElementLayout(
+      { ...elements[key], ...(SAFE_WIDE_PROFILE_LAYOUT[key] || {}) },
+      fallback[key]
+    )
+  ])
+) as Record<ProductCardElementKey, ProductCardElementLayout>
 
 export const createDefaultProductCardConfiguration = (): ProductCardConfiguration => ({
   version: 1,
@@ -160,6 +265,19 @@ export const normalizeProductCardConfiguration = (
       ]
     })
   ) as Record<ProductCardConfigurationProfileKey, ProductCardConfigurationProfile>
+
+  // Migra somente receitas Largo claramente incompatíveis com o proprio
+  // formato. Configuracoes Largo menores continuam livres para ajustes;
+  // esta protecao remove a combinacao que fazia a imagem ocupar quase todo o
+  // card e empurrava a etiqueta para cima dela.
+  if (profiles.wide && shouldRepairLegacyWideProfile(profiles.wide.elements)) {
+    profiles.wide = {
+      elements: repairLegacyWideProfile(
+        profiles.wide.elements,
+        defaults.profiles!.wide.elements
+      )
+    }
+  }
 
   return {
     version: 1,

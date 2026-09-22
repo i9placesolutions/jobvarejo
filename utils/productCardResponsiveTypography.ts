@@ -1,4 +1,6 @@
+import { positionProductLimitBelowName } from './productLimitLayout'
 import { applyWholesaleReferenceCardLayout } from './wholesaleReferenceLayout'
+import { isExplicitManualPricePosition } from './pricePositionPolicy'
 
 export const fitResponsiveProductName = (title: any, width: number, height: number, nameScale = 1) => {
   if (title && !title.__manualTypography && title.visible !== false) {
@@ -28,18 +30,22 @@ export const fitResponsiveProductName = (title: any, width: number, height: numb
 // Limites finais por card, independentes da célula de referência da zona.
 export const fitResponsiveProductTypography = (group: any, width: number, height: number, nameScale = 1, fitPrice = true) => {
   if (!(width > 0 && height > 0)) return
-  if (applyWholesaleReferenceCardLayout(group, width, height)) return
+  if (applyWholesaleReferenceCardLayout(group, width, height)) {
+    positionProductLimitBelowName(group, width, height)
+    return
+  }
   const children = group.getObjects?.() || []
   const title = children.find((o: any) => o.name === 'smart_title')
   const price = children.find((o: any) => o.name === 'priceGroup' || o.isPriceGroup)
   fitResponsiveProductName(title, width, height, nameScale)
-  if (fitPrice && price && price.visible !== false && !price.__manualPricePosition
+  positionProductLimitBelowName(group, width, height)
+  if (fitPrice && price && price.visible !== false && !isExplicitManualPricePosition(price)
     && ![price.__manualScaleX, price.__manualScaleY].some(value =>
       Number.isFinite(Number(value)) && Math.abs(Number(value) - 1) > 0.0001)) {
     const labelWidth = Math.abs(Number(price.width) * Number(price.scaleX || 1))
     const labelHeight = Math.abs(Number(price.height) * Number(price.scaleY || 1))
     const compact = Math.min(1, Math.sqrt(height / width))
-    const factor = Math.min(width * 0.86 * compact / labelWidth, height * 0.30 / labelHeight)
+    const factor = Math.min(width * 0.86 * compact / labelWidth, height * 0.44 / labelHeight)
     if (Number.isFinite(factor) && factor > 0 && Math.abs(factor - 1) > 0.001) {
       const bottom = price.getPointByOrigin?.('center', 'bottom')
       price.set({ scaleX: price.scaleX * factor, scaleY: price.scaleY * factor })
@@ -55,7 +61,10 @@ export const fitResponsiveProductTypography = (group: any, width: number, height
 export const harmonizeProductCardTypography = (cards: any[]) => {
   const groups = new Map<string, any[]>()
   for (const card of cards) {
-    if (applyWholesaleReferenceCardLayout(card, card.width, card.height)) continue
+    if (applyWholesaleReferenceCardLayout(card, card.width, card.height)) {
+      positionProductLimitBelowName(card, card.width, card.height)
+      continue
+    }
     const key = `${Math.round(card.width)}:${Math.round(card.height)}`
     const group = groups.get(key) || []
     group.push(card)
@@ -78,17 +87,8 @@ export const harmonizeProductCardTypography = (cards: any[]) => {
       title.setCoords?.()
       title.dirty = true
     }
-    const prices = cards.flatMap(card => (card.getObjects?.() || []).filter((o: any) => (o.name === 'priceGroup' || o.isPriceGroup) && o.visible !== false))
-    const height = Math.min(...prices.map((o: any) => Math.abs(o.height * o.scaleY)).filter((n: number) => n > 0))
-    for (const price of prices) {
-      const current = Math.abs(price.height * price.scaleY)
-      if (!(current > 0 && Number.isFinite(height))) continue
-      const bottom = price.getPointByOrigin?.('center', 'bottom')
-      price.set({ scaleX: price.scaleX * height / current, scaleY: price.scaleY * height / current })
-      if (bottom) price.setPositionByOrigin?.(bottom, 'center', 'bottom')
-      price.setCoords?.()
-      price.dirty = true
-    }
-    cards.forEach(card => { card.dirty = true })
+    // Cada etiqueta já foi encaixada na área do card/receita. Igualar à menor
+    // altura encolhia modelos com cabeçalho e também sobrescrevia escala manual.
+    cards.forEach(card => { positionProductLimitBelowName(card, card.width, card.height); card.dirty = true })
   }
 }

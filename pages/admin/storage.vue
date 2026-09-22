@@ -53,88 +53,81 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-zinc-950 text-zinc-100">
-    <div class="mx-auto max-w-4xl px-6 py-10">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h1 class="text-2xl font-semibold tracking-tight">Uso do Bucket (Wasabi)</h1>
-          <p class="mt-1 text-sm text-zinc-400">
-            Soma tamanho/quantidade por pasta. Se aparecer “truncated”, aumente <code class="text-zinc-200">maxKeys</code> ou filtre por prefixo.
-          </p>
-        </div>
-
-        <div class="flex gap-2">
-          <button
-            class="rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-white disabled:opacity-60"
-            :disabled="isLoading"
-            @click="fetchStats"
-          >
+  <AdminWorkspaceShell active-nav="storage">
+    <div class="admin-page">
+      <div class="admin-page__inner" style="max-width: 56rem">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="admin-page__eyebrow">Configuração · Storage</p>
+            <h1 class="admin-page__title">Uso do Bucket (Wasabi)</h1>
+            <p class="admin-page__lead">
+              Soma tamanho/quantidade por pasta. Se aparecer “truncated”, aumente <code class="rounded bg-[color:var(--jv-sky)] px-1.5 py-0.5 text-[color:var(--jv-navy)]">maxKeys</code> ou filtre por prefixo.
+            </p>
+          </div>
+          <button class="admin-btn admin-btn--primary" :disabled="isLoading" @click="fetchStats">
             {{ isLoading ? 'Carregando…' : 'Atualizar' }}
           </button>
         </div>
-      </div>
 
-      <div v-if="error" class="mt-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
-        {{ error }}
-      </div>
+        <div v-if="error" class="admin-alert admin-alert--error mt-6">{{ error }}</div>
 
-      <div v-if="stats" class="mt-6 space-y-4">
-        <div class="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-          <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-            <div>
-              <span class="text-zinc-400">Bucket:</span>
-              <span class="ml-2 font-medium text-zinc-200">{{ stats.bucket }}</span>
+        <div v-if="stats" class="mt-6 space-y-4">
+          <div class="admin-card admin-card--pad">
+            <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+              <div>
+                <span class="text-[color:var(--jv-muted)]">Bucket:</span>
+                <span class="ml-2 font-semibold text-[color:var(--jv-navy)]">{{ stats.bucket }}</span>
+              </div>
+              <div>
+                <span class="text-[color:var(--jv-muted)]">Endpoint:</span>
+                <span class="ml-2 font-semibold text-[color:var(--jv-navy)]">{{ stats.endpoint }}</span>
+              </div>
+              <div>
+                <span class="text-[color:var(--jv-muted)]">Total:</span>
+                <span class="ml-2 font-bold text-[color:var(--jv-navy)]">{{ stats.total.size }}</span>
+                <span class="ml-2 text-[color:var(--jv-muted)]">({{ stats.total.objects }} objetos)</span>
+              </div>
             </div>
-            <div>
-              <span class="text-zinc-400">Endpoint:</span>
-              <span class="ml-2 font-medium text-zinc-200">{{ stats.endpoint }}</span>
-            </div>
-            <div>
-              <span class="text-zinc-400">Total:</span>
-              <span class="ml-2 font-semibold text-zinc-100">{{ stats.total.size }}</span>
-              <span class="ml-2 text-zinc-400">({{ stats.total.objects }} objetos)</span>
+            <div class="mt-2 text-xs text-[color:var(--jv-muted)]">
+              Gerado em {{ stats.generatedAt }} | maxKeys={{ stats.maxKeys }}
             </div>
           </div>
-          <div class="mt-2 text-xs text-zinc-500">
-            Gerado em {{ stats.generatedAt }} | maxKeys={{ stats.maxKeys }}
+
+          <div class="admin-table-wrap" role="region" aria-label="Tabela de registros — deslize para ver todas as colunas" tabindex="0">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Pasta</th>
+                  <th>Tamanho</th>
+                  <th>Objetos</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="p in stats.prefixes" :key="p.prefix">
+                  <td class="font-mono text-xs">{{ p.prefix }}</td>
+                  <td>{{ p.size }}</td>
+                  <td>{{ p.objects }}</td>
+                  <td>
+                    <span class="admin-badge" :class="p.truncated ? 'admin-badge--warn' : 'admin-badge--ok'">
+                      {{ p.truncated ? 'truncated' : 'ok' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </div>
 
-        <div class="overflow-x-auto rounded-lg border border-zinc-800" role="region" aria-label="Tabela de registros — deslize para ver todas as colunas" tabindex="0">
-          <table class="w-full text-left text-sm">
-            <thead class="bg-zinc-900">
-              <tr>
-                <th class="px-4 py-3 font-medium text-zinc-200">Pasta</th>
-                <th class="px-4 py-3 font-medium text-zinc-200">Tamanho</th>
-                <th class="px-4 py-3 font-medium text-zinc-200">Objetos</th>
-                <th class="px-4 py-3 font-medium text-zinc-200">Status</th>
-              </tr>
-            </thead>
-            <tbody class="bg-zinc-950">
-              <tr v-for="p in stats.prefixes" :key="p.prefix" class="border-t border-zinc-900">
-                <td class="px-4 py-3 font-mono text-xs text-zinc-200">{{ p.prefix }}</td>
-                <td class="px-4 py-3 text-zinc-100">{{ p.size }}</td>
-                <td class="px-4 py-3 text-zinc-300">{{ p.objects }}</td>
-                <td class="px-4 py-3">
-                  <span
-                    class="inline-flex items-center rounded-full px-2 py-1 text-xs"
-                    :class="p.truncated ? 'bg-amber-500/15 text-amber-200 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-200 border border-emerald-500/20'"
-                  >
-                    {{ p.truncated ? 'truncated' : 'ok' }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div v-if="stats.warnings?.length" class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
-          <div class="font-medium text-amber-100">Avisos</div>
-          <ul class="mt-2 list-disc pl-5">
-            <li v-for="w in stats.warnings" :key="w">{{ w }}</li>
-          </ul>
+          <div v-if="stats.warnings?.length" class="admin-alert admin-alert--warning">
+            <div>
+              <div class="font-semibold">Avisos</div>
+              <ul class="mt-2 list-disc pl-5">
+                <li v-for="w in stats.warnings" :key="w">{{ w }}</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
+  </AdminWorkspaceShell>
 </template>

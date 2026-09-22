@@ -20,10 +20,17 @@ describe('Cobertura do catálogo de encartes',()=>{
    for(const a of [r.background,r.seal,r.energyBackground,r.energyBackgroundVertical].filter(Boolean))expect(existsSync(`public/video-studio/templates/${a}`)).toBe(true)
   }
  })
+ it('preserva a paleta do encarte em todos os modelos sem sobreposição genérica',()=>{
+  for(const r of recipes){expect(r.energyBackground).toBeUndefined();expect(r.energyBackgroundVertical).toBeUndefined()}
+  const client=recipes.find(r=>r.sourceProject==='ea0d0789-3081-409c-b830-10739806b065')!
+  const rgb=client.base.match(/[a-f0-9]{2}/gi)!.map(v=>parseInt(v,16))
+  expect(rgb[2]).toBeGreaterThan(rgb[0]!+80)
+  expect(client.background).toContain(client.sourceProject)
+ })
  it('oferece seis fundos com arte própria em cada formato e mantém a escolha do usuário',()=>{
   for(const bg of VIDEO_BACKGROUNDS){
    for(const format of ['vertical','horizontal'] as const)expect(existsSync('public/video-studio/templates/'+backgroundAsset(bg.id,format))).toBe(true)
-   const doc=newVideoFromTemplate('alerta');doc.background=bg.id;applyVideoTemplate(doc,'saldao');expect(doc.background).toBe(bg.id);expect(doc.templateRevision).toBe(18);expect(videoDocumentSchema.safeParse(doc).success).toBe(true)
+   const doc=newVideoFromTemplate('alerta');doc.background=bg.id;applyVideoTemplate(doc,'saldao');expect(doc.background).toBe(bg.id);expect(doc.templateRevision).toBe(19);expect(videoDocumentSchema.safeParse(doc).success).toBe(true)
   }
   expect(videoDocumentSchema.safeParse({...newVideoFromTemplate('alerta'),background:'https://outra-origem'}).success).toBe(false)
  })

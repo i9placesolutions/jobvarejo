@@ -511,6 +511,8 @@ onUnmounted(() => {
     </header>
 
     <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <EncartesWorkspaceNav />
+
       <section class="relative overflow-hidden rounded-3xl bg-slate-950 px-5 py-7 text-white shadow-2xl shadow-slate-900/10 sm:px-8 sm:py-9">
         <div class="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-indigo-500/30 blur-3xl" />
         <div class="pointer-events-none absolute -bottom-44 left-1/3 h-80 w-80 rounded-full bg-violet-500/15 blur-3xl" />

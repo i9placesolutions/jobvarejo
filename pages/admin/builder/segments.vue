@@ -143,13 +143,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-zinc-950 text-zinc-100">
+  <AdminWorkspaceShell>
+  <div class="admin-page admin-page--builder">
     <div class="mx-auto max-w-6xl px-6 py-10">
       <!-- Back link -->
       <div class="mb-8">
         <NuxtLink
           to="/admin/builder"
-          class="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+          class="admin-page__back inline-flex items-center gap-1.5 text-sm text-[color:var(--jv-muted)] hover:text-[color:var(--jv-blue)] transition-colors"
         >
           <ArrowLeft class="h-4 w-4" />
           Voltar ao dashboard
@@ -159,15 +160,15 @@ onMounted(() => {
       <!-- Header -->
       <div class="mb-8 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <Target class="h-7 w-7 text-emerald-400" />
+          <Target class="h-7 w-7 text-[color:var(--jv-blue)]" />
           <div>
             <h1 class="text-2xl font-semibold tracking-tight">Segmentos</h1>
-            <p class="text-sm text-zinc-400">Gerencie os segmentos de mercado para recomendacao de temas.</p>
+            <p class="text-sm text-[color:var(--jv-muted)]">Gerencie os segmentos de mercado para recomendacao de temas.</p>
           </div>
         </div>
         <button
           @click="openCreate"
-          class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 transition-colors"
+          class="inline-flex items-center gap-2 rounded-lg bg-[color:var(--jv-blue)] px-4 py-2 text-sm font-medium text-[color:var(--jv-navy)] hover:bg-[#1a4f96] transition-colors"
         >
           <Plus class="h-4 w-4" />
           Novo Segmento
@@ -176,19 +177,19 @@ onMounted(() => {
 
       <!-- Form Modal -->
       <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" @click.self="closeForm">
-        <div class="bg-zinc-900 rounded-xl border border-zinc-800 w-full max-w-lg p-6 space-y-4">
-          <h2 class="text-lg font-medium text-zinc-100">
+        <div class="bg-[#f3f8fd] rounded-xl border border-[color:var(--jv-line)] w-full max-w-lg p-6 space-y-4">
+          <h2 class="text-lg font-medium text-[color:var(--jv-ink)]">
             {{ editingId ? 'Editar Segmento' : 'Novo Segmento' }}
           </h2>
 
           <!-- Icon -->
           <div>
-            <label class="text-xs text-zinc-400 mb-1 block">Icone</label>
+            <label class="text-xs text-[color:var(--jv-muted)] mb-1 block">Icone</label>
             <div class="flex flex-wrap gap-2">
               <button v-for="icon in ICON_OPTIONS" :key="icon"
                 @click="form.icon = icon"
                 :class="['w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all border',
-                  form.icon === icon ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-700 bg-zinc-800 hover:bg-zinc-700']">
+                  form.icon === icon ? 'border-emerald-500 bg-emerald-500/10' : 'border-[color:var(--jv-line)] bg-[color:var(--jv-sky)] hover:bg-slate-200']">
                 {{ icon }}
               </button>
             </div>
@@ -196,37 +197,37 @@ onMounted(() => {
 
           <!-- Name -->
           <div>
-            <label class="text-xs text-zinc-400 mb-1 block">Nome</label>
+            <label class="text-xs text-[color:var(--jv-muted)] mb-1 block">Nome</label>
             <input v-model="form.name" placeholder="Ex: Supermercado"
-              class="w-full bg-zinc-800 text-sm text-zinc-100 rounded-lg px-3 py-2 border border-zinc-700 outline-none focus:border-emerald-500" />
+              class="w-full bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none focus:border-emerald-500" />
           </div>
 
           <!-- Slug -->
           <div>
-            <label class="text-xs text-zinc-400 mb-1 block">Slug</label>
+            <label class="text-xs text-[color:var(--jv-muted)] mb-1 block">Slug</label>
             <input v-model="form.slug" placeholder="supermercado"
-              class="w-full bg-zinc-800 text-sm text-zinc-100 rounded-lg px-3 py-2 border border-zinc-700 outline-none focus:border-emerald-500" />
+              class="w-full bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none focus:border-emerald-500" />
           </div>
 
           <!-- Description -->
           <div>
-            <label class="text-xs text-zinc-400 mb-1 block">Descricao</label>
+            <label class="text-xs text-[color:var(--jv-muted)] mb-1 block">Descricao</label>
             <textarea v-model="form.description" rows="2" placeholder="Descricao do segmento..."
-              class="w-full bg-zinc-800 text-sm text-zinc-100 rounded-lg px-3 py-2 border border-zinc-700 outline-none resize-none focus:border-emerald-500" />
+              class="w-full bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none resize-none focus:border-emerald-500" />
           </div>
 
           <!-- Sort Order -->
           <div>
-            <label class="text-xs text-zinc-400 mb-1 block">Ordem</label>
+            <label class="text-xs text-[color:var(--jv-muted)] mb-1 block">Ordem</label>
             <input v-model.number="form.sort_order" type="number"
-              class="w-24 bg-zinc-800 text-sm text-zinc-100 rounded-lg px-3 py-2 border border-zinc-700 outline-none focus:border-emerald-500" />
+              class="w-24 bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none focus:border-emerald-500" />
           </div>
 
           <!-- Actions -->
           <div class="flex justify-end gap-2 pt-2">
-            <button @click="closeForm" class="px-4 py-2 rounded-lg text-sm bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Cancelar</button>
+            <button @click="closeForm" class="px-4 py-2 rounded-lg text-sm bg-[color:var(--jv-sky)] text-slate-600 hover:bg-slate-200">Cancelar</button>
             <button @click="handleSave" :disabled="!form.name.trim()"
-              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed">
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-[color:var(--jv-blue)] text-[color:var(--jv-navy)] hover:bg-[#1a4f96] disabled:opacity-40 disabled:cursor-not-allowed">
               <Save class="h-4 w-4" />
               Salvar
             </button>
@@ -236,47 +237,47 @@ onMounted(() => {
 
       <!-- Table -->
       <div v-if="isLoading" class="flex items-center justify-center py-20">
-        <Loader2 class="h-8 w-8 text-emerald-400 animate-spin" />
+        <Loader2 class="h-8 w-8 text-[color:var(--jv-blue)] animate-spin" />
       </div>
 
-      <div v-else-if="segments.length === 0" class="text-center py-20 text-zinc-500">
+      <div v-else-if="segments.length === 0" class="text-center py-20 text-[color:var(--jv-muted)]">
         <Target class="h-12 w-12 mx-auto mb-3 opacity-30" />
         <p class="text-sm">Nenhum segmento cadastrado.</p>
         <p class="text-xs mt-1">Clique em "Novo Segmento" para comecar.</p>
       </div>
 
-      <div v-else class="overflow-x-auto rounded-xl border border-zinc-800">
+      <div v-else class="overflow-x-auto rounded-xl border border-[color:var(--jv-line)]">
         <table class="w-full text-sm">
           <thead>
-            <tr class="bg-zinc-900 border-b border-zinc-800">
-              <th class="text-left px-4 py-3 text-xs font-medium text-zinc-400">Icone</th>
-              <th class="text-left px-4 py-3 text-xs font-medium text-zinc-400">Nome</th>
-              <th class="text-left px-4 py-3 text-xs font-medium text-zinc-400">Slug</th>
-              <th class="text-left px-4 py-3 text-xs font-medium text-zinc-400">Ordem</th>
-              <th class="text-left px-4 py-3 text-xs font-medium text-zinc-400">Status</th>
-              <th class="text-right px-4 py-3 text-xs font-medium text-zinc-400">Acoes</th>
+            <tr class="bg-[#f3f8fd] border-b border-[color:var(--jv-line)]">
+              <th class="text-left px-4 py-3 text-xs font-medium text-[color:var(--jv-muted)]">Icone</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-[color:var(--jv-muted)]">Nome</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-[color:var(--jv-muted)]">Slug</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-[color:var(--jv-muted)]">Ordem</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-[color:var(--jv-muted)]">Status</th>
+              <th class="text-right px-4 py-3 text-xs font-medium text-[color:var(--jv-muted)]">Acoes</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="seg in [...segments].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))" :key="seg.id"
-              class="border-b border-zinc-800/50 hover:bg-zinc-900/50 transition-colors">
+              class="border-b border-[color:var(--jv-line)]/50 hover:bg-white transition-colors">
               <td class="px-4 py-3 text-xl">{{ seg.icon }}</td>
-              <td class="px-4 py-3 text-zinc-100 font-medium">{{ seg.name }}</td>
-              <td class="px-4 py-3 text-zinc-400 font-mono text-xs">{{ seg.slug }}</td>
-              <td class="px-4 py-3 text-zinc-400">{{ seg.sort_order ?? 0 }}</td>
+              <td class="px-4 py-3 text-[color:var(--jv-ink)] font-medium">{{ seg.name }}</td>
+              <td class="px-4 py-3 text-[color:var(--jv-muted)] font-mono text-xs">{{ seg.slug }}</td>
+              <td class="px-4 py-3 text-[color:var(--jv-muted)]">{{ seg.sort_order ?? 0 }}</td>
               <td class="px-4 py-3">
                 <button @click="toggleActive(seg)"
                   :class="['px-2 py-0.5 rounded-full text-xs font-medium',
-                    seg.is_active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-zinc-800 text-zinc-500']">
+                    seg.is_active ? 'bg-emerald-500/15 text-[color:var(--jv-blue)]' : 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)]']">
                   {{ seg.is_active ? 'Ativo' : 'Inativo' }}
                 </button>
               </td>
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1">
-                  <button @click="openEdit(seg)" class="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 transition-colors" title="Editar">
+                  <button @click="openEdit(seg)" class="p-1.5 rounded-lg hover:bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] hover:text-[color:var(--jv-blue)] transition-colors" title="Editar">
                     <Pencil class="h-3.5 w-3.5" />
                   </button>
-                  <button @click="handleDelete(seg.id)" class="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-red-400 transition-colors" title="Excluir">
+                  <button @click="handleDelete(seg.id)" class="p-1.5 rounded-lg hover:bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] hover:text-red-600 transition-colors" title="Excluir">
                     <Trash2 class="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -287,4 +288,5 @@ onMounted(() => {
       </div>
     </div>
   </div>
+  </AdminWorkspaceShell>
 </template>

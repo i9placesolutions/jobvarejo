@@ -9,6 +9,7 @@ import {
   setProductCardElementLayout
 } from '~/utils/product-card-configuration'
 import { createProductCardConfigurationLayout } from '~/utils/editorProductCardConfiguration'
+import { MANUAL_PRICE_POSITION_SOURCE } from '~/utils/pricePositionPolicy'
 
 const makeTransformObject = (props: Record<string, any> = {}) => {
   const object: any = {
@@ -92,6 +93,63 @@ describe('product-card-configuration', () => {
 
     const resolved = resolveProductCardConfigurationProfile(configuration, 120, 150)
     expect(resolved.elements.name.x).toBe(configuration.profiles!.compact.elements.name.x)
+  })
+
+  it('repara a receita Largo legada que fazia imagem e preco se sobreporem', () => {
+    const configuration = normalizeProductCardConfiguration({
+      profiles: {
+        wide: {
+          elements: {
+            name: { x: 74, y: 16, width: 43, height: 7 },
+            image: { x: 31, y: 50, width: 68, height: 90 },
+            price: { x: 75, y: 66, width: 58, height: 32 },
+            limit: { x: 73, y: 34, width: 66, height: 11 }
+          }
+        }
+      }
+    } as any)
+
+    expect(configuration.profiles!.wide.elements.image).toMatchObject({ x: 27, y: 49, width: 54, height: 78 })
+    expect(configuration.profiles!.wide.elements.name).toMatchObject({ x: 77, y: 36, width: 42, height: 16 })
+    expect(configuration.profiles!.wide.elements.price).toMatchObject({ x: 77, y: 67, width: 42, height: 22 })
+    expect(configuration.profiles!.wide.elements.limit).toMatchObject({ x: 77, y: 50, width: 38, height: 9 })
+  })
+
+  it('reancora nome e preco proximos no centro da coluna direita do Largo', () => {
+    const configuration = normalizeProductCardConfiguration({
+      profiles: {
+        wide: {
+          elements: {
+            name: { x: 74, y: 16, width: 43, height: 7 },
+            image: { x: 31, y: 50, width: 48, height: 56 },
+            price: { x: 75, y: 66, width: 46, height: 22 },
+            limit: { x: 73, y: 34, width: 40, height: 10 }
+          }
+        }
+      }
+    } as any)
+
+    expect(configuration.profiles!.wide.elements.name).toMatchObject({ x: 77, y: 36, width: 42, height: 16 })
+    expect(configuration.profiles!.wide.elements.price).toMatchObject({ x: 77, y: 67, width: 42, height: 22 })
+    expect(configuration.profiles!.wide.elements.limit).toMatchObject({ x: 77, y: 50, width: 38, height: 9 })
+  })
+
+  it('evolui a receita Largo anterior para imagem maior e coluna direita centralizada', () => {
+    const configuration = normalizeProductCardConfiguration({
+      profiles: {
+        wide: {
+          elements: {
+            name: { x: 76, y: 36, width: 44, height: 16 },
+            image: { x: 27, y: 48, width: 50, height: 68 },
+            price: { x: 76, y: 67, width: 46, height: 22 },
+            limit: { x: 76, y: 50, width: 40, height: 9 }
+          }
+        }
+      }
+    } as any)
+
+    expect(configuration.profiles!.wide.elements.image).toMatchObject({ x: 27, y: 49, width: 54, height: 78 })
+    expect(configuration.profiles!.wide.elements.price).toMatchObject({ x: 77, y: 67, width: 42, height: 22 })
   })
 
   it('identifica alcool por flag explicita e por categoria, mas respeita sem alcool', () => {
@@ -203,6 +261,40 @@ describe('product-card-configuration', () => {
     }
   })
 
+  it('usa o perfil Destaque para cards que persistiram apenas _cardHighlighted', () => {
+    const price = makeTransformObject({
+      type: 'group',
+      name: 'priceGroup',
+      width: 100,
+      height: 50
+    })
+    const objects = [price]
+    const group: any = {
+      type: 'group',
+      _cardHighlighted: true,
+      getObjects: () => objects,
+      _objects: objects,
+      _productData: {},
+      setCoords() {}
+    }
+    const configuration = createDefaultProductCardConfiguration()
+    configuration.alcoholBadgeEnabled = false
+    configuration.profiles!.standard.elements.price.x = 20
+    configuration.profiles!.featured.elements.price.x = 80
+    const layout = createProductCardConfigurationLayout({
+      fabric: () => ({}),
+      enableCardElementRotationControl: () => {},
+      safeRequestRenderAll: () => {},
+      getPriceGroupFromAny: () => price
+    })
+
+    layout.applyProductCardConfigurationLayout(group, 400, 400, {
+      cardLayout: configuration
+    })
+
+    expect(price.left).toBeCloseTo(120, 6)
+  })
+
   it('preserva a ancora movida da etiqueta, mas reaplica o tamanho da receita sem acumular escala', () => {
     const price = makeTransformObject({
       type: 'group',
@@ -212,6 +304,7 @@ describe('product-card-configuration', () => {
       left: 60,
       top: 35,
       __manualPricePosition: true,
+      __manualPricePositionSource: MANUAL_PRICE_POSITION_SOURCE,
       __manualTransform: true
     })
     const objects = [price]
@@ -252,6 +345,52 @@ describe('product-card-configuration', () => {
     expect(price.scaleX).toBeCloseTo(firstScale, 6)
     expect(price.getScaledWidth()).toBeCloseTo(firstWidth, 6)
     expect(price.getScaledHeight()).toBeCloseTo(firstHeight, 6)
+
+    // Uma troca explícita de receita deve reancorar a etiqueta, mesmo que ela
+    // tenha sido movida manualmente no perfil anterior.
+    group.__forceCardConfigurationLayout = true
+    layout.applyProductCardConfigurationLayout(group, 500, 300, {
+      cardLayout: configuration
+    })
+
+    expect(price.__manualPricePosition).toBeUndefined()
+    expect(price.left).toBeCloseTo(135, 6)
+    expect(price.top + price.getScaledHeight() / 2).toBeCloseTo(51 + 300 * 0.22 / 2, 6)
+  })
+
+  it('descarta o marcador manual legado e recentra a etiqueta automática', () => {
+    const price = makeTransformObject({
+      type: 'group',
+      name: 'priceGroup',
+      width: 824,
+      height: 333,
+      left: 12,
+      top: 35,
+      __manualPricePosition: true
+    })
+    const objects = [price]
+    const group: any = {
+      type: 'group',
+      getObjects: () => objects,
+      _objects: objects,
+      _productData: {},
+      setCoords() {}
+    }
+    const configuration = createDefaultProductCardConfiguration()
+    configuration.alcoholBadgeEnabled = false
+    const layout = createProductCardConfigurationLayout({
+      fabric: () => ({}),
+      enableCardElementRotationControl: () => {},
+      safeRequestRenderAll: () => {},
+      getPriceGroupFromAny: () => price
+    })
+
+    layout.applyProductCardConfigurationLayout(group, 500, 300, {
+      cardLayout: configuration
+    })
+
+    expect(price.__manualPricePosition).toBeUndefined()
+    expect(price.left).toBeCloseTo(135, 6)
   })
 })
 
@@ -281,4 +420,18 @@ it('preenche a área configurada da etiqueta e cresce com um card maior', () => 
   expect(price.getScaledHeight()).toBeLessThanOrEqual(900 * .36)
   layout.applyProductCardConfigurationLayout(group, 900, 900, { cardLayout: configuration })
   expect(price.getScaledWidth()).toBeCloseTo(810)
+})
+
+it('encaixa etiqueta alta pela largura da receita e mantém a borda inferior estável', () => {
+  const price = makeTransformObject({ type: 'group', name: 'priceGroup', width: 320, height: 210 })
+  const group: any = { type: 'group', width: 400, height: 500, getObjects: () => [price], _objects: [price], _productData: {}, __cardConfigurationProfile: 'standard', setCoords() {} }
+  const config = createDefaultProductCardConfiguration()
+  config.alcoholBadgeEnabled = false
+  const layout = createProductCardConfigurationLayout({ fabric: () => ({}), enableCardElementRotationControl: () => {}, safeRequestRenderAll: () => {}, getPriceGroupFromAny: () => price })
+  for (let i = 0; i < 5; i++) {
+    layout.applyProductCardConfigurationLayout(group, 400, 500, { cardLayout: config })
+    expect(price.getScaledWidth()).toBeCloseTo(256)
+    expect(price.getScaledHeight()).toBeCloseTo(168)
+    expect(price.top + price.getScaledHeight() / 2).toBeCloseTo(235)
+  }
 })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ArtPreview from '~/components/art-studio/ArtPreview.vue'
+import ArtPreview from '~/components/cartazista/CartazistaPreview.vue'
 import type { ArtComposition } from '~/types/art-studio'
 import type { CartazistaFormat } from '~/types/cartazista'
 

@@ -123,6 +123,7 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     // Editing the artwork/text inside a label must not freeze its position;
     // the card configuration remains responsible for the label slot.
     '__manualPricePosition',
+    '__manualPricePositionSource',
     '__manualTransformCardW',
     '__manualTransformCardH',
     '__manualTextWidth',

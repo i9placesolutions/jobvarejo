@@ -7,6 +7,10 @@ import {
   setRichPriceBaseFontSize,
   setRichPriceSegmentStyle
 } from './priceRichText'
+import {
+  clearManualPricePosition,
+  isExplicitManualPricePosition
+} from './pricePositionPolicy'
 
 type ResizeSmartObjectDeps = {
   fabric: () => any
@@ -190,7 +194,7 @@ export const createResizeSmartObject = (deps: ResizeSmartObjectDeps) => {
     // bloco de preço: a posição/tamanho externos continuam vindo da receita
     // percentual configurada em Cards. Apenas um arraste/redimensionamento
     // explícito do próprio priceGroup recebe este marcador separado.
-    const isManualPricePosition = (o: any) => !!(o && (o as any).__manualPricePosition === true)
+    const isManualPricePosition = (o: any) => isExplicitManualPricePosition(o)
 
     // If the card size changes (ex: more items in the zone, zone resize, preset change),
     // reposition manual elements proportionally so they keep their relative placement.
@@ -455,7 +459,42 @@ export const createResizeSmartObject = (deps: ResizeSmartObjectDeps) => {
     let bottomH = 0
     if (splash) {
       const marginBottom = h * 0.05
-      const splashManual = isManualPricePosition(splash)
+      let splashManual = isManualPricePosition(splash)
+
+      // Cards antigos podem carregar uma âncora manual válida no momento em
+      // que foram salvos, mas fora do novo card depois de uma troca de
+      // destaque, preset ou quantidade de colunas. Preserve movimentos que
+      // ainda cabem no card; quando a contenção precisa mover a etiqueta,
+      // descarte somente a âncora externa corrompida e deixe a receita atual
+      // reancorar o priceGroup no slot configurado.
+      if (splashManual) {
+        const previousLeft = Number((splash as any)?.left ?? 0) || 0
+        const previousTop = Number((splash as any)?.top ?? 0) || 0
+        const previousOriginX = String((splash as any)?.originX || 'center')
+        const previousOriginY = String((splash as any)?.originY || 'center')
+        const normalized = deps.normalizePriceGroupPlacementInCard(
+          splash,
+          w,
+          h,
+          null,
+          { preserveScale: true }
+        )
+        const wasMovedInsideCard = normalized && (
+          Math.abs(Number((splash as any)?.left ?? 0) - previousLeft) > 0.5 ||
+          Math.abs(Number((splash as any)?.top ?? 0) - previousTop) > 0.5 ||
+          String((splash as any)?.originX || 'center') !== previousOriginX ||
+          String((splash as any)?.originY || 'center') !== previousOriginY
+        )
+        if (wasMovedInsideCard) {
+          clearManualPricePosition(splash)
+          delete (splash as any).__manualTransform
+          delete (splash as any).__manualTransformCardW
+          delete (splash as any).__manualTransformCardH
+          delete (splash as any).__manualScaleX
+          delete (splash as any).__manualScaleY
+          splashManual = false
+        }
+      }
       let preserveTemplateVisual = false
       // "Ultima edicao vence": props sobrescritas explicitamente pelo painel da
       // zona reaplicam mesmo em resize/swap com layout manual preservado. Resolve
@@ -897,6 +936,20 @@ export const createResizeSmartObject = (deps: ResizeSmartObjectDeps) => {
     // imagem, limite e etiqueta de preco ja foram recalculados para o novo
     // tamanho da celula.
     deps.applyProductCardConfigurationLayout(group, w, h, styles)
+
+    // A configuração pode ainda não estar disponível no primeiro relayout,
+    // ou o grupo pode ter vindo de um JSON legado. Reaplicar apenas a
+    // contenção aqui garante que nenhuma etiqueta de preço escape do card,
+    // sem redimensionar uma etiqueta manual que já esteja dentro dele.
+    if (splash) {
+      deps.normalizePriceGroupPlacementInCard(
+        splash,
+        w,
+        h,
+        null,
+        { preserveScale: true }
+      )
+    }
 
     // Keep user-positioned inner elements inside the card bounds after any resize/relayout.
     // This avoids "teleporting" on reload when the card size changes (zone preset/columns/etc.).

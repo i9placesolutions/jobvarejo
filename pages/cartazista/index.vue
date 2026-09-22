@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Search, Plus, ArrowUpRight, Sparkles, SlidersHorizontal } from 'lucide-vue-next'
-import ArtPreview from '~/components/art-studio/ArtPreview.vue'
+import ArtPreview from '~/components/cartazista/CartazistaPreview.vue'
+import { cartazistaSample } from '~/utils/cartazista/samples'
+import type { CartazistaHeader } from '~/types/cartazista'
 import CartazistaShell from '~/components/cartazista/CartazistaShell.vue'
 import type { CartazistaDesign, CartazistaModel, CartazistaTemplateSummary } from '~/types/cartazista'
 import { createCartazistaDocument } from '~/utils/cartazista/composition'
@@ -12,6 +14,7 @@ useHead({ title: 'Cartazes online • JobVarejo' })
 const route = useRoute()
 const active = computed<'catalog' | 'mine'>(() => route.query.tab === 'mine' ? 'mine' : 'catalog')
 const templates = ref<CartazistaTemplateSummary[]>([])
+const headers = ref<CartazistaHeader[]>([])
 const designs = ref<CartazistaDesign[]>([])
 const search = ref('')
 const category = ref('Todos')
@@ -32,7 +35,8 @@ const visibleTemplates = computed(() => templates.value.filter((template) => {
   return matchesSearch && matchesCategory && matchesFormat
 }))
 
-const previewComposition = computed(() => picked.value ? createCartazistaDocument({ modelId: picked.value.id, formatId: 'a3', themeId: 'classic-yellow' }).composition : null)
+const previewComposition = computed(() => picked.value ? cartazistaSample(picked.value.id, headers.value) : null)
+const samples = computed(() => Object.fromEntries(templates.value.map(t=>[t.id,cartazistaSample(t.id,headers.value)])))
 
 const load = async () => {
   loading.value = true
@@ -40,6 +44,7 @@ const load = async () => {
   try {
     const result = await $fetch<{ templates: CartazistaTemplateSummary[]; databaseReady: boolean }>('/api/cartazista/templates')
     templates.value = result.templates
+    headers.value = (await $fetch<{ headers: CartazistaHeader[] }>('/api/cartazista/headers')).headers
     databaseReady.value = result.databaseReady
     if (active.value === 'mine') designs.value = await $fetch<CartazistaDesign[]>('/api/cartazista/designs')
   } catch (cause: any) {
@@ -63,7 +68,7 @@ const start = () => {
   void navigateTo({ path: '/cartazista/editor/new', query: { model: picked.value.id } })
 }
 
-const newBlank = () => void navigateTo('/cartazista/editor/new')
+const newBlank = () => void navigateTo('/cartazista/editor/new?blank=1')
 const modelById = (id: string) => templates.value.find((template) => template.id === id) || templates.value[0]
 </script>
 
@@ -95,12 +100,12 @@ const modelById = (id: string) => templates.value.find((template) => template.id
       </section>
 
       <template v-if="active === 'catalog'">
-        <div class="cartazista-section-heading"><div><h2>Modelos de cartaz</h2><span>{{ visibleTemplates.length }} modelos · layout e campos editáveis</span></div><span class="cartazista-badge">A1 · A2 · A3 · A5 · A6 · A7</span></div>
+        <div class="cartazista-section-heading"><div><h2>Modelos de cartaz</h2><span>{{ visibleTemplates.length }} modelos · layout e campos editáveis</span></div><span class="cartazista-badge">A1 · A2 · A3 · A4 · A5 · A6 · A7 · Faixa 2 m</span></div>
         <div v-if="loading" class="cartazista-empty">Carregando modelos…</div>
         <div v-else-if="!visibleTemplates.length" class="cartazista-empty">Nenhum modelo combina com a busca. <button @click="search = ''; category = 'Todos'">Limpar filtros</button></div>
         <section v-else class="cartazista-model-grid">
           <article v-for="template in visibleTemplates" :key="template.id" class="cartazista-model-card">
-            <button class="cartazista-model-preview" :aria-label="`Pré-visualizar ${template.name}`" @click="openPreview(template)"><ArtPreview :composition="createCartazistaDocument({ modelId: template.id, formatId: 'a3' }).composition" :label="template.name" /></button>
+            <button class="cartazista-model-preview" :aria-label="`Pré-visualizar ${template.name}`" @click="openPreview(template)"><ArtPreview :composition="samples[template.id]!" :label="template.name" /></button>
             <div class="cartazista-model-content"><div><span class="cartazista-model-category">{{ template.category }}</span><h3>{{ template.name }}</h3><p>{{ template.description }}</p></div><button class="cartazista-icon-button" :aria-label="`Usar ${template.name}`" @click="openPreview(template)"><ArrowUpRight :size="20" /></button></div>
             <div class="cartazista-tags"><span v-for="tag in template.tags.slice(0, 3)" :key="tag">#{{ tag }}</span></div>
           </article>

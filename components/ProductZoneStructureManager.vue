@@ -1091,9 +1091,9 @@ onMounted(() => {
   <div class="structure-manager">
     <header class="structure-manager__topbar">
       <div class="structure-manager__topbar-inner">
-        <NuxtLink to="/" class="structure-manager__back" aria-label="Voltar para o dashboard">
+        <NuxtLink to="/flyer-templates" class="structure-manager__back" aria-label="Voltar para Encartes">
           <ArrowLeft class="h-4 w-4" />
-          <span>Dashboard</span>
+          <span>Encartes</span>
         </NuxtLink>
         <div class="structure-manager__brand">
           <div class="structure-manager__brand-mark"><LayoutGrid class="h-4 w-4" /></div>

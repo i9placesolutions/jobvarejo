@@ -16,7 +16,7 @@ defineProps<{ active?: 'catalog' | 'mine' | 'editor' }>()
         <NuxtLink to="/cartazista" :class="{ current: active === 'catalog' }">Modelos</NuxtLink>
         <NuxtLink to="/cartazista?tab=mine" :class="{ current: active === 'mine' }">Meus cartazes</NuxtLink>
       </nav>
-      <NuxtLink to="/" class="cartazista-back">Voltar ao sistema ↗</NuxtLink>
+      <NuxtLink to="/" class="cartazista-back">Todas as soluções ↗</NuxtLink>
     </header>
     <slot />
   </div>

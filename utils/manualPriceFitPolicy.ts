@@ -36,6 +36,11 @@ export const fitAuthoredPriceTier = (background: any, objects: any[]): boolean =
   const frame = bounds(background)
   const boxes = shown.map(bounds)
   if (!boxes.length || [frame, ...boxes].some(b => ![b.x,b.y,b.w,b.h].every(Number.isFinite) || b.w <= 0 || b.h <= 0)) return false
+  // Valores longos precisam de respiro: encaixar exatamente na borda corta
+  // visualmente o R$ e os últimos centavos em fundos arredondados.
+  const horizontalPadding = frame.w * 0.06
+  frame.x += horizontalPadding
+  frame.w -= horizontalPadding * 2
   const left = Math.min(...boxes.map(b=>b.x)), top = Math.min(...boxes.map(b=>b.y))
   const width = Math.max(...boxes.map(b=>b.x+b.w)) - left
   const height = Math.max(...boxes.map(b=>b.y+b.h)) - top

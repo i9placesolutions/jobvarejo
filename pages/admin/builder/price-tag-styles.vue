@@ -705,7 +705,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-zinc-950 text-zinc-100">
+  <AdminWorkspaceShell>
+  <div class="admin-page admin-page--builder">
     <!-- Subtle grain texture overlay -->
     <div class="fixed inset-0 pointer-events-none opacity-[0.015] z-50" style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 256 256%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noise%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noise)%22/%3E%3C/svg%3E');" />
 
@@ -714,7 +715,7 @@ onMounted(() => {
       <div class="mb-8">
         <NuxtLink
           to="/admin/builder"
-          class="group inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-200 transition-all duration-200"
+          class="admin-page__back group inline-flex items-center gap-2 text-sm text-[color:var(--jv-muted)] hover:text-[color:var(--jv-navy)] transition-all duration-200"
         >
           <ArrowLeft class="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
           <span>Voltar ao Builder</span>
@@ -725,11 +726,11 @@ onMounted(() => {
             <h1 class="text-3xl font-bold tracking-tight bg-linear-to-r from-zinc-100 to-zinc-400 bg-clip-text text-transparent">
               Estilos de Etiqueta
             </h1>
-            <p class="text-sm text-zinc-500 mt-1.5">Configure cores, formatos e efeitos das etiquetas de preco</p>
+            <p class="text-sm text-[color:var(--jv-muted)] mt-1.5">Configure cores, formatos e efeitos das etiquetas de preco</p>
           </div>
           <div class="flex items-center gap-2">
             <button
-              class="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-all duration-200 border border-zinc-800 hover:border-zinc-700"
+              class="inline-flex items-center gap-2 rounded-lg bg-[#f3f8fd] px-4 py-2.5 text-sm font-medium text-[color:var(--jv-muted)] hover:text-[color:var(--jv-blue)] hover:bg-[color:var(--jv-sky)] transition-all duration-200 border border-[color:var(--jv-line)] hover:border-[color:var(--jv-line)]"
               :disabled="isSeeding"
               @click="seedStyles"
               title="Criar estilos predefinidos"
@@ -738,7 +739,7 @@ onMounted(() => {
               {{ isSeeding ? 'Criando...' : 'Seed' }}
             </button>
             <button
-              class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 transition-all duration-200 shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30"
+              class="inline-flex items-center gap-2 rounded-lg bg-[color:var(--jv-blue)] px-5 py-2.5 text-sm font-semibold text-[color:var(--jv-navy)] hover:bg-[#1a4f96] transition-all duration-200 shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30"
               @click="openCreate"
             >
               <Plus class="h-4 w-4" />
@@ -760,7 +761,7 @@ onMounted(() => {
         <div v-if="error" class="mb-6 rounded-xl border border-red-500/20 bg-red-500/5 backdrop-blur-sm p-4 text-sm text-red-300 flex items-start gap-3">
           <div class="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0 animate-pulse" />
           <span class="flex-1">{{ error }}</span>
-          <button @click="error = null" class="text-red-500/60 hover:text-red-400 transition-colors">
+          <button @click="error = null" class="text-red-500/60 hover:text-red-600 transition-colors">
             <X class="h-4 w-4" />
           </button>
         </div>
@@ -769,8 +770,8 @@ onMounted(() => {
       <!-- Loading -->
       <div v-if="isLoading" class="flex items-center justify-center py-24">
         <div class="flex flex-col items-center gap-4">
-          <div class="w-8 h-8 border-2 border-zinc-700 border-t-emerald-500 rounded-full animate-spin" />
-          <span class="text-sm text-zinc-500">Carregando estilos...</span>
+          <div class="w-8 h-8 border-2 border-[color:var(--jv-line)] border-t-emerald-500 rounded-full animate-spin" />
+          <span class="text-sm text-[color:var(--jv-muted)]">Carregando estilos...</span>
         </div>
       </div>
 
@@ -779,7 +780,7 @@ onMounted(() => {
         <div
           v-for="style in styles"
           :key="style.id"
-          class="group relative rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm hover:border-zinc-700/80 hover:bg-zinc-900/60 transition-all duration-300 overflow-hidden cursor-pointer"
+          class="group relative rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm hover:border-[color:var(--jv-line)]/80 hover:bg-[#f3f8fd]/60 transition-all duration-300 overflow-hidden cursor-pointer"
           @click="openEdit(style)"
         >
           <!-- Colored top accent bar -->
@@ -814,15 +815,15 @@ onMounted(() => {
           <div class="px-4 pb-3">
             <div class="flex items-center justify-between">
               <div class="min-w-0">
-                <h3 class="text-sm font-semibold text-zinc-200 truncate">{{ style.name }}</h3>
+                <h3 class="text-sm font-semibold text-[color:var(--jv-navy)] truncate">{{ style.name }}</h3>
                 <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                  <span class="text-[9px] text-zinc-500 bg-zinc-800/50 px-1.5 py-0.5 rounded">{{ shapeLabel(style.css_config?.shape) }}</span>
+                  <span class="text-[9px] text-[color:var(--jv-muted)] bg-[color:var(--jv-sky)]/50 px-1.5 py-0.5 rounded">{{ shapeLabel(style.css_config?.shape) }}</span>
                   <span
-                    class="w-3 h-3 rounded-sm border border-zinc-700 shrink-0"
+                    class="w-3 h-3 rounded-sm border border-[color:var(--jv-line)] shrink-0"
                     :style="{ backgroundColor: style.css_config?.bgColor }"
                   />
                   <template v-if="style.css_config?.displayMode && style.css_config.displayMode !== 'filled'">
-                    <span class="text-[9px] text-zinc-500 bg-zinc-800/50 px-1.5 py-0.5 rounded">{{ { outline: 'Contorno', underline: 'Sublinhado', naked: 'Sem fundo', splash: 'Splash' }[style.css_config.displayMode] || style.css_config.displayMode }}</span>
+                    <span class="text-[9px] text-[color:var(--jv-muted)] bg-[color:var(--jv-sky)]/50 px-1.5 py-0.5 rounded">{{ { outline: 'Contorno', underline: 'Sublinhado', naked: 'Sem fundo', splash: 'Splash' }[style.css_config.displayMode] || style.css_config.displayMode }}</span>
                   </template>
                   <span
                     v-if="style.is_global"
@@ -830,20 +831,20 @@ onMounted(() => {
                   >Global</span>
                   <span
                     v-if="!style.is_active"
-                    class="text-[8px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500 border border-zinc-700"
+                    class="text-[8px] px-1.5 py-0.5 rounded bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border border-[color:var(--jv-line)]"
                   >Inativo</span>
                 </div>
               </div>
               <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 <button
-                  class="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                  class="rounded-lg p-1.5 text-[color:var(--jv-muted)] hover:bg-[color:var(--jv-sky)] hover:text-[color:var(--jv-navy)] transition-colors"
                   title="Editar"
                   @click.stop="openEdit(style)"
                 >
                   <Pencil class="h-3.5 w-3.5" />
                 </button>
                 <button
-                  class="rounded-lg p-1.5 text-zinc-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                  class="rounded-lg p-1.5 text-[color:var(--jv-muted)] hover:bg-red-500/10 hover:text-red-600 transition-colors"
                   title="Excluir"
                   @click.stop="showDeleteConfirm = style.id"
                 >
@@ -857,16 +858,16 @@ onMounted(() => {
 
       <!-- Empty state -->
       <div v-else-if="!styles.length && !showForm && !isLoading" class="flex flex-col items-center justify-center py-24">
-        <div class="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-6">
+        <div class="w-16 h-16 rounded-2xl bg-[#f3f8fd] border border-[color:var(--jv-line)] flex items-center justify-center mb-6">
           <svg class="w-8 h-8 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
           </svg>
         </div>
-        <p class="text-zinc-400 font-medium mb-1">Nenhum estilo cadastrado</p>
+        <p class="text-[color:var(--jv-muted)] font-medium mb-1">Nenhum estilo cadastrado</p>
         <p class="text-sm text-zinc-600 mb-6">Comece criando estilos predefinidos ou crie o seu</p>
         <div class="flex items-center gap-3">
           <button
-            class="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-all duration-200 border border-zinc-800"
+            class="inline-flex items-center gap-2 rounded-lg bg-[#f3f8fd] px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[color:var(--jv-sky)] transition-all duration-200 border border-[color:var(--jv-line)]"
             :disabled="isSeeding"
             @click="seedStyles"
           >
@@ -874,7 +875,7 @@ onMounted(() => {
             {{ isSeeding ? 'Criando...' : 'Criar Predefinidos' }}
           </button>
           <button
-            class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 transition-all duration-200 shadow-lg shadow-emerald-600/20"
+            class="inline-flex items-center gap-2 rounded-lg bg-[color:var(--jv-blue)] px-5 py-2.5 text-sm font-semibold text-[color:var(--jv-navy)] hover:bg-[#1a4f96] transition-all duration-200 shadow-lg shadow-emerald-600/20"
             @click="openCreate"
           >
             <Plus class="h-4 w-4" />
@@ -897,21 +898,21 @@ onMounted(() => {
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
           @click.self="showDeleteConfirm = null"
         >
-          <div class="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl max-w-sm w-full mx-4">
+          <div class="rounded-2xl border border-[color:var(--jv-line)] bg-[#f3f8fd] p-6 shadow-2xl max-w-sm w-full mx-4">
             <div class="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center mb-4">
               <Trash2 class="h-6 w-6 text-red-400" />
             </div>
-            <h3 class="text-lg font-semibold text-zinc-100">Excluir estilo?</h3>
-            <p class="mt-2 text-sm text-zinc-400">Esta acao nao pode ser desfeita.</p>
+            <h3 class="text-lg font-semibold text-[color:var(--jv-ink)]">Excluir estilo?</h3>
+            <p class="mt-2 text-sm text-[color:var(--jv-muted)]">Esta acao nao pode ser desfeita.</p>
             <div class="mt-6 flex justify-end gap-2">
               <button
-                class="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+                class="rounded-lg bg-[color:var(--jv-sky)] px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 transition-colors"
                 @click="showDeleteConfirm = null"
               >
                 Cancelar
               </button>
               <button
-                class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 transition-colors"
+                class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-[color:var(--jv-navy)] hover:bg-red-500 transition-colors"
                 @click="deleteStyle(showDeleteConfirm!)"
               >
                 Excluir
@@ -935,7 +936,7 @@ onMounted(() => {
           <div class="flex items-center justify-between mb-6">
             <div class="flex items-center gap-3">
               <button
-                class="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                class="rounded-lg p-2 text-[color:var(--jv-muted)] hover:bg-[color:var(--jv-sky)] hover:text-[color:var(--jv-navy)] transition-colors"
                 @click="showForm = false; resetForm()"
               >
                 <ArrowLeft class="h-5 w-5" />
@@ -944,11 +945,11 @@ onMounted(() => {
                 <h2 class="text-xl font-semibold">
                   {{ editingId ? 'Editar Estilo' : 'Novo Estilo' }}
                 </h2>
-                <p class="text-xs text-zinc-500 mt-0.5">Configure todas as propriedades visuais</p>
+                <p class="text-xs text-[color:var(--jv-muted)] mt-0.5">Configure todas as propriedades visuais</p>
               </div>
             </div>
             <button
-              class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
+              class="rounded-lg p-2 text-[color:var(--jv-muted)] hover:bg-[color:var(--jv-sky)] hover:text-slate-600 transition-colors"
               @click="showForm = false; resetForm()"
             >
               <X class="h-5 w-5" />
@@ -960,52 +961,52 @@ onMounted(() => {
             <form @submit.prevent="saveStyle" class="lg:col-span-3 space-y-2">
 
               <!-- ── Nome (always visible) ── -->
-              <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm p-4">
-                <label class="block text-xs font-semibold text-zinc-300 mb-2">Nome do Estilo *</label>
+              <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm p-4">
+                <label class="block text-xs font-semibold text-slate-600 mb-2">Nome do Estilo *</label>
                 <input
                   v-model="form.name"
                   type="text"
                   required
-                  class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition-all"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-4 py-2.5 text-sm text-[color:var(--jv-navy)] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[rgba(55,119,194,.2)] focus:border-[#8fb8e6] transition-all"
                   placeholder="Ex: Vermelho Classico"
                 />
               </div>
 
               <!-- ── Section: Aparencia ── -->
-              <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('appearance')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
                       <Palette class="h-3.5 w-3.5 text-violet-400" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Aparencia</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Aparencia</span>
                     <span class="text-[10px] text-zinc-600">Cores, formato, fonte</span>
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.appearance }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.appearance }" />
                 </button>
-                <div v-show="openSections.appearance" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.appearance" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="grid grid-cols-2 gap-3 pt-3">
                     <div v-if="!form.bgImage && (form.displayMode === 'filled' || form.displayMode === 'splash')">
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Cor de Fundo</label>
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Cor de Fundo</label>
                       <div class="flex items-center gap-2">
-                        <input v-model="form.bgColor" type="color" class="h-9 w-11 rounded-lg border border-zinc-700/60 bg-zinc-950 cursor-pointer" />
-                        <input v-model="form.bgColor" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-2.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all" />
+                        <input v-model="form.bgColor" type="color" class="h-9 w-11 rounded-lg border border-[color:var(--jv-line)] bg-white cursor-pointer" />
+                        <input v-model="form.bgColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-2.5 py-2 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all" />
                       </div>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Cor do Texto</label>
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Cor do Texto</label>
                       <div class="flex items-center gap-2">
-                        <input v-model="form.textColor" type="color" class="h-9 w-11 rounded-lg border border-zinc-700/60 bg-zinc-950 cursor-pointer" />
-                        <input v-model="form.textColor" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-2.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all" />
+                        <input v-model="form.textColor" type="color" class="h-9 w-11 rounded-lg border border-[color:var(--jv-line)] bg-white cursor-pointer" />
+                        <input v-model="form.textColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-2.5 py-2 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all" />
                       </div>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Formato</label>
-                      <select v-model="form.shape" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Formato</label>
+                      <select v-model="form.shape" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                         <option value="rounded">Arredondado</option>
                         <option value="square">Quadrado</option>
                         <option value="pill">Pilula</option>
@@ -1013,14 +1014,14 @@ onMounted(() => {
                       </select>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Fonte</label>
-                      <select v-model="form.fontFamily" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Fonte</label>
+                      <select v-model="form.fontFamily" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                         <option v-for="f in FONT_OPTIONS" :key="f.value" :value="f.value" :style="{ fontFamily: f.value }">{{ f.label }}</option>
                       </select>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Estilo Centavos</label>
-                      <select v-model="form.decimalStyle" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Estilo Centavos</label>
+                      <select v-model="form.decimalStyle" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                         <option v-for="ds in DECIMAL_STYLE_OPTIONS" :key="ds.value" :value="ds.value">{{ ds.label }}</option>
                       </select>
                     </div>
@@ -1029,32 +1030,32 @@ onMounted(() => {
               </div>
 
               <!-- ── Section: Modo de Exibicao ── -->
-              <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('displayMode')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-sky-500/10 flex items-center justify-center">
                       <Eye class="h-3.5 w-3.5 text-sky-400" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Modo de Exibicao</span>
-                    <span class="text-[10px] text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">{{ DISPLAY_MODE_OPTIONS.find(d => d.value === form.displayMode)?.label || 'Preenchido' }}</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Modo de Exibicao</span>
+                    <span class="text-[10px] text-zinc-600 bg-[color:var(--jv-sky)]/60 px-1.5 py-0.5 rounded">{{ DISPLAY_MODE_OPTIONS.find(d => d.value === form.displayMode)?.label || 'Preenchido' }}</span>
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.displayMode }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.displayMode }" />
                 </button>
-                <div v-show="openSections.displayMode" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.displayMode" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="grid grid-cols-2 gap-3 pt-3">
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Tipo da Etiqueta</label>
-                      <select v-model="form.displayMode" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Tipo da Etiqueta</label>
+                      <select v-model="form.displayMode" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                         <option v-for="dm in DISPLAY_MODE_OPTIONS" :key="dm.value" :value="dm.value">{{ dm.label }}</option>
                       </select>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Tamanho do R$</label>
-                      <select v-model="form.currencySize" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Tamanho do R$</label>
+                      <select v-model="form.currencySize" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                         <option v-for="cs in CURRENCY_SIZE_OPTIONS" :key="cs.value" :value="cs.value">{{ cs.label }}</option>
                       </select>
                     </div>
@@ -1063,34 +1064,34 @@ onMounted(() => {
               </div>
 
               <!-- ── Section: Efeitos de Texto ── -->
-              <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('textEffects')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
                       <Type class="h-3.5 w-3.5 text-amber-400" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Efeitos de Texto</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Efeitos de Texto</span>
                     <span v-if="form.textShadow !== 'none' || form.rotation !== 0" class="w-1.5 h-1.5 rounded-full bg-amber-500" />
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.textEffects }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.textEffects }" />
                 </button>
-                <div v-show="openSections.textEffects" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.textEffects" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="grid grid-cols-2 gap-3 pt-3">
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Sombra no Texto</label>
-                      <select v-model="form.textShadow" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Sombra no Texto</label>
+                      <select v-model="form.textShadow" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                         <option v-for="ts in TEXT_SHADOW_OPTIONS" :key="ts.value" :value="ts.value">{{ ts.label }}</option>
                       </select>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Rotacao</label>
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Rotacao</label>
                       <div class="flex items-center gap-2">
                         <input v-model.number="form.rotation" type="range" min="-15" max="15" step="1" class="flex-1 accent-emerald-500" />
-                        <span class="text-xs text-zinc-400 font-mono w-8 text-right">{{ form.rotation }}°</span>
+                        <span class="text-xs text-[color:var(--jv-muted)] font-mono w-8 text-right">{{ form.rotation }}°</span>
                       </div>
                     </div>
                   </div>
@@ -1098,49 +1099,49 @@ onMounted(() => {
               </div>
 
               <!-- ── Section: Borda ── -->
-              <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('border')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-rose-500/10 flex items-center justify-center">
                       <Layers class="h-3.5 w-3.5 text-rose-400" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Borda</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Borda</span>
                     <span v-if="form.borderStyle !== 'none'" class="w-1.5 h-1.5 rounded-full bg-rose-500" />
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.border }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.border }" />
                 </button>
-                <div v-show="openSections.border" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.border" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="grid grid-cols-2 gap-3 pt-3">
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Estilo da Borda</label>
-                      <select v-model="form.borderStyle" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Estilo da Borda</label>
+                      <select v-model="form.borderStyle" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                         <option v-for="bs in BORDER_STYLE_OPTIONS" :key="bs.value" :value="bs.value">{{ bs.label }}</option>
                       </select>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Largura</label>
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Largura</label>
                       <div class="flex items-center gap-2">
                         <input v-model.number="form.borderWidth" type="range" min="0" max="8" step="1" class="flex-1 accent-emerald-500" />
-                        <span class="text-xs text-zinc-400 font-mono w-8 text-right">{{ form.borderWidth }}px</span>
+                        <span class="text-xs text-[color:var(--jv-muted)] font-mono w-8 text-right">{{ form.borderWidth }}px</span>
                       </div>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Cor da Borda</label>
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Cor da Borda</label>
                       <div class="flex items-center gap-2">
-                        <input v-model="form.borderColor" type="color" class="h-9 w-11 rounded-lg border border-zinc-700/60 bg-zinc-950 cursor-pointer" />
-                        <input v-model="form.borderColor" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-2.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all" />
+                        <input v-model="form.borderColor" type="color" class="h-9 w-11 rounded-lg border border-[color:var(--jv-line)] bg-white cursor-pointer" />
+                        <input v-model="form.borderColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-2.5 py-2 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all" />
                       </div>
                     </div>
                   </div>
                   <!-- Corner radius -->
-                  <div class="mt-4 pt-3 border-t border-zinc-800/40">
-                    <label class="block text-[11px] font-medium text-zinc-500 mb-2.5">Arredondamento por Canto</label>
+                  <div class="mt-4 pt-3 border-t border-[color:var(--jv-line)]/40">
+                    <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-2.5">Arredondamento por Canto</label>
                     <div class="flex items-center gap-4">
-                      <div class="relative w-16 h-14 border-2 border-zinc-700 shrink-0 transition-all duration-200" :style="{ borderRadius: previewBorderRadius }">
+                      <div class="relative w-16 h-14 border-2 border-[color:var(--jv-line)] shrink-0 transition-all duration-200" :style="{ borderRadius: previewBorderRadius }">
                         <div class="absolute -top-1 -left-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-zinc-950" title="Top-Left" />
                         <div class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-zinc-950" title="Top-Right" />
                         <div class="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-zinc-950" title="Bottom-Left" />
@@ -1152,7 +1153,7 @@ onMounted(() => {
                           <input
                             :value="form.borderRadiusTL ?? ''"
                             type="number" min="0" max="100" step="1" placeholder="Auto"
-                            class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/40"
+                            class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)]"
                             @input="form.borderRadiusTL = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
                           />
                         </div>
@@ -1161,7 +1162,7 @@ onMounted(() => {
                           <input
                             :value="form.borderRadiusTR ?? ''"
                             type="number" min="0" max="100" step="1" placeholder="Auto"
-                            class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/40"
+                            class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)]"
                             @input="form.borderRadiusTR = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
                           />
                         </div>
@@ -1170,7 +1171,7 @@ onMounted(() => {
                           <input
                             :value="form.borderRadiusBL ?? ''"
                             type="number" min="0" max="100" step="1" placeholder="Auto"
-                            class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/40"
+                            class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)]"
                             @input="form.borderRadiusBL = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
                           />
                         </div>
@@ -1179,7 +1180,7 @@ onMounted(() => {
                           <input
                             :value="form.borderRadiusBR ?? ''"
                             type="number" min="0" max="100" step="1" placeholder="Auto"
-                            class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/40"
+                            class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)]"
                             @input="form.borderRadiusBR = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
                           />
                         </div>
@@ -1191,34 +1192,34 @@ onMounted(() => {
               </div>
 
               <!-- ── Section: Sombra & Efeitos (conditional) ── -->
-              <div v-if="!form.bgImage && (form.displayMode === 'filled' || form.displayMode === 'splash')" class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div v-if="!form.bgImage && (form.displayMode === 'filled' || form.displayMode === 'splash')" class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('shadowEffects')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-indigo-500/10 flex items-center justify-center">
                       <Layers class="h-3.5 w-3.5 text-indigo-400" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Sombra & Opacidade</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Sombra & Opacidade</span>
                     <span v-if="form.shadow !== 'none' || form.bgOpacity < 1" class="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.shadowEffects }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.shadowEffects }" />
                 </button>
-                <div v-show="openSections.shadowEffects" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.shadowEffects" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="grid grid-cols-2 gap-3 pt-3">
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Sombra</label>
-                      <select v-model="form.shadow" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Sombra</label>
+                      <select v-model="form.shadow" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                         <option v-for="sh in SHADOW_OPTIONS" :key="sh.value" :value="sh.value">{{ sh.label }}</option>
                       </select>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Opacidade do Fundo</label>
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Opacidade do Fundo</label>
                       <div class="flex items-center gap-2">
                         <input v-model.number="form.bgOpacity" type="range" min="0.1" max="1" step="0.05" class="flex-1 accent-emerald-500" />
-                        <span class="text-xs text-zinc-400 font-mono w-8 text-right">{{ Math.round(form.bgOpacity * 100) }}%</span>
+                        <span class="text-xs text-[color:var(--jv-muted)] font-mono w-8 text-right">{{ Math.round(form.bgOpacity * 100) }}%</span>
                       </div>
                     </div>
                   </div>
@@ -1226,38 +1227,38 @@ onMounted(() => {
               </div>
 
               <!-- ── Section: Gradiente (conditional) ── -->
-              <div v-if="!form.bgImage && (form.displayMode === 'filled' || form.displayMode === 'splash')" class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div v-if="!form.bgImage && (form.displayMode === 'filled' || form.displayMode === 'splash')" class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('gradient')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg flex items-center justify-center overflow-hidden" :style="{ background: form.bgGradient ? `linear-gradient(to right, ${form.bgColor}, ${form.bgGradientColor})` : 'rgb(236 72 153 / 0.1)' }">
-                      <Palette class="h-3.5 w-3.5" :class="form.bgGradient ? 'text-white' : 'text-pink-400'" />
+                      <Palette class="h-3.5 w-3.5" :class="form.bgGradient ? 'text-[color:var(--jv-navy)]' : 'text-pink-400'" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Gradiente</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Gradiente</span>
                     <span v-if="form.bgGradient" class="w-1.5 h-1.5 rounded-full bg-pink-500" />
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.gradient }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.gradient }" />
                 </button>
-                <div v-show="openSections.gradient" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.gradient" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="pt-3">
-                    <label class="flex items-center gap-2.5 text-sm text-zinc-300 cursor-pointer mb-3">
-                      <input v-model="form.bgGradient" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                    <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer mb-3">
+                      <input v-model="form.bgGradient" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                       Ativar Gradiente
                     </label>
                     <div v-if="form.bgGradient" class="grid grid-cols-2 gap-3">
                       <div>
-                        <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Cor Final</label>
+                        <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Cor Final</label>
                         <div class="flex items-center gap-2">
-                          <input v-model="form.bgGradientColor" type="color" class="h-9 w-11 rounded-lg border border-zinc-700/60 bg-zinc-950 cursor-pointer" />
-                          <input v-model="form.bgGradientColor" type="text" class="flex-1 min-w-0 rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-2.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40" />
+                          <input v-model="form.bgGradientColor" type="color" class="h-9 w-11 rounded-lg border border-[color:var(--jv-line)] bg-white cursor-pointer" />
+                          <input v-model="form.bgGradientColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-2.5 py-2 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)]" />
                         </div>
                       </div>
                       <div>
-                        <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Direcao</label>
-                        <select v-model="form.bgGradientDirection" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                        <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Direcao</label>
+                        <select v-model="form.bgGradientDirection" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                           <option v-for="gd in GRADIENT_DIR_OPTIONS" :key="gd.value" :value="gd.value">{{ gd.label }}</option>
                         </select>
                       </div>
@@ -1267,22 +1268,22 @@ onMounted(() => {
               </div>
 
               <!-- ── Section: Imagem de Fundo ── -->
-              <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('bgImage')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-cyan-500/10 flex items-center justify-center">
                       <Image class="h-3.5 w-3.5 text-cyan-400" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Imagem de Fundo</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Imagem de Fundo</span>
                     <span v-if="form.bgImage" class="w-1.5 h-1.5 rounded-full bg-cyan-500" />
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.bgImage }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.bgImage }" />
                 </button>
-                <div v-show="openSections.bgImage" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.bgImage" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="pt-3">
                     <div class="flex items-center gap-2">
                       <input
@@ -1290,13 +1291,13 @@ onMounted(() => {
                         type="text"
                         readonly
                         placeholder="Nenhuma imagem"
-                        class="flex-1 min-w-0 rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none truncate"
+                        class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-slate-400 focus:outline-none truncate"
                       />
                       <input ref="bgImageInputRef" type="file" accept="image/*" class="hidden" @change="handleBgImageUpload" />
                       <button
                         type="button"
                         :disabled="isUploadingBgImage"
-                        class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700 transition-colors border border-zinc-700/60 whitespace-nowrap disabled:opacity-50"
+                        class="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--jv-sky)] px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 transition-colors border border-[color:var(--jv-line)] whitespace-nowrap disabled:opacity-50"
                         @click="bgImageInputRef?.click()"
                       >
                         <Upload class="h-3.5 w-3.5" />
@@ -1312,23 +1313,23 @@ onMounted(() => {
                       </button>
                     </div>
                     <div v-if="form.bgImage" class="mt-3 flex items-center gap-3">
-                      <img :src="form.bgImage" class="h-12 w-20 object-cover rounded-lg border border-zinc-700" alt="Preview" />
-                      <span class="text-[10px] text-zinc-500 truncate">{{ form.bgImage }}</span>
+                      <img :src="form.bgImage" class="h-12 w-20 object-cover rounded-lg border border-[color:var(--jv-line)]" alt="Preview" />
+                      <span class="text-[10px] text-[color:var(--jv-muted)] truncate">{{ form.bgImage }}</span>
                     </div>
                     <div v-if="form.bgImage" class="grid grid-cols-2 gap-3 mt-3">
                       <div>
-                        <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Ajuste</label>
-                        <select v-model="form.bgImageSize" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                        <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Ajuste</label>
+                        <select v-model="form.bgImageSize" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                           <option value="cover">Cobrir</option>
                           <option value="contain">Conter</option>
                           <option value="stretch">Esticar</option>
                         </select>
                       </div>
                       <div>
-                        <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Opacidade</label>
+                        <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Opacidade</label>
                         <div class="flex items-center gap-2">
                           <input v-model.number="form.bgImageOpacity" type="range" min="0.05" max="1" step="0.05" class="flex-1 accent-emerald-500" />
-                          <span class="text-xs text-zinc-400 font-mono w-8 text-right">{{ Math.round(form.bgImageOpacity * 100) }}%</span>
+                          <span class="text-xs text-[color:var(--jv-muted)] font-mono w-8 text-right">{{ Math.round(form.bgImageOpacity * 100) }}%</span>
                         </div>
                       </div>
                     </div>
@@ -1337,34 +1338,34 @@ onMounted(() => {
               </div>
 
               <!-- ── Section: Espacamento & Tamanho ── -->
-              <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('spacing')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                      <Move class="h-3.5 w-3.5 text-emerald-400" />
+                      <Move class="h-3.5 w-3.5 text-[color:var(--jv-blue)]" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Espacamento & Tamanho</span>
-                    <span class="text-[10px] text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">{{ Math.round(form.priceScale * 100) }}%</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Espacamento & Tamanho</span>
+                    <span class="text-[10px] text-zinc-600 bg-[color:var(--jv-sky)]/60 px-1.5 py-0.5 rounded">{{ Math.round(form.priceScale * 100) }}%</span>
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.spacing }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.spacing }" />
                 </button>
-                <div v-show="openSections.spacing" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.spacing" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="grid grid-cols-2 gap-3 pt-3">
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Padding</label>
-                      <select v-model="form.padding" class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all">
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Padding</label>
+                      <select v-model="form.padding" class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)] transition-all">
                         <option v-for="p in PADDING_OPTIONS" :key="p.value" :value="p.value">{{ p.label }}</option>
                       </select>
                     </div>
                     <div>
-                      <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Escala do Preco</label>
+                      <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Escala do Preco</label>
                       <div class="flex items-center gap-2">
                         <input v-model.number="form.priceScale" type="range" min="0.6" max="1.8" step="0.05" class="flex-1 accent-emerald-500" />
-                        <span class="text-xs text-zinc-400 font-mono w-10 text-right">{{ Math.round(form.priceScale * 100) }}%</span>
+                        <span class="text-xs text-[color:var(--jv-muted)] font-mono w-10 text-right">{{ Math.round(form.priceScale * 100) }}%</span>
                       </div>
                     </div>
                   </div>
@@ -1372,33 +1373,33 @@ onMounted(() => {
               </div>
 
               <!-- ── Section: Gondola ── -->
-              <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('gondola')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-orange-500/10 flex items-center justify-center">
                       <Scissors class="h-3.5 w-3.5 text-orange-400" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Gondola (Impresso)</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Gondola (Impresso)</span>
                     <span v-if="form.showCutLine || form.showBarcode || form.showValidity" class="w-1.5 h-1.5 rounded-full bg-orange-500" />
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.gondola }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.gondola }" />
                 </button>
-                <div v-show="openSections.gondola" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.gondola" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="flex flex-col gap-3 pt-3">
-                    <label class="flex items-center gap-2.5 text-sm text-zinc-300 cursor-pointer hover:text-zinc-100 transition-colors">
-                      <input v-model="form.showCutLine" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                    <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
+                      <input v-model="form.showCutLine" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                       Linha de Corte
                     </label>
-                    <label class="flex items-center gap-2.5 text-sm text-zinc-300 cursor-pointer hover:text-zinc-100 transition-colors">
-                      <input v-model="form.showBarcode" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                    <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
+                      <input v-model="form.showBarcode" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                       Codigo de Barras
                     </label>
-                    <label class="flex items-center gap-2.5 text-sm text-zinc-300 cursor-pointer hover:text-zinc-100 transition-colors">
-                      <input v-model="form.showValidity" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                    <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
+                      <input v-model="form.showValidity" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                       Validade da Oferta
                     </label>
                   </div>
@@ -1406,43 +1407,43 @@ onMounted(() => {
               </div>
 
               <!-- ── Section: Configuracoes ── -->
-              <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm overflow-hidden">
+              <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm overflow-hidden">
                 <button
                   type="button"
-                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--jv-sky)]/30 transition-colors"
                   @click="toggleSection('settings')"
                 >
                   <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-zinc-500/10 flex items-center justify-center">
-                      <Settings class="h-3.5 w-3.5 text-zinc-400" />
+                      <Settings class="h-3.5 w-3.5 text-[color:var(--jv-muted)]" />
                     </div>
-                    <span class="text-sm font-medium text-zinc-200">Configuracoes</span>
+                    <span class="text-sm font-medium text-[color:var(--jv-navy)]">Configuracoes</span>
                   </div>
-                  <ChevronDown class="h-4 w-4 text-zinc-500 transition-transform duration-200" :class="{ 'rotate-180': openSections.settings }" />
+                  <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.settings }" />
                 </button>
-                <div v-show="openSections.settings" class="px-4 pb-4 border-t border-zinc-800/50">
+                <div v-show="openSections.settings" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="pt-3 space-y-3">
                     <div class="grid grid-cols-2 gap-3">
                       <div>
-                        <label class="block text-[11px] font-medium text-zinc-500 mb-1.5">Ordem</label>
+                        <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Ordem</label>
                         <input
                           v-model.number="form.sort_order"
                           type="number"
-                          class="w-full rounded-lg border border-zinc-700/60 bg-zinc-950/50 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/40"
+                          class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f7fbff] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-1 focus:ring-[rgba(55,119,194,.2)]"
                         />
                       </div>
                     </div>
                     <div class="flex flex-col gap-2.5">
-                      <label class="flex items-center gap-2.5 text-sm text-zinc-300 cursor-pointer hover:text-zinc-100 transition-colors">
-                        <input v-model="form.is_global" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                      <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
+                        <input v-model="form.is_global" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                         Global (visivel para todos)
                       </label>
-                      <label class="flex items-center gap-2.5 text-sm text-zinc-300 cursor-pointer hover:text-zinc-100 transition-colors">
-                        <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                      <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
+                        <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                         Ativo
                       </label>
-                      <label class="flex items-center gap-2.5 text-sm text-zinc-300 cursor-pointer hover:text-zinc-100 transition-colors">
-                        <input v-model="form.hideUnit" type="checkbox" class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50" />
+                      <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
+                        <input v-model="form.hideUnit" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
                         Ocultar unidade (/kg, /un)
                       </label>
                     </div>
@@ -1455,13 +1456,13 @@ onMounted(() => {
                 <button
                   type="submit"
                   :disabled="isSaving || !form.name"
-                  class="rounded-xl bg-emerald-600 px-8 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 transition-all duration-200 shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30"
+                  class="rounded-xl bg-[color:var(--jv-blue)] px-8 py-2.5 text-sm font-semibold text-[color:var(--jv-navy)] hover:bg-[#1a4f96] disabled:opacity-50 transition-all duration-200 shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30"
                 >
                   {{ isSaving ? 'Salvando...' : (editingId ? 'Atualizar' : 'Criar Estilo') }}
                 </button>
                 <button
                   type="button"
-                  class="rounded-xl bg-zinc-800 px-6 py-2.5 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+                  class="rounded-xl bg-[color:var(--jv-sky)] px-6 py-2.5 text-sm text-slate-600 hover:bg-slate-200 transition-colors"
                   @click="showForm = false; resetForm()"
                 >
                   Cancelar
@@ -1473,8 +1474,8 @@ onMounted(() => {
             <div class="lg:col-span-2">
               <div class="lg:sticky lg:top-6 space-y-4">
                 <!-- Mode selector tabs -->
-                <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm p-3">
-                  <label class="block text-[11px] font-semibold text-zinc-500 mb-2 uppercase tracking-wider">Preview</label>
+                <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm p-3">
+                  <label class="block text-[11px] font-semibold text-[color:var(--jv-muted)] mb-2 uppercase tracking-wider">Preview</label>
                   <div class="flex flex-wrap gap-1">
                     <button
                       v-for="pm in PRICE_MODES"
@@ -1482,8 +1483,8 @@ onMounted(() => {
                       :class="[
                         'text-[10px] px-2.5 py-1 rounded-lg font-medium transition-all duration-200',
                         previewMode === pm.value
-                          ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                          : 'bg-zinc-800/60 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
+                          ? 'bg-[color:var(--jv-blue)] text-[color:var(--jv-navy)] shadow-sm shadow-emerald-600/30'
+                          : 'bg-[color:var(--jv-sky)]/60 text-[color:var(--jv-muted)] hover:text-slate-600 hover:bg-[color:var(--jv-sky)]'
                       ]"
                       @click="previewMode = pm.value"
                     >
@@ -1493,7 +1494,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Preview card -->
-                <div class="rounded-xl border border-zinc-800/80 bg-zinc-950/60 backdrop-blur-sm p-6 min-h-40 flex items-center justify-center">
+                <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white/60 backdrop-blur-sm p-6 min-h-40 flex items-center justify-center">
                   <!-- simple -->
                   <div v-if="previewMode === 'simple'" class="flex flex-col items-center gap-2">
                     <p class="text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Preco Simples</p>
@@ -1516,9 +1517,9 @@ onMounted(() => {
                       <div class="flex items-end gap-px" style="height: 14px;">
                         <div v-for="i in 20" :key="i" class="bg-zinc-400" :style="{ width: i % 3 === 0 ? '2px' : '1px', height: `${40 + (i * 7) % 30}%` }" />
                       </div>
-                      <span class="text-[7px] text-zinc-500 font-mono mt-0.5">7891234567890</span>
+                      <span class="text-[7px] text-[color:var(--jv-muted)] font-mono mt-0.5">7891234567890</span>
                     </div>
-                    <span v-if="form.showValidity" class="text-[8px] text-zinc-500 mt-0.5">Valido ate __/__/____</span>
+                    <span v-if="form.showValidity" class="text-[8px] text-[color:var(--jv-muted)] mt-0.5">Valido ate __/__/____</span>
                     <div v-if="form.showCutLine" class="w-full border-t-2 border-dashed opacity-30" :style="{ borderColor: form.bgColor }" />
                   </div>
 
@@ -1527,7 +1528,7 @@ onMounted(() => {
                     <p class="text-[10px] text-zinc-600 uppercase tracking-wider mb-1">De / Por</p>
                     <div class="flex items-center gap-3">
                       <div class="flex flex-col items-center gap-0.5">
-                        <span class="text-[8px] text-zinc-500 font-bold uppercase">De</span>
+                        <span class="text-[8px] text-[color:var(--jv-muted)] font-bold uppercase">De</span>
                         <span class="text-[11px] font-bold line-through px-2 py-1 rounded" :style="{ backgroundColor: form.bgColor + '22', color: form.bgColor }">R$40,00</span>
                       </div>
                       <div class="flex flex-col items-center gap-0.5">
@@ -1549,7 +1550,7 @@ onMounted(() => {
                     <span class="text-[11px] font-bold" :style="{ color: form.bgColor }">3 Kilos Por</span>
                     <div class="flex items-center gap-3">
                       <div class="flex flex-col items-center gap-0.5">
-                        <span class="text-[8px] text-zinc-500 font-bold">PRECO</span>
+                        <span class="text-[8px] text-[color:var(--jv-muted)] font-bold">PRECO</span>
                         <span class="text-[10px] font-bold px-2 py-1 rounded" :style="{ backgroundColor: form.bgColor + '22', color: form.bgColor }">R$16,88</span>
                       </div>
                       <div class="flex items-baseline gap-0.5 px-3 py-1.5 font-bold" :style="previewSealStyle">
@@ -1567,7 +1568,7 @@ onMounted(() => {
                     <span class="text-[11px] font-bold" :style="{ color: form.bgColor }">Leve 3 Pague 2</span>
                     <div class="flex items-center gap-3">
                       <div class="flex flex-col items-center gap-0.5">
-                        <span class="text-[8px] text-zinc-500 font-bold">KILO</span>
+                        <span class="text-[8px] text-[color:var(--jv-muted)] font-bold">KILO</span>
                         <span class="text-[10px] font-bold px-2 py-1 rounded" :style="{ backgroundColor: form.bgColor + '22', color: form.bgColor }">R$20,00</span>
                       </div>
                       <div class="flex items-baseline gap-0.5 px-3 py-1.5 font-bold" :style="previewSealStyle">
@@ -1586,7 +1587,7 @@ onMounted(() => {
                     <span class="text-[11px] font-bold" :style="{ color: form.bgColor }">Apenas 10X de</span>
                     <div class="flex items-center gap-3">
                       <div class="flex flex-col items-center gap-0.5">
-                        <span class="text-[8px] text-zinc-500 font-bold">A VISTA</span>
+                        <span class="text-[8px] text-[color:var(--jv-muted)] font-bold">A VISTA</span>
                         <span class="text-[10px] font-bold px-2 py-1 rounded" :style="{ backgroundColor: form.bgColor + '22', color: form.bgColor }">R$1.539</span>
                       </div>
                       <div class="flex items-baseline gap-0.5 px-3 py-1.5 font-bold" :style="previewSealStyle">
@@ -1620,7 +1621,7 @@ onMounted(() => {
                       <img :src="COIN_IMAGES.real1" alt="R$1" class="w-10 h-10 rounded-full shadow-lg relative" style="z-index: 2;" />
                       <img :src="COIN_IMAGES.cent25" alt="25¢" class="w-10 h-10 rounded-full shadow-lg relative" style="z-index: 1; margin-left: -10px;" />
                     </div>
-                    <span class="text-[8px] text-zinc-500">R$1,25</span>
+                    <span class="text-[8px] text-[color:var(--jv-muted)]">R$1,25</span>
                     <div class="flex items-center gap-2 mt-2">
                       <div class="flex items-center justify-center rounded-md border w-12 h-6 shadow-md" style="background-color: #6b46c1; border-color: rgba(255,255,255,0.3); color: #fff;">
                         <span class="text-[7px] font-extrabold">R$5</span>
@@ -1640,7 +1641,7 @@ onMounted(() => {
                     <span class="text-[11px] font-bold" :style="{ color: form.bgColor }">Preco Clube</span>
                     <div class="flex items-center gap-3">
                       <div class="flex flex-col items-center gap-0.5">
-                        <span class="text-[8px] text-zinc-500 font-bold">PRECO</span>
+                        <span class="text-[8px] text-[color:var(--jv-muted)] font-bold">PRECO</span>
                         <span class="text-[10px] font-bold line-through px-2 py-1 rounded" :style="{ backgroundColor: form.bgColor + '22', color: form.bgColor }">R$16,88</span>
                       </div>
                       <div class="flex items-baseline gap-0.5 px-3 py-1.5 font-bold" :style="previewSealStyle">
@@ -1665,14 +1666,14 @@ onMounted(() => {
                 </div>
 
                 <!-- All 8 modes mini grid -->
-                <div class="rounded-xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-sm p-3">
+                <div class="rounded-xl border border-[color:var(--jv-line)]/80 bg-white backdrop-blur-sm p-3">
                   <label class="block text-[10px] font-semibold text-zinc-600 mb-2 uppercase tracking-wider">Todos os modos</label>
                   <div class="grid grid-cols-4 gap-1.5">
                     <div
                       v-for="pm in PRICE_MODES"
                       :key="pm.value"
                       class="rounded-lg p-1.5 flex flex-col items-center gap-1 cursor-pointer border transition-all duration-200"
-                      :class="previewMode === pm.value ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-zinc-800/50 hover:border-zinc-700 bg-zinc-950/30'"
+                      :class="previewMode === pm.value ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-[color:var(--jv-line)]/50 hover:border-[color:var(--jv-line)] bg-white/30'"
                       @click="previewMode = pm.value"
                     >
                       <div
@@ -1700,6 +1701,7 @@ onMounted(() => {
       </Transition>
     </div>
   </div>
+  </AdminWorkspaceShell>
 </template>
 
 <style scoped>

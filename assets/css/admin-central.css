@@ -1,0 +1,276 @@
+/* Tema compartilhado da Central administrativa JobVarejo */
+:root,
+.admin-shell,
+.dash-admin {
+  --jv-navy: #173d70;
+  --jv-blue: #2160b4;
+  --jv-sky: #eaf3ff;
+  --jv-ink: #172b45;
+  --jv-muted: #60758f;
+  --jv-line: #d7e4f1;
+  --jv-surface: #ffffff;
+  --jv-surface-soft: rgba(255, 255, 255, 0.84);
+  --jv-danger: #dc2626;
+  --jv-success: #059669;
+  --jv-warning: #d97706;
+}
+
+.admin-page {
+  min-height: 100%;
+  padding: 28px 24px 40px;
+  color: var(--jv-ink);
+  font-family: "Plus Jakarta Sans", "Barlow", ui-sans-serif, system-ui, sans-serif;
+}
+
+.admin-page__inner {
+  max-width: 72rem;
+  margin: 0 auto;
+}
+
+.admin-page__eyebrow {
+  margin: 0;
+  color: #5b7ea8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-page__title {
+  margin: 8px 0 0;
+  color: #1d3f69;
+  font-size: clamp(1.5rem, 2vw, 1.875rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.admin-page__lead {
+  margin: 8px 0 0;
+  max-width: 42rem;
+  color: var(--jv-muted);
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+
+.admin-page__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  color: var(--jv-muted);
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.admin-page__back:hover {
+  color: var(--jv-blue);
+}
+
+.admin-card {
+  border: 1px solid var(--jv-line);
+  border-radius: 16px;
+  background: var(--jv-surface);
+  box-shadow: 0 8px 24px rgba(26, 68, 113, 0.05);
+}
+
+.admin-card--pad {
+  padding: 20px 22px;
+}
+
+.admin-input,
+.admin-select,
+.admin-textarea {
+  width: 100%;
+  border: 1px solid var(--jv-line);
+  border-radius: 12px;
+  background: #f7fbff;
+  color: var(--jv-ink);
+  padding: 10px 12px;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.admin-input:focus,
+.admin-select:focus,
+.admin-textarea:focus {
+  border-color: #8fb8e6;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(55, 119, 194, 0.11);
+}
+
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  padding: 0 16px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-btn--primary {
+  color: #fff;
+  background: var(--jv-blue);
+  box-shadow: 0 8px 18px rgba(33, 96, 180, 0.22);
+}
+
+.admin-btn--primary:hover:not(:disabled) {
+  background: #1a4f96;
+  transform: translateY(-1px);
+}
+
+.admin-btn--secondary {
+  color: var(--jv-navy);
+  border-color: var(--jv-line);
+  background: #fff;
+}
+
+.admin-btn--secondary:hover:not(:disabled) {
+  background: var(--jv-sky);
+}
+
+.admin-btn--danger {
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.2);
+  background: rgba(254, 226, 226, 0.55);
+}
+
+.admin-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  padding: 14px 16px;
+  font-size: 0.875rem;
+}
+
+.admin-alert--error {
+  color: #991b1b;
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(254, 226, 226, 0.65);
+}
+
+.admin-alert--success {
+  color: #065f46;
+  border-color: rgba(5, 150, 105, 0.22);
+  background: rgba(209, 250, 229, 0.7);
+}
+
+.admin-alert--warning {
+  color: #92400e;
+  border-color: rgba(217, 119, 6, 0.25);
+  background: rgba(254, 243, 199, 0.75);
+}
+
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.admin-badge--ok {
+  color: #065f46;
+  border-color: rgba(5, 150, 105, 0.2);
+  background: rgba(209, 250, 229, 0.7);
+}
+
+.admin-badge--warn {
+  color: #92400e;
+  border-color: rgba(217, 119, 6, 0.25);
+  background: rgba(254, 243, 199, 0.8);
+}
+
+.admin-badge--danger {
+  color: #991b1b;
+  border-color: rgba(220, 38, 38, 0.2);
+  background: rgba(254, 226, 226, 0.75);
+}
+
+.admin-badge--info {
+  color: #1e40af;
+  border-color: rgba(33, 96, 180, 0.2);
+  background: rgba(219, 234, 254, 0.8);
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--jv-line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.admin-table th {
+  padding: 12px 16px;
+  color: #355074;
+  font-weight: 700;
+  background: #f3f8fd;
+  border-bottom: 1px solid var(--jv-line);
+}
+
+.admin-table td {
+  padding: 12px 16px;
+  color: var(--jv-ink);
+  border-top: 1px solid #e8f0f8;
+}
+
+.admin-link-card {
+  display: block;
+  border: 1px solid var(--jv-line);
+  border-radius: 16px;
+  background: #fff;
+  padding: 20px;
+  text-decoration: none;
+  box-shadow: 0 8px 24px rgba(26, 68, 113, 0.04);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-link-card:hover {
+  border-color: #b7d3ef;
+  box-shadow: 0 12px 28px rgba(26, 68, 113, 0.08);
+  transform: translateY(-2px);
+}
+
+.admin-link-card__title {
+  margin: 14px 0 0;
+  color: #1d3f69;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.admin-page--builder .mx-auto {
+  max-width: 72rem;
+}
+
+/* Formulários herdados do tema escuro → superfície clara */
+.admin-page--builder input[type='text'],
+.admin-page--builder input[type='number'],
+.admin-page--builder input[type='url'],
+.admin-page--builder input[type='search'],
+.admin-page--builder textarea,
+.admin-page--builder select {
+  color: var(--jv-ink);
+}
