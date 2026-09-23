@@ -112,7 +112,10 @@ barreira.
 
 ## Worker de agenda
 
-O processo opcional `workers/radio_worker.py` usa `radio_schedule_jobs` no PostgreSQL e deve rodar como serviço separado do `node-server`:
+O container Docker inicia `workers/radio_worker.py` junto do servidor web por
+padrão e reinicia o processo se ele cair. Assim a fila `radio_schedule_jobs`
+continua sendo processada na instalação atual. Para operar um serviço separado,
+defina `RADIO_WORKER_ENABLED=0` no container web e inicie o worker com:
 
 ```bash
 # Em produção, injete POSTGRES_DATABASE_URL no serviço do worker.
