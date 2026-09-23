@@ -142,7 +142,7 @@ onUnmounted(() => {
         >
           <template v-if="isLoading">
             <div class="flex flex-col items-center gap-3">
-              <Loader2 class="w-8 h-8 text-emerald-500 animate-spin" />
+              <Loader2 class="w-8 h-8 text-blue-500 animate-spin" />
               <span class="text-sm text-gray-500">Carregando encarte...</span>
             </div>
           </template>
@@ -170,7 +170,7 @@ onUnmounted(() => {
                 :class="[
                   'w-7 h-7 rounded-lg text-xs font-medium transition-all',
                   page === currentPage
-                    ? 'bg-emerald-600 text-white'
+                    ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
                 ]"
               >

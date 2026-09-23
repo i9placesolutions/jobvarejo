@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { resolveComponent } from 'vue'
 import {
   LayoutDashboard,
   Palette,
@@ -23,14 +24,8 @@ definePageMeta({
   ssr: false
 })
 
-// Builder não faz parte da Central JobVarejo (fluxo de modelos de encarte).
-// Admins JobVarejo voltam para a Central; login do tenant builder continua válido.
-const jobvarejoAuth = useAuth()
-if (import.meta.client && jobvarejoAuth.isAdmin.value) {
-  await navigateTo('/', { replace: true })
-}
-
 const { getApiAuthHeaders } = useApiAuth()
+const sectionLinkComponent = resolveComponent('NuxtLink')
 
 type SectionItem = {
   title: string
@@ -39,6 +34,7 @@ type SectionItem = {
   icon: any
   countKey: string
   count: number | null
+  available?: boolean
 }
 
 const sections = ref<SectionItem[]>([
@@ -126,6 +122,7 @@ const sections = ref<SectionItem[]>([
     title: 'Templates Canva',
     description: 'Gerenciar templates do Canva disponíveis para os clientes',
     href: '/admin/canva/templates',
+    available: false,
     icon: Image,
     countKey: 'canvaTemplates',
     count: null
@@ -142,6 +139,7 @@ const sections = ref<SectionItem[]>([
     title: 'QR Academy',
     description: 'Central de ajuda e tutoriais internos do QROfertas',
     href: '/admin/builder/qr-academy',
+    available: false,
     icon: HelpCircle,
     countKey: 'qrAcademy',
     count: null
@@ -221,19 +219,23 @@ onMounted(() => {
         </div>
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <NuxtLink
+          <component
             v-for="section in sections"
             :key="section.href"
-            :to="section.href"
+            :is="section.available === false ? 'div' : sectionLinkComponent"
+            :to="section.available === false ? undefined : section.href"
             class="admin-link-card group"
+            :class="{ 'admin-link-card--pending': section.available === false }"
+            :aria-disabled="section.available === false ? 'true' : undefined"
           >
             <div class="flex items-start justify-between">
               <component
                 :is="section.icon"
                 class="h-6 w-6 text-[color:var(--jv-muted)] transition-colors group-hover:text-[color:var(--jv-blue)]"
               />
+              <span v-if="section.available === false" class="admin-badge admin-badge--info">Em preparação</span>
               <span
-                v-if="section.count !== null"
+                v-else-if="section.count !== null"
                 class="rounded-full bg-[color:var(--jv-sky)] px-2.5 py-0.5 text-xs font-bold text-[color:var(--jv-navy)]"
               >
                 {{ section.count }}
@@ -245,7 +247,7 @@ onMounted(() => {
             </div>
             <h2 class="admin-link-card__title">{{ section.title }}</h2>
             <p class="admin-link-card__desc">{{ section.description }}</p>
-          </NuxtLink>
+          </component>
         </div>
       </div>
     </div>

@@ -90,14 +90,15 @@ watch(
     <div class="flex-1 w-full h-full max-w-[1920px] mx-auto overflow-hidden bg-white backdrop-blur-3xl border border-slate-200 rounded-[2rem] shadow-xl shadow-black/5 flex flex-col relative z-20 ring-1 ring-slate-100">
       <header class="dashboard-header h-16 px-8 border-b border-slate-200 bg-transparent flex items-center justify-between shrink-0 sticky top-0 z-30">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl flex items-center justify-center border border-violet-400/40 bg-linear-to-br from-violet-500/40 to-fuchsia-500/20 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
-            <Sparkles class="w-4 h-4 text-violet-100" />
+          <WorkspaceMenuButton theme="light" />
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center border border-blue-400/40 bg-linear-to-br from-blue-500/40 to-sky-500/20 shadow-[0_0_20px_rgba(33,96,180,0.3)]">
+            <Sparkles class="w-4 h-4 text-blue-100" />
           </div>
-          <span class="text-base font-bold tracking-tight text-slate-800 drop-shadow-sm">Studio PRO</span>
+          <span class="text-base font-bold tracking-tight text-[#173d70] drop-shadow-sm">JobVarejo · Meu Perfil</span>
       </div>
 
       <div class="flex items-center gap-3">
-        <div class="w-8 h-8 bg-linear-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-semibold text-white overflow-hidden">
+        <div class="w-8 h-8 bg-linear-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-xs font-semibold text-white overflow-hidden">
           <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" class="w-full h-full object-cover" />
           <span v-else>{{ avatarInitial }}</span>
         </div>
@@ -107,7 +108,7 @@ watch(
       <div class="dashboard-layout relative flex-1 flex overflow-hidden min-h-0">
         <aside class="w-72 h-full min-h-0 border-r border-slate-200 bg-slate-50 flex flex-col shrink-0 overflow-hidden relative z-10 transition-all duration-300 backdrop-blur-md">
           <div class="h-12 px-3 border-b border-slate-200 flex items-center gap-2 shrink-0">
-          <div class="w-7 h-7 bg-linear-to-br from-violet-500 to-fuchsia-500 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 overflow-hidden">
+          <div class="w-7 h-7 bg-linear-to-br from-blue-500 to-sky-500 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 overflow-hidden">
             <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" class="w-full h-full object-cover" />
             <span v-else>{{ avatarInitial }}</span>
           </div>
@@ -194,7 +195,7 @@ watch(
 
           <div v-else class="mt-6 grid gap-4 md:grid-cols-3">
             <section class="md:col-span-1 rounded-2xl border border-slate-200 bg-white backdrop-blur-sm p-5 shadow-xs">
-              <div class="w-20 h-20 rounded-full bg-linear-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-2xl font-semibold text-white overflow-hidden mb-4">
+              <div class="w-20 h-20 rounded-full bg-linear-to-br from-blue-500 to-sky-500 flex items-center justify-center text-2xl font-semibold text-white overflow-hidden mb-4">
                 <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" class="w-full h-full object-cover" />
                 <span v-else>{{ avatarInitial }}</span>
               </div>
@@ -247,7 +248,7 @@ watch(
 }
 
 button:focus-visible {
-  outline: 1px solid rgba(99, 102, 241, 0.7);
+  outline: 1px solid rgba(33, 96, 180, 0.7);
   outline-offset: 2px;
 }
 </style>

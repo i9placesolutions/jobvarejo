@@ -611,7 +611,7 @@ onMounted(() => {
                   <span
                     class="inline-flex items-center rounded-full px-2 py-0.5 text-xs"
                     :class="theme.is_active
-                      ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                      ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                       : 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border border-[color:var(--jv-line)]'"
                   >
                     {{ theme.is_active ? 'Ativo' : 'Inativo' }}
@@ -703,7 +703,7 @@ onMounted(() => {
                   v-model="form.name"
                   type="text"
                   required
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   placeholder="Ex: Moderno Verde"
                 />
               </div>
@@ -712,7 +712,7 @@ onMounted(() => {
                 <input
                   v-model="form.slug"
                   type="text"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   placeholder="auto-gerado"
                 />
               </div>
@@ -721,7 +721,7 @@ onMounted(() => {
                 <input
                   v-model="form.category_name"
                   type="text"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   placeholder="Ex: Supermercado"
                 />
               </div>
@@ -730,7 +730,7 @@ onMounted(() => {
                 <input
                   v-model.number="form.sort_order"
                   type="number"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>
               <div>
@@ -750,7 +750,7 @@ onMounted(() => {
                     </button>
                   </div>
                   <label
-                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-[#f3f8fd] px-3 py-2.5 text-sm text-[color:var(--jv-muted)] hover:border-emerald-500 hover:text-[color:var(--jv-blue)] cursor-pointer transition-colors"
+                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-[#f3f8fd] px-3 py-2.5 text-sm text-[color:var(--jv-muted)] hover:border-blue-500 hover:text-[color:var(--jv-blue)] cursor-pointer transition-colors"
                     :class="{ 'opacity-50 pointer-events-none': uploadingField === 'thumbnail' }"
                   >
                     <Upload v-if="uploadingField !== 'thumbnail'" class="h-4 w-4" />
@@ -776,7 +776,7 @@ onMounted(() => {
                     </button>
                   </div>
                   <label
-                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-[#f3f8fd] px-3 py-2.5 text-sm text-[color:var(--jv-muted)] hover:border-emerald-500 hover:text-[color:var(--jv-blue)] cursor-pointer transition-colors"
+                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-[#f3f8fd] px-3 py-2.5 text-sm text-[color:var(--jv-muted)] hover:border-blue-500 hover:text-[color:var(--jv-blue)] cursor-pointer transition-colors"
                     :class="{ 'opacity-50 pointer-events-none': uploadingField === 'background_image' }"
                   >
                     <Upload v-if="uploadingField !== 'background_image'" class="h-4 w-4" />
@@ -790,21 +790,21 @@ onMounted(() => {
                 <input
                   v-model="form.tags_text"
                   type="text"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   placeholder="supermercado, moderno, verde"
                 />
               </div>
               <div class="flex items-center gap-6 sm:col-span-2 lg:col-span-3">
                 <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                  <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                  <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                   Ativo
                 </label>
                 <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                  <input v-model="form.is_premium" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                  <input v-model="form.is_premium" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                   Premium
                 </label>
                 <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                  <input v-model="form.is_public" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                  <input v-model="form.is_public" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                   Publico
                 </label>
               </div>
@@ -812,7 +812,7 @@ onMounted(() => {
           </div>
 
           <!-- Format Scope -->
-          <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+          <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
             <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 class="text-sm font-medium text-[color:var(--jv-navy)] uppercase tracking-wider">Formatos disponíveis para o cliente</h3>
@@ -820,7 +820,7 @@ onMounted(() => {
                   Defina em quais modelos este tema aparece no Builder. A opção todos também inclui formatos adicionados no futuro.
                 </p>
               </div>
-              <span class="text-xs font-medium text-emerald-300">
+              <span class="text-xs font-medium text-blue-300">
                 {{ form.all_formats ? 'Todos os formatos' : `${form.model_ids.length} selecionado(s)` }}
               </span>
             </div>
@@ -829,7 +829,7 @@ onMounted(() => {
               <input
                 :checked="form.all_formats"
                 type="checkbox"
-                class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50"
+                class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50"
                 @change="toggleAllFormats(($event.target as HTMLInputElement).checked)"
               />
               Todos os formatos
@@ -842,14 +842,14 @@ onMounted(() => {
                 :key="model.id"
                 class="flex items-start gap-2 rounded-lg border px-3 py-2 transition-colors"
                 :class="isModelSelected(model.id)
-                  ? 'border-emerald-500/40 bg-emerald-500/10'
+                  ? 'border-blue-500/40 bg-blue-500/10'
                   : 'border-[color:var(--jv-line)] bg-[#f3f8fd]/60'"
               >
                 <input
                   :checked="isModelSelected(model.id)"
                   :disabled="form.all_formats"
                   type="checkbox"
-                  class="mt-0.5 rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50 disabled:opacity-50"
+                  class="mt-0.5 rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50 disabled:opacity-50"
                   @change="toggleModel(model.id, ($event.target as HTMLInputElement).checked)"
                 />
                 <span class="min-w-0">
@@ -875,56 +875,56 @@ onMounted(() => {
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor Primaria</label>
                 <div class="flex items-center gap-2">
                   <input v-model="form.css_config.primaryColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                  <input v-model="form.css_config.primaryColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.primaryColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                 </div>
               </div>
               <div>
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor Secundaria</label>
                 <div class="flex items-center gap-2">
                   <input v-model="form.css_config.secondaryColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                  <input v-model="form.css_config.secondaryColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.secondaryColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                 </div>
               </div>
               <div>
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor de Fundo</label>
                 <div class="flex items-center gap-2">
                   <input v-model="form.css_config.bgColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                  <input v-model="form.css_config.bgColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.bgColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                 </div>
               </div>
               <div>
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor do Texto</label>
                 <div class="flex items-center gap-2">
                   <input v-model="form.css_config.textColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                  <input v-model="form.css_config.textColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.textColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                 </div>
               </div>
               <div>
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor Destaque</label>
                 <div class="flex items-center gap-2">
                   <input v-model="form.css_config.accentColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                  <input v-model="form.css_config.accentColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.accentColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                 </div>
               </div>
               <div>
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Header Bg</label>
                 <div class="flex items-center gap-2">
                   <input v-model="form.css_config.headerBg" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                  <input v-model="form.css_config.headerBg" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.headerBg" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                 </div>
               </div>
               <div>
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Body Bg</label>
                 <div class="flex items-center gap-2">
                   <input v-model="form.css_config.bodyBg" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                  <input v-model="form.css_config.bodyBg" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.bodyBg" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                 </div>
               </div>
               <div>
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Footer Bg</label>
                 <div class="flex items-center gap-2">
                   <input v-model="form.css_config.footerBg" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                  <input v-model="form.css_config.footerBg" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                  <input v-model="form.css_config.footerBg" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                 </div>
               </div>
               <div>
@@ -932,7 +932,7 @@ onMounted(() => {
                 <input
                   v-model="form.css_config.borderRadius"
                   type="text"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   placeholder="8px"
                 />
               </div>
@@ -947,7 +947,7 @@ onMounted(() => {
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Layout</label>
                 <select
                   v-model="form.header_config.layout"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 >
                   <option value="center">Center</option>
                   <option value="left">Left</option>
@@ -959,7 +959,7 @@ onMounted(() => {
                 <input
                   v-model.number="form.header_config.height"
                   type="number"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>
               <div>
@@ -979,7 +979,7 @@ onMounted(() => {
                     </button>
                   </div>
                   <label
-                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-[#f3f8fd] px-3 py-2 text-xs text-[color:var(--jv-muted)] hover:border-emerald-500 hover:text-[color:var(--jv-blue)] cursor-pointer transition-colors"
+                    class="flex items-center justify-center gap-2 w-full rounded-lg border border-dashed border-zinc-600 bg-[#f3f8fd] px-3 py-2 text-xs text-[color:var(--jv-muted)] hover:border-blue-500 hover:text-[color:var(--jv-blue)] cursor-pointer transition-colors"
                     :class="{ 'opacity-50 pointer-events-none': uploadingField === 'header_bg' }"
                   >
                     <Upload v-if="uploadingField !== 'header_bg'" class="h-3.5 w-3.5" />
@@ -990,15 +990,15 @@ onMounted(() => {
               </div>
               <div class="flex items-end gap-4">
                 <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                  <input v-model="form.header_config.showLogo" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                  <input v-model="form.header_config.showLogo" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                   Logo
                 </label>
                 <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                  <input v-model="form.header_config.showDates" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                  <input v-model="form.header_config.showDates" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                   Datas
                 </label>
                 <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                  <input v-model="form.header_config.showTitle" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                  <input v-model="form.header_config.showTitle" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                   Titulo
                 </label>
               </div>
@@ -1014,7 +1014,7 @@ onMounted(() => {
                 <input
                   v-model.number="form.body_config.padding"
                   type="number"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>
               <div>
@@ -1022,14 +1022,14 @@ onMounted(() => {
                 <input
                   v-model.number="form.body_config.gap"
                   type="number"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>
               <div>
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Estilo do Card</label>
                 <select
                   v-model="form.body_config.productCardStyle"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 >
                   <option value="rounded">Rounded</option>
                   <option value="square">Square</option>
@@ -1048,7 +1048,7 @@ onMounted(() => {
                 <input
                   v-model="form.footer_config.style"
                   type="text"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>
               <div>
@@ -1056,12 +1056,12 @@ onMounted(() => {
                 <input
                   v-model.number="form.footer_config.height"
                   type="number"
-                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>
               <div class="flex items-end">
                 <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                  <input v-model="form.footer_config.showWatermark" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                  <input v-model="form.footer_config.showWatermark" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                   Marca d'agua
                 </label>
               </div>

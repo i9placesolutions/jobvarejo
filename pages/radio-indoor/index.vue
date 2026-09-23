@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {
   Album, CalendarClock, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3,
-  Copy, Disc3, Download, Headphones, ListMusic, LoaderCircle, LockKeyhole, Menu,
+  Copy, Disc3, Download, Headphones, ListMusic, LoaderCircle,
   Mic2, MonitorPlay, Moon, Pause, Play, Plus, Radio, RefreshCw, Search, Send, Settings2, ShieldCheck, Store,
   Sparkles, Sun, UserPlus, Users, Volume2, X, Zap
 } from 'lucide-vue-next'
@@ -28,7 +28,6 @@ const duration = ref(0)
 const volume = ref(0.86)
 const radioTheme = ref<'dark' | 'light'>('light')
 const RADIO_THEME_STORAGE_KEY = 'jobvarejo:radio-indoor-theme'
-const showMobileNav = ref(false)
 const showStationForm = ref(false)
 const showStationEditForm = ref(false)
 const notice = ref<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
@@ -623,14 +622,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <AdminWorkspaceShell active-nav="radio">
   <div class="radio-app" :class="{ 'theme-light': radioTheme === 'light' }">
-    <aside class="radio-sidebar" :class="{ 'is-open': showMobileNav }">
-      <div class="brand-lockup">
-        <div class="brand-mark"><Radio :size="22" /></div>
-        <div><strong>JobVarejo</strong><span>Rádio Indoor</span></div>
-      </div>
-      <button class="close-nav mobile-only" aria-label="Fechar menu" @click="showMobileNav = false"><X :size="20" /></button>
-      <nav class="main-nav" aria-label="Rádio Indoor">
+    <main class="radio-main">
+      <header class="topbar">
+        <div class="crumb"><span>Rádio Indoor</span><ChevronRight :size="14" /><b>{{ activeView === 'home' ? 'Visão geral' : activeView === 'catalog' ? 'Músicas' : activeView === 'programs' ? 'Programas' : activeView === 'agenda' ? 'Agenda' : activeView === 'voices' ? 'Banco de vozes' : activeView === 'requests' ? 'Gerar áudio' : 'Equipe e players' }}</b></div>
+        <div class="topbar-actions"><div class="station-switcher"><Store :size="15" /><label class="sr-only" for="radio-station-select">Loja ativa</label><select id="radio-station-select" v-model="selectedStationId" @change="changeStation"><option v-for="item in stations" :key="item.id" :value="item.id">{{ item.name }}</option></select><button v-if="canManageUsers" class="station-add" title="Editar nome da loja" aria-label="Editar nome da loja" @click="openStationEdit"><Settings2 :size="15" /></button><button class="station-add" title="Adicionar loja" aria-label="Adicionar loja" @click="showStationForm = !showStationForm"><Plus :size="15" /></button></div><button v-if="canManageUsers" class="station-status clickable" :class="{ live: station?.status === 'active' }" :title="station?.status === 'active' ? 'Pausar loja' : 'Colocar no ar'" @click="toggleStationStatus"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</button><span v-else class="station-status" :class="{ live: station?.status === 'active' }"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</span><button class="icon-button theme-toggle" :aria-label="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" :aria-pressed="radioTheme === 'light'" :title="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" @click="toggleRadioTheme"><Sun v-if="radioTheme === 'dark'" :size="17" /><Moon v-else :size="17" /></button><button class="icon-button" title="Ajuda"><CircleHelp :size="18" /></button></div>
+      </header>
+      <nav class="main-nav" aria-label="Seções da Rádio Indoor">
         <button v-for="item in [
           { id: 'home', label: 'Visão geral', icon: Radio },
           { id: 'catalog', label: 'Músicas', icon: Disc3 },
@@ -639,23 +638,10 @@ onBeforeUnmount(() => {
           { id: 'voices', label: 'Banco de vozes', icon: Mic2 },
           { id: 'requests', label: 'Gerar áudio', icon: Sparkles },
           ...(canManageUsers ? [{ id: 'team', label: 'Equipe e players', icon: Users }] : [])
-        ]" :key="item.id" class="nav-item" :class="{ active: activeView === item.id }" @click="setView(item.id); showMobileNav = false">
+        ]" :key="item.id" class="nav-item" :class="{ active: activeView === item.id }" @click="setView(item.id)">
           <component :is="item.icon" :size="18" /><span>{{ item.label }}</span>
         </button>
       </nav>
-      <div class="sidebar-bottom">
-        <NuxtLink to="/" class="nav-item"><ChevronLeft :size="18" /><span>Todas as soluções</span></NuxtLink>
-        <div class="private-badge"><LockKeyhole :size="14" /><span>Player interno protegido</span></div>
-        <div class="cache-badge" :class="{ ready: radio.cacheReady.value }"><Zap :size="14" /><span>{{ radio.cacheReady.value ? 'Cache offline ativo' : 'Ativando cache...' }}</span></div>
-      </div>
-    </aside>
-
-    <main class="radio-main">
-      <header class="topbar">
-        <button class="menu-button mobile-only" aria-label="Abrir menu" @click="showMobileNav = true"><Menu :size="22" /></button>
-        <div class="crumb"><span>Rádio Indoor</span><ChevronRight :size="14" /><b>{{ activeView === 'home' ? 'Visão geral' : activeView === 'catalog' ? 'Músicas' : activeView === 'programs' ? 'Programas' : activeView === 'agenda' ? 'Agenda' : activeView === 'voices' ? 'Banco de vozes' : activeView === 'requests' ? 'Gerar áudio' : 'Equipe e players' }}</b></div>
-        <div class="topbar-actions"><div class="station-switcher"><Store :size="15" /><label class="sr-only" for="radio-station-select">Loja ativa</label><select id="radio-station-select" v-model="selectedStationId" @change="changeStation"><option v-for="item in stations" :key="item.id" :value="item.id">{{ item.name }}</option></select><button v-if="canManageUsers" class="station-add" title="Editar nome da loja" aria-label="Editar nome da loja" @click="openStationEdit"><Settings2 :size="15" /></button><button class="station-add" title="Adicionar loja" aria-label="Adicionar loja" @click="showStationForm = !showStationForm"><Plus :size="15" /></button></div><button v-if="canManageUsers" class="station-status clickable" :class="{ live: station?.status === 'active' }" :title="station?.status === 'active' ? 'Pausar loja' : 'Colocar no ar'" @click="toggleStationStatus"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</button><span v-else class="station-status" :class="{ live: station?.status === 'active' }"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</span><button class="icon-button theme-toggle" :aria-label="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" :aria-pressed="radioTheme === 'light'" :title="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" @click="toggleRadioTheme"><Sun v-if="radioTheme === 'dark'" :size="17" /><Moon v-else :size="17" /></button><button class="icon-button" title="Ajuda"><CircleHelp :size="18" /></button></div>
-      </header>
 
       <div v-if="showStationForm" class="station-create-panel"><div class="station-create-copy"><Store :size="18" /><div><strong>Adicionar uma loja</strong><span>Catálogo pode ser compartilhado; programação e agenda ficam separadas.</span></div></div><div class="station-create-fields"><input v-model="stationForm.name" placeholder="Nome da loja (ex.: Loja Centro)" @keyup.enter="createStation" /><input v-model="stationForm.timezone" placeholder="Fuso horário" /><button class="button primary" :disabled="isCreatingStation" @click="createStation"><LoaderCircle v-if="isCreatingStation" class="spin" :size="15" /><Plus v-else :size="15" /> Criar loja</button></div></div>
       <div v-if="showStationEditForm && canManageUsers" class="station-create-panel"><div class="station-create-copy"><Settings2 :size="18" /><div><strong>Editar loja</strong><span>Este nome identifica a estação no painel e no player.</span></div></div><div class="station-create-fields"><input v-model="stationEditForm.name" placeholder="Nome real da loja" @keyup.enter="saveStationDetails" /><input v-model="stationEditForm.timezone" placeholder="Fuso horário" /><button class="button primary" @click="saveStationDetails"><Check :size="15" /> Salvar loja</button></div></div>
@@ -767,6 +753,7 @@ onBeforeUnmount(() => {
       <div class="player-track"><div class="cover player-cover"><img v-if="currentTrack?.thumbnailUrl" :src="currentTrack.thumbnailUrl" :alt="currentTrack.title" /><Disc3 v-else :size="25" /></div><div class="now-playing"><strong>{{ currentTrack?.title || 'Escolha uma faixa para começar' }}</strong><span>{{ currentTrack?.artist || 'Seu player interno está pronto' }}</span></div></div><div class="player-controls"><div class="control-buttons"><button title="Anterior" @click="playPrevious"><ChevronLeft :size="18" /></button><button class="play-button" :disabled="isLoadingTrack" title="Reproduzir" @click="togglePlay"><LoaderCircle v-if="isLoadingTrack" class="spin" :size="19" /><Pause v-else-if="isPlaying" :size="19" fill="currentColor" /><Play v-else :size="19" fill="currentColor" /></button><button title="Próxima" @click="playNext"><ChevronRight :size="18" /></button></div><div class="progress-line"><span>{{ formatDuration(progress * 1000) }}</span><input type="range" min="0" :max="duration || 1" step="0.1" :value="progress" aria-label="Progresso da faixa" @input="seek" /><span>{{ formatDuration(duration * 1000) }}</span></div></div><div class="player-tools"><Volume2 :size="17" /><input v-model.number="volume" type="range" min="0" max="1" step="0.01" aria-label="Volume" @input="audioRef && (audioRef.volume = volume)" /><span class="cache-indicator"><i></i> cache</span></div><audio ref="audioRef" :src="currentTrack?.audioUrl || undefined" preload="auto" @timeupdate="onTimeUpdate" @loadedmetadata="onTimeUpdate" @play="isPlaying = true" @pause="isPlaying = false" @ended="playNext" @error="showNotice('Não foi possível ler esta faixa no navegador.', 'error')"></audio>
     </div>
   </div>
+  </AdminWorkspaceShell>
 </template>
 
 <style scoped>
@@ -1024,4 +1011,20 @@ onBeforeUnmount(() => {
 .radio-app.theme-light .player-dock { border-top-color:var(--jv-line); box-shadow:0 -12px 32px rgba(23,61,112,.1); }
 .radio-app.theme-light .control-buttons .play-button { color:#fff; }
 .radio-app.theme-light .progress-line input,.radio-app.theme-light .player-tools input,.radio-app.theme-light .store-checks input { accent-color:var(--jv-blue); }
+
+/* A rádio compartilha o cabeçalho e a navegação da Central administrativa. */
+.radio-app { display:block; min-height:calc(100dvh - 72px); max-width:none; background:transparent; }
+.radio-main { width:100%; max-width:none; margin-left:0; padding:0 32px 50px; }
+.main-nav { display:flex; flex-wrap:wrap; gap:3px; padding:12px 0; border-bottom:1px solid var(--jv-line); }
+.main-nav .nav-item { flex:0 0 auto; white-space:nowrap; min-height:40px; padding:10px 9px; gap:7px; font-size:12px; color:var(--jv-muted); }
+.main-nav .nav-item:hover { color:var(--jv-navy); background:var(--jv-sky); }
+.main-nav .nav-item.active { color:var(--jv-blue); background:var(--jv-sky); box-shadow:inset 0 -2px var(--jv-blue); }
+.player-dock { left:256px; }
+@media (max-width:768px) {
+  .radio-app { min-height:calc(100dvh - 72px); }
+  .radio-main { width:100%; margin:0; padding:0 16px 45px; }
+  .main-nav { margin:0 -16px; padding:10px 16px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:thin; }
+  .main-nav .nav-item { font-size:12px; }
+  .player-dock { left:0; }
+}
 </style>

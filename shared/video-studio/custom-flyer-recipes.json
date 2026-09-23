@@ -1754,14 +1754,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Leve Mais Pague Menos — Grafite",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -1771,9 +1771,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -1815,9 +1815,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -1891,14 +1891,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Leve Mais Pague Menos — Azul",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -1908,9 +1908,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -1952,9 +1952,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -2028,14 +2028,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Semana Imbatível",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -2045,9 +2045,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -2089,9 +2089,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -2165,14 +2165,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "electric",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Semana dos Eletros",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -2182,9 +2182,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -2226,9 +2226,9 @@
       ],
       "product": [
         5,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         90,
@@ -2302,14 +2302,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "clock",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Oferta do Dia",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -2319,9 +2319,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -2363,9 +2363,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -2439,14 +2439,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Venha Fazer Economia",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -2456,9 +2456,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -2500,9 +2500,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -2576,14 +2576,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Mês da Economia",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -2593,9 +2593,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -2637,9 +2637,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -2713,14 +2713,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Sempre o Menor Preço",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -2730,9 +2730,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -2774,9 +2774,9 @@
       ],
       "product": [
         5,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         90,
@@ -2850,14 +2850,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Leve Mais Pague Menos — Vermelho",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -2867,9 +2867,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -2911,9 +2911,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -2987,14 +2987,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Venha Economizar de Verdade",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -3004,9 +3004,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -3048,9 +3048,9 @@
       ],
       "product": [
         5,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         90,
@@ -3124,14 +3124,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "É Barato de Verdade",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -3141,9 +3141,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -3185,9 +3185,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -3261,14 +3261,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "É Preço Baixo Todo Dia",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -3278,9 +3278,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -3322,9 +3322,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -3398,14 +3398,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Preço Baixo É Aqui",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -3415,9 +3415,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -3459,9 +3459,9 @@
       ],
       "product": [
         675,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         785,
@@ -3535,14 +3535,14 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 2,
+    "revision": 3,
     "layoutName": "Comece o Mês de Carrinho Cheio",
     "vertical": {
       "seal": [
         145,
         70,
         790,
-        610
+        550
       ],
       "logo": [
         95,
@@ -3552,9 +3552,9 @@
       ],
       "product": [
         60,
-        615,
+        665,
         960,
-        745
+        620
       ],
       "name": [
         85,
@@ -3596,9 +3596,9 @@
       ],
       "product": [
         5,
-        120,
+        160,
         1240,
-        880
+        630
       ],
       "name": [
         90,

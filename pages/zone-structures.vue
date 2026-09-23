@@ -7,5 +7,7 @@ definePageMeta({
 </script>
 
 <template>
-  <ProductZoneStructureManager />
+  <AdminWorkspaceShell active-nav="zones">
+    <ProductZoneStructureManager />
+  </AdminWorkspaceShell>
 </template>

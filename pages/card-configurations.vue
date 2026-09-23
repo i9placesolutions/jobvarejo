@@ -7,5 +7,7 @@ definePageMeta({
 </script>
 
 <template>
-  <ProductCardConfigurationManager />
+  <AdminWorkspaceShell active-nav="cards">
+    <ProductCardConfigurationManager />
+  </AdminWorkspaceShell>
 </template>

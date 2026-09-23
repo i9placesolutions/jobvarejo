@@ -484,11 +484,12 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <AdminWorkspaceShell active-nav="encartes">
   <div class="min-h-screen bg-[#f6f7fb] text-slate-900">
     <header class="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <div class="flex min-w-0 items-center gap-3">
-          <NuxtLink to="/" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600">
+          <NuxtLink to="/" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600">
             <ArrowLeft class="h-4 w-4" />
           </NuxtLink>
           <div class="min-w-0">
@@ -497,11 +498,11 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="flex shrink-0 items-center gap-2">
-          <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700" @click="openCategoryDialog()">
+          <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700" @click="openCategoryDialog()">
             <Tag class="h-4 w-4" />
             <span class="hidden sm:inline">Nova categoria principal</span>
           </button>
-          <button type="button" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500 active:scale-[.98]" @click="openCreateDialog">
+          <button type="button" class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3.5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 active:scale-[.98]" @click="openCreateDialog">
             <Plus class="h-4 w-4" />
             <span class="hidden sm:inline">Novo modelo</span>
             <span class="sm:hidden">Novo</span>
@@ -514,10 +515,10 @@ onUnmounted(() => {
       <EncartesWorkspaceNav />
 
       <section class="relative overflow-hidden rounded-3xl bg-slate-950 px-5 py-7 text-white shadow-2xl shadow-slate-900/10 sm:px-8 sm:py-9">
-        <div class="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-indigo-500/30 blur-3xl" />
-        <div class="pointer-events-none absolute -bottom-44 left-1/3 h-80 w-80 rounded-full bg-violet-500/15 blur-3xl" />
+        <div class="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-blue-500/30 blur-3xl" />
+        <div class="pointer-events-none absolute -bottom-44 left-1/3 h-80 w-80 rounded-full bg-sky-500/15 blur-3xl" />
         <div class="relative max-w-2xl">
-          <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-200">
+          <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[.18em] text-blue-200">
             <Sparkles class="h-3.5 w-3.5" />
             Edição avançada + edição rápida
           </div>
@@ -534,13 +535,13 @@ onUnmounted(() => {
       <section class="mt-8">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p class="text-[11px] font-bold uppercase tracking-[.16em] text-indigo-500">Sua biblioteca</p>
+            <p class="text-[11px] font-bold uppercase tracking-[.16em] text-blue-500">Sua biblioteca</p>
             <h2 class="mt-1 text-xl font-bold tracking-tight text-slate-900">Modelos reutilizáveis</h2>
             <p class="mt-1 text-sm text-slate-500">Cada modelo vira um encarte novo sem alterar o original.</p>
           </div>
           <label class="relative block w-full sm:w-64">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input v-model="searchQuery" type="search" placeholder="Buscar modelo..." class="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" />
+            <input v-model="searchQuery" type="search" placeholder="Buscar modelo..." class="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-500/10" />
           </label>
         </div>
 
@@ -550,7 +551,7 @@ onUnmounted(() => {
             <button
               type="button"
               class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
-              :class="!selectedCategory ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
+              :class="!selectedCategory ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700'"
               :aria-pressed="!selectedCategory"
               @click="selectCategoryFilter(null)"
             >Todos</button>
@@ -559,7 +560,7 @@ onUnmounted(() => {
               :key="category.id"
               type="button"
               class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
-              :class="getCategoryKey(selectedCategory) === getCategoryKey(category.name) ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'"
+              :class="getCategoryKey(selectedCategory) === getCategoryKey(category.name) ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700'"
               :aria-pressed="getCategoryKey(selectedCategory) === getCategoryKey(category.name)"
               @click="selectCategoryFilter(category.name)"
             >{{ category.name }}</button>
@@ -570,7 +571,7 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
-                :class="!selectedSubcategory ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-violet-50 hover:text-violet-700'"
+                :class="!selectedSubcategory ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-sky-50 hover:text-sky-700'"
                 :aria-pressed="!selectedSubcategory"
                 @click="selectedSubcategory = null"
               >Todas</button>
@@ -579,7 +580,7 @@ onUnmounted(() => {
                 :key="subcategory.id"
                 type="button"
                 class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
-                :class="getCategoryKey(selectedSubcategory) === getCategoryKey(subcategory.name) ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-violet-50 hover:text-violet-700'"
+                :class="getCategoryKey(selectedSubcategory) === getCategoryKey(subcategory.name) ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-sky-50 hover:text-sky-700'"
                 :aria-pressed="getCategoryKey(selectedSubcategory) === getCategoryKey(subcategory.name)"
                 @click="selectedSubcategory = subcategory.name"
               >{{ subcategory.name }}</button>
@@ -598,18 +599,18 @@ onUnmounted(() => {
         </div>
 
         <div v-else-if="filteredTemplates.length === 0" class="mt-5 flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-          <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
+          <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
             <LayoutTemplate class="h-7 w-7" />
           </div>
           <h3 class="mt-4 text-base font-bold text-slate-800">{{ hasTemplateFilter ? 'Nenhum modelo encontrado' : 'Nenhum modelo ainda' }}</h3>
           <p class="mt-1 max-w-md text-sm leading-6 text-slate-500">{{ hasTemplateFilter ? 'Tente outra categoria, outro nome ou limpe os filtros.' : 'Crie o primeiro encarte no editor avançado. Deixe a zona de produtos vazia para a edição rápida preenchê-la.' }}</p>
-          <button v-if="!hasTemplateFilter" type="button" class="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-indigo-500" @click="openCreateDialog">
+          <button v-if="!hasTemplateFilter" type="button" class="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500" @click="openCreateDialog">
             <Plus class="h-4 w-4" /> Criar primeiro modelo
           </button>
         </div>
 
         <div v-else class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <article v-for="(template, index) in filteredTemplates" :key="template.id" class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-900/5">
+          <article v-for="(template, index) in filteredTemplates" :key="template.id" class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/5">
             <div class="relative flex aspect-[3/1] items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc]">
               <img
                 v-if="getProjectPreviewSource(template)"
@@ -620,22 +621,22 @@ onUnmounted(() => {
                 decoding="async"
                 :fetchpriority="index < 4 ? 'high' : (index < 8 ? 'auto' : 'low')"
               />
-              <div v-else class="flex h-24 w-24 items-center justify-center rounded-2xl border-2 border-dashed border-indigo-200 bg-white/70 text-indigo-300">
+              <div v-else class="flex h-24 w-24 items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-white/70 text-blue-300">
                 <LayoutTemplate class="h-8 w-8" />
               </div>
-              <span class="absolute left-3 top-3 rounded-full bg-indigo-600/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm">Modelo</span>
+              <span class="absolute left-3 top-3 rounded-full bg-blue-600/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm">Modelo</span>
             </div>
             <div class="p-4">
               <form v-if="renamingId === template.id" class="space-y-2" @submit.prevent="saveName(template)">
-                <input v-model="renameDraft" aria-label="Nome do modelo" maxlength="120" required class="w-full rounded-lg border border-violet-300 px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-violet-500" @keydown.esc="renamingId = ''" />
+                <input v-model="renameDraft" aria-label="Nome do modelo" maxlength="120" required class="w-full rounded-lg border border-sky-300 px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-sky-500" @keydown.esc="renamingId = ''" />
                 <div class="flex gap-3 text-xs">
-                  <button type="submit" :disabled="savingName || !renameDraft.trim()" class="rounded-lg bg-violet-600 px-3 py-2 font-semibold text-white disabled:opacity-50">{{ savingName ? 'Salvando…' : 'Salvar nome' }}</button>
+                  <button type="submit" :disabled="savingName || !renameDraft.trim()" class="rounded-lg bg-sky-600 px-3 py-2 font-semibold text-white disabled:opacity-50">{{ savingName ? 'Salvando…' : 'Salvar nome' }}</button>
                   <button type="button" :disabled="savingName" class="text-slate-500" @click="renamingId = ''">Cancelar</button>
                 </div>
               </form>
               <div v-else class="flex items-center gap-2">
                 <h3 class="min-w-0 flex-1 truncate text-sm font-bold text-slate-800" :title="sentenceName(template.name)">{{ sentenceName(template.name) }}</h3>
-                <button class="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-violet-50 hover:text-violet-600" title="Alterar nome" aria-label="Alterar nome" @click="startRename(template)"><Pencil class="h-4 w-4" /></button>
+                <button class="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-600" title="Alterar nome" aria-label="Alterar nome" @click="startRename(template)"><Pencil class="h-4 w-4" /></button>
               </div>
               <form v-if="categoryEditingId === template.id" class="mt-2 space-y-2" @submit.prevent="saveCategory(template)">
                 <div class="flex items-center gap-2">
@@ -643,14 +644,14 @@ onUnmounted(() => {
                   <select
                     :id="`template-category-${template.id}`"
                     v-model="categoryDraftId"
-                    class="min-w-0 flex-1 rounded-lg border border-indigo-300 px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                    class="min-w-0 flex-1 rounded-lg border border-blue-300 px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
                     @change="onCategoryDraftChange"
                     @keydown.esc="categoryEditingId = ''"
                   >
                     <option value="">Sem categoria principal</option>
                     <option v-for="category in categoryOptions" :key="category.id" :value="category.id">{{ category.name }}</option>
                   </select>
-                  <button type="button" class="rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-50" @click="openCategoryDialog('edit')">Nova</button>
+                  <button type="button" class="rounded-lg border border-blue-200 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-50" @click="openCategoryDialog('edit')">Nova</button>
                 </div>
                 <div class="flex items-center gap-2">
                   <label class="sr-only" :for="`template-subcategory-${template.id}`">Subcategoria do modelo</label>
@@ -658,36 +659,36 @@ onUnmounted(() => {
                     :id="`template-subcategory-${template.id}`"
                     v-model="subcategoryDraftId"
                     :disabled="!categoryDraftId"
-                    class="min-w-0 flex-1 rounded-lg border border-violet-300 px-2.5 py-1.5 text-xs text-slate-800 outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-violet-500"
+                    class="min-w-0 flex-1 rounded-lg border border-sky-300 px-2.5 py-1.5 text-xs text-slate-800 outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-sky-500"
                   >
                     <option value="">Sem subcategoria</option>
                     <option v-for="subcategory in getSubcategoryOptions(categoryDraftId)" :key="subcategory.id" :value="subcategory.id">{{ subcategory.name }}</option>
                   </select>
-                  <button type="button" :disabled="!categoryDraftId || categoryDraftId.startsWith('legacy:')" class="rounded-lg border border-violet-200 px-2.5 py-1.5 text-[11px] font-semibold text-violet-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40" @click="openCategoryDialog('edit', categoryDraftId)">Nova</button>
+                  <button type="button" :disabled="!categoryDraftId || categoryDraftId.startsWith('legacy:')" class="rounded-lg border border-sky-200 px-2.5 py-1.5 text-[11px] font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40" @click="openCategoryDialog('edit', categoryDraftId)">Nova</button>
                 </div>
                 <div class="flex items-center gap-3">
-                  <button type="submit" :disabled="savingCategory" class="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{{ savingCategory ? '...' : 'Salvar' }}</button>
+                  <button type="submit" :disabled="savingCategory" class="rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{{ savingCategory ? '...' : 'Salvar' }}</button>
                   <button type="button" :disabled="savingCategory" class="text-[11px] font-medium text-slate-500" @click="categoryEditingId = ''">Cancelar</button>
                 </div>
               </form>
               <div v-else class="mt-2 flex flex-wrap items-center gap-2">
-                <span class="inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold" :class="getTemplateCategory(template) ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'">
+                <span class="inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold" :class="getTemplateCategory(template) ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'">
                   <Tag class="h-3 w-3 shrink-0" />
                   <span class="truncate">{{ getTemplateCategoryLabel(template) || 'Sem categoria' }}</span>
                 </span>
-                <button type="button" class="text-[10px] font-semibold text-indigo-600 transition hover:text-indigo-800" @click="startCategoryEdit(template)">Editar classificação</button>
+                <button type="button" class="text-[10px] font-semibold text-blue-600 transition hover:text-blue-800" @click="startCategoryEdit(template)">Editar classificação</button>
               </div>
               <p class="mt-1 text-[11px] text-slate-400">{{ formatTemplateStructure(template) }} · {{ formatSize(template) }} · {{ formatDate(template.updated_at || template.created_at) }}</p>
               <div class="mt-4 flex items-center gap-2">
-                <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-600 disabled:opacity-60" :disabled="!!usingTemplateId" @click="useTemplate(template)">
+                <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60" :disabled="!!usingTemplateId" @click="useTemplate(template)">
                   <LoaderCircle v-if="usingTemplateId === template.id" class="h-3.5 w-3.5 animate-spin" />
                   <Zap v-else class="h-3.5 w-3.5" />
                   Usar rápido
                 </button>
-                <NuxtLink :to="`/editor/${template.id}`" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600" title="Editar no modo avançado">
+                <NuxtLink :to="`/editor/${template.id}`" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" title="Editar no modo avançado">
                   <Pencil class="h-4 w-4" />
                 </NuxtLink>
-                <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600" title="Duplicar modelo" @click="duplicateTemplate(template)">
+                <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" title="Duplicar modelo" @click="duplicateTemplate(template)">
                   <Copy class="h-4 w-4" />
                 </button>
                 <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600" title="Excluir modelo" :disabled="deletingTemplateId === template.id" @click="deleteTemplate(template)">
@@ -705,7 +706,7 @@ onUnmounted(() => {
       <div class="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2.5rem)]">
         <div class="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-7 sm:py-6">
           <div>
-            <p class="text-[11px] font-bold uppercase tracking-[.16em] text-indigo-500">Novo tema</p>
+            <p class="text-[11px] font-bold uppercase tracking-[.16em] text-blue-500">Novo tema</p>
             <h2 class="mt-1 text-xl font-bold tracking-tight text-slate-900">Montar no editor avançado</h2>
             <p class="mt-1 text-sm text-slate-500">Escolha o nome e os formatos que deseja criar.</p>
           </div>
@@ -716,18 +717,18 @@ onUnmounted(() => {
           <div class="space-y-5">
           <label class="block">
             <span class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Nome do modelo</span>
-            <input v-model="createName" type="text" maxlength="120" autofocus placeholder="Ex.: Oferta vermelha, Semana, Atacarejo..." class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" @keyup.enter="createTemplate" />
+            <input v-model="createName" type="text" maxlength="120" autofocus placeholder="Ex.: Oferta vermelha, Semana, Atacarejo..." class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-500/10" @keyup.enter="createTemplate" />
           </label>
 
           <div class="space-y-4">
             <div>
               <div class="mb-2 flex items-center justify-between gap-3">
                 <label for="create-template-category" class="block text-xs font-bold uppercase tracking-wider text-slate-500">Categoria principal</label>
-                <button type="button" class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 transition hover:text-indigo-800" @click="openCategoryDialog('create')">
+                <button type="button" class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 transition hover:text-blue-800" @click="openCategoryDialog('create')">
                   <Plus class="h-3.5 w-3.5" /> Nova categoria
                 </button>
               </div>
-              <select id="create-template-category" v-model="createCategoryId" class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" @change="onCreateCategoryChange">
+              <select id="create-template-category" v-model="createCategoryId" class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-500/10" @change="onCreateCategoryChange">
                 <option value="">Sem categoria principal</option>
                 <option v-for="category in categoryOptions" :key="category.id" :value="category.id">{{ category.name }}</option>
               </select>
@@ -736,11 +737,11 @@ onUnmounted(() => {
             <div>
               <div class="mb-2 flex items-center justify-between gap-3">
                 <label for="create-template-subcategory" class="block text-xs font-bold uppercase tracking-wider text-slate-500">Subcategoria</label>
-                <button type="button" :disabled="!createCategoryId || createCategoryId.startsWith('legacy:')" class="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-600 transition hover:text-violet-800 disabled:cursor-not-allowed disabled:opacity-40" @click="openCategoryDialog('create', createCategoryId)">
+                <button type="button" :disabled="!createCategoryId || createCategoryId.startsWith('legacy:')" class="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-600 transition hover:text-sky-800 disabled:cursor-not-allowed disabled:opacity-40" @click="openCategoryDialog('create', createCategoryId)">
                   <Plus class="h-3.5 w-3.5" /> Nova subcategoria
                 </button>
               </div>
-              <select id="create-template-subcategory" v-model="createSubcategoryId" :disabled="!createCategoryId" class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 focus:border-violet-300 focus:ring-4 focus:ring-violet-500/10">
+              <select id="create-template-subcategory" v-model="createSubcategoryId" :disabled="!createCategoryId" class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-500/10">
                 <option value="">Sem subcategoria</option>
                 <option v-for="subcategory in getSubcategoryOptions(createCategoryId)" :key="subcategory.id" :value="subcategory.id">{{ subcategory.name }}</option>
               </select>
@@ -754,7 +755,7 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="rounded-2xl border p-3 text-left transition"
-                :class="!createPresetId ? 'border-indigo-500 bg-indigo-50 ring-4 ring-indigo-500/10' : 'border-slate-200 bg-white hover:border-indigo-200'"
+                :class="!createPresetId ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-500/10' : 'border-slate-200 bg-white hover:border-blue-200'"
                 :aria-pressed="!createPresetId"
                 @click="selectCreatePreset(null)"
               >
@@ -766,7 +767,7 @@ onUnmounted(() => {
                 :key="preset.id"
                 type="button"
                 class="rounded-2xl border p-3 text-left transition"
-                :class="createPresetId === preset.id ? 'border-indigo-500 bg-indigo-50 ring-4 ring-indigo-500/10' : 'border-slate-200 bg-white hover:border-indigo-200'"
+                :class="createPresetId === preset.id ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-500/10' : 'border-slate-200 bg-white hover:border-blue-200'"
                 :aria-pressed="createPresetId === preset.id"
                 @click="selectCreatePreset(preset.id)"
               >
@@ -779,7 +780,7 @@ onUnmounted(() => {
           <div>
             <div class="mb-2 flex items-center justify-between gap-3">
               <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Formatos disponíveis</span>
-              <span class="rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-bold text-indigo-600">
+              <span class="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600">
                 {{ selectedFormats.length }} formato{{ selectedFormats.length === 1 ? '' : 's' }}
               </span>
             </div>
@@ -787,10 +788,10 @@ onUnmounted(() => {
             <button
               type="button"
               class="flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition"
-              :class="createAllFormats ? 'border-indigo-500 bg-indigo-50 ring-4 ring-indigo-500/10' : 'border-slate-200 bg-white hover:border-indigo-200'"
+              :class="createAllFormats ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-500/10' : 'border-slate-200 bg-white hover:border-blue-200'"
               @click="selectAllCreateFormats"
             >
-              <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border" :class="createAllFormats ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white'">
+              <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border" :class="createAllFormats ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'">
                 <svg v-if="createAllFormats" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5"><path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.25 7.25a1 1 0 01-1.415 0l-3.25-3.25a1 1 0 111.415-1.42l2.543 2.544 6.543-6.544a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
               </span>
               <span class="min-w-0">
@@ -805,10 +806,10 @@ onUnmounted(() => {
                 :key="format.id"
                 type="button"
                 class="flex items-center gap-3 rounded-2xl border px-3 py-3 text-left transition"
-                :class="createAllFormats || createFormatIds.includes(format.id) ? 'border-indigo-300 bg-indigo-50/60' : 'border-slate-200 bg-white hover:border-indigo-200'"
+                :class="createAllFormats || createFormatIds.includes(format.id) ? 'border-blue-300 bg-blue-50/60' : 'border-slate-200 bg-white hover:border-blue-200'"
                 @click="toggleCreateFormat(format.id)"
               >
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border" :class="createAllFormats || createFormatIds.includes(format.id) ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white'">
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border" :class="createAllFormats || createFormatIds.includes(format.id) ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'">
                   <svg v-if="createAllFormats || createFormatIds.includes(format.id)" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5"><path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.25 7.25a1 1 0 01-1.415 0l-3.25-3.25a1 1 0 111.415-1.42l2.543 2.544 6.543-6.544a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
                 </span>
                 <span class="min-w-0">
@@ -824,7 +825,7 @@ onUnmounted(() => {
 
         <div class="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
           <button type="button" class="rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isCreating" @click="showCreateDialog = false">Cancelar</button>
-          <button type="button" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isCreating" @click="createTemplate">
+          <button type="button" class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isCreating" @click="createTemplate">
               <LoaderCircle v-if="isCreating" class="h-4 w-4 animate-spin" />
               <Plus v-else class="h-4 w-4" />
               {{ isCreating ? 'Criando...' : 'Criar e editar' }}
@@ -837,7 +838,7 @@ onUnmounted(() => {
       <form class="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl sm:p-6" @submit.prevent="createCatalogCategory">
         <div class="flex items-start justify-between gap-4">
           <div>
-            <p class="text-[11px] font-bold uppercase tracking-[.16em] text-indigo-500">Biblioteca</p>
+            <p class="text-[11px] font-bold uppercase tracking-[.16em] text-blue-500">Biblioteca</p>
             <h2 class="mt-1 text-xl font-bold tracking-tight text-slate-900">{{ categoryDialogParentId ? 'Nova subcategoria' : 'Nova categoria principal' }}</h2>
             <p v-if="categoryDialogParentId" class="mt-1 text-sm leading-6 text-slate-500">Ela ficará dentro de <strong>{{ getCategoryNameById(categoryDialogParentId) }}</strong>.</p>
             <p v-else class="mt-1 text-sm leading-6 text-slate-500">Ela ficará disponível para selecionar em qualquer modelo.</p>
@@ -846,11 +847,11 @@ onUnmounted(() => {
         </div>
         <label class="mt-5 block">
           <span class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Nome da {{ categoryDialogParentId ? 'subcategoria' : 'categoria' }}</span>
-          <input v-model="categoryDialogName" type="text" maxlength="60" autofocus :placeholder="categoryDialogParentId ? 'Ex.: Quinta Verde, Feira da Semana...' : 'Ex.: Hortifruti, Açougue, Limpeza...'" class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10" />
+          <input v-model="categoryDialogName" type="text" maxlength="60" autofocus :placeholder="categoryDialogParentId ? 'Ex.: Quinta Verde, Feira da Semana...' : 'Ex.: Hortifruti, Açougue, Limpeza...'" class="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-500/10" />
         </label>
         <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" class="rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50" :disabled="isCreatingCategory" @click="showCategoryDialog = false">Cancelar</button>
-          <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500 disabled:opacity-60" :disabled="isCreatingCategory || !categoryDialogName.trim()">
+          <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 disabled:opacity-60" :disabled="isCreatingCategory || !categoryDialogName.trim()">
             <LoaderCircle v-if="isCreatingCategory" class="h-4 w-4 animate-spin" />
             <Plus v-else class="h-4 w-4" />
             {{ isCreatingCategory ? 'Criando...' : categoryDialogParentId ? 'Criar subcategoria' : 'Criar categoria' }}
@@ -865,6 +866,7 @@ onUnmounted(() => {
       </div>
     </Transition>
   </div>
+  </AdminWorkspaceShell>
 </template>
 
 <style scoped>

@@ -24,7 +24,7 @@ const reloadEditor = () => window.location.reload()
 .version-notice button { min-height:44px; border-radius:8px; background:#f5d28b; color:#231c10; font-weight:600; }
 
 :root {
-  --primary-rgb: 124, 58, 237; /* Base violet */
+  --primary-rgb: 33, 96, 180;
 }
 
 /* Global scrollbar styling */

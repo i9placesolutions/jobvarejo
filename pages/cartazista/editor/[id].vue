@@ -431,7 +431,8 @@ if (import.meta.client) window.onafterprint = closePrint
 </script>
 
 <template>
-  <CartazistaShell active="editor">
+  <AdminWorkspaceShell active-nav="cartazista">
+  <CartazistaShell active="editor" :embedded="true">
     <div class="cartazista-editor-page">
       <div v-if="recovery" class="cartazista-editor-error" role="status">Há um rascunho recuperável neste navegador. <button @click="restoreDraft">Recuperar rascunho</button><button @click="recovery=null">Continuar sem recuperar</button></div>
       <header class="cartazista-editor-toolbar">
@@ -498,6 +499,7 @@ if (import.meta.client) window.onafterprint = closePrint
       <dialog ref="printDialog" class="cartazista-print-dialog"><CartazistaSheetPreview :compositions="printableCompositions" :format="format" :columns="format.sheetColumns" /><button class="cartazista-print-close cartazista-button ghost" @click="printDialog?.close()">Fechar prévia</button></dialog>
     </div>
   </CartazistaShell>
+  </AdminWorkspaceShell>
 </template>
 
 <style>

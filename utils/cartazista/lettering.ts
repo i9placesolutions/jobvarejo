@@ -103,7 +103,12 @@ export function updatePosterLettering(source: ArtComposition, model: CartazistaM
       text(id,money(value))
       main.x=brush.x+brush.width*.10;main.width=brush.width*.83
       main.fontSize=Math.min(main.height*.90,main.width/(integer!.length*.53+.82));main.align='center'
-      if(unit){unit.x=brush.x+brush.width*.69;unit.width=brush.width*.25}
+      if(unit){
+        const integerWidth=integer!.length*main.fontSize*.49
+        unit.width=main.fontSize*.69
+        unit.x=main.x+main.width/2+integerWidth/2-unit.width/2
+        unit.align='center'
+      }
       return
     }
     if(main&&fraction&&brush){

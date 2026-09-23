@@ -166,7 +166,7 @@ const typeBadgeClass = (type: string) => {
     PROMO: 'bg-red-500/10 text-red-300 border-red-500/20',
     OFFER: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
     NEW: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
-    FEATURED: 'bg-purple-500/10 text-purple-300 border-purple-500/20'
+    FEATURED: 'bg-blue-500/10 text-blue-300 border-blue-500/20'
   }
   return map[type] || 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border-[color:var(--jv-line)]'
 }
@@ -257,7 +257,7 @@ onMounted(() => {
                 <span
                   class="inline-flex items-center rounded-full px-2 py-0.5 text-xs"
                   :class="badge.is_active
-                    ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                    ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                     : 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border border-[color:var(--jv-line)]'"
                 >
                   {{ badge.is_active ? 'Ativo' : 'Inativo' }}
@@ -339,7 +339,7 @@ onMounted(() => {
                 v-model="form.name"
                 type="text"
                 required
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 placeholder="Ex: Oferta Especial"
               />
             </div>
@@ -347,7 +347,7 @@ onMounted(() => {
               <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Tipo</label>
               <select
                 v-model="form.type"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 <option value="PROMO">Promocao</option>
                 <option value="OFFER">Oferta</option>
@@ -360,7 +360,7 @@ onMounted(() => {
               <input
                 v-model="form.text"
                 type="text"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 placeholder="Ex: OFERTA"
               />
             </div>
@@ -368,21 +368,21 @@ onMounted(() => {
               <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor de Fundo</label>
               <div class="flex items-center gap-2">
                 <input v-model="form.bgColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                <input v-model="form.bgColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                <input v-model="form.bgColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
               </div>
             </div>
             <div>
               <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor do Texto</label>
               <div class="flex items-center gap-2">
                 <input v-model="form.textColor" type="color" class="h-8 w-10 rounded border border-[color:var(--jv-line)] bg-[#f3f8fd] cursor-pointer" />
-                <input v-model="form.textColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                <input v-model="form.textColor" type="text" class="flex-1 min-w-0 rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-2 py-1.5 text-xs text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
               </div>
             </div>
             <div>
               <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Posicao</label>
               <select
                 v-model="form.position"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 <option value="top-right">Superior Direita</option>
                 <option value="top-left">Superior Esquerda</option>
@@ -393,18 +393,18 @@ onMounted(() => {
               <input
                 v-model.number="form.sort_order"
                 type="number"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               />
             </div>
           </div>
 
           <div class="flex items-center gap-6">
             <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-              <input v-model="form.is_global" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+              <input v-model="form.is_global" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
               Global
             </label>
             <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-              <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+              <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
               Ativo
             </label>
           </div>

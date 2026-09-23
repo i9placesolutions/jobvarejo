@@ -825,11 +825,8 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <component
-    :is="auth.isSuperAdmin.value ? AdminWorkspaceShell : 'div'"
-    v-bind="auth.isSuperAdmin.value ? { activeNav: 'art-studio' } : {}"
-  >
-  <ArtShell :embedded="auth.isSuperAdmin.value">
+  <AdminWorkspaceShell active-nav="art-studio">
+  <ArtShell :embedded="true">
     <div class="studio-toolbar">
       <NuxtLink
         :to="managing ? '/art-studio?tab=admin' : '/art-studio'"
@@ -1709,7 +1706,7 @@ onBeforeUnmount(() => {
       </form>
     </dialog>
   </ArtShell>
-  </component>
+  </AdminWorkspaceShell>
 </template>
 <style scoped>
 .format-pages {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const route = useRoute()
-const isLoginPage = computed(() => route.path === '/auth/login')
+const isBuilderAuthPage = computed(() => route.path === '/builder/login' || route.path === '/builder/register')
+const isLoginPage = computed(() => route.path.startsWith('/auth/') || isBuilderAuthPage.value)
 
 // Mouse tracking para efeito ambient
 const mousePosition = ref<{ x: number; y: number } | null>(null)
@@ -59,7 +60,7 @@ if (import.meta.client) {
               :height="isLoginPage ? 56 : 52"
             >
             <span v-if="isLoginPage" class="auth-brand__copy">
-              <strong>Central administrativa</strong>
+              <strong>{{ isBuilderAuthPage ? 'Criador de encartes' : 'Central administrativa' }}</strong>
               <small>Operação JobVarejo</small>
             </span>
           </NuxtLink>
@@ -91,7 +92,7 @@ if (import.meta.client) {
         class="pointer-events-none fixed inset-0 z-0 transition-opacity duration-500 opacity-20"
       >
         <div
-          class="absolute w-150 h-150 rounded-full blur-3xl bg-indigo-300/15"
+          class="absolute w-150 h-150 rounded-full blur-3xl bg-blue-300/15"
           style="transform: translate(-50%, -50%);"
           :style="{
             left: mousePosition?.x + 'px' || '50%',
@@ -228,7 +229,8 @@ if (import.meta.client) {
 
   .auth-layout--login .auth-main {
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    align-items: flex-start;
     padding: 12px 16px;
   }
 

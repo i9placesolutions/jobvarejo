@@ -739,7 +739,7 @@ onMounted(() => {
               {{ isSeeding ? 'Criando...' : 'Seed' }}
             </button>
             <button
-              class="inline-flex items-center gap-2 rounded-lg bg-[color:var(--jv-blue)] px-5 py-2.5 text-sm font-semibold text-[color:var(--jv-navy)] hover:bg-[#1a4f96] transition-all duration-200 shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30"
+              class="inline-flex items-center gap-2 rounded-lg bg-[color:var(--jv-blue)] px-5 py-2.5 text-sm font-semibold text-[color:var(--jv-navy)] hover:bg-[#1a4f96] transition-all duration-200 shadow-lg shadow-blue-600/20 hover:shadow-blue-500/30"
               @click="openCreate"
             >
               <Plus class="h-4 w-4" />
@@ -770,7 +770,7 @@ onMounted(() => {
       <!-- Loading -->
       <div v-if="isLoading" class="flex items-center justify-center py-24">
         <div class="flex flex-col items-center gap-4">
-          <div class="w-8 h-8 border-2 border-[color:var(--jv-line)] border-t-emerald-500 rounded-full animate-spin" />
+          <div class="w-8 h-8 border-2 border-[color:var(--jv-line)] border-t-blue-500 rounded-full animate-spin" />
           <span class="text-sm text-[color:var(--jv-muted)]">Carregando estilos...</span>
         </div>
       </div>
@@ -875,7 +875,7 @@ onMounted(() => {
             {{ isSeeding ? 'Criando...' : 'Criar Predefinidos' }}
           </button>
           <button
-            class="inline-flex items-center gap-2 rounded-lg bg-[color:var(--jv-blue)] px-5 py-2.5 text-sm font-semibold text-[color:var(--jv-navy)] hover:bg-[#1a4f96] transition-all duration-200 shadow-lg shadow-emerald-600/20"
+            class="inline-flex items-center gap-2 rounded-lg bg-[color:var(--jv-blue)] px-5 py-2.5 text-sm font-semibold text-[color:var(--jv-navy)] hover:bg-[#1a4f96] transition-all duration-200 shadow-lg shadow-blue-600/20"
             @click="openCreate"
           >
             <Plus class="h-4 w-4" />
@@ -980,8 +980,8 @@ onMounted(() => {
                   @click="toggleSection('appearance')"
                 >
                   <div class="flex items-center gap-2.5">
-                    <div class="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                      <Palette class="h-3.5 w-3.5 text-violet-400" />
+                    <div class="w-7 h-7 rounded-lg bg-sky-500/10 flex items-center justify-center">
+                      <Palette class="h-3.5 w-3.5 text-sky-400" />
                     </div>
                     <span class="text-sm font-medium text-[color:var(--jv-navy)]">Aparencia</span>
                     <span class="text-[10px] text-zinc-600">Cores, formato, fonte</span>
@@ -1090,7 +1090,7 @@ onMounted(() => {
                     <div>
                       <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Rotacao</label>
                       <div class="flex items-center gap-2">
-                        <input v-model.number="form.rotation" type="range" min="-15" max="15" step="1" class="flex-1 accent-emerald-500" />
+                        <input v-model.number="form.rotation" type="range" min="-15" max="15" step="1" class="flex-1 accent-blue-500" />
                         <span class="text-xs text-[color:var(--jv-muted)] font-mono w-8 text-right">{{ form.rotation }}°</span>
                       </div>
                     </div>
@@ -1125,7 +1125,7 @@ onMounted(() => {
                     <div>
                       <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Largura</label>
                       <div class="flex items-center gap-2">
-                        <input v-model.number="form.borderWidth" type="range" min="0" max="8" step="1" class="flex-1 accent-emerald-500" />
+                        <input v-model.number="form.borderWidth" type="range" min="0" max="8" step="1" class="flex-1 accent-blue-500" />
                         <span class="text-xs text-[color:var(--jv-muted)] font-mono w-8 text-right">{{ form.borderWidth }}px</span>
                       </div>
                     </div>
@@ -1142,14 +1142,14 @@ onMounted(() => {
                     <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-2.5">Arredondamento por Canto</label>
                     <div class="flex items-center gap-4">
                       <div class="relative w-16 h-14 border-2 border-[color:var(--jv-line)] shrink-0 transition-all duration-200" :style="{ borderRadius: previewBorderRadius }">
-                        <div class="absolute -top-1 -left-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-zinc-950" title="Top-Left" />
+                        <div class="absolute -top-1 -left-1 w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-zinc-950" title="Top-Left" />
                         <div class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-zinc-950" title="Top-Right" />
                         <div class="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-zinc-950" title="Bottom-Left" />
                         <div class="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-zinc-950" title="Bottom-Right" />
                       </div>
                       <div class="grid grid-cols-2 gap-2 flex-1">
                         <div class="flex items-center gap-1.5">
-                          <span class="w-2 h-2 bg-emerald-500 rounded-full shrink-0" />
+                          <span class="w-2 h-2 bg-blue-500 rounded-full shrink-0" />
                           <input
                             :value="form.borderRadiusTL ?? ''"
                             type="number" min="0" max="100" step="1" placeholder="Auto"
@@ -1199,11 +1199,11 @@ onMounted(() => {
                   @click="toggleSection('shadowEffects')"
                 >
                   <div class="flex items-center gap-2.5">
-                    <div class="w-7 h-7 rounded-lg bg-indigo-500/10 flex items-center justify-center">
-                      <Layers class="h-3.5 w-3.5 text-indigo-400" />
+                    <div class="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                      <Layers class="h-3.5 w-3.5 text-blue-400" />
                     </div>
                     <span class="text-sm font-medium text-[color:var(--jv-navy)]">Sombra & Opacidade</span>
-                    <span v-if="form.shadow !== 'none' || form.bgOpacity < 1" class="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                    <span v-if="form.shadow !== 'none' || form.bgOpacity < 1" class="w-1.5 h-1.5 rounded-full bg-blue-500" />
                   </div>
                   <ChevronDown class="h-4 w-4 text-[color:var(--jv-muted)] transition-transform duration-200" :class="{ 'rotate-180': openSections.shadowEffects }" />
                 </button>
@@ -1218,7 +1218,7 @@ onMounted(() => {
                     <div>
                       <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Opacidade do Fundo</label>
                       <div class="flex items-center gap-2">
-                        <input v-model.number="form.bgOpacity" type="range" min="0.1" max="1" step="0.05" class="flex-1 accent-emerald-500" />
+                        <input v-model.number="form.bgOpacity" type="range" min="0.1" max="1" step="0.05" class="flex-1 accent-blue-500" />
                         <span class="text-xs text-[color:var(--jv-muted)] font-mono w-8 text-right">{{ Math.round(form.bgOpacity * 100) }}%</span>
                       </div>
                     </div>
@@ -1245,7 +1245,7 @@ onMounted(() => {
                 <div v-show="openSections.gradient" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="pt-3">
                     <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer mb-3">
-                      <input v-model="form.bgGradient" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                      <input v-model="form.bgGradient" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                       Ativar Gradiente
                     </label>
                     <div v-if="form.bgGradient" class="grid grid-cols-2 gap-3">
@@ -1328,7 +1328,7 @@ onMounted(() => {
                       <div>
                         <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Opacidade</label>
                         <div class="flex items-center gap-2">
-                          <input v-model.number="form.bgImageOpacity" type="range" min="0.05" max="1" step="0.05" class="flex-1 accent-emerald-500" />
+                          <input v-model.number="form.bgImageOpacity" type="range" min="0.05" max="1" step="0.05" class="flex-1 accent-blue-500" />
                           <span class="text-xs text-[color:var(--jv-muted)] font-mono w-8 text-right">{{ Math.round(form.bgImageOpacity * 100) }}%</span>
                         </div>
                       </div>
@@ -1345,7 +1345,7 @@ onMounted(() => {
                   @click="toggleSection('spacing')"
                 >
                   <div class="flex items-center gap-2.5">
-                    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <div class="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
                       <Move class="h-3.5 w-3.5 text-[color:var(--jv-blue)]" />
                     </div>
                     <span class="text-sm font-medium text-[color:var(--jv-navy)]">Espacamento & Tamanho</span>
@@ -1364,7 +1364,7 @@ onMounted(() => {
                     <div>
                       <label class="block text-[11px] font-medium text-[color:var(--jv-muted)] mb-1.5">Escala do Preco</label>
                       <div class="flex items-center gap-2">
-                        <input v-model.number="form.priceScale" type="range" min="0.6" max="1.8" step="0.05" class="flex-1 accent-emerald-500" />
+                        <input v-model.number="form.priceScale" type="range" min="0.6" max="1.8" step="0.05" class="flex-1 accent-blue-500" />
                         <span class="text-xs text-[color:var(--jv-muted)] font-mono w-10 text-right">{{ Math.round(form.priceScale * 100) }}%</span>
                       </div>
                     </div>
@@ -1391,15 +1391,15 @@ onMounted(() => {
                 <div v-show="openSections.gondola" class="px-4 pb-4 border-t border-[color:var(--jv-line)]/50">
                   <div class="flex flex-col gap-3 pt-3">
                     <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
-                      <input v-model="form.showCutLine" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                      <input v-model="form.showCutLine" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                       Linha de Corte
                     </label>
                     <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
-                      <input v-model="form.showBarcode" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                      <input v-model="form.showBarcode" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                       Codigo de Barras
                     </label>
                     <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
-                      <input v-model="form.showValidity" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                      <input v-model="form.showValidity" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                       Validade da Oferta
                     </label>
                   </div>
@@ -1435,15 +1435,15 @@ onMounted(() => {
                     </div>
                     <div class="flex flex-col gap-2.5">
                       <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
-                        <input v-model="form.is_global" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                        <input v-model="form.is_global" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                         Global (visivel para todos)
                       </label>
                       <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
-                        <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                        <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                         Ativo
                       </label>
                       <label class="flex items-center gap-2.5 text-sm text-slate-600 cursor-pointer hover:text-[color:var(--jv-ink)] transition-colors">
-                        <input v-model="form.hideUnit" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+                        <input v-model="form.hideUnit" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
                         Ocultar unidade (/kg, /un)
                       </label>
                     </div>
@@ -1456,7 +1456,7 @@ onMounted(() => {
                 <button
                   type="submit"
                   :disabled="isSaving || !form.name"
-                  class="rounded-xl bg-[color:var(--jv-blue)] px-8 py-2.5 text-sm font-semibold text-[color:var(--jv-navy)] hover:bg-[#1a4f96] disabled:opacity-50 transition-all duration-200 shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30"
+                  class="rounded-xl bg-[color:var(--jv-blue)] px-8 py-2.5 text-sm font-semibold text-[color:var(--jv-navy)] hover:bg-[#1a4f96] disabled:opacity-50 transition-all duration-200 shadow-lg shadow-blue-600/20 hover:shadow-blue-500/30"
                 >
                   {{ isSaving ? 'Salvando...' : (editingId ? 'Atualizar' : 'Criar Estilo') }}
                 </button>
@@ -1483,7 +1483,7 @@ onMounted(() => {
                       :class="[
                         'text-[10px] px-2.5 py-1 rounded-lg font-medium transition-all duration-200',
                         previewMode === pm.value
-                          ? 'bg-[color:var(--jv-blue)] text-[color:var(--jv-navy)] shadow-sm shadow-emerald-600/30'
+                          ? 'bg-[color:var(--jv-blue)] text-[color:var(--jv-navy)] shadow-sm shadow-blue-600/30'
                           : 'bg-[color:var(--jv-sky)]/60 text-[color:var(--jv-muted)] hover:text-slate-600 hover:bg-[color:var(--jv-sky)]'
                       ]"
                       @click="previewMode = pm.value"
@@ -1673,7 +1673,7 @@ onMounted(() => {
                       v-for="pm in PRICE_MODES"
                       :key="pm.value"
                       class="rounded-lg p-1.5 flex flex-col items-center gap-1 cursor-pointer border transition-all duration-200"
-                      :class="previewMode === pm.value ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-[color:var(--jv-line)]/50 hover:border-[color:var(--jv-line)] bg-white/30'"
+                      :class="previewMode === pm.value ? 'border-blue-500/40 bg-blue-500/5' : 'border-[color:var(--jv-line)]/50 hover:border-[color:var(--jv-line)] bg-white/30'"
                       @click="previewMode = pm.value"
                     >
                       <div

@@ -23,8 +23,8 @@ const isActive = (item: typeof navItems[0]) => {
       <div class="max-w-7xl mx-auto px-2 sm:px-4 min-h-14 flex items-center justify-between gap-1">
         <!-- Logo -->
         <NuxtLink to="/builder" class="inline-flex items-center gap-3 group">
-          <div class="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-200 group-hover:bg-emerald-100 transition-colors">
-            <FileText class="w-4 h-4 text-emerald-600" />
+          <div class="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-200 group-hover:bg-blue-100 transition-colors">
+            <FileText class="w-4 h-4 text-blue-600" />
           </div>
           <span class="text-sm font-bold text-gray-900 hidden sm:block">Criador de Encartes</span>
         </NuxtLink>
@@ -36,7 +36,7 @@ const isActive = (item: typeof navItems[0]) => {
             :key="item.to"
             :to="item.to"
             class="flex flex-col sm:flex-row items-center gap-1 px-2 py-2 min-h-11 rounded-lg text-[10px] sm:text-sm transition-colors"
-            :class="isActive(item) ? 'bg-emerald-50 text-emerald-600' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'"
+            :class="isActive(item) ? 'bg-blue-50 text-blue-600' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'"
           >
             <component :is="item.icon" class="w-4 h-4" />
             <span>{{ item.label }}</span>

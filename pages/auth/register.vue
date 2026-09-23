@@ -184,19 +184,20 @@ const handleRegister = async () => {
     <!-- Card -->
     <div class="w-full">
       <!-- Main Card -->
-      <div class="bg-white border border-slate-200 rounded-[2rem] p-8 sm:p-10 shadow-xl shadow-black/5 relative overflow-hidden">
+      <div class="bg-white/95 border border-[#d7e4f1] rounded-[22px] p-8 sm:p-10 shadow-[0_22px_56px_rgba(26,68,113,.11)] relative overflow-hidden">
+        <div class="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#173d70] via-[#2160b4] to-[#4b8fc8]" aria-hidden="true"></div>
 
         <!-- Decoration light -->
-        <div class="absolute -top-32 -left-32 w-64 h-64 bg-indigo-100/60 rounded-full blur-[80px] pointer-events-none"></div>
-        <div class="absolute -bottom-32 -right-32 w-64 h-64 bg-violet-100/40 rounded-full blur-[80px] pointer-events-none"></div>
+        <div class="absolute -top-32 -left-32 w-64 h-64 bg-blue-100/60 rounded-full blur-[80px] pointer-events-none"></div>
+        <div class="absolute -bottom-32 -right-32 w-64 h-64 bg-sky-100/40 rounded-full blur-[80px] pointer-events-none"></div>
 
         <!-- Logo & Header -->
         <div class="text-center mb-10 relative z-10">
-          <div class="inline-flex items-center justify-center w-16 h-16 bg-indigo-50 rounded-2xl mb-5 border border-indigo-200 relative group">
-            <div class="absolute inset-0 bg-indigo-100 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <Sparkles class="w-8 h-8 text-indigo-500 relative z-10" />
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-50 rounded-2xl mb-5 border border-blue-200 relative group">
+            <div class="absolute inset-0 bg-blue-100 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <Sparkles class="w-8 h-8 text-blue-500 relative z-10" />
           </div>
-          <h1 class="text-2xl font-bold mb-2 text-slate-800 tracking-tight">Crie sua conta</h1>
+          <h1 class="text-2xl font-bold mb-2 text-[#173d70] tracking-tight">Crie sua conta</h1>
           <p class="text-sm font-medium text-slate-400">
             {{ isTrialSignup ? 'Seu teste de 15 dias começa agora' : 'Comece sua jornada criativa' }}
           </p>
@@ -242,14 +243,14 @@ const handleRegister = async () => {
               Nome completo
             </label>
             <div class="relative group">
-              <User class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-indigo-500" />
+              <User class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-blue-500" />
               <input
                 id="name"
                 v-model="name"
                 type="text"
                 autocomplete="name"
                 placeholder="Seu nome"
-                class="w-full h-12 pl-12 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+                class="w-full h-12 pl-12 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                 :class="{ 'border-red-400 focus:border-red-400 focus:ring-red-100': errorMessage }"
                 required
               />
@@ -262,14 +263,14 @@ const handleRegister = async () => {
               E-mail para recuperação
             </label>
             <div class="relative group">
-              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-indigo-500" />
+              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-blue-500" />
               <input
                 id="email"
                 v-model="email"
                 type="email"
                 autocomplete="email"
                 placeholder="seu@email.com"
-                class="w-full h-12 pl-12 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+                class="w-full h-12 pl-12 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                 :class="{ 'border-red-400 focus:border-red-400 focus:ring-red-100': errorMessage }"
                 required
               />
@@ -282,7 +283,7 @@ const handleRegister = async () => {
               WhatsApp para entrar
             </label>
             <div class="relative group">
-              <MessageCircle class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-indigo-500" />
+              <MessageCircle class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-blue-500" />
               <input
                 id="whatsapp"
                 :value="whatsapp"
@@ -291,7 +292,7 @@ const handleRegister = async () => {
                 inputmode="tel"
                 autocomplete="tel"
                 placeholder="(11) 99999-9999"
-                class="w-full h-12 pl-12 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+                class="w-full h-12 pl-12 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                 :class="{ 'border-red-400 focus:border-red-400 focus:ring-red-100': errorMessage }"
                 required
               />
@@ -302,7 +303,7 @@ const handleRegister = async () => {
           <button
             type="button"
             :disabled="isLoading || isRequestingWhatsAppCode"
-            class="w-full h-10 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-wait transition-colors"
+            class="w-full h-10 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-wait transition-colors"
             @click="requestWhatsAppCode"
           >
             {{ isRequestingWhatsAppCode ? 'Enviando código...' : isWhatsAppCodeSent ? 'Reenviar código pelo WhatsApp' : 'Confirmar WhatsApp' }}
@@ -321,7 +322,7 @@ const handleRegister = async () => {
               maxlength="6"
               pattern="[0-9]{6}"
               placeholder="6 dígitos"
-              class="w-full h-12 px-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-center text-lg tracking-[0.35em] text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+              class="w-full h-12 px-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-center text-lg tracking-[0.35em] text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
               required
             />
           </div>
@@ -332,14 +333,14 @@ const handleRegister = async () => {
               Senha
             </label>
             <div class="relative group">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-indigo-500" />
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-blue-500" />
               <input
                 id="password"
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
                 autocomplete="new-password"
                 placeholder="••••••••"
-                class="w-full h-12 pl-12 pr-12 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+                class="w-full h-12 pl-12 pr-12 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                 :class="{ 'border-red-400 focus:border-red-400 focus:ring-red-100': errorMessage }"
                 required
               />
@@ -379,14 +380,14 @@ const handleRegister = async () => {
               Confirmar senha
             </label>
             <div class="relative group">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-indigo-500" />
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-blue-500" />
               <input
                 id="confirmPassword"
                 v-model="confirmPassword"
                 :type="showConfirmPassword ? 'text' : 'password'"
                 autocomplete="new-password"
                 placeholder="••••••••"
-                class="w-full h-12 pl-12 pr-12 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+                class="w-full h-12 pl-12 pr-12 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                 :class="{ 'border-red-400 focus:border-red-400 focus:ring-red-100': errorMessage && confirmPassword !== password }"
                 required
               />
@@ -408,13 +409,13 @@ const handleRegister = async () => {
               id="terms"
               type="checkbox"
               required
-              class="mt-0.5 w-4 h-4 rounded border-slate-300 bg-slate-50 text-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
+              class="mt-0.5 w-4 h-4 rounded border-slate-300 bg-slate-50 text-blue-500 focus:ring-2 focus:ring-blue-200 transition-colors"
             />
             <label for="terms" class="text-xs text-slate-500 leading-tight">
               Eu concordo com os
-              <NuxtLink to="/terms" class="text-slate-700 font-medium hover:text-indigo-600 hover:underline underline-offset-4 transition-colors">Termos de Uso</NuxtLink>
+              <NuxtLink to="/terms" class="text-slate-700 font-medium hover:text-blue-600 hover:underline underline-offset-4 transition-colors">Termos de Uso</NuxtLink>
               e
-              <NuxtLink to="/privacy" class="text-slate-700 font-medium hover:text-indigo-600 hover:underline underline-offset-4 transition-colors">Política de Privacidade</NuxtLink>
+              <NuxtLink to="/privacy" class="text-slate-700 font-medium hover:text-blue-600 hover:underline underline-offset-4 transition-colors">Política de Privacidade</NuxtLink>
             </label>
           </div>
 
@@ -422,7 +423,7 @@ const handleRegister = async () => {
           <button
             type="submit"
             :disabled="isLoading"
-            class="w-full h-12 mt-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30 border border-indigo-500/20 group hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            class="w-full h-12 mt-4 bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/30 border border-blue-500/20 group hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             <span v-if="isLoading">Criando conta...</span>
             <span v-else class="flex items-center justify-center gap-2">
@@ -437,7 +438,7 @@ const handleRegister = async () => {
           Já tem uma conta?
           <NuxtLink
             to="/auth/login"
-            class="text-indigo-600 hover:text-indigo-500 font-medium transition-colors"
+            class="text-blue-600 hover:text-blue-500 font-medium transition-colors"
           >
             Fazer login
           </NuxtLink>

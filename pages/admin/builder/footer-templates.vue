@@ -343,7 +343,7 @@ onMounted(fetchData)
           </div>
           <div class="flex gap-2">
             <NuxtLink to="/admin/builder" class="px-4 py-2 rounded-lg text-sm bg-gray-200 text-gray-700 hover:bg-gray-300">Voltar</NuxtLink>
-            <button @click="openEditor()" class="px-4 py-2 rounded-lg text-sm bg-emerald-600 text-white hover:bg-emerald-500 font-medium">+ Novo Template</button>
+            <button @click="openEditor()" class="px-4 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-500 font-medium">+ Novo Template</button>
           </div>
         </div>
 
@@ -388,7 +388,7 @@ onMounted(fetchData)
             <div class="p-3">
               <div class="flex items-center justify-between">
                 <span class="font-medium text-sm text-gray-900 truncate">{{ item.name }}</span>
-                <span :class="item.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'" class="px-1.5 py-0.5 rounded text-[9px] font-medium shrink-0 ml-2">{{ item.is_active ? 'Ativo' : 'Off' }}</span>
+                <span :class="item.is_active ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'" class="px-1.5 py-0.5 rounded text-[9px] font-medium shrink-0 ml-2">{{ item.is_active ? 'Ativo' : 'Off' }}</span>
               </div>
               <div class="flex items-center gap-2 mt-1">
                 <span class="text-[10px] text-gray-400">{{ item.category }}</span>
@@ -403,7 +403,7 @@ onMounted(fetchData)
           </div>
 
           <!-- Card adicionar -->
-          <button @click="openEditor()" class="rounded-xl border-2 border-dashed border-gray-300 hover:border-emerald-400 flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-emerald-500 transition-all" style="aspect-ratio: 3/5">
+          <button @click="openEditor()" class="rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-400 flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-blue-500 transition-all" style="aspect-ratio: 3/5">
             <span class="text-3xl">+</span>
             <span class="text-xs">Novo Template</span>
           </button>
@@ -425,11 +425,11 @@ onMounted(fetchData)
             <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
           </select>
           <label class="flex items-center gap-1.5 text-xs text-gray-500">
-            <input v-model="formIsActive" type="checkbox" class="rounded accent-emerald-500" /> Ativo
+            <input v-model="formIsActive" type="checkbox" class="rounded accent-blue-500" /> Ativo
           </label>
           <div class="w-px h-6 bg-gray-200" />
           <div v-if="error" class="text-xs text-red-500 truncate max-w-48">{{ error }}</div>
-          <button @click="saveItem" class="px-4 py-1.5 rounded-lg text-sm bg-emerald-600 text-white hover:bg-emerald-500 font-medium">Salvar</button>
+          <button @click="saveItem" class="px-4 py-1.5 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-500 font-medium">Salvar</button>
         </header>
 
         <nav class="admin-workspace-tabs" aria-label="Ferramentas do modelo">
@@ -447,7 +447,7 @@ onMounted(fetchData)
                 <button
                   v-for="t in ELEMENT_TYPES" :key="t.type"
                   @click="addElement(t)"
-                  class="flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] bg-gray-50 hover:bg-emerald-50 hover:text-emerald-700 text-gray-600 border border-gray-100 hover:border-emerald-200 transition-all"
+                  class="flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] bg-gray-50 hover:bg-blue-50 hover:text-blue-700 text-gray-600 border border-gray-100 hover:border-blue-200 transition-all"
                 >
                   <span>{{ t.icon }}</span>
                   <span class="truncate">{{ t.label }}</span>
@@ -463,7 +463,7 @@ onMounted(fetchData)
                   v-for="(el, idx) in [...elements].reverse()" :key="el.id"
                   @click="selectedElementId = el.id"
                   :class="['flex items-center gap-2 px-2 py-1.5 rounded text-[11px] cursor-pointer transition-all',
-                    selectedElementId === el.id ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'hover:bg-gray-50 text-gray-600']"
+                    selectedElementId === el.id ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'hover:bg-gray-50 text-gray-600']"
                 >
                   <span>{{ typeIcon(el.type) }}</span>
                   <span class="flex-1 truncate">{{ typeLabel(el.type) }}</span>
@@ -541,19 +541,19 @@ onMounted(fetchData)
                   <div class="grid grid-cols-2 gap-2">
                     <label class="block">
                       <span class="text-[9px] text-gray-400">X</span>
-                      <input :value="selectedElement.x" @input="updateEl('x', ($event.target as HTMLInputElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-emerald-500" />
+                      <input :value="selectedElement.x" @input="updateEl('x', ($event.target as HTMLInputElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500" />
                     </label>
                     <label class="block">
                       <span class="text-[9px] text-gray-400">Y</span>
-                      <input :value="selectedElement.y" @input="updateEl('y', ($event.target as HTMLInputElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-emerald-500" />
+                      <input :value="selectedElement.y" @input="updateEl('y', ($event.target as HTMLInputElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500" />
                     </label>
                     <label class="block">
                       <span class="text-[9px] text-gray-400">Largura</span>
-                      <input :value="selectedElement.w" @input="updateEl('w', ($event.target as HTMLInputElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-emerald-500" />
+                      <input :value="selectedElement.w" @input="updateEl('w', ($event.target as HTMLInputElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500" />
                     </label>
                     <label class="block">
                       <span class="text-[9px] text-gray-400">Altura</span>
-                      <input :value="selectedElement.h" @input="updateEl('h', ($event.target as HTMLInputElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-emerald-500" />
+                      <input :value="selectedElement.h" @input="updateEl('h', ($event.target as HTMLInputElement).value)" class="w-full text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-500" />
                     </label>
                   </div>
                 </div>
@@ -582,7 +582,7 @@ onMounted(fetchData)
                     <label class="block">
                       <span class="text-[9px] text-gray-400">Alinhamento</span>
                       <div class="flex gap-1">
-                        <button v-for="a in ['left','center','right']" :key="a" @click="updateEl('textAlign', a)" :class="['flex-1 py-1 rounded text-[10px] transition-all', selectedElement.textAlign === a ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-400 hover:bg-gray-100']">
+                        <button v-for="a in ['left','center','right']" :key="a" @click="updateEl('textAlign', a)" :class="['flex-1 py-1 rounded text-[10px] transition-all', selectedElement.textAlign === a ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-400 hover:bg-gray-100']">
                           {{ a === 'left' ? '←' : a === 'right' ? '→' : '↔' }}
                         </button>
                       </div>
@@ -620,7 +620,7 @@ onMounted(fetchData)
                       <span class="text-[9px] text-gray-400">Cor texto</span>
                       <div class="flex gap-1">
                         <input type="color" :value="selectedElement.color === 'inherit' ? '#000000' : (selectedElement.color || '#000000')" @input="updateEl('color', ($event.target as HTMLInputElement).value)" class="w-8 h-7 rounded border border-gray-200 cursor-pointer" />
-                        <button @click="updateEl('color', 'inherit')" :class="['flex-1 text-[9px] rounded py-1 transition-all', selectedElement.color === 'inherit' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-400']">Herdar</button>
+                        <button @click="updateEl('color', 'inherit')" :class="['flex-1 text-[9px] rounded py-1 transition-all', selectedElement.color === 'inherit' ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-400']">Herdar</button>
                       </div>
                     </label>
                     <label class="block">

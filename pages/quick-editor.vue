@@ -317,13 +317,14 @@ onMounted(() => {
 </script>
 
 <template>
+  <AdminWorkspaceShell active-nav="encartes">
   <main class="quick-entry min-h-screen bg-[linear-gradient(180deg,#f7f8fc_0%,#f8fafc_46%,#f1f5f9_100%)] text-slate-900">
     <header class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/85 shadow-[0_1px_16px_rgba(15,23,42,0.04)] backdrop-blur-xl">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div class="flex min-w-0 items-center gap-3">
           <button
             type="button"
-            class="inline-flex items-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100"
+            class="inline-flex items-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
             @click="navigateTo('/flyer-templates')"
           >
             <ArrowLeft class="h-4 w-4" />
@@ -332,14 +333,14 @@ onMounted(() => {
           </button>
           <span class="hidden h-6 w-px bg-slate-200 sm:block" aria-hidden="true" />
           <NuxtLink to="/flyer-templates" class="hidden items-center gap-2 text-sm font-bold tracking-tight text-slate-800 sm:inline-flex">
-            <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/20">
+            <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-600/20">
               <Zap class="h-4 w-4" />
             </span>
             JobVarejo · Encartes
           </NuxtLink>
         </div>
         <nav class="flex items-center gap-2" aria-label="Atalhos da edição rápida">
-          <NuxtLink to="/flyer-templates" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100">
+          <NuxtLink to="/flyer-templates" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-blue-200 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100">
             <LayoutTemplate class="h-4 w-4" />
             <span class="hidden sm:inline">Gerenciar modelos</span>
             <span class="sm:hidden">Modelos</span>
@@ -349,24 +350,24 @@ onMounted(() => {
     </header>
 
     <section class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
-      <div class="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-900 px-5 py-7 text-white shadow-2xl shadow-indigo-950/15 sm:px-9 sm:py-10 lg:px-12">
-        <div class="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-indigo-400/20 blur-3xl" aria-hidden="true" />
-        <div class="pointer-events-none absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-violet-400/15 blur-3xl" aria-hidden="true" />
+      <div class="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-950 via-blue-950 to-sky-900 px-5 py-7 text-white shadow-2xl shadow-blue-950/15 sm:px-9 sm:py-10 lg:px-12">
+        <div class="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-blue-400/20 blur-3xl" aria-hidden="true" />
+        <div class="pointer-events-none absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-sky-400/15 blur-3xl" aria-hidden="true" />
         <div class="relative grid items-center gap-8 lg:grid-cols-[1.15fr_0.85fr]">
           <div>
-            <div class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-100">
+            <div class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
               <Sparkles class="h-3.5 w-3.5 text-amber-300" />
               Edição rápida
             </div>
             <h1 class="mt-4 max-w-xl text-3xl font-bold tracking-[-0.04em] text-white sm:text-4xl lg:text-[2.75rem]">Comece pelo encarte certo.</h1>
-            <p class="mt-3 max-w-xl text-sm leading-6 text-indigo-100/80 sm:text-base">Encontre um modelo pronto, filtre por categoria ou pesquise pelo nome. Depois, é só preencher os produtos e publicar.</p>
+            <p class="mt-3 max-w-xl text-sm leading-6 text-blue-100/80 sm:text-base">Encontre um modelo pronto, filtre por categoria ou pesquise pelo nome. Depois, é só preencher os produtos e publicar.</p>
             <div class="mt-6 flex flex-wrap gap-2 text-xs font-semibold">
-              <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-2 text-indigo-50">
-                <LayoutTemplate class="h-3.5 w-3.5 text-indigo-200" />
+              <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-2 text-blue-50">
+                <LayoutTemplate class="h-3.5 w-3.5 text-blue-200" />
                 {{ isOpening ? 'Carregando modelos…' : `${templates.length} ${templates.length === 1 ? 'modelo disponível' : 'modelos disponíveis'}` }}
               </span>
-              <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-2 text-indigo-50">
-                <Search class="h-3.5 w-3.5 text-indigo-200" />
+              <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-2 text-blue-50">
+                <Search class="h-3.5 w-3.5 text-blue-200" />
                 Busca e filtros rápidos
               </span>
             </div>
@@ -375,7 +376,7 @@ onMounted(() => {
             <div class="absolute h-44 w-44 rounded-full border border-white/10" />
             <div class="absolute h-32 w-32 rounded-full border border-white/10" />
             <div class="relative w-64 rotate-[-4deg] rounded-2xl border border-white/20 bg-white/95 p-3 text-slate-900 shadow-2xl shadow-black/20">
-              <div class="flex items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-500 px-3 py-2 text-white">
+              <div class="flex items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-blue-600 to-sky-500 px-3 py-2 text-white">
                 <span class="text-[9px] font-bold uppercase tracking-[0.16em]">Oferta da semana</span>
                 <Zap class="h-3.5 w-3.5 text-amber-200" />
               </div>
@@ -384,12 +385,12 @@ onMounted(() => {
                 <div class="space-y-2">
                   <div class="h-2.5 w-4/5 rounded-full bg-slate-200" />
                   <div class="h-2.5 w-3/5 rounded-full bg-slate-100" />
-                  <div class="h-7 w-2/3 rounded-lg bg-indigo-100" />
+                  <div class="h-7 w-2/3 rounded-lg bg-blue-100" />
                 </div>
               </div>
               <div class="mt-3 h-2 w-full rounded-full bg-slate-100" />
             </div>
-            <span class="absolute bottom-2 right-5 rounded-full border border-white/15 bg-slate-900/60 px-3 py-1.5 text-[10px] font-bold text-indigo-100 shadow-lg backdrop-blur">Busque · filtre · crie</span>
+            <span class="absolute bottom-2 right-5 rounded-full border border-white/15 bg-slate-900/60 px-3 py-1.5 text-[10px] font-bold text-blue-100 shadow-lg backdrop-blur">Busque · filtre · crie</span>
           </div>
         </div>
       </div>
@@ -397,15 +398,15 @@ onMounted(() => {
       <div class="mt-6 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200/80 bg-white/80 p-1.5 shadow-sm sm:inline-flex" role="tablist" aria-label="Edição rápida">
         <button id="quick-tab-models" type="button" role="tab" aria-controls="quick-panel-models"
           :aria-selected="activeTab === 'models'" :tabindex="activeTab === 'models' ? 0 : -1"
-          class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:px-6"
-          :class="activeTab === 'models' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'"
+          class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:px-6"
+          :class="activeTab === 'models' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'"
           @click="selectEntryTab('models')" @keydown.right="selectEntryTab('projects', $event)" @keydown.left="selectEntryTab('projects', $event)" @keydown.end="selectEntryTab('projects', $event)" @keydown.home="selectEntryTab('models', $event)">
           <LayoutTemplate class="h-4 w-4 shrink-0" /> Escolher modelo
         </button>
         <button id="quick-tab-projects" type="button" role="tab" aria-controls="quick-panel-projects"
           :aria-selected="activeTab === 'projects'" :tabindex="activeTab === 'projects' ? 0 : -1"
-          class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:px-6"
-          :class="activeTab === 'projects' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'"
+          class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:px-6"
+          :class="activeTab === 'projects' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'"
           @click="selectEntryTab('projects')" @keydown.right="selectEntryTab('models', $event)" @keydown.left="selectEntryTab('models', $event)" @keydown.home="selectEntryTab('models', $event)" @keydown.end="selectEntryTab('projects', $event)">
           <Clock3 class="h-4 w-4 shrink-0" /> Meus trabalhos
         </button>
@@ -420,16 +421,16 @@ onMounted(() => {
         <div v-else-if="!existingProjects.length" class="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
           <h2 class="text-lg font-bold text-slate-800">Você ainda não tem trabalhos salvos</h2>
           <p class="mt-2 text-sm text-slate-500">Escolha um modelo para criar seu primeiro encarte.</p>
-          <button type="button" class="mt-5 min-h-11 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200" @click="selectEntryTab('models')">Escolher modelo</button>
+          <button type="button" class="mt-5 min-h-11 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-200" @click="selectEntryTab('models')">Escolher modelo</button>
         </div>
         <div v-else>
         <div class="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">Seus trabalhos</p>
+            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-500">Seus trabalhos</p>
             <h2 id="saved-flyers-heading" class="mt-1 text-xl font-bold tracking-tight text-slate-900">Continue de onde parou</h2>
             <p class="mt-1 text-sm text-slate-500">Encontre um encarte salvo e retome a edição em um clique.</p>
           </div>
-          <span class="inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700">
+          <span class="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">
             <FolderOpen class="h-3.5 w-3.5" />
             {{ existingProjects.length }} {{ existingProjects.length === 1 ? 'encarte salvo' : 'encartes salvos' }}
           </span>
@@ -437,7 +438,7 @@ onMounted(() => {
 
         <div class="mt-5 rounded-[1.5rem] border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
           <div class="flex items-center gap-3">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Search class="h-4 w-4" />
             </span>
             <div>
@@ -449,15 +450,15 @@ onMounted(() => {
             <label class="relative block">
               <span class="sr-only">Pesquisar encartes salvos</span>
               <Search class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input id="quick-editor-project-search" v-model="projectSearch" type="search" autocomplete="off" placeholder="Ex.: ofertas de sábado, hortifruti…" class="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-11 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100" />
-              <button v-if="projectSearch" type="button" aria-label="Limpar busca de encartes" class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" @click="projectSearch = ''">
+              <input id="quick-editor-project-search" v-model="projectSearch" type="search" autocomplete="off" placeholder="Ex.: ofertas de sábado, hortifruti…" class="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-11 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" />
+              <button v-if="projectSearch" type="button" aria-label="Limpar busca de encartes" class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" @click="projectSearch = ''">
                 <X class="h-4 w-4" />
               </button>
             </label>
             <label class="relative block">
               <span class="sr-only">Ordenar encartes</span>
-              <ArrowDownAZ class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-500" />
-              <select v-model="projectSort" aria-label="Ordenar encartes" class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-9 text-sm font-semibold text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100">
+              <ArrowDownAZ class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" />
+              <select v-model="projectSort" aria-label="Ordenar encartes" class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-9 text-sm font-semibold text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100">
                 <option value="recent">Mais recentes</option>
                 <option value="oldest">Mais antigos</option>
                 <option value="name">Nome: A–Z</option>
@@ -467,9 +468,9 @@ onMounted(() => {
           </div>
           <div v-if="hasProjectFilters" class="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <span class="font-semibold text-slate-500">Filtros ativos</span>
-            <span v-if="projectSearch" class="rounded-full bg-indigo-50 px-2.5 py-1 font-semibold text-indigo-700">“{{ projectSearch }}”</span>
+            <span v-if="projectSearch" class="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">“{{ projectSearch }}”</span>
             <span v-if="projectSort !== 'recent'" class="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600">{{ projectSort === 'oldest' ? 'Mais antigos' : 'Nome A–Z' }}</span>
-            <button type="button" class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-bold text-indigo-600 transition hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" @click="clearProjectFilters">
+            <button type="button" class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-bold text-blue-600 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" @click="clearProjectFilters">
               <RotateCcw class="h-3 w-3" />
               Limpar
             </button>
@@ -481,7 +482,7 @@ onMounted(() => {
             v-for="(saved, index) in filteredProjects"
             :key="saved.id"
             type="button"
-            class="group overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-900/5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
+            class="group overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-900/5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-200"
             :title="`${saved.name || 'Sem título'} — ${getLastEditedTitle(saved)}`"
             @click="openExistingProject(saved.id)"
           >
@@ -495,23 +496,23 @@ onMounted(() => {
                 decoding="async"
                 :fetchpriority="index < 3 ? 'high' : (index < 6 ? 'auto' : 'low')"
               />
-              <LayoutTemplate v-else class="h-10 w-10 text-indigo-300" />
+              <LayoutTemplate v-else class="h-10 w-10 text-blue-300" />
               <span v-if="index === 0 && !projectSearch && projectSort === 'recent'" class="absolute left-3 top-3 rounded-full bg-slate-900/85 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm">Mais recente</span>
             </div>
             <div class="p-4">
               <p class="truncate text-sm font-bold text-slate-800">{{ saved.name || 'Encarte sem título' }}</p>
               <p class="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500" :title="getLastEditedTitle(saved)">
-                <Clock3 class="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                <Clock3 class="h-3.5 w-3.5 shrink-0 text-blue-500" />
                 <span>Última edição {{ formatLastEdited(saved) }}</span>
               </p>
-              <span class="mt-4 inline-flex min-h-10 items-center rounded-xl bg-indigo-50 px-3 text-xs font-bold text-indigo-700 transition group-hover:bg-indigo-600 group-hover:text-white">Abrir encarte</span>
+              <span class="mt-4 inline-flex min-h-10 items-center rounded-xl bg-blue-50 px-3 text-xs font-bold text-blue-700 transition group-hover:bg-blue-600 group-hover:text-white">Abrir encarte</span>
             </div>
           </button>
           <div v-if="!filteredProjects.length" class="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center sm:col-span-2 lg:col-span-3">
             <span class="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Search class="h-5 w-5" /></span>
             <p class="mt-3 text-sm font-bold text-slate-700">Nenhum encarte encontrado</p>
             <p class="mt-1 text-sm text-slate-500">Tente outro nome ou limpe os filtros para ver todos os trabalhos.</p>
-            <button v-if="hasProjectFilters" type="button" class="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100" @click="clearProjectFilters">
+            <button v-if="hasProjectFilters" type="button" class="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3.5 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100" @click="clearProjectFilters">
               <RotateCcw class="h-3.5 w-3.5" />
               Limpar filtros
             </button>
@@ -522,14 +523,14 @@ onMounted(() => {
 
       <section v-show="activeTab === 'models'" id="quick-panel-models" role="tabpanel" aria-labelledby="quick-tab-models" tabindex="0">
       <div v-if="isOpening" class="mt-8 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-        <Loader2 class="h-4 w-4 animate-spin text-indigo-500" />
+        <Loader2 class="h-4 w-4 animate-spin text-blue-500" />
         Preparando o encarte...
       </div>
 
       <div v-else-if="errorMessage" class="mt-8 max-w-md space-y-4">
         <p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-5 text-red-700" role="alert">{{ errorMessage }}</p>
         <div class="flex gap-2">
-          <button type="button" class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500" @click="openQuickEditor">
+          <button type="button" class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500" @click="openQuickEditor">
             <RefreshCw class="h-4 w-4" />
             Tentar novamente
           </button>
@@ -538,12 +539,12 @@ onMounted(() => {
       </div>
 
       <div v-else-if="isPicking && templates.length === 0" class="mt-8 flex max-w-lg flex-col items-center rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-        <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
+        <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
           <LayoutTemplate class="h-7 w-7" />
         </div>
         <h2 class="mt-4 text-lg font-bold text-slate-800">Crie um modelo primeiro</h2>
         <p class="mt-2 max-w-md text-sm leading-6 text-slate-500">A edição rápida usa um encarte já montado. Crie o layout no modo avançado e deixe a zona de produtos pronta para receber a lista.</p>
-        <NuxtLink to="/flyer-templates" class="mt-6 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-indigo-500">
+        <NuxtLink to="/flyer-templates" class="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500">
           <Plus class="h-4 w-4" />
           Criar modelo de encarte
         </NuxtLink>
@@ -552,7 +553,7 @@ onMounted(() => {
       <div v-else class="mt-10">
         <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">Novo encarte</p>
+            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-500">Novo encarte</p>
             <h2 class="mt-1 text-xl font-bold tracking-tight text-slate-900">Escolha um modelo</h2>
             <p class="mt-1 text-sm text-slate-500">O modelo abre com os campos e a área de produtos prontos para preencher.</p>
           </div>
@@ -564,7 +565,7 @@ onMounted(() => {
         <div class="mb-6 rounded-[1.5rem] border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-3">
-              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                 <SlidersHorizontal class="h-4 w-4" />
               </span>
               <div>
@@ -572,7 +573,7 @@ onMounted(() => {
                 <p class="text-xs text-slate-500">Busque por nome, categoria ou subcategoria.</p>
               </div>
             </div>
-            <button v-if="hasTemplateFilters" type="button" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" @click="clearTemplateFilters">
+            <button v-if="hasTemplateFilters" type="button" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-blue-600 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" @click="clearTemplateFilters">
               <RotateCcw class="h-3.5 w-3.5" />
               Limpar filtros<span v-if="activeTemplateFilterCount"> ({{ activeTemplateFilterCount }})</span>
             </button>
@@ -582,15 +583,15 @@ onMounted(() => {
             <label class="relative block">
               <span class="sr-only">Pesquisar modelos</span>
               <Search class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input id="quick-editor-template-search" v-model="templateSearch" type="search" autocomplete="off" placeholder="Buscar modelo, campanha ou tema…" class="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-11 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100" />
-              <button v-if="templateSearch" type="button" aria-label="Limpar busca de modelos" class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" @click="templateSearch = ''">
+              <input id="quick-editor-template-search" v-model="templateSearch" type="search" autocomplete="off" placeholder="Buscar modelo, campanha ou tema…" class="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-11 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" />
+              <button v-if="templateSearch" type="button" aria-label="Limpar busca de modelos" class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" @click="templateSearch = ''">
                 <X class="h-4 w-4" />
               </button>
             </label>
             <label class="relative block">
               <span class="sr-only">Ordenar modelos</span>
-              <ArrowDownAZ class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-500" />
-              <select v-model="templateSort" aria-label="Ordenar modelos" class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-9 text-sm font-semibold text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100">
+              <ArrowDownAZ class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" />
+              <select v-model="templateSort" aria-label="Ordenar modelos" class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-9 text-sm font-semibold text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100">
                 <option value="recent">Mais recentes</option>
                 <option value="name">Nome: A–Z</option>
               </select>
@@ -606,8 +607,8 @@ onMounted(() => {
             <div class="mt-2 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar modelos por categoria">
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                :class="!selectedTemplateCategory ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm shadow-indigo-600/20' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                :class="!selectedTemplateCategory ? 'border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-600/20' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'"
                 :aria-pressed="!selectedTemplateCategory"
                 @click="selectTemplateCategory(null)"
               >Todos <span class="rounded-full px-1.5 py-0.5 text-[10px]" :class="!selectedTemplateCategory ? 'bg-white/20 text-white' : 'bg-white text-slate-500'">{{ templates.length }}</span></button>
@@ -615,8 +616,8 @@ onMounted(() => {
                 v-for="category in templateCategories"
                 :key="category"
                 type="button"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                :class="getCategoryKey(selectedTemplateCategory) === getCategoryKey(category) ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm shadow-indigo-600/20' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                :class="getCategoryKey(selectedTemplateCategory) === getCategoryKey(category) ? 'border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-600/20' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'"
                 :aria-pressed="getCategoryKey(selectedTemplateCategory) === getCategoryKey(category)"
                 @click="selectTemplateCategory(category)"
               >{{ category }} <span class="rounded-full px-1.5 py-0.5 text-[10px]" :class="getCategoryKey(selectedTemplateCategory) === getCategoryKey(category) ? 'bg-white/20 text-white' : 'bg-white text-slate-500'">{{ getTemplateCategoryCount(category) }}</span></button>
@@ -631,8 +632,8 @@ onMounted(() => {
             <div class="mt-2 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar modelos por subcategoria">
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                :class="!selectedTemplateSubcategory ? 'border-violet-600 bg-violet-600 text-white shadow-sm shadow-violet-600/20' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700'"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                :class="!selectedTemplateSubcategory ? 'border-sky-600 bg-sky-600 text-white shadow-sm shadow-sky-600/20' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700'"
                 :aria-pressed="!selectedTemplateSubcategory"
                 @click="selectedTemplateSubcategory = null"
               >Todas</button>
@@ -640,8 +641,8 @@ onMounted(() => {
                 v-for="subcategory in templateSubcategories"
                 :key="subcategory"
                 type="button"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                :class="getCategoryKey(selectedTemplateSubcategory) === getCategoryKey(subcategory) ? 'border-violet-600 bg-violet-600 text-white shadow-sm shadow-violet-600/20' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700'"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                :class="getCategoryKey(selectedTemplateSubcategory) === getCategoryKey(subcategory) ? 'border-sky-600 bg-sky-600 text-white shadow-sm shadow-sky-600/20' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700'"
                 :aria-pressed="getCategoryKey(selectedTemplateSubcategory) === getCategoryKey(subcategory)"
                 @click="selectedTemplateSubcategory = subcategory"
               >{{ subcategory }} <span class="rounded-full px-1.5 py-0.5 text-[10px]" :class="getCategoryKey(selectedTemplateSubcategory) === getCategoryKey(subcategory) ? 'bg-white/20 text-white' : 'bg-white text-slate-500'">{{ getTemplateSubcategoryCount(subcategory) }}</span></button>
@@ -650,9 +651,9 @@ onMounted(() => {
 
           <div v-if="activeTemplateFilterCount" class="mt-4 flex flex-wrap items-center gap-2 text-xs">
             <span class="font-semibold text-slate-500">Aplicado:</span>
-            <span v-if="templateSearch" class="rounded-full bg-indigo-50 px-2.5 py-1 font-semibold text-indigo-700">“{{ templateSearch }}”</span>
-            <span v-if="selectedTemplateCategory" class="rounded-full bg-indigo-50 px-2.5 py-1 font-semibold text-indigo-700">{{ selectedTemplateCategory }}</span>
-            <span v-if="selectedTemplateSubcategory" class="rounded-full bg-violet-50 px-2.5 py-1 font-semibold text-violet-700">{{ selectedTemplateSubcategory }}</span>
+            <span v-if="templateSearch" class="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">“{{ templateSearch }}”</span>
+            <span v-if="selectedTemplateCategory" class="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">{{ selectedTemplateCategory }}</span>
+            <span v-if="selectedTemplateSubcategory" class="rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700">{{ selectedTemplateSubcategory }}</span>
           </div>
         </div>
         <p v-if="errorMessage" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{{ errorMessage }}</p>
@@ -660,9 +661,9 @@ onMounted(() => {
           <article
             v-for="(template, index) in filteredTemplates"
             :key="template.id"
-            class="group overflow-hidden rounded-[1.25rem] border border-slate-200/90 bg-white text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-900/5"
+            class="group overflow-hidden rounded-[1.25rem] border border-slate-200/90 bg-white text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/5"
           >
-            <button type="button" :aria-label="`Ver prévia de ${template.name}`" class="relative flex aspect-[3/1] w-full items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc] focus-visible:outline-2 focus-visible:outline-indigo-600 focus-visible:-outline-offset-2" @click="showTemplatePreview(template)">
+            <button type="button" :aria-label="`Ver prévia de ${template.name}`" class="relative flex aspect-[3/1] w-full items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc] focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:-outline-offset-2" @click="showTemplatePreview(template)">
               <img
                 v-if="getProjectPreviewSource(template)"
                 :src="getProjectPreviewSource(template) || undefined"
@@ -672,8 +673,8 @@ onMounted(() => {
                 decoding="async"
                 :fetchpriority="index < 3 ? 'high' : (index < 6 ? 'auto' : 'low')"
               />
-              <LayoutTemplate v-else class="h-10 w-10 text-indigo-300" />
-              <span class="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-indigo-600 shadow-sm">Modelo</span>
+              <LayoutTemplate v-else class="h-10 w-10 text-blue-300" />
+              <span class="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-blue-600 shadow-sm">Modelo</span>
               <span v-if="getTemplateCategoryLabel(template)" class="absolute right-3 top-3 inline-flex max-w-[65%] items-center gap-1 truncate rounded-full bg-slate-900/80 px-2.5 py-1 text-[9px] font-bold text-white shadow-sm">
                 <Tag class="h-3 w-3 shrink-0" />
                 <span class="truncate">{{ getTemplateCategoryLabel(template) }}</span>
@@ -689,10 +690,10 @@ onMounted(() => {
                 <span v-if="template.template_page_count">{{ template.template_page_count }} {{ template.template_page_count === 1 ? 'página pronta' : 'páginas prontas' }}</span>
               </div>
               <div class="mt-4 flex flex-wrap gap-2">
-                <button type="button" class="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" @click="showTemplatePreview(template)">
+                <button type="button" class="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" @click="showTemplatePreview(template)">
                   <Eye class="h-4 w-4" /> Ver prévia
                 </button>
-                <button type="button" class="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm shadow-indigo-600/15 transition hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200" :disabled="!!usingTemplateId" @click="useTemplate(template)">
+                <button type="button" class="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-200" :disabled="!!usingTemplateId" @click="useTemplate(template)">
                   <Loader2 v-if="usingTemplateId === template.id" class="h-4 w-4 animate-spin" />
                   <Zap v-else class="h-4 w-4" /> Usar modelo
                 </button>
@@ -704,7 +705,7 @@ onMounted(() => {
           <span class="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Search class="h-5 w-5" /></span>
           <p class="mt-3 text-sm font-bold text-slate-700">Nenhum modelo encontrado</p>
           <p class="mt-1 text-sm text-slate-500">Ajuste sua busca ou escolha outra categoria para continuar.</p>
-          <button v-if="hasTemplateFilters" type="button" class="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100" @click="clearTemplateFilters">
+          <button v-if="hasTemplateFilters" type="button" class="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3.5 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100" @click="clearTemplateFilters">
             <RotateCcw class="h-3.5 w-3.5" />
             Limpar filtros
           </button>
@@ -722,21 +723,22 @@ onMounted(() => {
           <button type="button" autofocus aria-label="Fechar prévia" class="rounded-lg p-2 text-slate-600 hover:bg-slate-100" @click="closeTemplatePreview"><X class="h-5 w-5" /></button>
         </header>
         <div class="relative flex min-h-64 items-center justify-center bg-slate-100 p-4">
-          <Loader2 v-if="previewImageLoading" class="absolute h-8 w-8 animate-spin text-indigo-600" aria-label="Carregando prévia" />
+          <Loader2 v-if="previewImageLoading" class="absolute h-8 w-8 animate-spin text-blue-600" aria-label="Carregando prévia" />
           <img v-if="getProjectPreviewSource(previewTemplate) && !previewImageFailed" :key="previewTemplate.id" :src="getProjectPreviewSource(previewTemplate) || undefined" :alt="`Prévia de ${previewTemplate.name}`" class="relative max-h-[65dvh] max-w-full object-contain shadow-sm" @load="previewImageLoading = false" @error="previewImageFailed = true; previewImageLoading = false" />
           <p v-else class="text-center text-sm text-slate-500">Prévia indisponível para este modelo.</p>
         </div>
         <footer class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
           <p class="text-xs text-slate-500">Visualizar não cria um encarte.</p>
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-70" :disabled="!!usingTemplateId" @click="usePreviewTemplate"><Zap class="h-4 w-4" /> Usar este modelo</button>
+          <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-70" :disabled="!!usingTemplateId" @click="usePreviewTemplate"><Zap class="h-4 w-4" /> Usar este modelo</button>
         </footer>
       </template>
     </dialog>
   </main>
+  </AdminWorkspaceShell>
 </template>
 
 <style scoped>
 .quick-entry {
-  font-family: Barlow, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Plus Jakarta Sans", Barlow, ui-sans-serif, system-ui, sans-serif;
 }
 </style>

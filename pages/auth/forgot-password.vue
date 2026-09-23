@@ -125,8 +125,8 @@ const changeWhatsApp = () => {
     <section class="recovery-card" aria-labelledby="recovery-title">
       <header class="text-center mb-6">
         <div class="icon-badge">
-          <MessageCircle v-if="step === 'phone'" class="w-7 h-7 text-indigo-500" />
-          <KeyRound v-else-if="step === 'verify'" class="w-7 h-7 text-indigo-500" />
+          <MessageCircle v-if="step === 'phone'" class="w-7 h-7 text-blue-500" />
+          <KeyRound v-else-if="step === 'verify'" class="w-7 h-7 text-blue-500" />
           <Check v-else class="w-7 h-7 text-green-600" />
         </div>
         <h1 id="recovery-title" class="text-xl font-bold mb-1 text-slate-800">
@@ -183,7 +183,7 @@ const changeWhatsApp = () => {
       </form>
 
       <form v-else-if="step === 'verify'" class="space-y-4" @submit.prevent="resetPassword">
-        <div class="rounded-xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-sm text-indigo-800">
+        <div class="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-800">
           <div class="flex items-center gap-2 font-medium">
             <Phone class="w-4 h-4" />
             {{ whatsapp }}
@@ -277,7 +277,7 @@ const changeWhatsApp = () => {
           </span>
         </button>
 
-        <button type="button" :disabled="isLoading" class="w-full py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 disabled:opacity-50" @click="requestCode">
+        <button type="button" :disabled="isLoading" class="w-full py-2 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50" @click="requestCode">
           Enviar outro código pelo WhatsApp
         </button>
       </form>
@@ -301,13 +301,23 @@ const changeWhatsApp = () => {
 
 <style scoped>
 .recovery-card {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 1.25rem;
+  border: 1px solid #d7e4f1;
+  border-radius: 22px;
   padding: 1.5rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 22px 56px rgba(26, 68, 113, 0.11);
   animation: cardEntry 0.35s ease-out;
+}
+
+.recovery-card::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, #173d70, #2160b4 68%, #4b8fc8);
+  content: '';
 }
 
 .icon-badge {
@@ -317,9 +327,9 @@ const changeWhatsApp = () => {
   width: 3.5rem;
   height: 3.5rem;
   margin-bottom: 0.75rem;
-  border: 1px solid #c7d2fe;
+  border: 1px solid #c8dcf4;
   border-radius: 0.875rem;
-  background: #eef2ff;
+  background: #eaf3ff;
 }
 
 .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -339,7 +349,7 @@ const changeWhatsApp = () => {
 .input-field.pl-12 { padding-left: 3rem; }
 .input-field.pr-12 { padding-right: 3rem; }
 .input-field::placeholder { color: #94a3b8; }
-.input-field:focus { outline: none; border-color: rgba(99, 102, 241, 0.6); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12); background: #fff; }
+.input-field:focus { outline: none; border-color: rgba(33, 96, 180, 0.6); box-shadow: 0 0 0 3px rgba(33, 96, 180, 0.12); background: #fff; }
 
 .visibility-button { position: absolute; right: 0.75rem; top: 50%; display: inline-flex; transform: translateY(-50%); padding: 0.25rem; color: #64748b; }
 .notice { display: flex; gap: 0.65rem; align-items: flex-start; margin-bottom: 1rem; padding: 0.75rem; border: 1px solid; border-radius: 0.75rem; font-size: 0.875rem; }
@@ -351,13 +361,13 @@ const changeWhatsApp = () => {
   overflow: hidden;
   padding: 0.875rem 1.5rem;
   border-radius: 0.75rem;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: linear-gradient(135deg, #173d70, #2160b4);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 10px 15px -3px rgba(33, 96, 180, 0.2);
   transition: transform 0.2s, box-shadow 0.2s;
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 15px 20px -5px rgba(99, 102, 241, 0.25); }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 15px 20px -5px rgba(33, 96, 180, 0.25); }
 .btn-primary:disabled { cursor: not-allowed; opacity: 0.55; transform: none; }
 
 @keyframes cardEntry {

@@ -280,7 +280,7 @@ const confirm = () => {
 
 .offer-validity-prompt__eyebrow {
   margin: 0;
-  color: #4f35f4;
+  color: #2160b4;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -327,22 +327,22 @@ const confirm = () => {
 }
 
 .offer-validity-prompt__option:hover {
-  border-color: #a5a0fc;
-  background: #f5f3ff;
+  border-color: #8fb8e6;
+  background: #eaf3ff;
   transform: translateY(-1px);
 }
 
 .offer-validity-prompt__option:focus-visible,
 .offer-validity-prompt__confirm:focus-visible,
 .offer-validity-prompt__dates input:focus-visible {
-  outline: 3px solid #c4b5fd;
+  outline: 3px solid #b7d3ef;
   outline-offset: 2px;
 }
 
 .offer-validity-prompt__option--active {
-  border-color: #4f35f4;
-  background: #f5f3ff;
-  box-shadow: 0 0 0 1px #4f35f4;
+  border-color: #2160b4;
+  background: #eaf3ff;
+  box-shadow: 0 0 0 1px #2160b4;
 }
 
 .offer-validity-prompt__option-radio {
@@ -356,9 +356,9 @@ const confirm = () => {
 }
 
 .offer-validity-prompt__option--active .offer-validity-prompt__option-radio {
-  border-color: #4f35f4;
-  background: #4f35f4;
-  box-shadow: inset 0 0 0 4px #f5f3ff;
+  border-color: #2160b4;
+  background: #2160b4;
+  box-shadow: inset 0 0 0 4px #eaf3ff;
 }
 
 .offer-validity-prompt__option-copy {
@@ -413,7 +413,7 @@ const confirm = () => {
 }
 
 .offer-validity-prompt__dates input:focus {
-  border-color: #4f35f4;
+  border-color: #2160b4;
 }
 
 .offer-validity-prompt__stocks {
@@ -437,8 +437,8 @@ const confirm = () => {
   height: 22px;
   place-items: center;
   border-radius: 50%;
-  background: #ede9fe;
-  color: #6d28d9;
+  background: #eaf3ff;
+  color: #173d70;
   font-size: 13px;
   font-weight: 800;
 }
@@ -464,13 +464,13 @@ const confirm = () => {
   margin-top: 16px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  background: #f5f3ff;
-  border-left: 3px solid #7c5cff;
+  background: #eaf3ff;
+  border-left: 3px solid #2160b4;
   padding: 14px 15px;
 }
 
 .offer-validity-prompt__preview-label {
-  color: #6d28d9;
+  color: #173d70;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -493,9 +493,9 @@ const confirm = () => {
   width: 100%;
   min-height: 48px;
   margin-top: 0;
-  border: 1px solid #4f35f4;
+  border: 1px solid #2160b4;
   border-radius: 10px;
-  background: #4f35f4;
+  background: #2160b4;
   color: #fff;
   cursor: pointer;
   font-size: 14px;
@@ -504,7 +504,7 @@ const confirm = () => {
 }
 
 .offer-validity-prompt__confirm:hover {
-  background: #4325de;
+  background: #1a4f96;
 }
 
 .offer-validity-prompt__confirm:active {
@@ -513,7 +513,7 @@ const confirm = () => {
 
 .offer-validity-prompt__format { display:grid; gap:7px; margin-top:18px; color:#475569; font-size:12px; font-weight:700; }
 .offer-validity-prompt__select { width:100%; min-height:44px; padding:10px 12px; border:1px solid #dbe2ed; border-radius:10px; background:#f8fafc; color:#243047; color-scheme:light; font:inherit; font-size:14px; font-weight:500; }
-.offer-validity-prompt__select:focus-visible { outline:3px solid #ddd6fe; border-color:#7c5cff; }
+.offer-validity-prompt__select:focus-visible { outline:3px solid #ddd6fe; border-color:#2160b4; }
 .offer-validity-prompt__confirm { display:flex; align-items:center; justify-content:center; gap:12px; }
 .offer-validity-prompt__confirm span { font-size:20px; font-weight:500; }
 .offer-validity-prompt__option-copy strong { line-height:1.3; }

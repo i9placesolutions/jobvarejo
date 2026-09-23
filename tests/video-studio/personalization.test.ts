@@ -18,6 +18,17 @@ describe('personalização privada de vídeos',()=>{
    }
   }
  })
+ it('mantém o produto separado do selo e só a base atrás da etiqueta na coleção Economia',()=>{
+  for(const recipe of Object.values(FLYER_RECIPES).filter(r=>r.preserveBrandLayout)){
+   const layout=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id))
+   expect(layout.vertical.product[1]-layout.vertical.seal[1]-layout.vertical.seal[3]).toBeGreaterThanOrEqual(35)
+   for(const part of [layout.vertical,layout.horizontal]){
+    const [,y,,height]=part.product
+    const overlap=Math.max(0,y+height-part.price[1])
+    expect(overlap/height).toBeLessThanOrEqual(.1)
+   }
+  }
+ })
  it('não herda a empresa da campanha usada como origem do modelo',()=>{
   const recipe=FLYER_RECIPES['flyer-6a1de6f4-4cd8-46d2-b5d7-0a19c1afbcc4']!
   const doc=newVideoFromTemplate(recipe.id)

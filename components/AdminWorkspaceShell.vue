@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import {
   Clapperboard,
+  Grid3X3,
   HardDrive,
   LayoutTemplate,
   LogOut,
   Menu as MenuIcon,
   Mic2,
   Radio,
+  SlidersHorizontal,
   Sparkles,
   Store,
   User
@@ -14,7 +16,7 @@ import {
 import { useResponsive } from '~/composables/useResponsive'
 
 const props = withDefaults(defineProps<{
-  activeNav?: 'library' | 'musicgpt' | 'storage' | 'art-studio' | 'videos' | 'cartazista' | 'cartazes'
+  activeNav?: 'library' | 'musicgpt' | 'storage' | 'art-studio' | 'videos' | 'cartazista' | 'cartazes' | 'radio' | 'builder' | 'cards' | 'zones' | 'encartes'
   showSearch?: boolean
 }>(), {
   activeNav: 'library',
@@ -36,7 +38,7 @@ const user = computed(() => auth.user.value)
 
 const formatUserName = (name?: string | null) => {
   const value = String(name || '').trim()
-  return value || 'Administrador'
+  return value || 'Usuário'
 }
 
 watch(searchQuery, (value) => {
@@ -56,6 +58,11 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   if (key === 'musicgpt') return route.path.startsWith('/admin/musicgpt')
   if (key === 'storage') return route.path.startsWith('/admin/storage')
   if (key === 'videos') return route.path.startsWith('/videos')
+  if (key === 'radio') return route.path.startsWith('/radio-indoor')
+  if (key === 'encartes') return route.path.startsWith('/flyer-templates') || route.path.startsWith('/quick-editor')
+  if (key === 'builder') return route.path.startsWith('/admin/builder')
+  if (key === 'cards') return route.path.startsWith('/card-configurations')
+  if (key === 'zones') return route.path.startsWith('/zone-structures')
   if (key === 'art-studio') return route.path.startsWith('/art-studio')
   if (key === 'cartazista' || key === 'cartazes') return route.path.startsWith('/cartazista')
   return route.path === '/'
@@ -99,7 +106,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
             <img v-if="user.avatar_url" :src="user.avatar_url" :alt="user.name || 'Admin'">
             <span v-else>{{ user.name?.charAt(0) || 'A' }}</span>
           </div>
-          <span v-if="!dashMobile" class="admin-shell__role">Super admin</span>
+          <span v-if="!dashMobile" class="admin-shell__role">{{ auth.isSuperAdmin.value ? 'Super admin' : 'Minha conta' }}</span>
           <span v-if="!dashMobile" class="admin-shell__name">{{ formatUserName(user.name) }}</span>
         </div>
       </header>
@@ -112,18 +119,21 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
               Biblioteca e projetos
             </NuxtLink>
             <p class="admin-shell__section">Soluções</p>
-            <NuxtLink to="/flyer-templates" class="admin-shell__nav-item" @click="closeDrawer"><LayoutTemplate class="h-3.5 w-3.5 text-indigo-500" /> Encartes</NuxtLink>
+            <NuxtLink to="/flyer-templates" class="admin-shell__nav-item" :class="{ active: isActive('encartes') }" @click="closeDrawer"><LayoutTemplate class="h-3.5 w-3.5 text-blue-600" /> Encartes</NuxtLink>
             <NuxtLink to="/cartazista" class="admin-shell__nav-item" :class="{ active: isActive('cartazista') }" @click="closeDrawer"><Sparkles class="h-3.5 w-3.5 text-blue-500" /> Cartazes</NuxtLink>
-            <NuxtLink to="/videos" class="admin-shell__nav-item" :class="{ active: isActive('videos') }" @click="closeDrawer"><Clapperboard class="h-3.5 w-3.5 text-emerald-600" /> Vídeos</NuxtLink>
-            <NuxtLink to="/radio-indoor" class="admin-shell__nav-item" @click="closeDrawer"><Radio class="h-3.5 w-3.5 text-orange-500" /> Rádio Indoor</NuxtLink>
-            <NuxtLink to="/art-studio" class="admin-shell__nav-item" :class="{ active: isActive('art-studio') }" @click="closeDrawer"><Sparkles class="h-3.5 w-3.5 text-violet-500" /> Estúdio de Artes</NuxtLink>
+            <NuxtLink to="/videos" class="admin-shell__nav-item" :class="{ active: isActive('videos') }" @click="closeDrawer"><Clapperboard class="h-3.5 w-3.5 text-blue-600" /> Vídeos</NuxtLink>
+            <NuxtLink to="/radio-indoor" class="admin-shell__nav-item" :class="{ active: isActive('radio') }" @click="closeDrawer"><Radio class="h-3.5 w-3.5 text-blue-600" /> Rádio Indoor</NuxtLink>
+            <NuxtLink to="/art-studio" class="admin-shell__nav-item" :class="{ active: isActive('art-studio') }" @click="closeDrawer"><Sparkles class="h-3.5 w-3.5 text-sky-600" /> Estúdio de Artes</NuxtLink>
             <div class="admin-shell__spacer" />
             <p class="admin-shell__section">Configuração</p>
-            <NuxtLink to="/admin/musicgpt" class="admin-shell__nav-item" :class="{ active: isActive('musicgpt') }" @click="closeDrawer"><Mic2 class="h-3.5 w-3.5 text-violet-400" /> MusicGPT</NuxtLink>
-            <NuxtLink to="/admin/storage" class="admin-shell__nav-item" :class="{ active: isActive('storage') }" @click="closeDrawer"><HardDrive class="h-3.5 w-3.5 text-slate-400" /> Storage</NuxtLink>
+            <NuxtLink v-if="auth.isSuperAdmin.value" to="/admin/musicgpt" class="admin-shell__nav-item" :class="{ active: isActive('musicgpt') }" @click="closeDrawer"><Mic2 class="h-3.5 w-3.5 text-blue-600" /> MusicGPT</NuxtLink>
+            <NuxtLink v-if="auth.isSuperAdmin.value" to="/admin/storage" class="admin-shell__nav-item" :class="{ active: isActive('storage') }" @click="closeDrawer"><HardDrive class="h-3.5 w-3.5 text-slate-400" /> Storage</NuxtLink>
+            <NuxtLink to="/card-configurations" class="admin-shell__nav-item" :class="{ active: isActive('cards') }" @click="closeDrawer"><SlidersHorizontal class="h-3.5 w-3.5 text-blue-600" /> Configuração de cards</NuxtLink>
+            <NuxtLink to="/zone-structures" class="admin-shell__nav-item" :class="{ active: isActive('zones') }" @click="closeDrawer"><Grid3X3 class="h-3.5 w-3.5 text-blue-600" /> Estrutura de zonas</NuxtLink>
+            <NuxtLink v-if="auth.isSuperAdmin.value" to="/admin/builder" class="admin-shell__nav-item" :class="{ active: isActive('builder') }" @click="closeDrawer"><LayoutTemplate class="h-3.5 w-3.5 text-blue-600" /> Configurações do builder</NuxtLink>
             <div class="admin-shell__divider" />
             <button type="button" class="admin-shell__nav-item" @click="navigateTo('/profile'); closeDrawer()"><User class="h-3.5 w-3.5" /> Meu Perfil</button>
-            <NuxtLink to="/business-profile" class="admin-shell__nav-item" @click="closeDrawer"><Store class="h-3.5 w-3.5 text-emerald-500" /> Minha loja</NuxtLink>
+            <NuxtLink to="/business-profile" class="admin-shell__nav-item" @click="closeDrawer"><Store class="h-3.5 w-3.5 text-blue-500" /> Minha loja</NuxtLink>
             <button type="button" class="admin-shell__nav-item signout" @click="handleSignOut"><LogOut class="h-3.5 w-3.5" /> Sair</button>
           </nav>
         </DashboardMobileDrawer>
@@ -135,20 +145,23 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
               Biblioteca e projetos
             </NuxtLink>
             <p class="admin-shell__section">Soluções</p>
-            <NuxtLink to="/flyer-templates" class="admin-shell__nav-item"><LayoutTemplate class="h-4 w-4 text-indigo-500" /> Encartes</NuxtLink>
+            <NuxtLink to="/flyer-templates" class="admin-shell__nav-item" :class="{ active: isActive('encartes') }"><LayoutTemplate class="h-4 w-4 text-blue-600" /> Encartes</NuxtLink>
             <NuxtLink to="/cartazista" class="admin-shell__nav-item" :class="{ active: isActive('cartazista') }"><Sparkles class="h-4 w-4 text-blue-500" /> Cartazes</NuxtLink>
-            <NuxtLink to="/videos" class="admin-shell__nav-item" :class="{ active: isActive('videos') }"><Clapperboard class="h-4 w-4 text-emerald-600" /> Vídeos</NuxtLink>
-            <NuxtLink to="/radio-indoor" class="admin-shell__nav-item"><Radio class="h-4 w-4 text-orange-500" /> Rádio Indoor</NuxtLink>
-            <NuxtLink to="/art-studio" class="admin-shell__nav-item" :class="{ active: isActive('art-studio') }"><Sparkles class="h-4 w-4 text-violet-500" /> Estúdio de Artes</NuxtLink>
+            <NuxtLink to="/videos" class="admin-shell__nav-item" :class="{ active: isActive('videos') }"><Clapperboard class="h-4 w-4 text-blue-600" /> Vídeos</NuxtLink>
+            <NuxtLink to="/radio-indoor" class="admin-shell__nav-item" :class="{ active: isActive('radio') }"><Radio class="h-4 w-4 text-blue-600" /> Rádio Indoor</NuxtLink>
+            <NuxtLink to="/art-studio" class="admin-shell__nav-item" :class="{ active: isActive('art-studio') }"><Sparkles class="h-4 w-4 text-sky-600" /> Estúdio de Artes</NuxtLink>
           </nav>
           <div class="admin-shell__bottom">
             <div class="admin-shell__divider" />
             <p class="admin-shell__section">Configuração</p>
-            <NuxtLink to="/admin/musicgpt" class="admin-shell__nav-item" :class="{ active: isActive('musicgpt') }"><Mic2 class="h-4 w-4 text-violet-400" /> MusicGPT</NuxtLink>
-            <NuxtLink to="/admin/storage" class="admin-shell__nav-item" :class="{ active: isActive('storage') }"><HardDrive class="h-4 w-4 text-slate-400" /> Storage</NuxtLink>
+            <NuxtLink v-if="auth.isSuperAdmin.value" to="/admin/musicgpt" class="admin-shell__nav-item" :class="{ active: isActive('musicgpt') }"><Mic2 class="h-4 w-4 text-blue-600" /> MusicGPT</NuxtLink>
+            <NuxtLink v-if="auth.isSuperAdmin.value" to="/admin/storage" class="admin-shell__nav-item" :class="{ active: isActive('storage') }"><HardDrive class="h-4 w-4 text-slate-400" /> Storage</NuxtLink>
+            <NuxtLink to="/card-configurations" class="admin-shell__nav-item" :class="{ active: isActive('cards') }"><SlidersHorizontal class="h-4 w-4 text-blue-600" /> Configuração de cards</NuxtLink>
+            <NuxtLink to="/zone-structures" class="admin-shell__nav-item" :class="{ active: isActive('zones') }"><Grid3X3 class="h-4 w-4 text-blue-600" /> Estrutura de zonas</NuxtLink>
+            <NuxtLink v-if="auth.isSuperAdmin.value" to="/admin/builder" class="admin-shell__nav-item" :class="{ active: isActive('builder') }"><LayoutTemplate class="h-4 w-4 text-blue-600" /> Configurações do builder</NuxtLink>
             <div class="admin-shell__divider" />
             <button type="button" class="admin-shell__nav-item" @click="navigateTo('/profile')"><User class="h-4 w-4" /> Meu Perfil</button>
-            <NuxtLink to="/business-profile" class="admin-shell__nav-item"><Store class="h-4 w-4 text-emerald-500" /> Minha loja</NuxtLink>
+            <NuxtLink to="/business-profile" class="admin-shell__nav-item"><Store class="h-4 w-4 text-blue-500" /> Minha loja</NuxtLink>
             <button type="button" class="admin-shell__nav-item signout" @click="handleSignOut"><LogOut class="h-4 w-4" /> Sair</button>
           </div>
         </aside>
@@ -327,6 +340,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   width: 256px;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
   border-right: 1px solid rgba(148, 163, 184, 0.22);
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(12px);
@@ -334,7 +348,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
 
 .admin-shell__nav {
   padding: 16px 12px 8px;
-  overflow-y: auto;
+  flex: 0 0 auto;
 }
 
 .admin-shell__nav--drawer {
@@ -346,6 +360,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
 
 .admin-shell__bottom {
   margin-top: auto;
+  flex: 0 0 auto;
   padding: 8px 12px 12px;
 }
 
@@ -419,5 +434,14 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   .admin-shell__topbar {
     padding: 0 12px;
   }
+}
+
+@media print {
+  .admin-shell,
+  .admin-shell__frame,
+  .admin-shell__layout,
+  .admin-shell__main { width:auto; height:auto; min-height:0; overflow:visible; background:#fff; }
+  .admin-shell__topbar,
+  .admin-shell__sidebar { display:none !important; }
 }
 </style>

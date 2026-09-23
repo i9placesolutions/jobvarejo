@@ -254,6 +254,9 @@
   transform: translateY(-2px);
 }
 
+.admin-link-card--pending,
+.admin-link-card--pending:hover { cursor:default; box-shadow:0 8px 24px rgba(26, 68, 113, 0.04); transform:none; }
+
 .admin-link-card__title {
   margin: 14px 0 0;
   color: #1d3f69;
@@ -274,3 +277,15 @@
 .admin-page--builder select {
   color: var(--jv-ink);
 }
+
+/* Páginas antigas do builder usavam texto escuro sobre o botão azul. */
+.admin-page--builder button[class*='bg-[color:var(--jv-blue)]'],
+.admin-page--builder a[class*='bg-[color:var(--jv-blue)]'] {
+  color: #fff;
+}
+
+.admin-page--builder [class~='text-emerald-300'] { color: #047857; }
+.admin-page--builder [class~='text-blue-300'] { color: #1d4ed8; }
+.admin-page--builder [class~='text-purple-300'] { color: #6d28d9; }
+.admin-page--builder [class~='text-red-300'] { color: #b91c1c; }
+.admin-page--builder [class~='text-amber-300'] { color: #a16207; }

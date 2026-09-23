@@ -3,11 +3,11 @@
   --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
   --color-border: hsl(240 5.9% 90%);
   --color-input: hsl(240 5.9% 90%);
-  --color-ring: hsl(262.1 83.3% 57.8%);
+  --color-ring: #2160b4;
   --color-background: hsl(0 0% 100%);
   --color-foreground: hsl(240 10% 3.9%);
 
-  --color-primary: hsl(262.1 83.3% 57.8%);
+  --color-primary: #2160b4;
   --color-primary-foreground: hsl(210 20% 98%);
 
   --color-secondary: hsl(240 4.8% 95.9%);
@@ -66,7 +66,7 @@
   --color-popover: hsl(240 10% 6%);
   --color-popover-foreground: hsl(0 0% 98%);
   
-  --color-primary: hsl(263.4 70% 50.4%);
+  --color-primary: #3a85d2;
   --color-primary-foreground: hsl(210 20% 98%);
   
   --color-secondary: hsl(240 3.7% 15.9%);
@@ -83,7 +83,7 @@
   
   --color-border: hsl(240 3.7% 15.9%);
   --color-input: hsl(240 3.7% 15.9%);
-  --color-ring: hsl(263.4 70% 50.4%);
+  --color-ring: #3a85d2;
 }
 
 @layer base {

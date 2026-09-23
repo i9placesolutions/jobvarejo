@@ -107,7 +107,7 @@ const confirmDelete = async () => {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const statusConfig: Record<BuilderFlyerStatus, { label: string; classes: string }> = {
   DRAFT: { label: 'Rascunho', classes: 'bg-gray-100 text-gray-600 border-gray-300' },
-  PUBLISHED: { label: 'Publicado', classes: 'bg-emerald-50 text-emerald-600 border-emerald-300' },
+  PUBLISHED: { label: 'Publicado', classes: 'bg-blue-50 text-blue-600 border-blue-300' },
   ARCHIVED: { label: 'Arquivado', classes: 'bg-amber-50 text-amber-600 border-amber-300' },
 }
 
@@ -158,7 +158,7 @@ onMounted(() => {
       <button
         @click="createFlyer"
         :disabled="isCreating"
-        class="inline-flex items-center justify-center gap-2 h-11 px-6 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 shrink-0"
+        class="inline-flex items-center justify-center gap-2 h-11 px-6 bg-linear-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-blue-400/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 shrink-0"
       >
         <Loader2 v-if="isCreating" class="w-4 h-4 animate-spin" />
         <Plus v-else class="w-4 h-4" />
@@ -174,7 +174,7 @@ onMounted(() => {
         @click="activeFilter = tab.key"
         class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200"
         :class="activeFilter === tab.key
-          ? 'bg-emerald-500/15 text-emerald-600 shadow-sm'
+          ? 'bg-blue-500/15 text-blue-600 shadow-sm'
           : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'"
       >
         {{ tab.label }}
@@ -219,7 +219,7 @@ onMounted(() => {
         v-if="activeFilter === 'ALL'"
         @click="createFlyer"
         :disabled="isCreating"
-        class="inline-flex items-center gap-2 h-11 px-6 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-emerald-400/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+        class="inline-flex items-center gap-2 h-11 px-6 bg-linear-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white rounded-xl text-sm font-semibold transition-all duration-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] border border-blue-400/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
       >
         <Plus class="w-4 h-4" />
         <span>Criar primeiro encarte</span>
@@ -231,12 +231,12 @@ onMounted(() => {
       <div
         v-for="flyer in filteredFlyers"
         :key="flyer.id"
-        class="group bg-white border border-gray-200 rounded-xl p-5 hover:border-emerald-500/30 hover:bg-gray-50 transition-all duration-300 cursor-pointer relative shadow-sm"
+        class="group bg-white border border-gray-200 rounded-xl p-5 hover:border-blue-500/30 hover:bg-gray-50 transition-all duration-300 cursor-pointer relative shadow-sm"
         @click="navigateTo(`/builder/${flyer.id}`)"
       >
         <!-- Card Header -->
         <div class="flex items-start justify-between mb-4">
-          <h3 class="text-sm font-semibold text-gray-900 group-hover:text-emerald-600 transition-colors truncate pr-3 max-w-[70%]">
+          <h3 class="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors truncate pr-3 max-w-[70%]">
             {{ flyer.title || 'Sem título' }}
           </h3>
           <span

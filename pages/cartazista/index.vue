@@ -74,11 +74,8 @@ const modelById = (id: string) => templates.value.find((template) => template.id
 </script>
 
 <template>
-  <component
-    :is="auth.isSuperAdmin.value ? AdminWorkspaceShell : 'div'"
-    v-bind="auth.isSuperAdmin.value ? { activeNav: 'cartazista' } : {}"
-  >
-    <CartazistaShell :active="active" :embedded="auth.isSuperAdmin.value">
+  <AdminWorkspaceShell active-nav="cartazista">
+    <CartazistaShell :active="active" :embedded="true">
       <main class="cartazista-catalog">
         <div v-if="error" class="cartazista-alert" role="alert">
           {{ error }} <button @click="load">Tentar novamente</button>
@@ -278,7 +275,7 @@ const modelById = (id: string) => templates.value.find((template) => template.id
         </dialog>
       </main>
     </CartazistaShell>
-  </component>
+  </AdminWorkspaceShell>
 </template>
 
 <style scoped>

@@ -189,7 +189,7 @@ onMounted(() => {
               <button v-for="icon in ICON_OPTIONS" :key="icon"
                 @click="form.icon = icon"
                 :class="['w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all border',
-                  form.icon === icon ? 'border-emerald-500 bg-emerald-500/10' : 'border-[color:var(--jv-line)] bg-[color:var(--jv-sky)] hover:bg-slate-200']">
+                  form.icon === icon ? 'border-blue-500 bg-blue-500/10' : 'border-[color:var(--jv-line)] bg-[color:var(--jv-sky)] hover:bg-slate-200']">
                 {{ icon }}
               </button>
             </div>
@@ -199,28 +199,28 @@ onMounted(() => {
           <div>
             <label class="text-xs text-[color:var(--jv-muted)] mb-1 block">Nome</label>
             <input v-model="form.name" placeholder="Ex: Supermercado"
-              class="w-full bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none focus:border-emerald-500" />
+              class="w-full bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none focus:border-blue-500" />
           </div>
 
           <!-- Slug -->
           <div>
             <label class="text-xs text-[color:var(--jv-muted)] mb-1 block">Slug</label>
             <input v-model="form.slug" placeholder="supermercado"
-              class="w-full bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none focus:border-emerald-500" />
+              class="w-full bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none focus:border-blue-500" />
           </div>
 
           <!-- Description -->
           <div>
             <label class="text-xs text-[color:var(--jv-muted)] mb-1 block">Descricao</label>
             <textarea v-model="form.description" rows="2" placeholder="Descricao do segmento..."
-              class="w-full bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none resize-none focus:border-emerald-500" />
+              class="w-full bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none resize-none focus:border-blue-500" />
           </div>
 
           <!-- Sort Order -->
           <div>
             <label class="text-xs text-[color:var(--jv-muted)] mb-1 block">Ordem</label>
             <input v-model.number="form.sort_order" type="number"
-              class="w-24 bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none focus:border-emerald-500" />
+              class="w-24 bg-[color:var(--jv-sky)] text-sm text-[color:var(--jv-ink)] rounded-lg px-3 py-2 border border-[color:var(--jv-line)] outline-none focus:border-blue-500" />
           </div>
 
           <!-- Actions -->
@@ -268,7 +268,7 @@ onMounted(() => {
               <td class="px-4 py-3">
                 <button @click="toggleActive(seg)"
                   :class="['px-2 py-0.5 rounded-full text-xs font-medium',
-                    seg.is_active ? 'bg-emerald-500/15 text-[color:var(--jv-blue)]' : 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)]']">
+                    seg.is_active ? 'bg-blue-500/15 text-[color:var(--jv-blue)]' : 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)]']">
                   {{ seg.is_active ? 'Ativo' : 'Inativo' }}
                 </button>
               </td>

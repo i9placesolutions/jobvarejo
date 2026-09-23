@@ -139,11 +139,8 @@ const start = () => {
 }
 </script>
 <template>
-  <component
-    :is="auth.isSuperAdmin.value ? AdminWorkspaceShell : 'div'"
-    v-bind="auth.isSuperAdmin.value ? { activeNav: 'art-studio' } : {}"
-  >
-    <ArtShell :active="active" :embedded="auth.isSuperAdmin.value">
+  <AdminWorkspaceShell active-nav="art-studio">
+    <ArtShell :active="active" :embedded="true">
       <main class="art-catalog">
       <div v-if="error" role="alert" class="art-alert">
         {{ error }} <button @click="load">Tentar novamente</button>
@@ -412,7 +409,7 @@ const start = () => {
       </div>
     </dialog>
     </ArtShell>
-  </component>
+  </AdminWorkspaceShell>
 </template>
 <style scoped>
 .format-checks {

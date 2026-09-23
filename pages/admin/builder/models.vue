@@ -137,7 +137,7 @@ const typeLabel = (type: string) => {
 const typeBadgeClass = (type: string) => {
   const map: Record<string, string> = {
     SOCIAL: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
-    PRINT: 'bg-purple-500/10 text-purple-300 border-purple-500/20',
+    PRINT: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
     TV: 'bg-orange-500/10 text-orange-300 border-orange-500/20'
   }
   return map[type] || 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border-[color:var(--jv-line)]'
@@ -210,7 +210,7 @@ onMounted(() => {
                 <span
                   class="inline-flex items-center rounded-full px-2 py-0.5 text-xs"
                   :class="model.is_active
-                    ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                    ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                     : 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border border-[color:var(--jv-line)]'"
                 >
                   {{ model.is_active ? 'Ativo' : 'Inativo' }}
@@ -292,7 +292,7 @@ onMounted(() => {
                 v-model="form.name"
                 type="text"
                 required
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 placeholder="Ex: Story Instagram"
               />
             </div>
@@ -300,7 +300,7 @@ onMounted(() => {
               <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Tipo</label>
               <select
                 v-model="form.type"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 <option value="SOCIAL">Social</option>
                 <option value="PRINT">Impressao</option>
@@ -312,7 +312,7 @@ onMounted(() => {
               <input
                 v-model.number="form.width"
                 type="number"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               />
             </div>
             <div>
@@ -320,7 +320,7 @@ onMounted(() => {
               <input
                 v-model.number="form.height"
                 type="number"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               />
             </div>
             <div>
@@ -328,7 +328,7 @@ onMounted(() => {
               <input
                 v-model="form.aspect_ratio"
                 type="text"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 placeholder="Ex: 1:1, 9:16"
               />
             </div>
@@ -337,14 +337,14 @@ onMounted(() => {
               <input
                 v-model.number="form.sort_order"
                 type="number"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               />
             </div>
           </div>
 
           <div>
             <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-              <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+              <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
               Ativo
             </label>
           </div>

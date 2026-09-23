@@ -2,7 +2,7 @@
 import { Eye, EyeOff, Mail, Lock, ArrowRight, FileText } from 'lucide-vue-next'
 
 definePageMeta({
-  layout: 'builder-auth',
+  layout: 'auth',
   middleware: 'builder-auth',
 })
 
@@ -51,14 +51,14 @@ const handleLogin = async () => {
     <div class="w-full">
       <div class="bg-white border border-slate-200 rounded-4xl p-8 sm:p-10 shadow-xl shadow-black/5 relative overflow-hidden">
         <!-- Decoration light -->
-        <div class="absolute -top-32 -right-32 w-64 h-64 bg-emerald-100/60 rounded-full blur-[80px] pointer-events-none"></div>
-        <div class="absolute -bottom-32 -left-32 w-64 h-64 bg-teal-100/40 rounded-full blur-[80px] pointer-events-none"></div>
+        <div class="absolute -top-32 -right-32 w-64 h-64 bg-blue-100/60 rounded-full blur-[80px] pointer-events-none"></div>
+        <div class="absolute -bottom-32 -left-32 w-64 h-64 bg-sky-100/40 rounded-full blur-[80px] pointer-events-none"></div>
 
         <!-- Logo & Header -->
         <div class="text-center mb-10 relative z-10">
-          <div class="inline-flex items-center justify-center w-16 h-16 bg-emerald-50 rounded-2xl mb-5 border border-emerald-200 relative group">
-            <div class="absolute inset-0 bg-emerald-100 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <FileText class="w-8 h-8 text-emerald-600 relative z-10" />
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-50 rounded-2xl mb-5 border border-blue-200 relative group">
+            <div class="absolute inset-0 bg-blue-100 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <FileText class="w-8 h-8 text-blue-600 relative z-10" />
           </div>
           <h1 class="text-2xl font-bold mb-2 text-slate-800 tracking-tight">Bem-vindo de volta</h1>
           <p class="text-sm font-medium text-slate-400">
@@ -79,14 +79,14 @@ const handleLogin = async () => {
               E-mail
             </label>
             <div class="relative group">
-              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-emerald-500" />
+              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-blue-500" />
               <input
                 id="builder-email"
                 v-model="email"
                 type="email"
                 autocomplete="email"
                 placeholder="seu@email.com"
-                class="w-full h-12 pl-12 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
+                class="w-full h-12 pl-12 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                 :class="{ 'border-red-400': errorMessage }"
                 required
               />
@@ -99,14 +99,14 @@ const handleLogin = async () => {
               Senha
             </label>
             <div class="relative group">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-emerald-500" />
+              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-blue-500" />
               <input
                 id="builder-password"
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
                 autocomplete="current-password"
                 placeholder="••••••••"
-                class="w-full h-12 pl-12 pr-12 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
+                class="w-full h-12 pl-12 pr-12 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                 :class="{ 'border-red-400': errorMessage }"
                 required
               />
@@ -126,7 +126,7 @@ const handleLogin = async () => {
           <button
             type="submit"
             :disabled="isLoading"
-            class="w-full h-12 mt-2 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-emerald-500/15 hover:shadow-xl hover:shadow-emerald-500/25 border border-emerald-500/20 group hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            class="w-full h-12 mt-2 bg-linear-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-blue-500/15 hover:shadow-xl hover:shadow-blue-500/25 border border-blue-500/20 group hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             <span v-if="isLoading">Entrando...</span>
             <span v-else class="flex items-center justify-center gap-2">
@@ -141,7 +141,7 @@ const handleLogin = async () => {
           Não tem uma conta?
           <NuxtLink
             to="/builder/register"
-            class="text-emerald-600 hover:text-emerald-500 font-medium transition-colors"
+            class="text-blue-600 hover:text-blue-500 font-medium transition-colors"
           >
             Criar conta grátis
           </NuxtLink>

@@ -345,7 +345,7 @@ onMounted(() => fetchProducts())
   <div class="max-w-5xl mx-auto px-4 py-6">
 
     <!-- Explicacao -->
-    <div class="mb-5 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+    <div class="mb-5 p-4 bg-blue-50 border border-blue-200 rounded-xl">
       <p class="text-sm text-gray-600 leading-relaxed">
         Cadastre aqui os produtos da sua loja. Depois, ao criar um encarte, voce pode puxar esses produtos direto do catalogo sem precisar digitar tudo de novo.
       </p>
@@ -362,7 +362,7 @@ onMounted(() => fetchProducts())
           <List class="w-3.5 h-3.5" />
           Cadastrar Lista
         </button>
-        <button @click="openNewProduct" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-all">
+        <button @click="openNewProduct" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-all">
           <Plus class="w-3.5 h-3.5" />
           Novo Produto
         </button>
@@ -378,7 +378,7 @@ onMounted(() => fetchProducts())
           @input="onSearchInput"
           type="text"
           placeholder="Buscar produto..."
-          class="w-full h-9 pl-9 pr-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-emerald-500/50 transition-colors"
+          class="w-full h-9 pl-9 pr-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500/50 transition-colors"
         />
       </div>
     </div>
@@ -398,7 +398,7 @@ onMounted(() => fetchProducts())
           <List class="w-3.5 h-3.5" />
           Cadastrar Lista
         </button>
-        <button @click="openNewProduct" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-all">
+        <button @click="openNewProduct" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-all">
           <Plus class="w-3.5 h-3.5" />
           Novo Produto
         </button>
@@ -425,11 +425,11 @@ onMounted(() => fetchProducts())
 
         <!-- Info -->
         <div class="p-3 flex items-start justify-between gap-2">
-          <h3 class="text-xs font-semibold text-gray-900 truncate flex-1 group-hover:text-emerald-600 transition-colors cursor-pointer" @click="openEditProduct(product)">
+          <h3 class="text-xs font-semibold text-gray-900 truncate flex-1 group-hover:text-blue-600 transition-colors cursor-pointer" @click="openEditProduct(product)">
             {{ product.name }}
           </h3>
           <div class="flex items-center gap-0.5 shrink-0">
-            <button @click="openEditProduct(product)" class="p-1 text-gray-400 hover:text-emerald-600 rounded transition-colors" title="Editar">
+            <button @click="openEditProduct(product)" class="p-1 text-gray-400 hover:text-blue-600 rounded transition-colors" title="Editar">
               <Pencil class="w-3 h-3" />
             </button>
             <button @click="requestDelete(product.id)" :disabled="deletingId === product.id" class="p-1 text-gray-400 hover:text-red-500 rounded transition-colors disabled:opacity-50" title="Excluir">
@@ -465,7 +465,7 @@ onMounted(() => fetchProducts())
                 type="text"
                 placeholder="Nome do produto (ex: Arroz Tio Joao 1kg)"
                 required
-                class="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                class="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
               />
 
               <!-- Image selected -->
@@ -475,7 +475,7 @@ onMounted(() => fetchProducts())
                   <p class="text-[11px] text-gray-500">Imagem selecionada</p>
                 </div>
                 <div class="flex gap-1 shrink-0">
-                  <button type="button" @click="removeBackground(form.image!)" :disabled="isRemovingBg" class="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50" title="Remover fundo">
+                  <button type="button" @click="removeBackground(form.image!)" :disabled="isRemovingBg" class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50" title="Remover fundo">
                     <Loader2 v-if="isRemovingBg" class="w-3.5 h-3.5 animate-spin" />
                     <Eraser v-else class="w-3.5 h-3.5" />
                   </button>
@@ -530,7 +530,7 @@ onMounted(() => fetchProducts())
                         :key="i"
                         type="button"
                         @click="selectSearchImage(img)"
-                        class="flex flex-col bg-white rounded-lg overflow-hidden border border-gray-200 hover:border-emerald-500/50 hover:ring-1 hover:ring-emerald-500/30 transition-all"
+                        class="flex flex-col bg-white rounded-lg overflow-hidden border border-gray-200 hover:border-blue-500/50 hover:ring-1 hover:ring-blue-500/30 transition-all"
                       >
                         <div class="aspect-square p-1 flex items-center justify-center">
                           <img :src="img.url" class="w-full h-full object-contain" loading="lazy" />
@@ -548,7 +548,7 @@ onMounted(() => fetchProducts())
 
               <div class="flex items-center justify-end gap-2 pt-1">
                 <button type="button" @click="closeModal" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors">Cancelar</button>
-                <button type="submit" :disabled="isSaving || isUploading" class="inline-flex items-center gap-1.5 h-9 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-40">
+                <button type="submit" :disabled="isSaving || isUploading" class="inline-flex items-center gap-1.5 h-9 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-40">
                   <Loader2 v-if="isSaving" class="w-3.5 h-3.5 animate-spin" />
                   {{ isSaving ? 'Salvando...' : (isEditing ? 'Salvar' : 'Cadastrar') }}
                 </button>
@@ -586,17 +586,17 @@ onMounted(() => fetchProducts())
             <textarea
               v-model="bulkText"
               placeholder="Cole a lista de produtos aqui..."
-              class="flex-1 min-h-40 max-h-[40vh] w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 p-3 focus:outline-none focus:border-emerald-500/50 transition-all resize-none font-mono leading-relaxed"
+              class="flex-1 min-h-40 max-h-[40vh] w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 p-3 focus:outline-none focus:border-blue-500/50 transition-all resize-none font-mono leading-relaxed"
             ></textarea>
 
             <div class="flex items-center justify-between mt-3">
-              <span v-if="bulkParsedProducts.length > 0" class="text-xs font-medium px-2 py-0.5 rounded-md" :class="bulkParsedProducts.length > 200 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'">
+              <span v-if="bulkParsedProducts.length > 0" class="text-xs font-medium px-2 py-0.5 rounded-md" :class="bulkParsedProducts.length > 200 ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400'">
                 {{ bulkParsedProducts.length }} produtos
               </span>
               <div v-else></div>
               <div class="flex items-center gap-2">
                 <button @click="closeBulkModal" class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-900 rounded-lg transition-colors">Cancelar</button>
-                <button @click="saveBulkProducts" :disabled="bulkSaving || bulkParsedProducts.length === 0 || bulkParsedProducts.length > 200" class="inline-flex items-center gap-1.5 h-8 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-40">
+                <button @click="saveBulkProducts" :disabled="bulkSaving || bulkParsedProducts.length === 0 || bulkParsedProducts.length > 200" class="inline-flex items-center gap-1.5 h-8 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-40">
                   <Loader2 v-if="bulkSaving" class="w-3.5 h-3.5 animate-spin" />
                   <ClipboardPaste v-else class="w-3.5 h-3.5" />
                   {{ bulkSaving ? 'Cadastrando...' : 'Cadastrar todos' }}

@@ -209,7 +209,7 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
               <span class="font-medium text-sm truncate block text-gray-800">{{ item.name }}</span>
               <div class="flex items-center gap-2 mt-1 text-[10px]">
                 <span class="text-gray-400">{{ item.category }}</span>
-                <span :class="item.is_active ? 'text-emerald-600' : 'text-gray-400'">{{ item.is_active ? 'Ativo' : 'Inativo' }}</span>
+                <span :class="item.is_active ? 'text-blue-600' : 'text-gray-400'">{{ item.is_active ? 'Ativo' : 'Inativo' }}</span>
               </div>
               <div class="mt-1 truncate text-[10px] text-blue-600" :title="cardTemplateFormatSummary(item)">
                 {{ cardTemplateFormatSummary(item) }}
@@ -284,11 +284,11 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
             <button :aria-expanded="openToolbarMenu === 'elements'" @click="openToolbarMenu = openToolbarMenu === 'elements' ? null : 'elements'" class="px-3 py-1.5 rounded-md text-xs bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100">+ Elemento</button>
             <div v-if="openToolbarMenu === 'elements'" class="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-1.5 z-50 w-40">
               <button @click="addElement('text')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-blue-500 font-bold mr-1.5">T</span> Nome</button>
-              <button @click="addElement('image')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-emerald-500 font-bold mr-1.5">◻</span> Imagem</button>
+              <button @click="addElement('image')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-blue-500 font-bold mr-1.5">◻</span> Imagem</button>
               <button @click="addElement('price')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-red-500 font-bold mr-1.5">$</span> Preco</button>
               <button @click="addElement('badge')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-amber-500 font-bold mr-1.5">★</span> Selo</button>
-              <button @click="addElement('unit')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-violet-500 font-bold mr-1.5">g</span> Unidade</button>
-              <button @click="addElement('observation')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-indigo-500 font-bold mr-1.5">…</span> Obs</button>
+              <button @click="addElement('unit')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-sky-500 font-bold mr-1.5">g</span> Unidade</button>
+              <button @click="addElement('observation')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-blue-500 font-bold mr-1.5">…</span> Obs</button>
               <button @click="addElement('shape')" class="w-full text-left px-3 py-1.5 rounded text-xs hover:bg-gray-50"><span class="text-pink-500 font-bold mr-1.5">◆</span> Forma</button>
             </div>
           </div>

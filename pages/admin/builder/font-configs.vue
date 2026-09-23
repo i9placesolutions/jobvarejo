@@ -225,7 +225,7 @@ onMounted(() => {
                 <span
                   class="inline-flex items-center rounded-full px-2 py-0.5 text-xs"
                   :class="font.is_active
-                    ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                    ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                     : 'bg-[color:var(--jv-sky)] text-[color:var(--jv-muted)] border border-[color:var(--jv-line)]'"
                 >
                   {{ font.is_active ? 'Ativo' : 'Inativo' }}
@@ -306,7 +306,7 @@ onMounted(() => {
                 v-model="form.name"
                 type="text"
                 required
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 placeholder="Ex: Roboto Bold"
               />
             </div>
@@ -315,7 +315,7 @@ onMounted(() => {
               <input
                 v-model="form.family"
                 type="text"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 placeholder="Ex: Roboto"
               />
             </div>
@@ -324,7 +324,7 @@ onMounted(() => {
               <input
                 v-model="form.weight"
                 type="text"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 placeholder="Ex: 400, 700"
               />
             </div>
@@ -333,7 +333,7 @@ onMounted(() => {
               <input
                 v-model="form.style"
                 type="text"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 placeholder="Ex: normal, italic"
               />
             </div>
@@ -342,7 +342,7 @@ onMounted(() => {
               <input
                 v-model="form.google_url"
                 type="text"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 placeholder="https://fonts.googleapis.com/css2?family=Roboto:wght@700"
               />
             </div>
@@ -351,14 +351,14 @@ onMounted(() => {
               <input
                 v-model.number="form.sort_order"
                 type="number"
-                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                class="w-full rounded-lg border border-[color:var(--jv-line)] bg-[#f3f8fd] px-3 py-2 text-sm text-[color:var(--jv-navy)] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               />
             </div>
           </div>
 
           <div>
             <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-              <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-emerald-500 focus:ring-emerald-500/50" />
+              <input v-model="form.is_active" type="checkbox" class="rounded border-zinc-600 bg-[color:var(--jv-sky)] text-blue-500 focus:ring-blue-500/50" />
               Ativo
             </label>
           </div>

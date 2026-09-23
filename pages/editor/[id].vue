@@ -554,8 +554,9 @@ const openPageHistory = () => {
   <ClientOnly>
   <div class="h-screen h-dvh flex flex-col bg-[#0f0f0f] overflow-hidden">
     <!-- Project Name Header -->
-    <div :class="['border-b border-white/5 flex items-center justify-between px-3 bg-[#1e1e1e] shrink-0', isMobile ? 'min-h-[calc(40px+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]' : 'h-8']">
+    <div :class="['border-b border-blue-300/20 flex items-center justify-between px-3 bg-[#173d70] shrink-0', isMobile ? 'min-h-[calc(40px+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]' : 'h-8']">
       <div class="flex items-center gap-2 min-w-0">
+        <WorkspaceMenuButton />
         <button
           @click="navigateTo(editorExitPath)"
           class="p-1 hover:bg-white/5 rounded transition-colors text-zinc-400 hover:text-white shrink-0"
