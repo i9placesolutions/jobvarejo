@@ -1,4 +1,5 @@
 import type {VideoDocument} from './model'
+import {formatOfferDate,formatOfferDateInterval} from '../../utils/offerValidity'
 const months=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
 function dateParts(value:string){
  const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
@@ -14,8 +15,17 @@ function rangeText(start:VideoDate,end:VideoDate){
  const first=start.year!==end.year?full(start):start.month!==end.month?`${start.day} de ${months[start.month-1]}`:String(start.day)
  return `Ofertas válidas ${first} a ${full(end)}`
 }
-export function videoValidityText(doc:Pick<VideoDocument,'validity'|'validityRange'>):string{
+export function videoValidityText(doc:Pick<VideoDocument,'validity'|'validityRange'|'validityMode'|'validityDateFormat'>):string{
+ if(doc.validityMode==='none')return ''
  const start=dateParts(doc.validityRange?.start||''),end=dateParts(doc.validityRange?.end||'')
+ if(doc.validityMode==='single_day'||doc.validityMode==='date_range'){
+  if(!doc.validityDateFormat||!start)return ''
+  const first=formatOfferDate(doc.validityRange?.start,doc.validityDateFormat)
+  if(doc.validityMode==='single_day')return `Ofertas válidas em ${first}`
+  if(!end)return ''
+  const last=formatOfferDate(doc.validityRange?.end,doc.validityDateFormat)
+  return doc.validityDateFormat==='long'?`Ofertas válidas de ${formatOfferDateInterval(first,last)}`:`Ofertas válidas de ${first} a ${last}`
+ }
  if(start&&end)return rangeText(start,end)
  const text=doc.validity.trim().replace(/\s+/g,' ').replace(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\b/g,(original,day,month,year)=>{
   if(!year)return Number(day)>=1&&Number(day)<=31&&Number(month)>=1&&Number(month)<=12?`${Number(day)} de ${months[Number(month)-1]}`:original

@@ -21,6 +21,7 @@ const emit = defineEmits<{
 }>()
 
 const dateFormat = ref<OfferDateFormat>(normalizeOfferDateFormat(props.dateFormat))
+const dateFormatSelected = ref(false)
 const startDate = ref(String(props.startDate || ''))
 const endDate = ref(String(props.endDate || ''))
 const mode = ref<OfferValidityMode>(normalizeOfferValidityMode(
@@ -31,6 +32,7 @@ const errorMessage = ref('')
 
 const validityPreview = computed(() => {
   if (dateFormat.value === 'hidden') return 'Nenhuma validade será exibida no encarte.'
+  if (mode.value !== 'while_stocks' && !dateFormatSelected.value) return 'Escolha numérico ou por extenso para ver o texto final.'
   const start = String(startDate.value || '').trim()
   const end = String(endDate.value || '').trim()
   if (mode.value === 'single_day' && !start && !end) {
@@ -61,7 +63,7 @@ watch(() => props.whileStocks, value => {
 
 const selectMode = (value: unknown) => {
   mode.value = normalizeOfferValidityMode(value)
-  if (dateFormat.value === 'hidden') dateFormat.value = 'numeric'
+  if (dateFormat.value === 'hidden') { dateFormat.value = 'numeric'; dateFormatSelected.value = false }
   // As três opções comerciais deste fluxo sempre limitam a oferta pelo estoque.
   whileStocks.value = true
   errorMessage.value = ''
@@ -79,7 +81,13 @@ const confirm = () => {
   errorMessage.value = ''
   whileStocks.value = true
   if (dateFormat.value === 'hidden') {
-    emit('confirm', { startDate: startDate.value, endDate: endDate.value, mode: mode.value, whileStocks: false, dateFormat: 'hidden', show: false })
+    startDate.value = ''
+    endDate.value = ''
+    emit('confirm', { startDate: '', endDate: '', mode: 'while_stocks', whileStocks: false, dateFormat: 'hidden', show: false })
+    return
+  }
+  if (mode.value !== 'while_stocks' && !dateFormatSelected.value) {
+    errorMessage.value = 'Escolha como a data deve aparecer: numérica ou por extenso.'
     return
   }
   if (mode.value === 'single_day') {
@@ -158,41 +166,40 @@ const confirm = () => {
         <button
           type="button"
           role="radio"
-          :aria-checked="dateFormat !== 'hidden' && mode === 'while_stocks'"
-          :class="['offer-validity-prompt__option', dateFormat !== 'hidden' && mode === 'while_stocks' ? 'offer-validity-prompt__option--active' : '']"
-          @click="selectMode('while_stocks')"
-        >
-          <span class="offer-validity-prompt__option-radio" aria-hidden="true"></span>
-          <span class="offer-validity-prompt__option-copy">
-            <strong>Sem data</strong>
-            <small>Até acabar o estoque</small>
-          </span>
-        </button>
-        <button
-          type="button"
-          role="radio"
           :aria-checked="dateFormat === 'hidden'"
           :class="['offer-validity-prompt__option', dateFormat === 'hidden' ? 'offer-validity-prompt__option--active' : '']"
           @click="dateFormat = 'hidden'; errorMessage = ''"
         >
           <span class="offer-validity-prompt__option-radio" aria-hidden="true"></span>
           <span class="offer-validity-prompt__option-copy">
-            <strong>Não exibir</strong>
-            <small>Encarte sem validade visível</small>
+            <strong>Sem data</strong>
+            <small>Não mostrar validade no encarte</small>
+          </span>
+        </button>
+        <button
+          type="button"
+          role="radio"
+          :aria-checked="dateFormat !== 'hidden' && mode === 'while_stocks'"
+          :class="['offer-validity-prompt__option', dateFormat !== 'hidden' && mode === 'while_stocks' ? 'offer-validity-prompt__option--active' : '']"
+          @click="selectMode('while_stocks')"
+        >
+          <span class="offer-validity-prompt__option-radio" aria-hidden="true"></span>
+          <span class="offer-validity-prompt__option-copy">
+            <strong>Enquanto houver estoque</strong>
+            <small>Mostrar validade sem datas</small>
           </span>
         </button>
       </div>
       <div v-if="dateFormat !== 'hidden'">
         <p class="offer-validity-prompt__stock-note">As ofertas são limitadas à disponibilidade de estoque.</p>
 
-      <label v-if="mode !== 'while_stocks'" class="offer-validity-prompt__format">
-        <span>Como exibir a validade</span>
-        <select v-model="dateFormat" aria-label="Formato da validade" class="offer-validity-prompt__select">
-          <option value="numeric">07/09/2026 — numérica</option>
-          <option value="long">sete de setembro — por extenso</option>
-
-        </select>
-      </label>
+      <fieldset v-if="mode !== 'while_stocks'" class="offer-validity-prompt__format">
+        <legend>Como exibir a data? <span>Obrigatório</span></legend>
+        <div class="offer-validity-prompt__format-options">
+          <button type="button" :class="{'is-selected':dateFormatSelected && dateFormat === 'numeric'}" :aria-pressed="dateFormatSelected && dateFormat === 'numeric'" @click="dateFormat = 'numeric'; dateFormatSelected = true; errorMessage = ''"><strong>07/09/2026</strong><small>Numérico</small></button>
+          <button type="button" :class="{'is-selected':dateFormatSelected && dateFormat === 'long'}" :aria-pressed="dateFormatSelected && dateFormat === 'long'" @click="dateFormat = 'long'; dateFormatSelected = true; errorMessage = ''"><strong>sete de setembro</strong><small>Por extenso</small></button>
+        </div>
+      </fieldset>
         <div v-if="mode === 'single_day'" class="offer-validity-prompt__dates">
           <label>
             <span>Data da oferta</span>
@@ -511,7 +518,15 @@ const confirm = () => {
   transform: translateY(1px);
 }
 
-.offer-validity-prompt__format { display:grid; gap:7px; margin-top:18px; color:#475569; font-size:12px; font-weight:700; }
+.offer-validity-prompt__format { min-width:0; padding:0; border:0; margin:18px 0 0; color:#475569; font-size:12px; font-weight:700; }
+.offer-validity-prompt__format legend { padding:0; margin-bottom:9px; }
+.offer-validity-prompt__format legend span { margin-left:6px; color:#2160b4; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+.offer-validity-prompt__format-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.offer-validity-prompt__format-options button { display:grid; gap:4px; min-height:58px; padding:10px 12px; border:1px solid #dbe2ed; border-radius:10px; background:#f8fafc; color:#243047; text-align:left; cursor:pointer; }
+.offer-validity-prompt__format-options button strong { font-size:12px; line-height:1.2; }
+.offer-validity-prompt__format-options button small { color:#60758f; font-size:11px; }
+.offer-validity-prompt__format-options button.is-selected { border-color:#2160b4; background:#eaf3ff; box-shadow:0 0 0 1px #2160b4; }
+.offer-validity-prompt__format-options button:focus-visible { outline:3px solid #b7d3ef; outline-offset:2px; }
 .offer-validity-prompt__select { width:100%; min-height:44px; padding:10px 12px; border:1px solid #dbe2ed; border-radius:10px; background:#f8fafc; color:#243047; color-scheme:light; font:inherit; font-size:14px; font-weight:500; }
 .offer-validity-prompt__select:focus-visible { outline:3px solid #ddd6fe; border-color:#2160b4; }
 .offer-validity-prompt__confirm { display:flex; align-items:center; justify-content:center; gap:12px; }

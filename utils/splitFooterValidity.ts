@@ -6,6 +6,7 @@ export const isSplitFooterValidity = (object: any): boolean =>
   (object?.name === 'dynamic-validity' && object?.quickDataField === 'validity')
 
 export const splitFooterValidityText = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; layout?: string; dateFormat?: OfferDateFormat }) => {
+  if (value.dateFormat === 'hidden') return { heading: '', period: '', stock: '' }
   if (value.layout === 'reference-ribbon') return referenceValidityCopy(value)
   const parse = (raw?: string) => {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw || ''))

@@ -208,6 +208,7 @@ const validityMode = ref<OfferValidityMode>(normalizeOfferValidityMode(
 ))
 const validityWhileStocks = ref(props.validityWhileStocks !== false)
 const showValidity = ref(props.showValidity !== false)
+const validityFormatRequired = ref(false)
 const offerScope = reactive<OfferValidityScope>(normalizeOfferValidityScope(props.offerScope))
 // Confirmar a validade em cada abertura, depois de carregar os dados do encarte.
 const validityPromptOpen = ref(false)
@@ -483,6 +484,7 @@ const formatDateForSummary = (value: string): string => {
 }
 
 const validitySummary = computed(() => {
+  if (validityFormatRequired.value) return 'Escolha como a data aparecerá no encarte'
   if (!showValidity.value || validityDateFormat.value === 'hidden') return 'Validade oculta no encarte'
   const start = formatOfferDate(validityStartDate.value, validityDateFormat.value)
   const end = formatOfferDate(validityEndDate.value, validityDateFormat.value)
@@ -644,7 +646,33 @@ const selectValidityMode = (value: unknown, commit = false) => {
 }
 
 const handleValidityModeChange = (event: Event) => {
-  selectValidityMode((event.target as HTMLSelectElement)?.value, true)
+  const mode = (event.target as HTMLSelectElement)?.value
+  if (mode === 'none') {
+    validityFormatRequired.value = false
+    showValidity.value = false
+    validityDateFormat.value = 'hidden'
+    validityStartDate.value = ''
+    validityEndDate.value = ''
+    updateValidity()
+    return
+  }
+  selectValidityMode(mode)
+  if (validityMode.value === 'while_stocks') {
+    validityFormatRequired.value = false
+    validityDateFormat.value = 'numeric'
+    showValidity.value = true
+  } else {
+    validityFormatRequired.value = true
+    validityDateFormat.value = 'hidden'
+    showValidity.value = false
+  }
+  updateValidity()
+}
+const selectValidityDateFormat = (format: 'numeric' | 'long') => {
+  validityDateFormat.value = format
+  validityFormatRequired.value = false
+  showValidity.value = true
+  updateValidity()
 }
 
 const updateValidity = () => {
@@ -672,8 +700,11 @@ const updateValidity = () => {
 
 const applyValidityPrompt = (payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean; dateFormat: OfferDateFormat; show: boolean }) => {
   validityDateFormat.value = payload.dateFormat
+  validityFormatRequired.value = false
   if (!payload.show) {
     showValidity.value = false
+    validityStartDate.value = ''
+    validityEndDate.value = ''
     updateValidity()
     validityPromptResolved.value = true
     validityPromptOpen.value = false
@@ -1109,8 +1140,9 @@ const useTemplateModel = (modelId: string) => {
               class="quick-mode-switch"
               :class="showValidity ? 'quick-mode-switch--active' : ''"
               :aria-pressed="showValidity"
+              :disabled="validityFormatRequired"
               aria-label="Mostrar validade no encarte"
-              @click="showValidity = !showValidity; updateValidity()"
+              @click="showValidity = !showValidity; if (showValidity && validityDateFormat === 'hidden') validityDateFormat = 'numeric'; updateValidity()"
             >
               <span></span>
             </button>
@@ -1118,9 +1150,10 @@ const useTemplateModel = (modelId: string) => {
 
           <label class="quick-mode-validity-mode">
             <span>Tipo de validade</span>
-            <select :value="validityMode" @change="handleValidityModeChange">
+            <select :value="validityFormatRequired ? validityMode : (!showValidity || validityDateFormat === 'hidden' ? 'none' : validityMode)" @change="handleValidityModeChange">
               <option value="single_day">Só em um dia</option>
               <option value="date_range">Por um período</option>
+              <option value="none">Sem data · não exibir validade</option>
               <option value="while_stocks">Enquanto houver estoque</option>
             </select>
           </label>
@@ -1141,7 +1174,12 @@ const useTemplateModel = (modelId: string) => {
               <input v-model="validityEndDate" type="date" :min="validityStartDate || undefined" @change="updateValidity" />
             </label>
           </div>
-          <p v-else class="quick-mode-validity-stocks-hint">Sem datas: a oferta vale até o estoque acabar.</p>
+          <fieldset v-if="(showValidity || validityFormatRequired) && validityMode !== 'while_stocks'" class="quick-mode-date-format">
+            <legend>Como a data aparece? <span>Obrigatório</span></legend>
+            <div><button type="button" :class="{active:!validityFormatRequired && validityDateFormat==='numeric'}" :aria-pressed="!validityFormatRequired && validityDateFormat==='numeric'" @click="selectValidityDateFormat('numeric')">24/09/2026 <small>Numérico</small></button><button type="button" :class="{active:!validityFormatRequired && validityDateFormat==='long'}" :aria-pressed="!validityFormatRequired && validityDateFormat==='long'" @click="selectValidityDateFormat('long')">vinte e quatro de setembro <small>Por extenso</small></button></div>
+          </fieldset>
+          <p v-else-if="showValidity && validityDateFormat !== 'hidden'" class="quick-mode-validity-stocks-hint">Sem datas: a oferta vale até o estoque acabar.</p>
+          <p v-else class="quick-mode-validity-stocks-hint">Nenhuma validade aparecerá no encarte.</p>
 
           <div class="quick-mode-offer-scope">
             <label class="quick-mode-offer-scope__mode">
@@ -4063,4 +4101,15 @@ const useTemplateModel = (modelId: string) => {
 .quick-mode-layout-options { margin-bottom: 16px; border: 1px solid #3f3f46; border-radius: 12px; padding: 0 14px; }
 .quick-mode-layout-options summary { padding: 14px 0; color: #f4f4f5; font-size: 13px; font-weight: 600; cursor: pointer; }
 .quick-mode-layout-options > label { margin: 0 0 14px; }
+</style>
+
+<style scoped>
+.quick-mode-date-format{min-width:0;margin:10px 0 12px;padding:0;border:0}
+.quick-mode-date-format legend{padding:0 0 7px;color:rgba(255,255,255,.75);font-size:10px;font-weight:700}
+.quick-mode-date-format legend span{margin-left:5px;color:#a9c5ff;font-size:9px;text-transform:uppercase}
+.quick-mode-date-format>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.quick-mode-date-format button{display:grid;gap:3px;min-width:0;min-height:48px;padding:7px;border:1px solid rgba(255,255,255,.15);border-radius:7px;background:#303133;color:#f6f7fb;text-align:left;font-size:10px;line-height:1.25;overflow-wrap:anywhere}
+.quick-mode-date-format button small{color:#b5bdcc;font-size:9px}
+.quick-mode-date-format button.active{border-color:#8cb6ff;background:#233f70;box-shadow:0 0 0 1px #8cb6ff}
+.quick-mode-date-format button:focus-visible{outline:2px solid #9fc5ff;outline-offset:2px}
 </style>

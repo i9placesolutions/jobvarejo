@@ -30,6 +30,8 @@ export type VideoEffect = typeof VIDEO_EFFECTS[number]['id']
 export interface VideoOffer { alcoholBadgeEnabled?: boolean; copies?: 1|2|3; imageAspectRatio?: number; id: string; name: string; price: string; unit: string; image: string; condition: string }
 export interface VideoScript { id: string; text: string }
 export interface VideoDocument {
+  validityMode?: 'single_day' | 'date_range' | 'none' | 'custom';
+  validityDateFormat?: 'numeric' | 'long';
   appearance?: {textColor?:string;accent?:string;nameColor?:string;priceColor?:string;currencyColor?:string;unitColor?:string;conditionColor?:string;validityColor?:string;contactColor?:string};
   validityRange?: {start:string;end:string};
   layoutEdits?: VideoLayoutEdits;
@@ -47,7 +49,7 @@ import type { VideoLabel } from './labels'
 export interface VideoRenderProps extends Record<string, unknown> { editor?: VideoEditorState; document: VideoDocument; scenes: VideoScene[]; media: Record<string, string>; format: VideoFormat; voiceAudio?: string; music?: string; impact?: string; whoosh?: string; audioBase?: string; fontBase?: string; templateBase?: string; label?: VideoLabel }
 export function newVideoDocument(): VideoDocument {
   return { layoutVersion:2,duplicateProducts:true,priceLabel:'',version: 1, title: 'Meu vídeo de ofertas', theme: 'impact', campaign: 'FECHA MÊS', formats: ['vertical','horizontal'], duration: 30,
-    brand: { logoStyle:'sticker',name: '', logo: '', address: '', whatsapp: '', instagram: '' }, validity: '', offers: [], scripts: [],
+    brand: { logoStyle:'sticker',name: '', logo: '', address: '', whatsapp: '', instagram: '' }, validityMode:'none', validity: '', offers: [], scripts: [],
     voice: { enabled: true, id: 'default', pronunciations: [] }, effects: ['zoom','shake','smoke','embers','glow','rays','pulse'], intensity: 0.85, transition: 'light',
     audio: { music: 'upbeat', musicVolume: 0.23, voiceVolume: 1, effectsVolume: 0.3, sounds: true } }
 }
@@ -65,7 +67,7 @@ function spokenOfferName(offer: VideoOffer): string {
 }
 export function suggestVideoScripts(doc: VideoDocument): VideoScript[] {
   return [ {id:'intro', text:`${doc.campaign} no ${doc.brand.name}!`}, ...doc.offers.map(o=>({id:o.id, text:`${spokenOfferName(o)}, por R$ ${displayPrice(o.price)}${o.unit ? ` ${o.unit}` : ''}.${o.condition ? ` ${o.condition}.` : ''}`})),
-    {id:'outro', text:`Aproveite no ${doc.brand.name}!${doc.validity ? ` ${doc.validity}.` : ''}`} ]
+    {id:'outro', text:`Aproveite no ${doc.brand.name}!${doc.validityMode!=='none'&&doc.validity ? ` ${doc.validity}.` : ''}`} ]
 }
 export function narrationScripts(doc: VideoDocument, text: string): VideoScript[] | null {
   const ids=['intro',...doc.offers.map(o=>o.id),'outro']
@@ -77,7 +79,7 @@ export function videoNarrationText(doc: VideoDocument): string {
   return doc.narrationText ?? doc.scripts.map(script=>script.text).join('\n')
 }
 // Fonte comercial permanece separada do texto editável. O usuário confirma o roteiro após mudanças.
-export function videoSpeechSource(doc: VideoDocument): string { return JSON.stringify({brand:doc.brand.name,campaign:doc.campaign,validity:doc.validity,offers:doc.offers.map(({id,name,price,unit,condition})=>({id,name,price,unit,condition}))}) }
+export function videoSpeechSource(doc: VideoDocument): string { return JSON.stringify({brand:doc.brand.name,campaign:doc.campaign,validity:doc.validityMode==='none'?'':doc.validity,validityMode:doc.validityMode,validityDateFormat:doc.validityDateFormat,validityRange:doc.validityMode==='none'?undefined:doc.validityRange,offers:doc.offers.map(({id,name,price,unit,condition})=>({id,name,price,unit,condition}))}) }
 export function videoAudioIdentity(doc: VideoDocument): string { return JSON.stringify({source:videoSpeechSource(doc),scripts:doc.scripts,voice:doc.voice}) }
 export function estimateSpeechSeconds(text: string): number { return Math.max(1.2, text.trim().split(/\s+/).filter(Boolean).length / 2.35 + .35) }
 export function buildVideoTimeline(doc: VideoDocument, durations?: Record<string, number>): VideoScene[] {
@@ -104,8 +106,11 @@ export function buildVideoTimeline(doc: VideoDocument, durations?: Record<string
 }
 export function validateVideoForGeneration(doc: VideoDocument): string[] {
   const errors: string[]=[]
-  if(doc.validityRange&&(!doc.validityRange.start||!doc.validityRange.end))errors.push('Informe a data inicial e a data final das ofertas.')
-  if(doc.validityRange?.start&&doc.validityRange?.end&&doc.validityRange.end<doc.validityRange.start)errors.push('A data final deve ser igual ou posterior à inicial.')
+  if(doc.validityMode==='single_day'&&!doc.validityRange?.start)errors.push('Informe o dia da oferta.')
+  if(doc.validityMode==='date_range'&&(!doc.validityRange?.start||!doc.validityRange?.end))errors.push('Informe a data inicial e a data final das ofertas.')
+  if((doc.validityMode==='single_day'||doc.validityMode==='date_range')&&!doc.validityDateFormat)errors.push('Escolha se a validade aparece em números ou por extenso.')
+  if(!doc.validityMode&&doc.validityRange&&(!doc.validityRange.start||!doc.validityRange.end))errors.push('Informe a data inicial e a data final das ofertas.')
+  if((doc.validityMode==='date_range'||!doc.validityMode)&&doc.validityRange?.start&&doc.validityRange?.end&&doc.validityRange.end<doc.validityRange.start)errors.push('A data final deve ser igual ou posterior à inicial.')
   if(!doc.brand.name.trim())errors.push('Informe o nome da empresa.')
   if(!doc.offers.length)errors.push('Adicione pelo menos um produto.')
   for(const o of doc.offers){if(!o.name.trim()||parseOfferPrice(o.price)===null)errors.push('Confira o nome e o preço de todos os produtos.');if(!o.image)errors.push(`Adicione a imagem de ${o.name||'cada produto'}.`)}

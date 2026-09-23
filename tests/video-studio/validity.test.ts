@@ -1,8 +1,36 @@
 import {describe,it,expect} from 'vitest'
 import {videoValidityText} from '../../shared/video-studio/validity'
+import {newVideoDocument,suggestVideoScripts,validateVideoForGeneration} from '../../shared/video-studio/model'
+import {videoDocumentSchema} from '../../server/utils/video-studio/schema'
 import {videoFooterLayout} from '../../shared/video-studio/personalization'
 import {FLYER_RECIPES} from '../../shared/video-studio/flyer-recipes'
 describe('validade no rodapé do vídeo',()=>{
+ it('mostra um único dia e oculta totalmente a validade quando sem data',()=>{
+  const doc=newVideoDocument()
+  doc.validityMode='single_day';doc.validityRange={start:'2026-09-24',end:'2026-09-24'}
+  expect(videoValidityText(doc)).toBe('')
+  expect(validateVideoForGeneration(doc)).toContain('Escolha se a validade aparece em números ou por extenso.')
+  doc.validityDateFormat='long'
+  expect(videoValidityText(doc)).toBe('Ofertas válidas em vinte e quatro de setembro')
+  doc.validityDateFormat='numeric'
+  expect(videoValidityText(doc)).toBe('Ofertas válidas em 24/09/2026')
+  doc.validityMode='date_range';doc.validityRange.end='2026-09-25'
+  expect(videoValidityText(doc)).toBe('Ofertas válidas de 24/09/2026 a 25/09/2026')
+  doc.validityDateFormat='long'
+  expect(videoValidityText(doc)).toBe('Ofertas válidas de vinte e quatro a vinte e cinco de setembro')
+  doc.validityMode='none';doc.validity='DE 24/09/2026 A 24/09/2026'
+  expect(videoValidityText(doc)).toBe('')
+  expect(suggestVideoScripts(doc).at(-1)?.text).not.toContain('24/09/2026')
+  expect(validateVideoForGeneration(doc)).not.toContain('Informe o dia da oferta.')
+ })
+ it('preserva modo e formato ao salvar e reabrir um vídeo',()=>{
+  const doc=newVideoDocument()
+  doc.validityMode='date_range';doc.validityDateFormat='long';doc.validityRange={start:'2026-09-24',end:'2026-09-25'}
+  const saved=videoDocumentSchema.parse(JSON.parse(JSON.stringify(doc)))
+  expect(saved.validityMode).toBe('date_range')
+  expect(saved.validityDateFormat).toBe('long')
+  expect(videoValidityText(saved)).toBe('Ofertas válidas de vinte e quatro a vinte e cinco de setembro')
+ })
  it('mostra o intervalo por extenso sem depender do fuso',()=>expect(videoValidityText({validity:'',validityRange:{start:'2026-09-22',end:'2026-09-23'}})).toBe('Ofertas válidas 22 a 23 de setembro de 2026'))
  it('mantém meses distintos e um único dia',()=>{
   expect(videoValidityText({validity:'',validityRange:{start:'2026-09-30',end:'2026-10-01'}})).toBe('Ofertas válidas 30 de setembro a 1 de outubro de 2026')

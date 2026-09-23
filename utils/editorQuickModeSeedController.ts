@@ -71,6 +71,7 @@ export const createEditorQuickModeSeedController = (ctx: EditorQuickModeSeedCont
         quickOfferScope,
         quickSeedAppliedForProjectId,
         quickShowValidity,
+        quickValidityDateFormat,
         quickValidityEndDate,
         quickValidityMode,
         quickValidityStartDate,
@@ -303,7 +304,7 @@ export const createEditorQuickModeSeedController = (ctx: EditorQuickModeSeedCont
                     quickValidityEndDate: String(seed.endDate || ''),
                     quickValidityMode: seed.validityMode || 'while_stocks',
                     quickValidityWhileStocks: seed.validityWhileStocks !== false,
-                    quickValidityDateFormat: 'numeric',
+                    quickValidityDateFormat: quickValidityDateFormat.value,
                     quickOfferScope: seed.offerScope || {}
                 } : {}),
                 ...getDynamicBusinessTextOptions(opts.field || opts.dataField || '')
@@ -796,7 +797,7 @@ export const createEditorQuickModeSeedController = (ctx: EditorQuickModeSeedCont
                     quickValidityEndDate: String(seed.endDate || ''),
                     quickValidityMode: seed.validityMode || 'while_stocks',
                     quickValidityWhileStocks: seed.validityWhileStocks !== false,
-                    quickValidityDateFormat: 'numeric',
+                    quickValidityDateFormat: quickValidityDateFormat.value,
                     quickOfferScope: seed.offerScope || {}
                 } : {}),
                 ...getDynamicBusinessTextOptions(opts.field || opts.dataField || '')
@@ -1388,6 +1389,7 @@ export const createEditorQuickModeSeedController = (ctx: EditorQuickModeSeedCont
                         quickValidityMode: dataField === 'validity'
                             ? normalizeOfferValidityMode(options.validityMode || quickValidityMode.value)
                             : undefined,
+                        quickValidityDateFormat: dataField === 'validity' ? quickValidityDateFormat.value : undefined,
                         quickValidityWhileStocks: dataField === 'validity'
                             ? options.validityWhileStocks !== false
                             : undefined,

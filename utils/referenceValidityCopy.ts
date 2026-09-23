@@ -2,6 +2,7 @@ import { formatOfferDate, formatOfferDateInterval, type OfferDateFormat } from '
 
 /** Duas linhas da faixa inclinada, respeitando o formato escolhido na edição rápida. */
 export const referenceValidityCopy = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; dateFormat?: OfferDateFormat }) => {
+  if (value.dateFormat === 'hidden') return { heading: '', period: '', stock: '' }
   const parse = (raw?: string) => {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw || '')
     if (!match) return null

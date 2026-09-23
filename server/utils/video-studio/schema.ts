@@ -12,6 +12,7 @@ const elementsSchema=z.record(z.string().regex(/^(seal|logo|name|price|validity|
 const scenesSchema=z.record(z.string().regex(/^(intro|outro|[0-9a-f-]{36})$/i),elementsSchema).refine(v=>Object.keys(v).length<=8)
 export const videoDocumentSchema=z.object({
  autoFitVoice:z.boolean().optional(),appearance:z.object({currencyColor:z.string().regex(/^#[0-9a-f]{6}$/i).optional(),nameColor:z.string().regex(/^#[0-9a-f]{6}$/i).optional(),priceColor:z.string().regex(/^#[0-9a-f]{6}$/i).optional(),unitColor:z.string().regex(/^#[0-9a-f]{6}$/i).optional(),conditionColor:z.string().regex(/^#[0-9a-f]{6}$/i).optional(),validityColor:z.string().regex(/^#[0-9a-f]{6}$/i).optional(),contactColor:z.string().regex(/^#[0-9a-f]{6}$/i).optional(),textColor:z.string().regex(/^#[0-9a-f]{6}$/i).optional(),accent:z.string().regex(/^#[0-9a-f]{6}$/i).optional()}).optional(),
+ validityMode:z.enum(['single_day','date_range','none','custom']).optional(),validityDateFormat:z.enum(['numeric','long']).optional(),
  validityRange:z.object({start:dateSchema,end:dateSchema}).optional(),
  layoutEdits:z.object({vertical:scenesSchema.optional(),horizontal:scenesSchema.optional()}).optional(),
  background:z.enum(ids(VIDEO_BACKGROUNDS)).optional(),templateRevision:z.number().int().positive().max(10000).optional(),layoutVersion:z.literal(2).optional(),duplicateProducts:z.boolean().optional(),priceLabel:text(100).optional(),version:z.literal(1),title:text(100,1),theme:z.enum(ids(VIDEO_THEMES)),campaign:text(65,1),

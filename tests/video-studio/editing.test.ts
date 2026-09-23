@@ -39,6 +39,6 @@ describe('Edição de vídeos e importação comercial',()=>{
   const layers=productLayers([690,215,1130,735],false,true,.5,2)
   expect(layers).toHaveLength(2);expect(layers[1]!.box[0]-layers[0]!.box[0]).toBeGreaterThan(400)
  })
- it('não exporta a validade anterior quando falta uma das novas datas',()=>{const doc=newVideoFromTemplate('alerta');doc.validity='20 A 27/09';doc.validityRange={start:'2026-10-01',end:''};expect(validateVideoForGeneration(doc).join(' ')).toMatch(/data inicial e a data final/)})
- it('recusa exportar validade invertida',()=>{const doc=newVideoFromTemplate('alerta');doc.validityRange={start:'2026-09-25',end:'2026-09-20'};expect(validateVideoForGeneration(doc).join(' ')).toMatch(/data final/)})
+ it('não exporta a validade anterior quando falta uma das novas datas',()=>{const doc=newVideoFromTemplate('alerta');doc.validityMode='date_range';doc.validityDateFormat='numeric';doc.validity='20 A 27/09';doc.validityRange={start:'2026-10-01',end:''};expect(validateVideoForGeneration(doc).join(' ')).toMatch(/data inicial e a data final/)})
+ it('recusa exportar validade invertida',()=>{const doc=newVideoFromTemplate('alerta');doc.validityMode='date_range';doc.validityDateFormat='numeric';doc.validityRange={start:'2026-09-25',end:'2026-09-20'};expect(validateVideoForGeneration(doc).join(' ')).toMatch(/data final/)})
 })
