@@ -99,6 +99,13 @@ export function updatePosterLettering(source: ArtComposition, model: CartazistaM
     text(`${id}-unit`,/^(kg|g|l|ml)$/i.test(product.unit||'') ? product.unit!.toUpperCase() : 'CADA', settings.showEach !== false)
     text(`${id}-currency`,'R$',!!settings.showCurrency)
     const main=find(id),fraction=find(`${id}-cents`),brush=find(`${id}-brush`),unit=find(`${id}-unit`)
+    if(main?.richPrice&&brush){
+      text(id,money(value))
+      main.x=brush.x+brush.width*.10;main.width=brush.width*.83
+      main.fontSize=Math.min(main.height*.90,main.width/(integer!.length*.53+.82));main.align='center'
+      if(unit){unit.x=brush.x+brush.width*.69;unit.width=brush.width*.25}
+      return
+    }
     if(main&&fraction&&brush){
       const ratio=integer!.length*.62+.55
       const total=Math.min(brush.width*.94,main.height*ratio)

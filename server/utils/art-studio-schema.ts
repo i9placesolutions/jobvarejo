@@ -17,6 +17,7 @@ const layer = z.object({
   fill: color,
   text: z.string().max(2000).optional(),
   fontFamily: z.enum(ART_FONTS).optional(),
+  richPrice: z.boolean().optional(),
   fontScaleX: finite.min(.4).max(2).optional(),
   lineHeight: finite.min(.7).max(2.5).optional(),
   letterSpacing: finite.min(0).max(60).optional(),

@@ -4,7 +4,7 @@ import AdminWorkspaceShell from '~/components/AdminWorkspaceShell.vue'
 import {defaultTransform,elementTransform,setElementTransform,elementNames,type VideoElementTransform} from '~/shared/video-studio/layout-editing'
 import {VIDEO_BACKGROUNDS} from '~/shared/video-studio/backgrounds'
 import { Store, ShoppingBasket, SlidersHorizontal, ArrowLeft, ArrowRight, Check, ChevronDown, ChevronUp, Clapperboard, Copy, Download, Headphones, ImagePlus, LoaderCircle, Monitor, Music2, Play, Plus, Save, Smartphone, Sparkles, Trash2, Upload, Volume2, X } from 'lucide-vue-next'
-import { VIDEO_THEMES, VIDEO_EFFECTS, VIDEO_FORMATS, newVideoDocument, suggestVideoScripts, videoSpeechSource, videoAudioIdentity, buildVideoTimeline, validateVideoForGeneration, type VideoDocument, type VideoFormat, type VideoRenderProps } from '~/shared/video-studio/model'
+import { VIDEO_THEMES, VIDEO_EFFECTS, VIDEO_FORMATS, newVideoDocument, suggestVideoScripts, narrationScripts, videoNarrationText, videoSpeechSource, videoAudioIdentity, buildVideoTimeline, validateVideoForGeneration, type VideoDocument, type VideoFormat, type VideoRenderProps } from '~/shared/video-studio/model'
 import {isVideoModel} from '~/shared/video-studio/project-kind'
 import {showVideoAlcoholBadge} from '~/shared/video-studio/personalization'
 import {newVideoFromTemplate,applyVideoTemplate} from '~/shared/video-studio/templates'
@@ -46,18 +46,21 @@ function resetScene(){if(doc.value.layoutEdits?.[previewFormat.value])delete doc
 watch(editScene,()=>editElement.value=editScene.value==='outro'?'logo':editScene.value==='intro'?'seal':'product-0')
 
 const projects=ref<any[]>([]),jobs=ref<any[]>([]),assets=ref<any[]>([]),voices=ref<any[]>([]),sources=ref<any[]>([])
-const workerReady=ref(false),musicgpt=ref(false),loading=ref(true),busy=ref(''),saving=ref(false),notice=ref(''),error=ref(''),savedAt=ref('')
+const workerReady=ref(false),musicgpt=ref(false),elevenlabs=ref(false),loading=ref(true),busy=ref(''),saving=ref(false),notice=ref(''),error=ref(''),savedAt=ref('')
 const previewFormat=ref<VideoFormat>('vertical'),advanced=ref(false),pronunciationOpen=ref(false),normalized=ref<any[]>([]),previewError=ref('')
 const showListImport=ref(false)
+const legacyNarrationText=ref<string|null>(null)
 const showImport=ref(false),sourceId=ref(''),sourceOffers=ref<any[]>([]),selectedOffers=ref<number[]>([]),musicPrompt=ref('Trilha instrumental animada para ofertas de supermercado, sem voz')
 let poll:ReturnType<typeof setInterval>|undefined,autosave:ReturnType<typeof setTimeout>|undefined
 const serialize=()=>JSON.stringify({document:doc.value,scriptSource:scriptSource.value})
 const dirty=computed(()=>serialize()!==baseline.value)
 const theme=computed(()=>VIDEO_THEMES.find(t=>t.id===doc.value.theme)!)
-const voiceJob=computed(()=>jobs.value.find(j=>j.kind==='voice'&&j.status==='ready'&&j.result?.audioIdentity===videoAudioIdentity(doc.value)))
-const renderJob=computed(()=>jobs.value.find(j=>j.kind==='render'&&j.status==='ready'&&!dirty.value&&j.revision===revision.value))
+const narrationInvalid=computed(()=>doc.value.narrationText!==undefined&&JSON.stringify(narrationScripts(doc.value,doc.value.narrationText))!==JSON.stringify(doc.value.scripts))
+const voiceJob=computed(()=>narrationInvalid.value?undefined:jobs.value.find(j=>j.kind==='voice'&&j.status==='ready'&&j.result?.provider==='elevenlabs'&&j.result?.audioIdentity===videoAudioIdentity(doc.value)))
+const renderJob=computed(()=>jobs.value.find(j=>j.kind==='render'&&j.status==='ready'&&!dirty.value&&j.revision===revision.value&&(!doc.value.voice.enabled||j.voice_asset_id===voiceJob.value?.result?.fullVoice?.assetId)))
 const activeJobs=computed(()=>jobs.value.filter(j=>['queued','running'].includes(j.status)))
 const scriptChanged=computed(()=>doc.value.voice.enabled&&scriptSource.value!==videoSpeechSource(doc.value))
+const narrationText=computed({get:()=>legacyNarrationText.value??videoNarrationText(doc.value),set:(value:string)=>{legacyNarrationText.value=null;doc.value.narrationText=value;const scripts=narrationScripts(doc.value,value);if(scripts)doc.value.scripts=scripts;scriptSource.value='';normalized.value=[]}})
 const issues=computed(()=>validateVideoForGeneration(doc.value))
 const mediaUrl=(id:string)=>`/api/videos/assets/${id}`
 const readyProjectCoverIds=ref(new Set<string>())
@@ -101,7 +104,7 @@ watch([projectId,view],([id,current])=>{
 const trackedJob=computed(()=>activeJobs.value[0]||jobs.value[0])
 function jobDescription(j:any){if(j.status==='ready')return j.kind==='voice'?'Locução pronta para ouvir na prévia':'Geração concluída';if(j.status==='failed')return j.error||'Não foi possível concluir';if(j.status==='queued')return 'Aguardando início do processamento';if(j.kind==='voice'&&j.total_clips===1)return 'Preparando a locução do seu vídeo';if(j.kind==='voice')return `${j.completed_clips||0} de ${j.total_clips||doc.value.scripts.length} trechos prontos · aguardando o próximo áudio`;return j.kind==='music'?'Aguardando a música ficar pronta':`Renderizando · ${j.progress}%`}
 
-async function refreshHealth(){try{const r=await $fetch<any>('/api/videos/health');workerReady.value=r.ready;musicgpt.value=r.musicgpt}catch{workerReady.value=false}}
+async function refreshHealth(){try{const r=await $fetch<any>('/api/videos/health');workerReady.value=r.ready;musicgpt.value=r.musicgpt;elevenlabs.value=r.elevenlabs}catch{workerReady.value=false}}
 async function refreshAssets(){
  const [images,music]=await Promise.all([$fetch<any>('/api/videos/assets',{query:{kind:'image'}}),$fetch<any>('/api/videos/assets',{query:{kind:'music'}})])
  assets.value=[...images.items,...music.items];musicCursor.value=music.nextCursor||null
@@ -142,6 +145,7 @@ async function loadEditorData(labelId=''){
    $fetch<any>('/api/videos/sources').then(r=>sources.value=r.items)
   ])
   for(const result of results)if(result.status==='rejected')sayError(result.reason)
+  if(voices.value.length&&!voices.value.some((voice:any)=>voice.id===doc.value.voice.id))doc.value.voice.id=voices.value[0].id
  })()
  await Promise.all([editorDataPromise,selectedLabel])
 }
@@ -156,7 +160,7 @@ async function prepareModel(themeId:string,source?:VideoDocument){
  if(autosave)clearTimeout(autosave)
  switchingProject=true
  try{
-  projectId.value='';revision.value=0;jobs.value=[];scriptSource.value='';editingLayout.value=false
+  projectId.value='';revision.value=0;jobs.value=[];scriptSource.value='';legacyNarrationText.value=null;editingLayout.value=false
   const draft=newVideoFromTemplate(themeId)
   if(!accountBrand){const r=await $fetch<any>('/api/videos/brand',{method:'POST'});accountBrand={...r.brand,logoStyle:'sticker'};if(r.warning)notice.value=r.warning}
   draft.brand=JSON.parse(JSON.stringify(accountBrand))
@@ -177,7 +181,7 @@ async function useSelectedTemplate(){await action('Preparando seu vídeo',async(
  try{
   const result=await $fetch<any>('/api/videos/templates/use',{method:'POST',body:{theme:doc.value.theme}})
   const p=result.project
-  doc.value=p.document;projectId.value=p.id;revision.value=p.revision;scriptSource.value=p.script_source||'';jobs.value=[];normalized.value=[]
+  doc.value=p.document;projectId.value=p.id;revision.value=p.revision;scriptSource.value=p.script_source||'';jobs.value=[];normalized.value=[];legacyNarrationText.value=null
   baseline.value=serialize();step.value=0;showModelPreview.value=false;view.value='editor';editingLayout.value=false
   await navigateTo({path:'/videos',query:{project:p.id}},{replace:true})
   await loadEditorData(doc.value.priceLabel);await refreshAssets();await nextTick()
@@ -189,18 +193,20 @@ async function openVideo(id:string){await action('Abrindo vídeo',async()=>{
  const p=await $fetch<any>(`/api/videos/projects/${id}`)
  if(isVideoModel(p)){view.value='library';libraryTab.value='models';await prepareModel(p.document.theme,p.document);await navigateTo('/videos',{replace:true});return}
  switchingProject=true
- try{doc.value=p.document;scriptSource.value=p.script_source;projectId.value=p.id;revision.value=p.revision;baseline.value=serialize();step.value=0;view.value='editor';editingLayout.value=false;void loadEditorData(doc.value.priceLabel);previewFormat.value=doc.value.formats[0]!;normalized.value=[];await navigateTo({path:'/videos',query:{project:p.id}},{replace:true});await refreshJobs();await nextTick()}finally{switchingProject=false}
+ try{doc.value=p.document;scriptSource.value=p.script_source;projectId.value=p.id;revision.value=p.revision;baseline.value=serialize();step.value=0;view.value='editor';editingLayout.value=false;void loadEditorData(doc.value.priceLabel);previewFormat.value=doc.value.formats[0]!;normalized.value=[];legacyNarrationText.value=null;await navigateTo({path:'/videos',query:{project:p.id}},{replace:true});await refreshJobs();await nextTick()}finally{switchingProject=false}
 })}
 async function library(){await action('Salvando',async()=>{await save();await refreshLibrary();view.value='library';libraryTab.value='projects';await navigateTo('/videos',{replace:true})})}
 function selectTheme(id:VideoDocument['theme']){if(id!==doc.value.theme)doc.value.layoutEdits=undefined;applyVideoTemplate(doc.value,id);editScene.value='intro';editingLayout.value=false}
 function toggleFormat(format:VideoFormat){const i=doc.value.formats.indexOf(format);if(i>=0&&doc.value.formats.length>1)doc.value.formats.splice(i,1);else if(i<0)doc.value.formats.push(format);if(!doc.value.formats.includes(previewFormat.value))previewFormat.value=doc.value.formats[0]!}
 function addOffer(){if(doc.value.offers.length<6)doc.value.offers.push({id:crypto.randomUUID(),name:'',price:'',unit:'un',condition:'',image:''})}
-function moveOffer(index:number,delta:number){const next=index+delta;if(next<0||next>=doc.value.offers.length)return;const item=doc.value.offers.splice(index,1)[0]!;doc.value.offers.splice(next,0,item);const map=new Map(doc.value.scripts.map(s=>[s.id,s]));doc.value.scripts=['intro',...doc.value.offers.map(o=>o.id),'outro'].flatMap(id=>map.has(id)?[map.get(id)!]:[])}
+function moveOffer(index:number,delta:number){const next=index+delta;if(next<0||next>=doc.value.offers.length)return;const item=doc.value.offers.splice(index,1)[0]!;doc.value.offers.splice(next,0,item);const map=new Map(doc.value.scripts.map(s=>[s.id,s]));doc.value.scripts=['intro',...doc.value.offers.map(o=>o.id),'outro'].flatMap(id=>map.has(id)?[map.get(id)!]:[]);if(doc.value.narrationText!==undefined)doc.value.narrationText=doc.value.scripts.map(s=>s.text).join('\n')}
+function removeOffer(index:number){const removed=doc.value.offers.splice(index,1)[0];if(!removed)return;doc.value.scripts=doc.value.scripts.filter(s=>s.id!==removed.id);if(doc.value.narrationText!==undefined)doc.value.narrationText=doc.value.scripts.map(s=>s.text).join('\n')}
 async function upload(event:Event,target:string){const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file)return;await action('Enviando arquivo',async()=>{const body=new FormData();body.append('file',file);body.append('kind',target==='music'?'music':'image');const asset=await $fetch<any>('/api/videos/assets',{method:'POST',body});if(target==='logo')doc.value.brand.logo=asset.id;else if(target==='music')doc.value.audio.music=asset.id;else{const offer=doc.value.offers.find(o=>o.id===target);if(offer){offer.image=asset.id;offer.imageAspectRatio=asset.aspectRatio}}await refreshAssets();await save();if(target==='music')notice.value='Música aplicada e salva em Minha biblioteca para seus próximos vídeos.'});input.value=''}
-async function suggestWithAI(){await action('Sugerindo roteiro com IA',async()=>{const source=videoSpeechSource(doc.value);const r=await $fetch<any>('/api/videos/script',{method:'POST',body:doc.value});if(source!==videoSpeechSource(doc.value))throw Error('As ofertas mudaram durante a sugestão. Solicite novamente.');doc.value.scripts=r.scripts;scriptSource.value='';notice.value='Sugestão pronta. Confira o texto antes de gerar o áudio.'})}
-function suggest(){scriptSource.value='';doc.value.scripts=suggestVideoScripts(doc.value);normalized.value=[];notice.value='Texto sugerido. Revise os nomes, preços e condições antes de confirmar.'}
+async function suggestWithAI(){await action('Sugerindo roteiro com IA',async()=>{const source=videoSpeechSource(doc.value);const r=await $fetch<any>('/api/videos/script',{method:'POST',body:doc.value});if(source!==videoSpeechSource(doc.value))throw Error('As ofertas mudaram durante a sugestão. Solicite novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');legacyNarrationText.value=null;scriptSource.value='';notice.value='Roteiro sugerido por IA com números e unidades por extenso. Confira antes de gerar o áudio.'})}
+async function suggest(){await action('Preparando roteiro',async()=>{const source=videoSpeechSource(doc.value),scripts=suggestVideoScripts(doc.value);const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts,pronunciations:doc.value.voice.pronunciations}});if(source!==videoSpeechSource(doc.value))throw Error('As ofertas mudaram durante a sugestão. Solicite novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');legacyNarrationText.value=null;scriptSource.value='';normalized.value=[];notice.value='Texto preparado por extenso. Revise nomes, preços e condições antes de confirmar.'})}
+async function previewLegacyNarration(){if(doc.value.narrationText!==undefined||!doc.value.scripts.length)return;try{const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts:doc.value.scripts,pronunciations:doc.value.voice.pronunciations}});legacyNarrationText.value=r.scripts.map((s:{text:string})=>s.text).join('\n')}catch{legacyNarrationText.value=null}}
 async function normalize(){await action('Preparando a pronúncia',async()=>{const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts:doc.value.scripts,pronunciations:doc.value.voice.pronunciations}});normalized.value=r.scripts})}
-function confirmScript(){scriptSource.value=videoSpeechSource(doc.value);notice.value='Roteiro conferido. Agora você pode gerar a locução.'}
+async function confirmScript(){if(narrationInvalid.value){error.value=`Mantenha ${doc.value.offers.length+2} linhas no campo: abertura, uma por produto e encerramento.`;return}if(doc.value.narrationText===undefined){scriptSource.value=videoSpeechSource(doc.value);notice.value='Roteiro conferido. Agora você pode gerar a locução.';return}await action('Preparando texto da locução',async()=>{const source=videoSpeechSource(doc.value),draft=doc.value.narrationText;const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts:doc.value.scripts,pronunciations:doc.value.voice.pronunciations}});if(source!==videoSpeechSource(doc.value)||draft!==doc.value.narrationText)throw Error('As ofertas ou o texto mudaram durante a preparação. Confira o roteiro novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');scriptSource.value=source;notice.value='Roteiro por extenso conferido. Agora você pode gerar a locução.'})}
 async function generate(kind:'voice'|'render'|'music'){if(kind==='render'){step.value=4;editingLayout.value=false}await action(kind==='voice'?'Solicitando locução':kind==='music'?'Solicitando música':'Preparando exportação',async()=>{await save();await $fetch('/api/videos/jobs',{method:'POST',body:{projectId:projectId.value,revision:revision.value,kind,...(kind==='music'?{musicPrompt:musicPrompt.value}:{})}});await refreshJobs();notice.value=kind==='render'?'Seu vídeo entrou na fila. Você pode acompanhar abaixo.':'Solicitação enviada. A geração de áudio pode levar alguns minutos.'})}
 async function chooseSource(){await action('Lendo ofertas',async()=>{const r=await $fetch<any>('/api/videos/import',{method:'POST',body:{projectId:sourceId.value}});sourceOffers.value=r.items;selectedOffers.value=[];notice.value=r.warning||''})}
 async function importOffers(){await action('Importando produtos',async()=>{const r=await $fetch<any>('/api/videos/import',{method:'POST',body:{projectId:sourceId.value,indices:selectedOffers.value.slice(0,6-doc.value.offers.length)}});doc.value.offers.push(...r.offers);showImport.value=false;notice.value=r.warning||'Produtos importados. Confira preços e unidades.';await refreshAssets();await save()})}
@@ -212,7 +218,7 @@ async function goStep(target:number){
  if(target>step.value){
   if(!doc.value.brand.name.trim()){step.value=0;error.value='Informe o nome da empresa para continuar.';return}
   if(target>1){const productIssues=validateVideoForGeneration({...doc.value,voice:{...doc.value.voice,enabled:false}});if(productIssues.length){step.value=1;error.value=productIssues[0]!;return}}
-  if(target===3&&!doc.value.scripts.length)suggest()
+  if(target===3){const ids=['intro',...doc.value.offers.map(o=>o.id),'outro'];const stale=()=>!!scriptSource.value&&scriptSource.value!==videoSpeechSource(doc.value);const needsSuggestion=ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale();if(needsSuggestion){await suggestWithAI();if(ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale())await suggest();if(ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale())return}await previewLegacyNarration()}
  }
  await action('Salvando',async()=>{await save();step.value=target;editingLayout.value=false;document.querySelector('.vs-editor-title')?.scrollIntoView({behavior:'smooth',block:'start'})})
 }
@@ -238,7 +244,24 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
   <div v-if="error" class="vs-message error" role="alert"><span>{{ error }}</span><button aria-label="Fechar aviso" @click="error=''"><X :size="18"/></button></div>
   <div v-if="notice" class="vs-message" role="status"><span>{{ notice }}</span><button aria-label="Fechar aviso" @click="notice=''"><X :size="18"/></button></div>
   <main v-if="view==='library'" class="vs-library">
-   <section class="vs-hero"><div class="vs-hero-copy"><span class="vs-eyebrow"><Clapperboard :size="14"/> Estúdio de vídeos</span><h1>Sua oferta<br><span>em movimento.</span></h1><p>Crie vídeos para Reels, Stories e TV com as ofertas, a locução e a identidade da sua loja no mesmo fluxo.</p><div class="vs-hero-actions"><button class="vs-button primary large" :disabled="!!busy||loading" @click="createVideo"><Plus :size="20"/> Criar vídeo</button><span class="vs-hero-assurance"><Check :size="15"/> Comece por um modelo pronto</span></div><div class="vs-hero-tags"><span><Smartphone :size="15"/> Reels e Stories</span><span><Monitor :size="15"/> TV da loja</span><span><Volume2 :size="15"/> Locução e música</span></div></div><div class="vs-hero-art" aria-hidden="true"><div class="vs-hero-glow"/><div class="vs-hero-grid"/><article class="vs-art-card"><div class="vs-art-card__top"><span><Clapperboard :size="13"/> Vídeo da campanha</span><b>15s</b></div><div class="vs-art-card__copy"><span>OFERTAS DA SEMANA</span><strong>PREÇO<br>QUE CHAMA</strong></div><div class="vs-art-card__price"><small>A PARTIR DE</small><strong>R$ 9,99</strong></div><div class="vs-art-card__footer"><span><Play :size="13" fill="currentColor"/> Prévia em vídeo</span><span>9:16</span></div></article><div class="vs-hero-render-card"><span class="vs-hero-render-card__play"><Play :size="15" fill="currentColor"/></span><span><small>Pronto para publicar</small><strong>Reels • Stories • TV</strong></span><Check class="vs-hero-render-card__check" :size="17"/></div><span class="vs-floating-tag"><Sparkles :size="15"/> Sua marca, seus produtos.</span></div></section>
+   <section class="vs-hero">
+    <div class="vs-hero-copy">
+     <span class="vs-eyebrow"><Clapperboard :size="14"/> Estúdio de vídeos</span>
+     <h1>Sua oferta<br><span>em movimento.</span></h1>
+     <p>Escolha um modelo, adicione os produtos e preços da sua loja e monte vídeos para Reels, Stories e TV com locução e música.</p>
+     <div class="vs-hero-actions"><button class="vs-button primary large" :disabled="!!busy||loading" @click="createVideo"><Plus :size="20"/> Criar vídeo</button><span class="vs-hero-assurance"><Check :size="15"/> Comece por um modelo pronto</span></div>
+     <div class="vs-hero-tags"><span><Smartphone :size="15"/> Reels e Stories</span><span><Monitor :size="15"/> TV da loja</span><span><Volume2 :size="15"/> Locução e música</span></div>
+    </div>
+    <div class="vs-hero-art" role="img" aria-label="Exemplo ilustrativo de um vídeo de oferta montado no JobVarejo">
+     <div class="vs-studio-demo">
+      <div class="vs-studio-demo__header"><span class="vs-studio-demo__status"><span/> EXEMPLO DE COMPOSIÇÃO</span><span>Alerta de Oferta <Clapperboard :size="14"/></span></div>
+      <div class="vs-studio-demo__body">
+       <div class="vs-studio-demo__reel"><span class="vs-studio-demo__format"><Smartphone :size="12"/> Reels · 9:16</span><div class="vs-studio-demo__scene"><img class="vs-studio-demo__seal" src="/video-studio/templates/alerta-seal.png" alt=""/><img class="vs-studio-demo__product" src="/coins/LEITE%20PO%20INTEGRAL%20ITALAC%20400G.png" alt=""/><span class="vs-studio-demo__price"><small>LEITE EM PÓ 400 G</small><strong>R$ 9,99</strong></span><span class="vs-studio-demo__sample">PREÇO ILUSTRATIVO</span></div></div>
+       <div class="vs-studio-demo__side"><span class="vs-studio-demo__format"><Monitor :size="13"/> TV da loja · 16:9</span><div class="vs-studio-demo__tv"><img class="vs-studio-demo__tv-seal" src="/video-studio/templates/alerta-seal.png" alt=""/><img class="vs-studio-demo__tv-product" src="/coins/LEITE%20PO%20INTEGRAL%20ITALAC%20400G.png" alt=""/><span class="vs-studio-demo__tv-price">R$ 9,99</span></div><div class="vs-studio-demo__track"><span><Volume2 :size="13"/> Cenas e áudio</span><div><i/><i/><i/></div><small>abertura <b>·</b> produto <b>·</b> fechamento</small></div></div>
+      </div>
+     </div>
+    </div>
+   </section>
    <section id="video-catalog">
     <div class="vs-library-tabs" role="tablist" aria-label="Biblioteca de vídeos"><button role="tab" :aria-selected="libraryTab==='models'" :class="{active:libraryTab==='models'}" @click="libraryTab='models'">Modelos prontos <span>{{ VIDEO_THEMES.length }}</span></button><button role="tab" :aria-selected="libraryTab==='projects'" :class="{active:libraryTab==='projects'}" @click="libraryTab='projects'">Meus vídeos <span>{{ personalProjects.length }}</span></button></div>
     <div v-if="libraryTab==='models'" class="vs-catalog">
@@ -277,7 +300,7 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
     </div>
     <div v-if="step===1&&!showListImport" class="vs-step-content"><span class="vs-eyebrow">02 · ESCOLHA AS OFERTAS</span><h2>O que vamos anunciar?</h2><p class="vs-lead">Para 30 segundos, comece com 3 ou 4 produtos. Nomes curtos deixam a locução mais natural.</p><div class="vs-inline-actions"><button class="vs-button primary" :disabled="doc.offers.length>=6" @click="showListImport=true"><Upload :size="16"/> Enviar lista de produtos</button><button class="vs-button secondary" :disabled="doc.offers.length>=6" @click="addOffer"><Plus :size="16"/> Adicionar produto</button><button class="vs-button quiet" :disabled="!sources.length||doc.offers.length>=6" @click="showImport=true"><Copy :size="16"/> Trazer de um encarte</button></div>
      <div v-if="!doc.offers.length" class="vs-mini-empty">Adicione a primeira oferta para ver seu vídeo ganhar forma.</div>
-     <details v-for="(offer,i) in doc.offers" :key="offer.id" name="video-offer-editor" class="vs-offer vs-offer-compact"><summary class="vs-offer-summary"><img v-if="offer.image" :src="mediaUrl(offer.image)" alt=""/><ImagePlus v-else :size="24"/><span><strong>{{ offer.name || `Oferta ${i+1}` }}</strong><small>R$ {{ offer.price || '—' }}<template v-if="offer.unit"> · {{ offer.unit }}</template></small></span><ChevronDown :size="16"/></summary><div class="vs-offer-details"><div class="vs-offer-top"><strong>Oferta {{ i+1 }}</strong><div><button :disabled="i===0" aria-label="Mover produto para cima" @click="moveOffer(i,-1)"><ChevronUp :size="17"/></button><button :disabled="i===doc.offers.length-1" aria-label="Mover produto para baixo" @click="moveOffer(i,1)"><ChevronDown :size="17"/></button><button aria-label="Retirar produto deste vídeo" @click="doc.offers.splice(i,1)"><Trash2 :size="16"/></button></div></div><div class="vs-offer-body"><label class="vs-product-upload"><img v-if="offer.image" :src="mediaUrl(offer.image)" :alt="offer.name||'Imagem do produto'"/><ImagePlus v-else :size="27"/><span>{{ offer.image?'Trocar foto':'Adicionar foto' }}</span><input type="file" accept="image/png,image/jpeg,image/webp" @change="upload($event,offer.id)"/></label><div><label class="vs-field">Produto<input v-model="offer.name" maxlength="120" placeholder="Ex.: Café Tesouro 500 g"/></label><div class="vs-two"><label class="vs-field">Preço (R$)<input v-model="offer.price" inputmode="decimal" maxlength="20" placeholder="19,90"/></label><label class="vs-field">Unidade<input v-model="offer.unit" maxlength="30" placeholder="un, kg, pacote…"/></label></div></div></div><label class="vs-field">Imagens deste produto<select v-model="offer.copies" @change="previewOffer(offer.id)"><option :value="undefined">Automático · conforme a imagem</option><option :value="1">Uma imagem</option><option :value="2">Duas imagens</option><option :value="3">Três imagens</option></select></label><label class="vs-field">Limite ou condição da oferta<input v-model="offer.condition" maxlength="140" placeholder="Ex.: Limite de 3 unidades por cliente"/></label><label class="vs-toggle"><span><strong>Selo de bebida alcoólica · 18 anos</strong><small>Aparece na cena deste produto, na prévia e na exportação.</small></span><input type="checkbox" :checked="showVideoAlcoholBadge(offer)" @change="offer.alcoholBadgeEnabled=($event.target as HTMLInputElement).checked"/></label></div></details>
+     <details v-for="(offer,i) in doc.offers" :key="offer.id" name="video-offer-editor" class="vs-offer vs-offer-compact"><summary class="vs-offer-summary"><img v-if="offer.image" :src="mediaUrl(offer.image)" alt=""/><ImagePlus v-else :size="24"/><span><strong>{{ offer.name || `Oferta ${i+1}` }}</strong><small>R$ {{ offer.price || '—' }}<template v-if="offer.unit"> · {{ offer.unit }}</template></small></span><ChevronDown :size="16"/></summary><div class="vs-offer-details"><div class="vs-offer-top"><strong>Oferta {{ i+1 }}</strong><div><button :disabled="i===0" aria-label="Mover produto para cima" @click="moveOffer(i,-1)"><ChevronUp :size="17"/></button><button :disabled="i===doc.offers.length-1" aria-label="Mover produto para baixo" @click="moveOffer(i,1)"><ChevronDown :size="17"/></button><button aria-label="Retirar produto deste vídeo" @click="removeOffer(i)"><Trash2 :size="16"/></button></div></div><div class="vs-offer-body"><label class="vs-product-upload"><img v-if="offer.image" :src="mediaUrl(offer.image)" :alt="offer.name||'Imagem do produto'"/><ImagePlus v-else :size="27"/><span>{{ offer.image?'Trocar foto':'Adicionar foto' }}</span><input type="file" accept="image/png,image/jpeg,image/webp" @change="upload($event,offer.id)"/></label><div><label class="vs-field">Produto<input v-model="offer.name" maxlength="120" placeholder="Ex.: Café Tesouro 500 g"/></label><div class="vs-two"><label class="vs-field">Preço (R$)<input v-model="offer.price" inputmode="decimal" maxlength="20" placeholder="19,90"/></label><label class="vs-field">Unidade<input v-model="offer.unit" maxlength="30" placeholder="un, kg, pacote…"/></label></div></div></div><label class="vs-field">Imagens deste produto<select v-model="offer.copies" @change="previewOffer(offer.id)"><option :value="undefined">Automático · conforme a imagem</option><option :value="1">Uma imagem</option><option :value="2">Duas imagens</option><option :value="3">Três imagens</option></select></label><label class="vs-field">Limite ou condição da oferta<input v-model="offer.condition" maxlength="140" placeholder="Ex.: Limite de 3 unidades por cliente"/></label><label class="vs-toggle"><span><strong>Selo de bebida alcoólica · 18 anos</strong><small>Aparece na cena deste produto, na prévia e na exportação.</small></span><input type="checkbox" :checked="showVideoAlcoholBadge(offer)" @change="offer.alcoholBadgeEnabled=($event.target as HTMLInputElement).checked"/></label></div></details>
      <div class="vs-two"><label class="vs-field">Data inicial<input type="date" :value="doc.validityRange?.start||''" @change="changeDate('start',$event)"/></label><label class="vs-field">Data final<input type="date" :value="doc.validityRange?.end||''" :min="doc.validityRange?.start" @change="changeDate('end',$event)"/></label></div><label class="vs-field">Validade das ofertas<input v-model="doc.validity" @input="doc.validityRange=undefined" maxlength="160" placeholder="Ex.: Ofertas válidas de 26 a 29/09"/><small>A validade também aparece no vídeo. Confira antes de publicar.</small></label>
     </div>
     <div v-if="step===2" class="vs-step-content"><span class="vs-eyebrow">03 · PERSONALIZE COM UM CLIQUE</span><h2>Seu vídeo, do seu jeito.</h2><p class="vs-lead">Escolha as combinações e confira na prévia. Você pode voltar às opções do modelo a qualquer momento.</p><VideoStudioPersonalize v-model="doc"/>
@@ -286,11 +309,11 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
      <label class="vs-toggle"><span><strong>Sons na abertura e transições</strong><small>Impactos na logo, no selo e nas mudanças de oferta.</small></span><input v-model="doc.audio.sounds" type="checkbox"/></label><details class="vs-details"><summary>Ajustar volumes <Volume2 :size="16"/></summary><label v-for="item in ([{key:'musicVolume',name:'Música'},{key:'voiceVolume',name:'Locutor'},{key:'effectsVolume',name:'Efeitos sonoros'}] as const)" :key="item.key" class="vs-field">{{ item.name }} · {{ Math.round(doc.audio[item.key]*100) }}%<input v-model.number="doc.audio[item.key]" type="range" min="0" max="1" step="0.05"/></label></details>
     </div>
     <div v-if="step===3" class="vs-step-content"><span class="vs-eyebrow">04 · DÊ VOZ ÀS OFERTAS</span><h2>Do seu jeito. Com a sua voz.</h2><p class="vs-lead">Revise o texto, escolha o locutor e ouça antes de finalizar.</p><label class="vs-toggle"><span><strong>Usar locução</strong><small>O locutor anuncia sua loja e os produtos.</small></span><input v-model="doc.voice.enabled" type="checkbox"/></label>
-     <template v-if="doc.voice.enabled"><label class="vs-field">Locutor<select v-model="doc.voice.id"><option v-if="!voices.length" value="default">Nenhum locutor disponível nesta conta</option><option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }}</option></select></label><div v-if="!voices.length" class="vs-inline-note">Ainda não há uma voz disponível para sua conta. Você pode preparar o roteiro ou criar o vídeo sem locução.</div><button class="vs-button primary" :disabled="!!busy||!doc.offers.length" @click="suggestWithAI"><Sparkles :size="16"/> Sugerir roteiro com IA</button><button class="vs-button quiet" :disabled="!!busy" @click="suggest"><Sparkles :size="16"/> Usar texto básico das ofertas</button><p v-if="doc.scripts.length" class="vs-hint">Uma nova sugestão substitui o texto abaixo. Edite cada trecho como preferir.</p>
-      <div v-for="script in doc.scripts" :key="script.id" class="vs-script"><label class="vs-field">{{ script.id==='intro'?'Abertura':script.id==='outro'?'Encerramento':doc.offers.find(o=>o.id===script.id)?.name||'Oferta' }}<textarea v-model="script.text" rows="3" maxlength="700"/></label></div>
+     <template v-if="doc.voice.enabled"><label class="vs-field">Locutor<select v-model="doc.voice.id"><option v-if="!voices.length" value="default">Nenhum locutor disponível nesta conta</option><option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }}</option></select></label><div v-if="!voices.length" class="vs-inline-note">Ainda não há uma voz disponível para sua conta. Você pode preparar o roteiro ou criar o vídeo sem locução.</div><button class="vs-button primary" :disabled="!!busy||!doc.offers.length" @click="suggestWithAI"><Sparkles :size="16"/> Gerar novo roteiro com IA</button><button class="vs-button quiet" :disabled="!!busy" @click="suggest"><Sparkles :size="16"/> Usar texto básico das ofertas</button><p v-if="doc.scripts.length" class="vs-hint">O roteiro é gerado automaticamente ao chegar nesta etapa. Uma nova sugestão substitui o texto abaixo.</p>
+     <label v-if="doc.scripts.length||doc.narrationText" class="vs-field vs-narration-field">Texto completo da locução<textarea v-model="narrationText" :rows="Math.max(8,doc.offers.length+3)" maxlength="5600" placeholder="Abertura, ofertas e encerramento em um só roteiro"/><small>Uma linha para a abertura, uma para cada produto na ordem do vídeo e uma para o encerramento. Preços, medidas, unidades e datas são preparados por extenso.</small></label>
       <details class="vs-details"><summary>Ajustar a pronúncia de um nome <ChevronDown :size="16"/></summary><p class="vs-hint">Exemplo: nome “I9” → falar “i nove”. O nome escrito no vídeo não muda.</p><div v-for="(p,i) in doc.voice.pronunciations" :key="i" class="vs-pronunciation"><input v-model="p.from" aria-label="Nome escrito" placeholder="Como se escreve" maxlength="80"/><input v-model="p.to" aria-label="Pronúncia desejada" placeholder="Como se fala" maxlength="120"/><button aria-label="Remover pronúncia" @click="doc.voice.pronunciations.splice(i,1)"><X :size="16"/></button></div><button class="vs-button quiet" :disabled="doc.voice.pronunciations.length>=30" @click="doc.voice.pronunciations.push({from:'',to:''})"><Plus :size="15"/> Adicionar pronúncia</button></details>
       <button class="vs-button quiet" :disabled="!!busy||!doc.scripts.length" @click="normalize">Ver como o locutor vai ler</button><div v-if="normalized.length" class="vs-normalized"><p v-for="s in normalized" :key="s.id">{{ s.text }}</p></div>
-      <div v-if="scriptChanged" class="vs-inline-note">Confira se o texto corresponde aos produtos, preços e validade atuais.</div><label class="vs-toggle"><span><strong>Ajustar a locução para caber em {{ doc.duration }} segundos</strong><small>Acelera somente quando necessário, até 2×, sem cortar o texto.</small></span><input type="checkbox" :checked="doc.autoFitVoice!==false" @change="doc.autoFitVoice=($event.target as HTMLInputElement).checked"/></label><p v-if="voicePlaybackRate>1" class="vs-hint">{{ voiceJob?'Velocidade aplicada':'Velocidade estimada' }}: {{ voicePlaybackRate.toFixed(2).replace('.',',') }}× · vídeo com até {{ doc.duration }} segundos.</p><button class="vs-button secondary" :disabled="!doc.scripts.length" @click="confirmScript"><Check :size="16"/> Conferi o texto e os preços</button><div class="vs-voice-generation"><button class="vs-button primary" :disabled="!!busy||!workerReady||!musicgpt||!voices.length||scriptChanged||!!activeJobs.find(j=>j.kind==='voice')" @click="generate('voice')"><Headphones :size="18"/> {{ voiceJob?'Gerar / recuperar locução':'Gerar locução' }}</button><small>Confira o roteiro e gere a locução do seu vídeo.</small></div>
+      <div v-if="scriptChanged" class="vs-inline-note">Confira se o texto corresponde aos produtos, preços e validade atuais.</div><label class="vs-toggle"><span><strong>Ajustar a locução para caber em {{ doc.duration }} segundos</strong><small>Acelera somente quando necessário, até 2×, sem cortar o texto.</small></span><input type="checkbox" :checked="doc.autoFitVoice!==false" @change="doc.autoFitVoice=($event.target as HTMLInputElement).checked"/></label><p v-if="voicePlaybackRate>1" class="vs-hint">{{ voiceJob?'Velocidade aplicada':'Velocidade estimada' }}: {{ voicePlaybackRate.toFixed(2).replace('.',',') }}× · vídeo com até {{ doc.duration }} segundos.</p><button class="vs-button secondary" :disabled="!doc.scripts.length" @click="confirmScript"><Check :size="16"/> Conferi o texto e os preços</button><div class="vs-voice-generation"><button class="vs-button primary" :disabled="!!busy||!workerReady||!elevenlabs||!voices.length||scriptChanged||narrationInvalid||!!activeJobs.find(j=>j.kind==='voice')" @click="generate('voice')"><Headphones :size="18"/> {{ voiceJob?'Gerar / recuperar locução':'Gerar locução' }}</button><small>Locução ElevenLabs com a voz autorizada e interpretação animada para varejo.</small></div>
       <div v-if="voiceJob?.result?.fullVoice" class="vs-clips"><strong>Locução completa</strong><audio controls preload="none" :src="mediaUrl(voiceJob.result.fullVoice.assetId)"/></div><div v-if="voiceJob&&!voiceJob.result.fullVoice" class="vs-clips"><div v-for="(clip,id) in voiceJob.result.clips" :key="id"><strong>{{ String(id)==='intro'?'Abertura':String(id)==='outro'?'Encerramento':doc.offers.find(o=>o.id===String(id))?.name }}</strong><audio controls preload="none" :src="mediaUrl(clip.assetId)"/></div></div>
      </template>
 
@@ -1164,6 +1187,339 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
 .vs-in-shell{min-height:100%;background:transparent}.vs-in-shell .vs-library,.vs-in-shell .vs-editor{width:100%;padding:28px}.vs-shell-toolbar{display:flex;align-items:center;justify-content:space-between;padding:12px 28px;border-bottom:1px solid #dce1eb}.vs-in-shell .vs-workspace{grid-template-columns:minmax(0,1.3fr) minmax(280px,.85fr);gap:20px}.vs-in-shell .vs-step-content{padding:25px}.vs-library-tabs{display:flex;gap:8px;border-bottom:1px solid #dddfea;margin-bottom:30px;padding-bottom:12px}.vs-library-tabs button{display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:12px;font-weight:650;color:#64748b}.vs-library-tabs button.active{background:#5f5aa7;color:white}.vs-library-tabs span{font-size:12px;background:#ffffff25;border-radius:20px;padding:3px 8px}.vs-catalog>.vs-button{margin-top:24px}.vs-model-art{height:240px;background-color:var(--base);background-size:cover;background-position:center;position:relative;display:grid;place-items:center;overflow:hidden;padding:24px}.vs-model-art>img{width:90%;height:170px;object-fit:contain;filter:drop-shadow(0 8px 18px #0004)}.vs-model-art>strong{font-size:32px;color:var(--accent);max-width:80%;text-align:center;line-height:1}.vs-model-play{position:absolute;bottom:14px;right:14px;display:flex;gap:8px;align-items:center;border-radius:25px;background:#17142edb;color:#fff;padding:9px 14px;font-size:12px}.vs-model-modal{width:min(1120px,100%);max-height:94dvh;overflow:auto;background:#f7f8fc;color:#233554;border-radius:24px;padding:28px}.vs-model-modal>header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}.vs-model-modal h2{font-size:25px;font-weight:700}.vs-model-modal-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,1fr);gap:32px;align-items:center}.vs-model-preview{background:#e8e9f2;border-radius:18px;padding:18px}.vs-model-preview.vertical{width:min(320px,100%);margin:auto}.vs-model-description{display:grid;gap:18px;line-height:1.6}.vs-model-description h3{font-size:30px;line-height:1.15;font-weight:700}.vs-model-description p,.vs-model-description li{font-size:14px;color:#60718a}.vs-model-description ol{list-style:decimal;padding-left:22px}.vs-model-description li{padding:5px 0}.vs-model-description small{font-size:12px;color:#60718a}.vs-model-modal .vs-format-switch button{font-size:13px;padding:10px}.vs-app button:focus-visible,.vs-app a:focus-visible{outline:3px solid #9186dd;outline-offset:3px}.vs-render-progress{margin-top:24px;padding:20px;background:#eeedf7;border-radius:14px}.vs-render-progress progress{width:100%;accent-color:#5f5aa7}.vs-render-progress p{font-size:13px;margin-top:10px}.vs-steps button:disabled{opacity:.55}
 @media(max-width:760px){.vs-model-modal{padding:18px}.vs-model-modal-body{grid-template-columns:1fr;gap:20px}.vs-model-preview.vertical{max-width:220px}.vs-model-description h3{font-size:24px}.vs-model-art{height:180px;padding:12px}.vs-model-art>img{height:135px}.vs-model-art>strong{font-size:24px}.vs-catalog .vs-section-heading{display:block}.vs-library-tabs button{padding:10px 12px;font-size:13px}}
 
+
+/* Biblioteca dentro do painel admin: mesma superficie, navegacao e tokens do shell. */
+.vs-in-shell {
+  --vs-admin-navy: var(--jv-navy, #173d70);
+  --vs-admin-blue: var(--jv-blue, #2160b4);
+  --vs-admin-sky: var(--jv-sky, #eaf3ff);
+  --vs-admin-ink: var(--jv-ink, #172b45);
+  --vs-admin-muted: var(--jv-muted, #60758f);
+  --vs-admin-line: var(--jv-line, #d7e4f1);
+  color: var(--vs-admin-ink);
+}
+
+.vs-in-shell .vs-library {
+  width: 100%;
+  max-width: 1540px;
+  margin: 0 auto;
+  padding: 30px 32px 74px;
+}
+
+.vs-in-shell .vs-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(340px, .92fr);
+  min-height: 342px;
+  margin-bottom: 28px;
+  padding: 36px 42px;
+  border: 1px solid var(--vs-admin-line);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 88% 16%, rgba(72, 157, 128, .12), transparent 18rem),
+    linear-gradient(135deg, #fff 0%, #f7fbff 62%, #eef6ff 100%);
+  box-shadow: 0 18px 48px rgba(26, 68, 113, .08);
+}
+
+.vs-in-shell .vs-hero-copy {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  max-width: 620px;
+}
+
+.vs-in-shell .vs-eyebrow { color: var(--vs-admin-blue); }
+
+.vs-in-shell .vs-hero h1 {
+  color: var(--vs-admin-navy);
+  font-size: clamp(36px, 3.6vw, 54px);
+  letter-spacing: -.06em;
+}
+
+.vs-in-shell .vs-hero h1 span { color: var(--vs-admin-blue); }
+
+.vs-in-shell .vs-hero p {
+  max-width: 560px;
+  color: var(--vs-admin-muted);
+  font-size: 14px;
+  line-height: 1.72;
+}
+
+.vs-in-shell .vs-hero-actions {
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.vs-in-shell .vs-button.primary {
+  background: var(--vs-admin-blue);
+  box-shadow: 0 9px 20px rgba(33, 96, 180, .2);
+}
+
+.vs-in-shell .vs-button.primary:hover { background: #1b4f96; }
+
+.vs-in-shell .vs-button.secondary {
+  color: var(--vs-admin-blue);
+  border-color: #c5daf3;
+  background: #f7fbff;
+}
+
+.vs-in-shell .vs-button.quiet { color: var(--vs-admin-muted); }
+.vs-in-shell .vs-button.quiet:hover { color: var(--vs-admin-blue); background: var(--vs-admin-sky); }
+
+.vs-in-shell .vs-hero-assurance,
+.vs-in-shell .vs-hero-tags { color: var(--vs-admin-muted); }
+
+.vs-in-shell .vs-hero-assurance svg,
+.vs-in-shell .vs-hero-tags svg { color: #2d8a69; }
+
+.vs-in-shell .vs-hero-tags span {
+  border-color: var(--vs-admin-line);
+  background: rgba(255, 255, 255, .8);
+}
+
+.vs-in-shell .vs-hero-art {
+  position: relative;
+  right: auto;
+  width: 100%;
+  min-height: 286px;
+  align-self: center;
+}
+
+.vs-in-shell .vs-hero-art::before { content: none; }
+
+.vs-in-shell .vs-hero-grid {
+  width: min(100%, 420px);
+  height: 250px;
+}
+
+.vs-in-shell .vs-art-card {
+  width: 220px;
+  height: 280px;
+  border-color: #fff;
+  background:
+    radial-gradient(circle at 82% 15%, rgba(97, 160, 221, .64), transparent 28%),
+    linear-gradient(150deg, #173d70 0%, #2160b4 58%, #4b8fc8 100%);
+  box-shadow: 16px 23px 40px rgba(26, 68, 113, .22);
+}
+
+.vs-in-shell .vs-art-card__copy strong { font-size: 50px; }
+.vs-in-shell .vs-art-card__price { background: rgba(14, 44, 83, .2); }
+
+.vs-in-shell .vs-floating-tag {
+  color: var(--vs-admin-navy);
+  border-color: var(--vs-admin-line);
+  background: rgba(255, 255, 255, .9);
+}
+
+.vs-in-shell .vs-floating-tag svg { color: var(--vs-admin-blue); }
+
+.vs-in-shell .vs-library-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin: 0 0 28px;
+  padding: 4px;
+  border: 1px solid var(--vs-admin-line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .72);
+  box-shadow: 0 4px 14px rgba(26, 68, 113, .04);
+}
+
+.vs-in-shell .vs-library-tabs button {
+  min-height: 38px;
+  padding: 8px 15px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--vs-admin-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.vs-in-shell .vs-library-tabs button:hover { color: var(--vs-admin-blue); background: rgba(33, 96, 180, .06); }
+
+.vs-in-shell .vs-library-tabs button.active {
+  color: #1d4ed8;
+  border-color: #c5daf3;
+  background: var(--vs-admin-sky);
+  box-shadow: none;
+}
+
+.vs-in-shell .vs-library-tabs span { color: #1d4ed8; background: #dbeafe; }
+
+.vs-in-shell .vs-section-heading {
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+
+.vs-in-shell .vs-section-heading h2 {
+  color: var(--vs-admin-navy);
+  font-size: 22px;
+  letter-spacing: -.035em;
+}
+
+.vs-in-shell .vs-section-heading p,
+.vs-in-shell .vs-section-heading > span { color: var(--vs-admin-muted); }
+
+.vs-in-shell .vs-section-heading .vs-field {
+  width: min(100%, 292px);
+  margin: 0;
+  color: var(--vs-admin-muted);
+  font-size: 11px;
+}
+
+.vs-in-shell .vs-section-heading .vs-field input {
+  min-height: 40px;
+  border-color: var(--vs-admin-line);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.vs-in-shell .vs-project-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.vs-in-shell .vs-project-card {
+  border-color: var(--vs-admin-line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 7px 20px rgba(26, 68, 113, .05);
+}
+
+.vs-in-shell .vs-project-card:hover {
+  border-color: #b9d0ec;
+  box-shadow: 0 16px 34px rgba(26, 68, 113, .12);
+  transform: translateY(-4px);
+}
+
+.vs-in-shell .vs-model-art {
+  height: 216px;
+  border-bottom: 1px solid rgba(255, 255, 255, .28);
+}
+
+.vs-in-shell .vs-model-play {
+  background: rgba(23, 61, 112, .88);
+  box-shadow: 0 8px 18px rgba(23, 61, 112, .18);
+}
+
+.vs-in-shell .vs-model-play:hover { background: var(--vs-admin-blue); }
+
+.vs-in-shell .vs-project-info { padding: 16px 17px 18px; }
+
+.vs-in-shell .vs-project-info h3 {
+  color: var(--vs-admin-navy);
+  font-size: 15px;
+  letter-spacing: -.015em;
+}
+
+.vs-in-shell .vs-project-info span { color: var(--vs-admin-muted); font-size: 11px; }
+
+.vs-in-shell .vs-empty {
+  border-color: #c8d9eb;
+  background: rgba(255, 255, 255, .78);
+}
+
+.vs-in-shell .vs-mini-empty {
+  border: 1px dashed #c8d9eb;
+  background: #f7fbff;
+  color: var(--vs-admin-muted);
+}
+
+.vs-in-shell .vs-message {
+  width: calc(100% - 64px);
+  max-width: 1476px;
+  margin: 12px auto 0;
+}
+
+@media (max-width: 1180px) {
+  .vs-in-shell .vs-project-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .vs-in-shell .vs-hero { grid-template-columns: 1fr; gap: 18px; }
+  .vs-in-shell .vs-hero-art { min-height: 260px; }
+  .vs-in-shell .vs-project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .vs-in-shell .vs-library { padding: 22px 16px 54px; }
+  .vs-in-shell .vs-hero { padding: 28px 24px; }
+  .vs-in-shell .vs-library-tabs { width: 100%; }
+  .vs-in-shell .vs-library-tabs button { flex: 1; padding-inline: 8px; }
+  .vs-in-shell .vs-section-heading { display: block; }
+  .vs-in-shell .vs-section-heading .vs-field { width: 100%; margin-top: 16px; }
+  .vs-in-shell .vs-project-grid { gap: 12px; }
+  .vs-in-shell .vs-model-art { height: 174px; }
+  .vs-in-shell .vs-project-info { padding: 13px; }
+  .vs-in-shell .vs-project-info h3 { font-size: 13px; }
+  .vs-in-shell .vs-message { width: calc(100% - 32px); }
+}
+
+@media (max-width: 520px) {
+  .vs-in-shell .vs-project-grid { grid-template-columns: 1fr; }
+  .vs-in-shell .vs-model-art { height: 210px; }
+}
+
+/* Mostra os elementos reais do estúdio: modelo, produto, preço, formatos e cenas. */
+.vs-in-shell .vs-hero { grid-template-columns: minmax(0, 1fr) minmax(390px, .94fr); gap: clamp(22px, 3vw, 48px); }
+.vs-in-shell .vs-hero::after { content: none; }
+.vs-in-shell .vs-hero-art { min-width: 0; min-height: 320px; }
+.vs-studio-demo {
+  width: 100%;
+  max-width: 550px;
+  padding: 12px;
+  border: 1px solid #d7e2ef;
+  border-radius: 20px;
+  background: #f8fbff;
+  box-shadow: 0 18px 40px rgba(27, 63, 107, .14);
+}
+.vs-studio-demo__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 5px 12px; color: #425a77; font-size: 11px; font-weight: 700; }
+.vs-studio-demo__header > span:last-child { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.vs-studio-demo__status { display: inline-flex; align-items: center; gap: 6px; color: #5b6e85; font-size: 9px; letter-spacing: .08em; }
+.vs-studio-demo__status > span { width: 7px; height: 7px; border-radius: 50%; background: #eaa523; }
+.vs-studio-demo__body { display: grid; grid-template-columns: minmax(0, .69fr) minmax(0, 1fr); gap: 12px; }
+.vs-studio-demo__reel, .vs-studio-demo__side { min-width: 0; }
+.vs-studio-demo__format { display: flex; align-items: center; gap: 5px; height: 23px; color: #425a77; font-size: 10px; font-weight: 800; }
+.vs-studio-demo__scene, .vs-studio-demo__tv { position: relative; overflow: hidden; border: 3px solid #fff; border-radius: 12px; background: #d81b0e url('/video-studio/templates/alerta-background.png') center / cover; box-shadow: 0 5px 18px rgba(72, 38, 31, .16); }
+.vs-studio-demo__scene { height: 255px; }
+.vs-studio-demo__seal { position: absolute; z-index: 1; top: 4%; left: 13%; width: 74%; height: 31%; object-fit: contain; filter: drop-shadow(0 4px 5px #6e1609aa); }
+.vs-studio-demo__product { position: absolute; z-index: 1; top: 32%; right: 5%; width: 57%; height: 45%; object-fit: contain; filter: drop-shadow(0 7px 5px #75100b88); }
+.vs-studio-demo__price { position: absolute; z-index: 2; bottom: 11%; left: 6%; display: grid; gap: 2px; max-width: 70%; padding: 7px 10px 6px; color: #fff; border: 2px solid #ffe938; border-radius: 9px; background: #b80c14; box-shadow: 3px 4px 0 #661018; transform: rotate(-4deg); }
+.vs-studio-demo__price small { overflow: hidden; font-size: 8px; font-weight: 800; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+.vs-studio-demo__price strong { color: #fff035; font-family: 'Barlow Condensed', sans-serif; font-size: clamp(25px, 2.2vw, 36px); line-height: .9; white-space: nowrap; }
+.vs-studio-demo__sample { position: absolute; right: 5%; bottom: 2%; color: #fff; font-size: 7px; font-weight: 800; letter-spacing: .06em; text-shadow: 0 1px 3px #5e0e0e; }
+.vs-studio-demo__tv { height: 143px; }
+.vs-studio-demo__tv-seal { position: absolute; top: 4%; left: 3%; width: 40%; height: 64%; object-fit: contain; filter: drop-shadow(0 3px 4px #6e1609aa); }
+.vs-studio-demo__tv-product { position: absolute; top: 6%; right: 5%; width: 37%; height: 75%; object-fit: contain; filter: drop-shadow(0 4px 4px #75100b88); }
+.vs-studio-demo__tv-price { position: absolute; bottom: 8%; left: 8%; padding: 3px 8px; color: #fff035; border: 2px solid #ffe938; border-radius: 7px; background: #b80c14; font: 800 24px/.95 'Barlow Condensed', sans-serif; box-shadow: 2px 3px 0 #661018; }
+.vs-studio-demo__track { display: grid; gap: 8px; margin-top: 11px; padding: 12px; border: 1px solid #dce6f1; border-radius: 11px; background: #fff; }
+.vs-studio-demo__track > span { display: flex; align-items: center; gap: 6px; color: #294965; font-size: 10px; font-weight: 800; }
+.vs-studio-demo__track > div { display: grid; grid-template-columns: .6fr 1fr .7fr; gap: 3px; height: 22px; }
+.vs-studio-demo__track i { border-radius: 4px; background: #dceaff; }
+.vs-studio-demo__track i:nth-child(2) { background: #ffd49b; }
+.vs-studio-demo__track small { color: #70829a; font-size: 8px; white-space: nowrap; }
+.vs-studio-demo__track b { padding: 0 2px; }
+
+@media (max-width: 900px) {
+  .vs-in-shell .vs-hero { grid-template-columns: 1fr; }
+  .vs-in-shell .vs-hero-art { min-height: 0; }
+  .vs-studio-demo { max-width: 580px; margin: 0 auto; }
+}
+@media (max-width: 520px) {
+  .vs-in-shell .vs-hero { padding: 25px 18px; }
+  .vs-studio-demo { padding: 8px; border-radius: 14px; }
+  .vs-studio-demo__header { font-size: 9px; }
+  .vs-studio-demo__status { font-size: 7px; }
+  .vs-studio-demo__body { gap: 7px; }
+  .vs-studio-demo__scene { height: 220px; }
+  .vs-studio-demo__tv { height: 118px; }
+  .vs-studio-demo__price { padding: 5px; }
+  .vs-studio-demo__price strong { font-size: 24px; }
+  .vs-studio-demo__price small { font-size: 6px; }
+  .vs-studio-demo__tv-price { font-size: 17px; }
+  .vs-studio-demo__track { padding: 8px; gap: 5px; }
+  .vs-studio-demo__track small { font-size: 7px; white-space: normal; }
+}
 
 /* Constrain every grid row so only the tools and preview scroll. */
 .vs-app.vs-editing{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;overflow:hidden;background:#f3f5f9}

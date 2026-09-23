@@ -1,68 +1,45 @@
-import { ensureAuthColumns, getProfileByResetTokenHash, updatePasswordForUser } from '../../utils/auth-db'
 import { enforceRateLimit } from '../../utils/rate-limit'
+import { ensureAuthColumns, getProfileByWhatsApp, updatePasswordForUser } from '../../utils/auth-db'
+import { consumeWhatsAppChallenge, ensureWhatsAppChallengeSchema } from '../../utils/auth-whatsapp'
 import { hashPassword } from '../../utils/password'
-import { createSessionToken, hashOpaqueToken } from '../../utils/session-token'
-import { getAuthCookieOptions } from '../../utils/auth-cookie'
+import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
-  await enforceRateLimit(event, `auth-reset-password:${ip}`, 20, 60_000)
+  await enforceRateLimit(event, `auth-reset-whatsapp:${ip}`, 10, 15 * 60_000)
 
   const body = await readBody<Record<string, any>>(event)
-  const token = String(body?.token || '').trim()
+  const whatsapp = normalizeBrazilWhatsApp(body?.whatsapp)
+  const code = String(body?.code || '').trim()
   const password = String(body?.password || '')
 
-  if (!token) throw createError({ statusCode: 400, statusMessage: 'Token de recuperacao invalido' })
-  if (password.length < 8) {
-    throw createError({ statusCode: 400, statusMessage: 'Senha deve ter no minimo 8 caracteres' })
+  if (!whatsapp || !/^\d{6}$/.test(code)) {
+    throw createError({ statusCode: 400, statusMessage: 'Código inválido ou expirado. Solicite outro pelo WhatsApp.' })
+  }
+  if (password.length < 8 || password.length > 256) {
+    throw createError({ statusCode: 400, statusMessage: 'A senha deve ter entre 8 e 256 caracteres.' })
   }
 
   await ensureAuthColumns()
+  await ensureWhatsAppChallengeSchema()
 
-  const tokenHash = hashOpaqueToken(token)
-  const profile = await getProfileByResetTokenHash(tokenHash)
-  if (!profile?.id) {
-    throw createError({ statusCode: 400, statusMessage: 'Token invalido ou expirado' })
+  const profile = await getProfileByWhatsApp(whatsapp)
+  const codeIsValid = await consumeWhatsAppChallenge({
+    phone: whatsapp,
+    purpose: 'password_reset',
+    code,
+    userId: profile?.id || null
+  })
+
+  if (!profile?.id || !codeIsValid) {
+    throw createError({ statusCode: 400, statusMessage: 'Código inválido ou expirado. Solicite outro pelo WhatsApp.' })
   }
 
   const passwordHash = await hashPassword(password)
   await updatePasswordForUser(profile.id, passwordHash)
 
-  const role = profile.role || 'user'
-  const { token: sessionToken, expiresIn } = createSessionToken({
-    userId: profile.id,
-    email: profile.email,
-    role
-  })
-
-  const cookieBase = getAuthCookieOptions(event, expiresIn)
-  setCookie(event, 'access-token', sessionToken, {
-    ...cookieBase,
-    httpOnly: true
-  })
-  // Keep legacy cookie for backward compatibility during cutover.
-  setCookie(event, 'sb-access-token', sessionToken, {
-    ...cookieBase,
-    httpOnly: true
-  })
-  setCookie(event, 'authenticated', 'true', {
-    ...cookieBase,
-    httpOnly: false
-  })
-
   return {
     success: true,
-    message: 'Senha redefinida com sucesso.',
-    user: {
-      id: profile.id,
-      email: profile.email,
-      name: profile.name ?? null,
-      avatar_url: profile.avatar_url ?? null,
-      role
-    },
-    session: {
-      access_token: sessionToken,
-      expires_in: expiresIn
-    }
+    message: 'Senha redefinida. Entre com WhatsApp e sua nova senha.'
   }
 })

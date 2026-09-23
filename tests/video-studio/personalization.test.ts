@@ -7,6 +7,17 @@ import {videoOfferFromList} from '../../shared/video-studio/list-import'
 import {isVideoModel} from '../../shared/video-studio/project-kind'
 
 describe('personalização privada de vídeos',()=>{
+ it('preserva a identidade ampliada com validade dentro da margem do zoom',()=>{
+  for(const recipe of Object.values(FLYER_RECIPES).filter(r=>r.preserveBrandLayout)){
+   const result=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id))
+   expect(result.vertical.logo).toEqual(recipe.vertical.logo)
+   for(const [layout,height] of [[result.vertical,1920],[result.horizontal,1080]] as const){
+    const [,y,,h]=layout.validity
+    expect((y+h-height/2)*1.045+height/2).toBeLessThan(height)
+    expect(layout.logo[1]+layout.logo[3]).toBeLessThan(y)
+   }
+  }
+ })
  it('não herda a empresa da campanha usada como origem do modelo',()=>{
   const recipe=FLYER_RECIPES['flyer-6a1de6f4-4cd8-46d2-b5d7-0a19c1afbcc4']!
   const doc=newVideoFromTemplate(recipe.id)

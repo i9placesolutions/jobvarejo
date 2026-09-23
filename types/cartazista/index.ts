@@ -100,8 +100,13 @@ export type CartazistaSettings = {
 }
 
 export type CartazistaHeader = {
+  tagline?: string
+  retailFinish?: { decoration?: string; labelFill: string; labelInk: string; labelEdge: string }
+  priceCornerRadius?: number
+  accent?: string
+  secondary?: string
   mascot?: string
-  layout?: 'suina-ouro' | 'suina-rustica'
+  layout?: 'suina-ouro' | 'suina-rustica' | 'thematic-seal'
   id: string
   name: string
   background: string

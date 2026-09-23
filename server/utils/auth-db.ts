@@ -5,6 +5,8 @@ import { pgOneOrNull, pgQuery } from './postgres'
 type ProfileRow = {
   id: string
   email: string
+  login_whatsapp?: string | null
+  login_whatsapp_verified_at?: string | null
   name: string | null
   avatar_url: string | null
   role: UserRole
@@ -23,12 +25,20 @@ export const ensureAuthColumns = async (): Promise<void> => {
       add column if not exists password_hash text,
       add column if not exists reset_token_hash text,
       add column if not exists reset_token_expires_at timestamptz,
-      add column if not exists last_login_at timestamptz
+      add column if not exists last_login_at timestamptz,
+      add column if not exists login_whatsapp text,
+      add column if not exists login_whatsapp_verified_at timestamptz
   `)
 
   await pgQuery(`
     create index if not exists idx_profiles_reset_token_hash
       on public.profiles (reset_token_hash)
+  `)
+
+  await pgQuery(`
+    create unique index if not exists idx_profiles_login_whatsapp_unique
+      on public.profiles (login_whatsapp)
+      where login_whatsapp is not null
   `)
 
   try {
@@ -57,9 +67,22 @@ export const getProfileByEmail = async (email: string): Promise<ProfileRow | nul
   const normalized = normalizeEmail(email)
   if (!normalized) return null
   return pgOneOrNull<ProfileRow>(
-    `select id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at
+    `select id, email, login_whatsapp, login_whatsapp_verified_at, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at
      from public.profiles
      where lower(email) = $1
+     limit 1`,
+    [normalized]
+  )
+}
+
+export const getProfileByWhatsApp = async (whatsapp: string): Promise<ProfileRow | null> => {
+  const normalized = String(whatsapp || '').trim()
+  if (!normalized) return null
+  return pgOneOrNull<ProfileRow>(
+    `select id, email, login_whatsapp, login_whatsapp_verified_at, name, avatar_url, role::text as role, password_hash
+     from public.profiles
+     where login_whatsapp = $1
+       and login_whatsapp_verified_at is not null
      limit 1`,
     [normalized]
   )
@@ -69,7 +92,7 @@ export const getProfileById = async (id: string): Promise<ProfileRow | null> => 
   const normalized = String(id || '').trim()
   if (!normalized) return null
   return pgOneOrNull<ProfileRow>(
-    `select id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at
+    `select id, email, login_whatsapp, login_whatsapp_verified_at, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at
      from public.profiles
      where id = $1
      limit 1`,
@@ -80,6 +103,7 @@ export const getProfileById = async (id: string): Promise<ProfileRow | null> => 
 export const createProfileWithPassword = async (params: {
   name: string
   email: string
+  whatsapp?: string | null
   passwordHash: string
   role: UserRole
 }): Promise<ProfileRow> => {
@@ -111,10 +135,12 @@ export const createProfileWithPassword = async (params: {
   if (authUserCreated) {
     const synchronized = await pgOneOrNull<ProfileRow>(
       `update public.profiles
-          set email = $2, name = $3, role = $4::user_role, password_hash = $5, updated_at = timezone('utc', now())
+          set email = $2, login_whatsapp = $3,
+              login_whatsapp_verified_at = case when $3 is null then null else timezone('utc', now()) end,
+              name = $4, role = $5::user_role, password_hash = $6, updated_at = timezone('utc', now())
         where id = $1
         returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at`,
-      [id, normalizedEmail, trimmedName, params.role, params.passwordHash]
+      [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash]
     )
     if (synchronized) return synchronized
   }
@@ -123,11 +149,11 @@ export const createProfileWithPassword = async (params: {
   try {
     const first = await pgQuery<ProfileRow>(
       `insert into public.profiles
-         (id, email, name, role, password_hash)
+         (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash)
        values
-         ($1::uuid, $2, $3, $4::user_role, $5)
+         ($1::uuid, $2, $3, case when $3 is null then null else timezone('utc', now()) end, $4, $5::user_role, $6)
        returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at`,
-      [id, normalizedEmail, trimmedName, params.role, params.passwordHash]
+      [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash]
     )
     rows = first.rows || []
   } catch (error: any) {
@@ -138,11 +164,11 @@ export const createProfileWithPassword = async (params: {
 
     const fallback = await pgQuery<ProfileRow>(
       `insert into public.profiles
-         (id, email, name, role, password_hash)
+         (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash)
        values
-         ($1::uuid, $2, $3, $4, $5)
+         ($1::uuid, $2, $3, case when $3 is null then null else timezone('utc', now()) end, $4, $5, $6)
        returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at`,
-      [id, normalizedEmail, trimmedName, params.role, params.passwordHash]
+      [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash]
     )
     rows = fallback.rows || []
   }
@@ -150,6 +176,19 @@ export const createProfileWithPassword = async (params: {
   const created = rows[0]
   if (!created) throw new Error('Failed to create profile')
   return created
+}
+
+export const setLoginWhatsAppForUser = async (userId: string, whatsapp: string): Promise<ProfileRow | null> => {
+  return pgOneOrNull<ProfileRow>(
+    `update public.profiles
+        set login_whatsapp = $1,
+            login_whatsapp_verified_at = timezone('utc', now()),
+            updated_at = timezone('utc', now())
+      where id = $2
+        and login_whatsapp is null
+      returning id, email, login_whatsapp, login_whatsapp_verified_at, name, avatar_url, role::text as role`,
+    [whatsapp, userId]
+  )
 }
 
 export const updateLastLoginAt = async (userId: string): Promise<void> => {

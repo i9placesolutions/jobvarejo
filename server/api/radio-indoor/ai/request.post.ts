@@ -1,7 +1,7 @@
 import { requireAuthenticatedUser } from '../../../utils/auth'
 import { enforceRateLimit } from '../../../utils/rate-limit'
 import { pgOneOrNull, pgQuery } from '../../../utils/postgres'
-import { getMusicGptConfig, submitMusicGptMusicAi, submitMusicGptTextToSpeech } from '../../../utils/musicgpt'
+import { ensureElevenLabsVoice, generateElevenLabsRadioMusic, generateElevenLabsRadioSpeech, getElevenLabsConfig } from '../../../utils/elevenlabs'
 import {
   cleanText,
   jsonParam,
@@ -9,7 +9,7 @@ import {
   radioTableErrorResponse
 } from '../../../utils/radio-indoor'
 import { requireRadioStationAccess } from '../../../utils/radio-access'
-import { getAccessibleRadioVoice, getMusicGptVoiceSampleUrl, ensureMusicGptCloneSample } from '../../../utils/radio-voices'
+import { getAccessibleRadioVoice } from '../../../utils/radio-voices'
 
 const allowedKinds = new Set(['jingle', 'off', 'voice', 'music'])
 
@@ -24,11 +24,8 @@ export default defineEventHandler(async (event) => {
   if (!brief) throw createError({ statusCode: 400, statusMessage: 'Descreva o áudio que você precisa' })
   const lyrics = cleanText(body.lyrics, 6000) || null
   const style = cleanText(body.style || (kind === 'jingle' ? 'vinheta curta para rádio indoor, energética e clara' : 'locução comercial em português do Brasil'), 240) || null
-  // Locuções usam somente o banco aprovado pelo Admin (ou o padrão do
-  // servidor). Não aceitamos um voice_id arbitrário enviado pelo usuário da
-  // loja; para MusicAI mantemos o campo compatível com integrações existentes.
-  const requestedVoiceId = cleanText(body.voiceId, 120) || null
-  const voiceId = kind === 'off' || kind === 'voice' ? null : requestedVoiceId
+  // A voz cadastrada só é usada em off/locução; música não aceita voice_id.
+  const voiceId = null
   const voiceProfileId = cleanText(body.voiceProfileId, 80) || null
   const requestedGender = ['male', 'female'].includes(String(body.gender || '').toLowerCase()) ? String(body.gender).toLowerCase() : null
   let requestId: string | null = null
@@ -45,6 +42,7 @@ export default defineEventHandler(async (event) => {
       selectedVoiceProfile = await getAccessibleRadioVoice(ownerUserId, persistedVoiceProfileId, String(station.id))
       if (!selectedVoiceProfile) throw createError({ statusCode: 404, statusMessage: 'Banco de voz não encontrado ou sem autorização' })
     }
+    if ((kind === 'off' || kind === 'voice') && !selectedVoiceProfile) throw createError({ statusCode: 422, statusMessage: 'Selecione uma voz autorizada para esta locução.' })
     // Gênero do perfil manda no clone; formulário só entra se não houver perfil.
     const voiceGender = selectedVoiceProfile
       ? (String(selectedVoiceProfile.gender || '').toLowerCase() === 'male' ? 'male' : 'female')
@@ -61,87 +59,25 @@ export default defineEventHandler(async (event) => {
     if (!request) throw createError({ statusCode: 500, statusMessage: 'Não foi possível criar a solicitação' })
     requestId = String(request.id)
 
-    const provider = getMusicGptConfig()
-    if (!provider.configured) {
-      await pgQuery(`update public.radio_requests set status = 'queued', metadata = metadata || $1::jsonb where id = $2 and user_id = $3`, [jsonParam({ awaitingProviderConfig: true }), request.id, ownerUserId])
-      return {
-        success: true,
-        request: { ...request, status: 'queued', provider: null },
-        provider: { configured: false, message: 'Configure MUSICGPT_API_KEY no servidor para enviar automaticamente.' }
-      }
+    if (!getElevenLabsConfig().apiKey) throw createError({ statusCode: 503, statusMessage: 'Configure ELEVENLABS_API_KEY no servidor.' })
+    await pgQuery("update public.radio_requests set status='processing',provider='elevenlabs' where id=$1 and user_id=$2", [request.id, ownerUserId])
+    if (kind === 'off' || kind === 'voice') {
+      const clone = await ensureElevenLabsVoice(ownerUserId, persistedVoiceProfileId!)
+      await generateElevenLabsRadioSpeech({ ownerUserId, requestId: String(request.id), stationId: station?.id || null, title, text: lyrics || brief, voiceId: clone.voiceId, kind })
+    } else {
+      await generateElevenLabsRadioMusic({ ownerUserId, requestId: String(request.id), stationId: station?.id || null, title, brief, style, lyrics, kind: kind as 'jingle' | 'music' })
     }
-
-    await pgQuery(`update public.radio_requests set status = 'processing', provider = 'musicgpt' where id = $1 and user_id = $2`, [request.id, ownerUserId])
-    let sampleAudioUrl: string | null = null
-    let voiceProfileName: string | null = null
-    let sampleDeliveryMode: 'app-proxy' | 'wasabi-presigned' | null = null
-    if (selectedVoiceProfile) {
-      await ensureMusicGptCloneSample({
-        voiceId: String(selectedVoiceProfile.id),
-        ownerUserId,
-        sampleStorageKey: String(selectedVoiceProfile.sample_storage_key || selectedVoiceProfile.sampleStorageKey || '')
-      })
-      const sample = await getMusicGptVoiceSampleUrl(event, selectedVoiceProfile, ownerUserId, 900)
-      sampleAudioUrl = sample.url
-      sampleDeliveryMode = sample.mode
-      voiceProfileName = String(selectedVoiceProfile.name || '').slice(0, 120) || null
-    }
-    const effectiveVoiceId = sampleAudioUrl ? null : (voiceId || provider.defaultVoiceId)
-    if ((kind === 'off' || kind === 'voice') && !effectiveVoiceId && !sampleAudioUrl) {
-      const queued = await pgOneOrNull<any>(
-        `update public.radio_requests set status = 'queued', metadata = metadata || $1::jsonb where id = $2 and user_id = $3
-         returning id, status, provider, metadata, created_at, updated_at`,
-        [jsonParam({ awaitingVoiceId: true }), request.id, ownerUserId]
-      )
-      return { success: true, request: queued || request, provider: { configured: true, accepted: false, message: 'Selecione uma voz liberada no banco ou configure MUSICGPT_DEFAULT_VOICE_ID.' } }
-    }
-    const submission = (kind === 'off' || kind === 'voice')
-      ? await submitMusicGptTextToSpeech({ text: lyrics || brief, voiceId: effectiveVoiceId, sampleAudioUrl, gender: voiceGender })
-      : await submitMusicGptMusicAi(event, {
-          // Trilha sempre gerada pelo MusicGPT — a amostra do banco é só referência de voz (TTS).
-          prompt: kind === 'jingle'
-            ? `Crie uma vinheta curta de rádio indoor com trilha musical ORIGINAL (não copie áudio de referência). Texto/ideia: ${brief}`
-            : `Crie uma música para rádio indoor com arranjo ORIGINAL gerado agora. Ideia: ${brief}`,
-          musicStyle: style,
-          lyrics,
-          makeInstrumental: kind === 'music' && !lyrics,
-          vocalOnly: false,
-          voiceId
-        })
     const updated = await pgOneOrNull<any>(
-      `update public.radio_requests
-          set status = 'queued', provider = 'musicgpt', provider_task_id = $1,
-              provider_conversion_id = $2, metadata = metadata || $3::jsonb, updated_at = now()
-        where id = $4 and user_id = $5
-        returning id, station_id, kind, title, brief, lyrics, style, voice_id, voice_profile_id, status, provider,
-                  provider_task_id, provider_conversion_id, result_storage_key, result_source_url,
-                  result_format, result_duration_ms, error, metadata, created_at, updated_at`,
-      [
-        submission.taskId,
-        submission.conversionId,
-        jsonParam({
-          providerResponse: submission.raw,
-          requestedBy: user.id,
-          voiceProfileId: persistedVoiceProfileId,
-          voiceProfileName,
-          sampleDeliveryMode,
-          webhookConfigured: provider.webhookConfigured
-        }),
-        request.id,
-        ownerUserId
-      ]
+      `select id, station_id, kind, title, brief, lyrics, style, voice_id, voice_profile_id, status, provider,
+              provider_task_id, provider_conversion_id, result_storage_key, result_source_url, result_format,
+              result_duration_ms, error, metadata, created_at, updated_at
+         from public.radio_requests where id=$1 and user_id=$2`,
+      [request.id, ownerUserId]
     )
     return {
       success: true,
-      request: updated || request,
-      provider: {
-        configured: true,
-        accepted: true,
-        webhookConfigured: provider.webhookConfigured,
-        message: provider.webhookConfigured
-          ? 'Solicitação aceita pelo MusicGPT. O áudio chega pelo webhook.'
-          : 'Solicitação aceita. Configure MUSICGPT_WEBHOOK_URL/SECRET para retorno automático.'
-      }
+      request: updated,
+      provider: { configured: true, accepted: true, message: 'Áudio ElevenLabs pronto para ouvir.' }
     }
   } catch (error: any) {
     const setup = radioTableErrorResponse(error)
@@ -153,6 +89,6 @@ export default defineEventHandler(async (event) => {
       ).catch(() => undefined)
     }
     if (error?.statusCode) throw error
-    throw createError({ statusCode: 502, statusMessage: error?.message || 'Falha ao solicitar áudio ao MusicGPT' })
+    throw createError({ statusCode: 502, statusMessage: error?.message || 'Falha ao gerar áudio na ElevenLabs' })
   }
 })

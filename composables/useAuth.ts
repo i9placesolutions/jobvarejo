@@ -1,4 +1,5 @@
 import type { UserWithProfile, AuthState } from '~/types/auth'
+import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
 
 const AUTH_COOKIE = 'authenticated'
 
@@ -78,16 +79,16 @@ export const useAuth = () => {
     }
   }
 
-  const signIn = async (email: string, password: string) => {
-    const normalizedEmail = String(email || '').trim().toLowerCase()
-    if (!normalizedEmail) throw new Error('Informe um e-mail valido.')
+  const signIn = async (whatsapp: string, password: string) => {
+    const normalizedWhatsApp = normalizeBrazilWhatsApp(whatsapp)
+    if (!normalizedWhatsApp) throw new Error('Informe um WhatsApp válido com DDD.')
     if (!String(password || '')) throw new Error('Informe sua senha.')
 
     try {
       const data = await $fetch<any>('/api/auth/login', {
         method: 'POST',
         body: {
-          email: normalizedEmail,
+          whatsapp: normalizedWhatsApp,
           password
         }
       })
@@ -100,17 +101,20 @@ export const useAuth = () => {
       return data
     } catch (error: any) {
       const statusCode = Number(error?.statusCode || error?.response?.status || 0)
-      if (statusCode === 401) throw new Error('E-mail ou senha invalidos.')
+      if (statusCode === 401) throw new Error('WhatsApp ou senha inválidos.')
       throw new Error(error?.data?.statusMessage || error?.message || 'Erro ao fazer login. Tente novamente.')
     }
   }
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = async (email: string, password: string, name: string, whatsapp: string, whatsappCode: string) => {
     const normalizedEmail = String(email || '').trim().toLowerCase()
     const trimmedName = String(name || '').trim()
+    const normalizedWhatsApp = normalizeBrazilWhatsApp(whatsapp)
     if (!trimmedName) throw new Error('Informe seu nome.')
     if (!normalizedEmail) throw new Error('Informe um e-mail valido.')
+    if (!normalizedWhatsApp) throw new Error('Informe um WhatsApp válido com DDD.')
     if (String(password || '').length < 8) throw new Error('A senha deve ter no minimo 8 caracteres.')
+    if (!/^\d{6}$/.test(String(whatsappCode || '').trim())) throw new Error('Informe o código de confirmação do WhatsApp.')
 
     try {
       const data = await $fetch<any>('/api/auth/register', {
@@ -118,6 +122,8 @@ export const useAuth = () => {
         body: {
           name: trimmedName,
           email: normalizedEmail,
+          whatsapp: normalizedWhatsApp,
+          whatsapp_code: String(whatsappCode).trim(),
           password,
           auto_login: false
         }
@@ -125,7 +131,7 @@ export const useAuth = () => {
       return data
     } catch (error: any) {
       const statusCode = Number(error?.statusCode || error?.response?.status || 0)
-      if (statusCode === 409) throw new Error('Ja existe uma conta com este e-mail.')
+      if (statusCode === 409) throw new Error('Este e-mail ou WhatsApp já está vinculado a uma conta.')
       throw new Error(error?.data?.statusMessage || error?.message || 'Erro ao criar conta. Tente novamente.')
     }
   }

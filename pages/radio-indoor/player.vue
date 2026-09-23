@@ -56,7 +56,7 @@ const playTrack = async (track: RadioTrack) => {
       playlistId: track.playlistId || undefined,
       completed: false
     })
-    await radio.prefetchQueue(queue.value.slice(Math.max(0, currentIndex.value), currentIndex.value + 4))
+    void radio.prefetchQueue(queue.value.slice(Math.max(0, currentIndex.value + 1), currentIndex.value + 4))
   } catch {
     showNotice('Toque em play para iniciar o áudio neste navegador.')
   } finally {
@@ -108,7 +108,7 @@ const seek = (event: Event) => {
 }
 
 const refreshQueue = async (force = false) => {
-  if (!playerToken.value) return
+  if (!playerToken.value) return false
   try {
     const previousId = currentTrack.value?.id
     const wasPlaying = isPlaying.value
@@ -119,20 +119,33 @@ const refreshQueue = async (force = false) => {
       schedule.value?.endTime || '',
       queue.value.map((track) => track.id).join(',')
     ].join('|')
-    if (!force && signature === lastSignature) return
+    if (!force && signature === lastSignature) return true
     lastSignature = signature
-    await radio.prefetchQueue(queue.value)
+    void radio.prefetchQueue(queue.value)
     if (previousId) {
       const stillThere = queue.value.find((track) => track.id === previousId)
       if (stillThere) {
         currentTrack.value = stillThere
         if (wasPlaying && audioRef.value?.paused) await audioRef.value.play().catch(() => undefined)
-        return
+        return true
       }
     }
-    if (!currentTrack.value && queue.value[0]) currentTrack.value = queue.value[0]
+    if (!queue.value.length) {
+      audioRef.value?.pause()
+      currentTrack.value = null
+    } else if (!currentTrack.value && queue.value[0]) currentTrack.value = queue.value[0]
+    return true
   } catch (error: any) {
     showNotice(error?.data?.statusMessage || error?.statusMessage || 'Token inválido ou player pausado.')
+    const status = Number(error?.statusCode || error?.response?.status || error?.data?.statusCode)
+    if (status === 401 || status === 403) {
+      audioRef.value?.pause()
+      currentTrack.value = null
+      radio.playerData.value = null
+      playerToken.value = ''
+      window.localStorage.removeItem(TOKEN_STORAGE_KEY)
+    }
+    return false
   }
 }
 
@@ -145,13 +158,15 @@ const connect = async (rawToken?: string) => {
   isBootstrapping.value = true
   try {
     playerToken.value = token
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, token)
     await radio.registerCache()
-    await refreshQueue(true)
+    const loaded = await refreshQueue(true)
+    if (!loaded) throw new Error('Não foi possível conectar este player.')
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, token)
     if (queue.value[0]) await playTrack(queue.value[0])
     showNotice(`Conectado: ${station.value?.name || playerMeta.value?.name || 'loja'}`)
   } catch (error: any) {
     playerToken.value = ''
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY)
     showNotice(error?.data?.statusMessage || 'Não foi possível autenticar o player.')
   } finally {
     isBootstrapping.value = false

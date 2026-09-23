@@ -9,6 +9,32 @@ import {
 import { cartazistaPrintableCompositions, rebuildCartazistaComposition } from '~/utils/cartazista/composition'
 
 describe('cartazista composition', () => {
+  it('reconstrói o acabamento varejista sem frase e mantém preço e identidade dinâmicos', () => {
+    const doc=createCartazistaDocument({modelId:'standard',formatId:'a4'})
+    doc.settings.header={id:'11111111-1111-4111-8111-111111111111',name:'Economia',background:'/video-studio/templates/bg.png',seal:'/video-studio/templates/seal.png',color:'#123456',layout:'thematic-seal',retailFinish:{decoration:'/video-studio/templates/corner.png',labelFill:'#ffdf00',labelInk:'#171717',labelEdge:'#990000'}}
+    doc.products[0]!.price=129.90
+    const next=rebuildCartazistaComposition(doc).composition
+    expect(next.layers.some(l=>l.id==='cartaz-campaign-header-detail')).toBe(false)
+    expect(next.layers.find(l=>l.id==='cartaz-price-brush')?.fill).toBe('#ffdf00')
+    expect(next.layers.find(l=>l.id==='cartaz-price')).toMatchObject({text:'129,90',richPrice:true})
+    expect(next.layers.some(l=>l.id==='cartaz-price-cents')).toBe(false)
+    expect(next.layers.find(l=>l.id==='cartaz-campaign-seal')?.width).toBe(next.width*.58)
+    expect(next.layers.find(l=>l.id==='cartaz-logo')?.binding).toBe('logo')
+    doc.formatId='banner-2m'
+    expect(rebuildCartazistaComposition(doc).composition.layers.some(l=>l.id==='cartaz-campaign-corner')).toBe(true)
+  })
+  it('mantém a chamada e a etiqueta da campanha após trocar produto e formato', () => {
+    const doc=createCartazistaDocument({modelId:'standard',formatId:'a4'})
+    doc.settings.header={id:'11111111-1111-4111-8111-111111111111',name:'Economia',background:'/video-studio/templates/bg.png',seal:'/video-studio/templates/seal.png',color:'#123456',layout:'thematic-seal',tagline:'Mais economia para você',priceCornerRadius:.06}
+    doc.products[0]!.name='OUTRO PRODUTO'
+    doc.products[0]!.price=19.99
+    doc.formatId='a3'
+    const next=rebuildCartazistaComposition(doc).composition
+    expect(next.layers.find(l=>l.id==='cartaz-price-brush')?.cornerRadius).toBe(next.width*.06)
+    expect(next.layers.find(l=>l.id==='cartaz-campaign-header-detail')).toMatchObject({text:'Mais economia para você',fontFamily:'Caveat'})
+    expect(next.layers.find(l=>l.id==='cartaz-product-name')?.text).toBe('OUTRO PRODUTO')
+    expect(next.layers.find(l=>l.id==='cartaz-logo')?.binding).toBe('logo')
+  })
   it('preserva cabeçalho cadastrado e edição de camadas ao imprimir outra oferta', () => {
     const doc=createCartazistaDocument({modelId:'leve-x-y'})
     doc.settings.header={id:'11111111-1111-4111-8111-111111111111',name:'Campanha cadastrada',background:'/video-studio/templates/background.png',seal:'/video-studio/templates/seal.png',color:'#123456'}

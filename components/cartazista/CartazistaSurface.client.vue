@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { cartazistaPriceStyles } from '~/utils/cartazista/rich-price'
 const { preference: logoPreference } = useLogoPreference()
 const artLayerImageSrc = (layer: ArtLayer) => baseArtLayerImageSrc(layer, logoPreference.value)
 import {
@@ -170,6 +171,7 @@ async function render(doc: ArtComposition) {
         obj = new Group([new Rect({left:0,top:0,width:layer.width,height:layer.height,fill:'transparent',strokeWidth:0}),...glyphs],options)
       } else if (layer.kind === 'text') {
         const text = new Textbox(layer.text || '', {
+          styles: cartazistaPriceStyles(layer),
           ...options,
           width: layer.width / (layer.fontScaleX || 1),
           scaleX: layer.fontScaleX || 1,
@@ -186,7 +188,7 @@ async function render(doc: ArtComposition) {
           (text.height > layer.height + .01 || text.width * text.scaleX > layer.width + .01) &&
           text.fontSize > 6
         ) {
-          text.set({fontSize: text.fontSize - 1, width: layer.width / (layer.fontScaleX || 1)})
+          text.set({styles:cartazistaPriceStyles(layer,text.fontSize-1),fontSize: text.fontSize - 1, width: layer.width / (layer.fontScaleX || 1)})
           text.initDimensions()
         }
         if (text.height > layer.height + .01 || text.width * text.scaleX > layer.width + .01)

@@ -73,19 +73,20 @@ try {
          audio_format, audio_codec, rights_status, status, metadata)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'youtube',$13,$14,$15,$16,$17,$18,$19,'ready',$20::jsonb)
        on conflict (user_id, source_provider, source_id) do update set
-         station_id=coalesce(radio_catalog_tracks.station_id, excluded.station_id), title=excluded.title, artist=excluded.artist, album=excluded.album,
+         station_id=null, title=excluded.title, artist=excluded.artist, album=excluded.album,
          release_year=excluded.release_year, release_date=excluded.release_date, genre=excluded.genre,
          duration_ms=excluded.duration_ms, source_url=excluded.source_url, storage_key=excluded.storage_key,
          thumbnail_key=excluded.thumbnail_key, thumbnail_source_url=excluded.thumbnail_source_url,
          audio_format=excluded.audio_format, audio_codec=excluded.audio_codec,
-         rights_status=excluded.rights_status, status='ready', metadata=excluded.metadata, updated_at=now()
+         rights_status=case when excluded.rights_status='pending' then radio_catalog_tracks.rights_status else excluded.rights_status end,
+         status='ready', metadata=excluded.metadata, updated_at=now()
        returning id`,
       [
-        userId, station.id, String(track.title || `Faixa ${index + 1}`).slice(0, 240), String(track.artist || playlist.artist || 'Artista desconhecido').slice(0, 180),
+        userId, null, String(track.title || `Faixa ${index + 1}`).slice(0, 240), String(track.artist || playlist.artist || 'Artista desconhecido').slice(0, 180),
         String(track.album || playlist.album || '').slice(0, 180) || null, Number(track.year || playlist.year) || null, track.releaseDate || null,
         String(track.genre || playlist.genre || 'Outros').slice(0, 80), Array.isArray(track.tags) ? track.tags.map(String).slice(0, 20) : [], String(track.language || playlist.language || 'pt-BR').slice(0, 20),
         Math.round(Number(track.durationSeconds || audio.durationSeconds || 0) * 1000) || null, source.url || null, sourceId,
-        audio.storageKey || null, thumbnail.storageKey || null, thumbnail.sourceUrl || null, audio.format || 'webm', audio.codec || 'opus', audio.rightsStatus || 'authorized_by_user',
+        audio.storageKey || null, thumbnail.storageKey || null, thumbnail.sourceUrl || null, audio.format || 'webm', audio.codec || 'opus', audio.rightsStatus || 'pending',
         JSON.stringify({ importedFrom: manifestKey, playlistPosition: Number(track.position || index + 1) })
       ]
     )).rows[0]

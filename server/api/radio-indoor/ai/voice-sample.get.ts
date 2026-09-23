@@ -7,7 +7,8 @@ import { pgOneOrNull } from '../../../utils/postgres'
 
 /**
  * Endpoint público (sem cookie) para o MusicGPT baixar a amostra de voz.
- * Serve o clip `.clone.mp3` pré-processado (ffmpeg), não o arquivo longo original.
+ * Serve a referência configurada para o perfil. Perfis em modo original
+ * entregam o MP3 enviado, sem isolamento ou outro filtro.
  */
 export default defineEventHandler(async (event) => {
   await enforceRateLimit(event, `radio-mgpt-voice-sample:${getRequestIP(event, { xForwardedFor: true }) || 'anon'}`, 60, 60_000)

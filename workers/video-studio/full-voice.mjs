@@ -15,13 +15,14 @@ export function voiceBoundaries(scripts,duration,pauses=[]){
 }
 export async function analyzeVoiceBoundaries(file,scripts,duration){
  return new Promise((resolve,reject)=>{
-  const child=spawn(process.env.VIDEO_STUDIO_PYTHON||'python3',[fileURLToPath(new URL('./align_voice.py',import.meta.url))]);let out='';let settled=false
+  const python=process.env.VIDEO_STUDIO_PYTHON||'python3'
+  const child=spawn(python,[fileURLToPath(new URL('./align_voice.py',import.meta.url))]);let out='',err='';let settled=false
   const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);error?reject(error):resolve(value)}
   const timer=setTimeout(()=>{child.kill('SIGKILL');finish(Error('A sincronização demorou além do esperado. A locução está salva; tente novamente sem gerar outra voz.'))},300000)
   child.stdout.on('data',chunk=>{out+=chunk;if(out.length>2_000_000){child.kill();finish(Error('Resposta de sincronização inválida.'))}})
-  child.stderr.resume()
-  child.on('error',()=>finish(Error('O sincronizador de voz está indisponível. O áudio está salvo.')))
-  child.on('close',code=>{if(code)return finish(Error('Não foi possível sincronizar todas as ofertas com a fala. O áudio está salvo para nova tentativa.'));try{const result=JSON.parse(out);if(result.version!=='words-v1'||!Array.isArray(result.boundaries))throw Error();finish(null,result)}catch{finish(Error('Resposta de sincronização inválida.'))}})
+  child.stderr.on('data',chunk=>{if(err.length<6000)err+=String(chunk).slice(0,6000-err.length)})
+  child.on('error',error=>{console.error('[video-alignment] processo indisponível',error.message);finish(Error('O sincronizador de voz está indisponível. O áudio está salvo.'))})
+  child.on('close',(code,signal)=>{if(code){const detail=err.trim().split(/\r?\n/).at(-1)?.slice(0,240)||'sem detalhe';console.error('[video-alignment] processo encerrou',JSON.stringify({code,signal,pythonConfigured:!!process.env.VIDEO_STUDIO_PYTHON,modelConfigured:!!process.env.VIDEO_ALIGNMENT_MODEL,detail}));return finish(Error('Não foi possível sincronizar todas as ofertas com a fala. O áudio está salvo para nova tentativa.'))}try{const result=JSON.parse(out);if(result.version!=='words-v1'||!Array.isArray(result.boundaries))throw Error();finish(null,result)}catch{finish(Error('Resposta de sincronização inválida.'))}})
   child.stdin.on('error',()=>{});child.stdin.end(JSON.stringify({file,scripts,duration}))
  })
 }

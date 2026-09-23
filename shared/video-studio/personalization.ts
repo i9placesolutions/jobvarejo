@@ -15,7 +15,7 @@ export const VIDEO_COLOR_PALETTES=[
 
 export function personalizedRecipe(recipe:FlyerRecipe,doc:VideoDocument):FlyerRecipe {
   const titleChanged=doc.campaign.trim()!==videoTemplateCopy(recipe).title.trim()
-  return {...recipe,vertical:videoFooterLayout(recipe.vertical,true),horizontal:videoTvOfferLayout(videoFooterLayout(recipe.horizontal,false)),
+  return {...recipe,vertical:recipe.preserveBrandLayout?recipe.vertical:videoFooterLayout(recipe.vertical,true),horizontal:videoTvOfferLayout(recipe.preserveBrandLayout?recipe.horizontal:videoFooterLayout(recipe.horizontal,false)),
     ...(doc.appearance?.accent?{accent:doc.appearance.accent,nativeTitleColor:doc.appearance.accent}:{}),
     ...(titleChanged?{seal:'',nativeTitle:doc.campaign,sealAspect:1}:{}),
   }

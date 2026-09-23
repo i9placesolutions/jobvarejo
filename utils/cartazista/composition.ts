@@ -116,7 +116,7 @@ export const applyCartazistaProduct = (
   settings: CartazistaSettings,
   themeId: CartazistaThemeId
 ): ArtComposition => {
-  if (source.layers.some(l => l.id === 'cartaz-price-cents')) return updatePosterLettering(source, modelId, product, settings)
+  if (source.layers.some(l => l.id === 'cartaz-price-cents' || l.richPrice)) return updatePosterLettering(source, modelId, product, settings)
   const next = cloneCartazista(source)
   const theme = themeFor(themeId)
   const find = (id: string) => next.layers.find((item) => item.id === id)

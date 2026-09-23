@@ -36,11 +36,7 @@ type Voice = {
 }
 
 const voices = ref<Voice[]>([])
-const provider = ref<{ configured: boolean; ttsConfigured: boolean; webhookConfigured: boolean }>({
-  configured: false,
-  ttsConfigured: false,
-  webhookConfigured: false
-})
+const provider = ref<{ configured: boolean }>({ configured: false })
 const isLoading = ref(false)
 const isSaving = ref(false)
 const error = ref<string | null>(null)
@@ -152,22 +148,22 @@ onMounted(loadVoices)
               <Mic2 class="h-6 w-6" />
             </div>
             <div>
-              <p class="admin-page__eyebrow">Configuração · MusicGPT</p>
+              <p class="admin-page__eyebrow">Configuração · ElevenLabs</p>
               <h1 class="admin-page__title">Banco de vozes</h1>
               <p class="admin-page__lead">
-                A amostra pode ter trilha: o servidor isola a fala no clip de clone. Off/locução usam só a voz clonada; jingle/música pedem trilha nova ao MusicGPT.
+                Offs e locuções usam a voz autorizada na ElevenLabs. Jingles e músicas continuam no MusicGPT.
               </p>
             </div>
           </div>
           <div
             class="admin-badge"
-            :class="provider.configured && provider.ttsConfigured ? 'admin-badge--ok' : 'admin-badge--warn'"
+            :class="provider.configured ? 'admin-badge--ok' : 'admin-badge--warn'"
           >
             <span
               class="mr-1.5 h-2 w-2 rounded-full"
-              :class="provider.configured && provider.ttsConfigured ? 'bg-emerald-500' : 'bg-amber-500'"
+              :class="provider.configured ? 'bg-emerald-500' : 'bg-amber-500'"
             />
-            {{ provider.configured && provider.ttsConfigured ? 'MusicGPT pronto para locuções' : 'Configure o MusicGPT no servidor' }}
+            {{ provider.configured ? 'ElevenLabs configurada' : 'Configure a ElevenLabs no servidor' }}
           </div>
         </div>
 
@@ -180,7 +176,7 @@ onMounted(loadVoices)
               <div>
                 <h2 class="text-base font-bold text-[color:var(--jv-navy)]">Adicionar voz clonada</h2>
                 <p class="mt-1 text-xs leading-5 text-[color:var(--jv-muted)]">
-                  Pode enviar locução com fundo musical: isolamos a fala para o clone. A trilha do produto final é gerada pelo MusicGPT.
+                  Envie uma amostra de fala clara e autorizada. A ElevenLabs criará a voz na primeira locução; a trilha do produto final pode ser gerada pelo MusicGPT.
                 </p>
               </div>
               <FileAudio class="h-5 w-5 text-[color:var(--jv-blue)]" />
@@ -229,7 +225,7 @@ onMounted(loadVoices)
             </div>
             <div class="mt-5 flex items-start gap-2 text-[11px] leading-5 text-[color:var(--jv-muted)]">
               <LockKeyhole class="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--jv-blue)]" />
-              A amostra é privada no Wasabi. O servidor gera apenas uma URL temporária quando o MusicGPT precisa sintetizar a locução.
+              A amostra fica privada no Wasabi e é enviada à ElevenLabs somente para criar a voz autorizada.
             </div>
           </section>
 

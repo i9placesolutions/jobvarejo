@@ -117,6 +117,8 @@ export default defineNuxtConfig({
     authJwtSecret: process.env.AUTH_JWT_SECRET || '',
     authTokenTtlSeconds: process.env.AUTH_TOKEN_TTL_SECONDS || '604800',
     authResetTokenTtlMinutes: process.env.AUTH_RESET_TOKEN_TTL_MINUTES || '60',
+    uazapiServerUrl: process.env.UAZAPI_SERVER_URL || process.env.NUXT_UAZAPI_SERVER_URL || '',
+    uazapiInstanceToken: process.env.UAZAPI_INSTANCE_TOKEN || process.env.NUXT_UAZAPI_INSTANCE_TOKEN || '',
     appBaseUrl: process.env.APP_BASE_URL || '',
     smtpHost: process.env.SMTP_HOST || '',
     smtpPort: process.env.SMTP_PORT || '587',

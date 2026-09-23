@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
     if (!result.Body) throw createError({ statusCode: 404, statusMessage: 'Mídia não encontrada' })
     setResponseHeaders(event, {
       'Content-Type': result.ContentType || mediaType(key),
-      'Cache-Control': 'private, max-age=86400, stale-while-revalidate=604800',
+      'Cache-Control': playerIdentity ? 'private, no-store' : 'private, max-age=86400, stale-while-revalidate=604800',
       'X-Radio-Storage': 'private'
     })
     if (result.ContentLength != null) setResponseHeader(event, 'Content-Length', Number(result.ContentLength))

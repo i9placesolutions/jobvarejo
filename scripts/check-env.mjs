@@ -131,6 +131,11 @@ const run = () => {
     }
   }
 
+  if (!hasAny(env, ['UAZAPI_SERVER_URL', 'NUXT_UAZAPI_SERVER_URL']) ||
+      !hasAny(env, ['UAZAPI_INSTANCE_TOKEN', 'NUXT_UAZAPI_INSTANCE_TOKEN'])) {
+    warnings.push('UAZAPI_SERVER_URL + UAZAPI_INSTANCE_TOKEN (envio de códigos de confirmação do WhatsApp)')
+  }
+
   if (missing.length > 0) {
     const modeLabel = args.profile.toUpperCase()
     fail([

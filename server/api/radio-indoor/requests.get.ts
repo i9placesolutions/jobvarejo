@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
               t.id as catalog_track_id
          from public.radio_requests r
          left join public.radio_catalog_tracks t
-           on t.user_id = r.user_id and t.source_provider = 'musicgpt'
+           on t.user_id = r.user_id and t.source_provider = r.provider
           and t.source_id = r.id::text and t.status = 'ready'
         where r.user_id = $1 and (r.station_id = $2 or r.station_id is null)
         order by r.created_at desc limit $3`,

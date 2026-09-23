@@ -30,6 +30,19 @@ vez e pode autenticar integrações que enviem `X-Radio-Player-Token` ou
 2. Confirme as variáveis Wasabi já usadas pelo JobVarejo.
 3. Abra `/radio-indoor`, clique em **Importar catálogo** e teste uma faixa.
 4. Crie um programa, adicione um bloco de playlist e publique um horário.
+5. Em **Equipe e players**, crie um token para o computador da loja.
+6. Corrija o nome da loja pelo botão de edição ao lado do seletor e coloque a
+   estação no ar. A ativação só é aceita com agenda reproduzível e player ativo.
+7. Abra `/radio-indoor/player` no computador da loja e conecte o token. O
+   navegador pode exigir um toque em **Play** após abrir ou reiniciar a página.
+
+Enquanto a estação está em rascunho, o player interno autenticado permite
+testar o catálogo. O kiosk com token só reproduz quando a estação está ativa.
+Fora dos horários publicados, a loja fica silenciosa. Um bloco de música ou
+playlist sem playlist escolhida usa o catálogo geral; blocos de vinheta,
+comercial e pacote de áudio exigem uma playlist com faixas prontas. A agenda
+considera o dia de início quando um horário atravessa a meia-noite.
+Para uma grade contínua, selecione os sete dias e use início e fim em `00:00`.
 
 Para importar o mesmo manifesto para uma loja específica pela linha de
 comando, informe o identificador exibido pela API/player:
@@ -44,8 +57,19 @@ O importador usa, por padrão, o manifesto já enviado para:
 `radio-indoor/catalog/metadata/playlists/henrique-e-juliano/menos-e-mais-ao-vivo-2018.json`
 
 Os áudios continuam privados no Wasabi. O navegador recebe o áudio pelo proxy autenticado `/api/radio-indoor/audio`, com suporte a `Range` e cache local do próximo conteúdo.
+O catálogo importado é compartilhado entre as lojas da mesma conta; a playlist
+importada continua vinculada à loja escolhida. Importações novas deixam
+`rights_status` como `pending` quando o manifesto não informa a autorização.
+Esse campo é apenas um registro administrativo e não substitui a comprovação
+das licenças necessárias para armazenamento e execução pública.
 
-## MusicGPT
+## Geração de áudio: ElevenLabs
+
+Novas solicitações de off, locução, jingle e música usam `ELEVENLABS_API_KEY` no servidor. Off e locução usam a voz autorizada do banco; jingle e música usam a API de música (`/v1/music`, modelo `music_v2_5`). O jingle solicita 15 segundos e a música, 60 segundos. A resposta em MP3 é salva no Wasabi privado e registrada no catálogo para prévia e inclusão manual em playlist. A geração pode levar até três minutos; a ausência da chave ou um erro do provedor deixa o pedido como `failed`, com a causa registrada.
+
+Pedidos antigos enviados ao MusicGPT continuam consultáveis por polling e webhook. A chave MusicGPT só é necessária para concluir esses pedidos antigos ou para outros módulos que ainda a utilizam.
+
+## MusicGPT (pedidos antigos)
 
 Configure no servidor (nunca em `runtimeConfig.public`):
 
@@ -67,17 +91,15 @@ valor no endpoint. Sem `MUSICGPT_WEBHOOK_SECRET` (ou URL derivada de
 `APP_BASE_URL`), o pedido ainda é criado, mas o retorno depende do polling
 da tela de solicitações.
 
-O formulário de solicitações registra jingle, off, locução e música. Sem a chave, o pedido fica salvo como `queued` e pode ser enviado depois. Com a chave, jingles e músicas usam MusicAI; offs e locuções usam TextToSpeech com a voz escolhida no banco (ou o padrão configurado). A amostra clonada é entregue ao MusicGPT por uma URL pública de curta duração em `/api/radio-indoor/ai/voice-sample` (não pela URL assinada do Wasabi). Esse endpoint recodifica com ffmpeg um clip mono de ~12s — amostras longas falham na conversão e corte cru em bytes deixa o clone genérico. A amostra ideal é só fala, sem música de fundo (recomendação do MusicGPT). O JobVarejo guarda `task_id`/`conversion_id` e o webhook atualiza o status sem expor o segredo ao cliente. Consulte os contratos assíncronos na [documentação oficial do MusicGPT](https://docs.musicgpt.com/api-documentation/endpoint/MusicAI) e no [TextToSpeech](https://docs.musicgpt.com/api-documentation/conversions/texttospeech).
+Pedidos anteriores já enviados ao MusicGPT mantêm `task_id`/`conversion_id`; webhook e polling continuam disponíveis para concluir e importar o resultado. Novos pedidos da Rádio Indoor não são enviados ao MusicGPT.
 
 ### Banco de vozes
 
 O cadastro de uma voz clonada é feito exclusivamente em **Administração do
 Builder → MusicGPT / Banco de vozes** (`/admin/musicgpt`). O administrador envia
 a amostra (preferência: só fala, ~20–60s, sem música), registra a confirmação de
-autorização e pode revogar o perfil. No upload, o servidor isola a fala (remove/atenua
-trilha da amostra) num clip `.clone.mp3` (~18s) — esse arquivo é o que o MusicGPT
-usa para clonar a voz. Off/locução = TTS com essa voz. Jingle/música = MusicAI gera
-trilha ORIGINAL (não herda música da amostra). A amostra completa continua privada
+autorização e pode revogar o perfil. Off/locução usam TTS da ElevenLabs com essa voz;
+jingle/música usam geração musical da ElevenLabs sem a amostra. A amostra completa continua privada
 no Wasabi para prévia humana.
 
 Na Rádio Indoor, a tela **Banco de vozes** é somente leitura: cada usuário pode
@@ -119,7 +141,7 @@ O player sempre calcula a faixa ativa no fuso da estação. O worker mantém os 
 
 ## Cache offline
 
-`public/radio-indoor-sw.js` é registrado somente quando o usuário abre o módulo. Ele intercepta apenas `/api/radio-indoor/audio` e `/api/radio-indoor/media`, pré-carrega as próximas três faixas e mantém até 20 respostas locais. Em uma queda de conexão, a faixa atual continua pelo buffer do elemento `<audio>` e as próximas faixas armazenadas podem ser reproduzidas por até aproximadamente 45 minutos, dependendo do tamanho do catálogo.
+`public/radio-indoor-sw.js` é registrado somente quando o usuário abre o módulo. Ele intercepta apenas `/api/radio-indoor/audio` e `/api/radio-indoor/media`, pré-carrega as próximas três faixas completas e mantém até 20 respostas locais por navegador. As chaves do cache são separadas pelo hash do token do player; respostas parciais `Range` são atendidas diretamente pela rede e, em uma queda de conexão, podem ser reconstruídas a partir de um arquivo completo já armazenado. A duração offline depende das faixas efetivamente pré-carregadas e deve ser testada no computador da loja.
 
 ## Player kiosk
 

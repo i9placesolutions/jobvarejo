@@ -25,7 +25,7 @@ const mix=(f:number,a:number,b:number,x:number,y:number)=>interpolate(f,[a,b],[x
 const random=(n:number)=>{const x=Math.sin(n*93.17+21)*42817;return x-Math.floor(x)}
 function Backdrop({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
  const f=useCurrentFrame(),{width:w,height:ht}=useVideoConfig(),intensity=props.document.intensity,kind=r.backgroundKind||r.id,seed=r.seed||0,items:React.ReactNode[]=[]
- const asset=(props.templateBase||'/video-studio/templates')+'/'+r.background
+ const asset=(props.templateBase||'/video-studio/templates')+'/'+(props.format==='horizontal'?(r.backgroundHorizontal||r.background):r.background)
  // A arte de origem mantém suas cores; fundos alternativos exigem escolha explícita.
  const variant=r.backgroundVariant||0,chosen=videoBackground(props.document.background),energy=chosen?backgroundAsset(chosen.id,props.format):ht>w?(r.energyBackgroundVertical||r.energyBackground):r.energyBackground
  if(energy)items.push(h(Img,{key:'energy-art',src:(props.templateBase||'/video-studio/templates')+'/'+energy,style:{position:'absolute',inset:'-7%',width:'114%',height:'114%',objectFit:'cover',transform:`translate(${Math.sin(f/(28+variant*3))*18}px,${Math.cos(f/(36+variant*4))*20}px) scale(${1.04+Math.sin(f/45)*.035}) rotate(${Math.sin(f/70+variant)*.6}deg)`,opacity:1}}))

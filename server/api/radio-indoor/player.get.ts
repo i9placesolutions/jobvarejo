@@ -41,19 +41,36 @@ export default defineEventHandler(async (event) => {
       blocks = blockResult.rows
     }
 
+    const history = await pgQuery<{ track_id: string }>(
+      `select track_id from public.radio_playback_events
+        where station_id = $1 and track_id is not null
+        order by played_at desc limit 300`,
+      [station.id]
+    )
+    const recentlyPlayedIds = Array.from(new Set(history.rows.map((row) => String(row.track_id))))
+
     const queue: any[] = []
     const seen = new Set<string>()
     for (const block of blocks) {
-      if (!block.playlist_id) continue
+      if (!['music', 'playlist', 'jingle', 'commercial', 'audio_pack'].includes(String(block.block_type))) continue
       const limit = Math.max(1, Math.min(50, Number(block.target_count || 20)))
-      const items = await pgQuery<any>(
+      const items = block.playlist_id ? await pgQuery<any>(
         `select t.* from public.radio_playlist_items i
            join public.radio_catalog_tracks t on t.id = i.track_id
            join public.radio_playlists p on p.id = i.playlist_id
           where i.playlist_id = $1 and t.user_id = $2 and t.status = 'ready'
+            and t.storage_key is not null and p.is_active = true
             and p.user_id = $2 and (p.station_id = $4 or p.station_id is null)
-          order by i.position, t.artist, t.title limit $3`,
-        [block.playlist_id, ownerUserId, limit, station.id]
+          order by (t.id = any($5::uuid[])), array_position($5::uuid[], t.id) desc nulls last,
+                   i.position, t.artist, t.title limit $3`,
+        [block.playlist_id, ownerUserId, limit, station.id, recentlyPlayedIds]
+      ) : await pgQuery<any>(
+        `select * from public.radio_catalog_tracks
+          where user_id = $1 and status = 'ready' and storage_key is not null
+            and (station_id = $2 or station_id is null)
+          order by (id = any($4::uuid[])), array_position($4::uuid[], id) desc nulls last,
+                   artist, title limit $3`,
+        [ownerUserId, station.id, limit, recentlyPlayedIds]
       )
       for (const track of items.rows) {
         if (seen.has(String(track.id))) continue
@@ -62,18 +79,20 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    const fallback = await pgQuery<any>(
-      `select * from public.radio_catalog_tracks
-        where user_id = $1 and status = 'ready'
-          and (station_id = $2 or station_id is null)
-        order by artist, title limit 80`,
-      [ownerUserId, station.id]
-    )
-    for (const track of fallback.rows) {
-      if (seen.has(String(track.id))) continue
-      seen.add(String(track.id))
-      queue.push({ ...serializeTrack(track), blockId: null, blockLabel: 'Catálogo geral', playlistId: null })
-      if (queue.length >= 80) break
+    // A loja ativa fica silenciosa fora dos horários publicados. A prévia
+    // autenticada ainda pode tocar o catálogo enquanto a grade é preparada.
+    if (!schedule && !playerIdentity && station.status !== 'active') {
+      const fallback = await pgQuery<any>(
+        `select * from public.radio_catalog_tracks
+          where user_id = $1 and status = 'ready' and storage_key is not null
+            and (station_id = $2 or station_id is null)
+          order by (id = any($3::uuid[])), array_position($3::uuid[], id) desc nulls last,
+                   artist, title limit 80`,
+        [ownerUserId, station.id, recentlyPlayedIds]
+      )
+      for (const track of fallback.rows) {
+        queue.push({ ...serializeTrack(track), blockId: null, blockLabel: 'Catálogo geral', playlistId: null })
+      }
     }
 
     return {

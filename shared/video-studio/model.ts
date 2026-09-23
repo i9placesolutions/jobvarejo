@@ -37,7 +37,7 @@ export interface VideoDocument {
   layoutVersion?: 2; duplicateProducts?: boolean; version: 1; title: string; theme: typeof VIDEO_THEMES[number]['id']; campaign: string
   autoFitVoice?: boolean; formats: VideoFormat[]; duration: 15 | 20 | 30
   brand: { logoStyle?: 'sticker' | 'clean'; name: string; logo: string; address: string; whatsapp: string; instagram: string; phone?:string; facebook?:string; website?:string; slogan?:string; hours?:string; paymentNotes?:string; addresses?:string[]; whatsappNumbers?:string[] }
-  priceLabel?: string; validity: string; offers: VideoOffer[]; scripts: VideoScript[]
+  priceLabel?: string; validity: string; offers: VideoOffer[]; scripts: VideoScript[]; narrationText?: string
   voice: { enabled: boolean; id: string; pronunciations: { from: string; to: string }[] }
   effects: VideoEffect[]; intensity: number; transition: SceneTransition; motion?: VideoMotionSettings
   audio: { music: string; musicVolume: number; voiceVolume: number; effectsVolume: number; sounds: boolean }
@@ -58,9 +58,23 @@ export function parseOfferPrice(value: string): number | null {
   return Number.isFinite(n) && n > 0 && n <= 999999 ? n : null
 }
 export function displayPrice(value: string): string { const n = parseOfferPrice(value); return n === null ? value : n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) }
+function spokenOfferName(offer: VideoOffer): string {
+  const unit=offer.unit.trim().toLowerCase()
+  if(!['kg','g','ml','l','un','pct'].includes(unit))return offer.name
+  return offer.name.replace(new RegExp(`\\s+${unit}\\.?$`,'i'),'').trim()
+}
 export function suggestVideoScripts(doc: VideoDocument): VideoScript[] {
-  return [ {id:'intro', text:`${doc.campaign} no ${doc.brand.name}!`}, ...doc.offers.map(o=>({id:o.id, text:`${o.name}, por R$ ${displayPrice(o.price)}${o.unit ? ` ${o.unit}` : ''}.${o.condition ? ` ${o.condition}.` : ''}`})),
+  return [ {id:'intro', text:`${doc.campaign} no ${doc.brand.name}!`}, ...doc.offers.map(o=>({id:o.id, text:`${spokenOfferName(o)}, por R$ ${displayPrice(o.price)}${o.unit ? ` ${o.unit}` : ''}.${o.condition ? ` ${o.condition}.` : ''}`})),
     {id:'outro', text:`Aproveite no ${doc.brand.name}!${doc.validity ? ` ${doc.validity}.` : ''}`} ]
+}
+export function narrationScripts(doc: VideoDocument, text: string): VideoScript[] | null {
+  const ids=['intro',...doc.offers.map(o=>o.id),'outro']
+  const lines=text.replace(/\r/g,'').split('\n').map(line=>line.trim()).filter(Boolean)
+  if(lines.length!==ids.length||lines.some(line=>line.length>700))return null
+  return ids.map((id,index)=>({id,text:lines[index]!}))
+}
+export function videoNarrationText(doc: VideoDocument): string {
+  return doc.narrationText ?? doc.scripts.map(script=>script.text).join('\n')
 }
 // Fonte comercial permanece separada do texto editável. O usuário confirma o roteiro após mudanças.
 export function videoSpeechSource(doc: VideoDocument): string { return JSON.stringify({brand:doc.brand.name,campaign:doc.campaign,validity:doc.validity,offers:doc.offers.map(({id,name,price,unit,condition})=>({id,name,price,unit,condition}))}) }
@@ -95,7 +109,7 @@ export function validateVideoForGeneration(doc: VideoDocument): string[] {
   if(!doc.brand.name.trim())errors.push('Informe o nome da empresa.')
   if(!doc.offers.length)errors.push('Adicione pelo menos um produto.')
   for(const o of doc.offers){if(!o.name.trim()||parseOfferPrice(o.price)===null)errors.push('Confira o nome e o preço de todos os produtos.');if(!o.image)errors.push(`Adicione a imagem de ${o.name||'cada produto'}.`)}
-  if(doc.voice.enabled){const ids=['intro',...doc.offers.map(o=>o.id),'outro'];if(ids.some(id=>!doc.scripts.find(s=>s.id===id)?.text.trim()))errors.push('Revise o texto da abertura, das ofertas e do encerramento.')}
+  if(doc.voice.enabled){const ids=['intro',...doc.offers.map(o=>o.id),'outro'];if(ids.some(id=>!doc.scripts.find(s=>s.id===id)?.text.trim()))errors.push('Revise o texto da abertura, das ofertas e do encerramento.');if(doc.narrationText!==undefined&&JSON.stringify(narrationScripts(doc,doc.narrationText))!==JSON.stringify(doc.scripts))errors.push(`Mantenha ${ids.length} linhas no roteiro: abertura, uma por produto e encerramento.`)}
   try {buildVideoTimeline(doc)}catch(e){errors.push((e as Error).message)}
   return [...new Set(errors)]
 }

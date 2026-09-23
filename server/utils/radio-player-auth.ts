@@ -26,9 +26,10 @@ export const getRadioPlayerIdentity = async (event: H3Event): Promise<RadioPlaye
   const token = readPlayerToken(event)
   if (!token) return null
   const row = await pgOneOrNull<any>(
-    `select id, user_id, station_id, name
-       from public.radio_players
-      where token_hash = $1 and status = 'active'
+    `select p.id, p.user_id, p.station_id, p.name
+       from public.radio_players p
+       join public.radio_stations s on s.id = p.station_id
+      where p.token_hash = $1 and p.status = 'active' and s.status = 'active'
       limit 1`,
     [hashToken(token)]
   )

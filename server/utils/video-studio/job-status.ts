@@ -3,6 +3,7 @@ import { pgQuery } from '../postgres'
 // Only public progress is returned; provider identifiers and payloads stay on the server.
 export async function videoJobStatus(userId: string, projectId: string) {
   const { rows } = await pgQuery(`SELECT id,revision,kind,status,fingerprint,result,progress,error,created_at,
+    CASE WHEN kind='render' THEN payload->'voiceResult'->'fullVoice'->>'assetId' ELSE NULL END AS voice_asset_id,
     (SELECT count(*)::int FROM jsonb_each(COALESCE(provider_state,'{}'::jsonb)) entry WHERE entry.value ? 'asset') AS completed_clips,
     CASE WHEN payload->>'voiceMode'='full-v1' THEN 1 WHEN kind='voice' THEN jsonb_array_length(payload->'document'->'scripts') ELSE 1 END AS total_clips
     FROM public.video_studio_jobs WHERE user_id=$1 AND project_id=$2 ORDER BY created_at DESC LIMIT 40`, [userId, projectId])

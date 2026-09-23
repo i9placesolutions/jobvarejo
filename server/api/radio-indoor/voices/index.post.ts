@@ -6,7 +6,6 @@ import { getS3Client } from '../../../utils/s3'
 import {
   cleanVoiceDescription,
   cleanVoiceName,
-  ensureMusicGptCloneSample,
   isAllowedVoiceMime,
   RADIO_VOICE_CONSENT_TEXT,
   RADIO_VOICE_CONSENT_VERSION,
@@ -113,21 +112,6 @@ export default defineEventHandler(async (event) => {
         ]
       )
       if (!row) throw createError({ statusCode: 500, statusMessage: 'Não foi possível salvar a voz' })
-      // Clip curto otimizado para o MusicGPT — falha aqui não desfaz o cadastro,
-      // mas o voice-sample regenera sob demanda.
-      let cloneReady = false
-      try {
-        await ensureMusicGptCloneSample({
-          voiceId,
-          ownerUserId: actor.id,
-          sampleStorageKey: key,
-          sourceBuffer: buffer,
-          force: true
-        })
-        cloneReady = true
-      } catch (cloneError: any) {
-        console.warn('[radio-voices] falha ao preparar clip MusicGPT', String(cloneError?.message || cloneError).slice(0, 200))
-      }
       const refreshed = await pgOneOrNull<any>(
         `select id, user_id, station_id, name, description, gender,
                 sample_content_type, sample_size_bytes, consent_status,
@@ -139,10 +123,8 @@ export default defineEventHandler(async (event) => {
       return {
         success: true,
         voice: serializeRadioVoice(refreshed || row),
-        cloneReady,
-        message: cloneReady
-          ? 'Voz salva com clip de clonagem pronto para o MusicGPT.'
-          : 'Voz salva. O clip de clonagem será gerado na primeira solicitação.'
+        cloneReady: false,
+        message: 'Voz salva. A ElevenLabs criará o clone na primeira locução.'
       }
     } catch (error) {
       await getS3Client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key })).catch(() => undefined)

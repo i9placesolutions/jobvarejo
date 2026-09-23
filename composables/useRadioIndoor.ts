@@ -23,6 +23,8 @@ export interface RadioAlbum {
   sampleTrackId?: string | null
 }
 
+const radioPrefetchTimes = new Map<string, number>()
+
 export const useRadioIndoor = () => {
   const bootstrap = useState<any | null>('radio-indoor-bootstrap', () => null)
   const stations = useState<any[]>('radio-indoor-stations', () => [])
@@ -114,7 +116,8 @@ export const useRadioIndoor = () => {
     if (token && Array.isArray(data?.queue)) {
       data.queue = data.queue.map((track: RadioTrack) => ({
         ...track,
-        audioUrl: withPlayerToken(track.audioUrl, token)
+        audioUrl: withPlayerToken(track.audioUrl, token),
+        thumbnailUrl: withPlayerToken(track.thumbnailUrl, token)
       }))
     }
     playerData.value = data
@@ -182,13 +185,23 @@ export const useRadioIndoor = () => {
 
   const prefetchTrack = async (track: RadioTrack | null | undefined) => {
     if (!import.meta.client || !track?.audioUrl) return
+    const url = track.audioUrl
+    const now = Date.now()
+    if (now - (radioPrefetchTimes.get(url) || 0) < 30 * 60 * 1000) return
     try {
       // `cache=1` asks the service worker to store the complete response so a
       // later range request can be served if the store loses connectivity.
-      await fetch(`${track.audioUrl}${track.audioUrl.includes('?') ? '&' : '?'}cache=1`, {
+      const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}cache=1`, {
         credentials: 'include',
         cache: 'no-store'
       })
+      if (response.ok) {
+        radioPrefetchTimes.set(url, now)
+        if (radioPrefetchTimes.size > 100) {
+          const oldest = radioPrefetchTimes.keys().next().value
+          if (oldest) radioPrefetchTimes.delete(oldest)
+        }
+      }
     } catch {
       // The current track keeps playing from the media buffer when prefetch fails.
     }

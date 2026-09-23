@@ -416,5 +416,3223 @@
       230,
       490
     ]
+  },
+  {
+    "id": "flyer-cb48f210-676e-496d-89b8-d00d4c06a64c",
+    "sourceProject": "cb48f210-676e-496d-89b8-d00d4c06a64c",
+    "name": "Quarta Suína — Ofertas Especiais",
+    "campaign": "QUARTA SUÍNA",
+    "accent": "#ffd21c",
+    "base": "#a30808",
+    "ink": "#8f160d",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ofertas Especiais — Etiqueta"
+    ],
+    "background": "quarta-suina-retail-v3.png",
+    "seal": "quarta-suina-colecao-1-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-cb48f210-676e-496d-89b8-d00d4c06a64c",
+    "musicStyle": "funk",
+    "bpm": 108,
+    "seed": 22093001,
+    "transition": "iris",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "orbit",
+        "bokeh"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta Suína — Ofertas Especiais",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-suina-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-3e2e827a-d0ce-4a80-b33d-11fdd99936c6",
+    "sourceProject": "3e2e827a-d0ce-4a80-b33d-11fdd99936c6",
+    "name": "Quarta Suína — Preço Baixo",
+    "campaign": "QUARTA SUÍNA",
+    "accent": "#ffd21c",
+    "base": "#a30808",
+    "ink": "#d51d13",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Preço Baixo — Etiqueta"
+    ],
+    "background": "quarta-suina-retail-v3.png",
+    "seal": "quarta-suina-colecao-2-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-3e2e827a-d0ce-4a80-b33d-11fdd99936c6",
+    "musicStyle": "drive",
+    "bpm": 116,
+    "seed": 22093002,
+    "transition": "slide",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "whip",
+      "price": "rise",
+      "camera": "impact",
+      "atmosphere": [
+        "speed-lines",
+        "spotlights"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta Suína — Preço Baixo",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-suina-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-59c70825-c9bf-4543-b233-87a7ed8d2019",
+    "sourceProject": "59c70825-c9bf-4543-b233-87a7ed8d2019",
+    "name": "Quarta Suína — Super Ofertas",
+    "campaign": "QUARTA SUÍNA",
+    "accent": "#ffd21c",
+    "base": "#a30808",
+    "ink": "#8f160d",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Super Ofertas — Etiqueta"
+    ],
+    "background": "quarta-suina-retail-v3.png",
+    "seal": "quarta-suina-colecao-3-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-59c70825-c9bf-4543-b233-87a7ed8d2019",
+    "musicStyle": "disco",
+    "bpm": 124,
+    "seed": 22093003,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "elastic",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "ribbons"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "pop"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta Suína — Super Ofertas",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-suina-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-ef64f202-f51e-4df1-abec-06bcc643f05a",
+    "sourceProject": "ef64f202-f51e-4df1-abec-06bcc643f05a",
+    "name": "Quarta Suína — Carnes Selecionadas",
+    "campaign": "QUARTA SUÍNA",
+    "accent": "#ffd21c",
+    "base": "#a30808",
+    "ink": "#8f160d",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Carnes Selecionadas — Etiqueta"
+    ],
+    "background": "quarta-suina-retail-v3.png",
+    "seal": "quarta-suina-colecao-4-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-ef64f202-f51e-4df1-abec-06bcc643f05a",
+    "musicStyle": "tropical",
+    "bpm": 104,
+    "seed": 22093004,
+    "transition": "blur",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "tracking",
+      "price": "tilt",
+      "camera": "impact",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "snap"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta Suína — Carnes Selecionadas",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-suina-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-4a452f25-4ee0-4060-861c-7a388ce4d2ec",
+    "sourceProject": "4a452f25-4ee0-4060-861c-7a388ce4d2ec",
+    "name": "Quarta Suína — Só Hoje",
+    "campaign": "QUARTA SUÍNA",
+    "accent": "#ffd21c",
+    "base": "#a30808",
+    "ink": "#8f160d",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Só Hoje — Etiqueta"
+    ],
+    "background": "quarta-suina-retail-v3.png",
+    "seal": "quarta-suina-colecao-5-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-4a452f25-4ee0-4060-861c-7a388ce4d2ec",
+    "musicStyle": "house",
+    "bpm": 120,
+    "seed": 22093005,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "rise",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "prism",
+        "spotlights"
+      ],
+      "transitionSound": "snap",
+      "accentSound": "sparkle"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta Suína — Só Hoje",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-suina-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-8df7651c-6b91-4f14-8fed-0eebacf7581a",
+    "sourceProject": "8df7651c-6b91-4f14-8fed-0eebacf7581a",
+    "name": "Quarta do Frango — Ofertas Imperdíveis",
+    "campaign": "QUARTA DO FRANGO",
+    "accent": "#ffce13",
+    "base": "#c90805",
+    "ink": "#e2280d",
+    "label": "banner",
+    "labelNames": [
+      "Quarta do Frango — Ofertas Imperdíveis — Etiqueta"
+    ],
+    "background": "quarta-frango-retail-v3.png",
+    "seal": "quarta-frango-colecao-1-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-8df7651c-6b91-4f14-8fed-0eebacf7581a",
+    "musicStyle": "funk",
+    "bpm": 112,
+    "seed": 22093006,
+    "transition": "iris",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "orbit",
+        "bokeh"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta do Frango — Ofertas Imperdíveis",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-frango-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-40e0c0e4-8f46-4df7-b171-9f5cb52b1cb6",
+    "sourceProject": "40e0c0e4-8f46-4df7-b171-9f5cb52b1cb6",
+    "name": "Quarta do Frango — Preço Baixo",
+    "campaign": "QUARTA DO FRANGO",
+    "accent": "#ffce13",
+    "base": "#c90805",
+    "ink": "#e2280d",
+    "label": "banner",
+    "labelNames": [
+      "Quarta do Frango — Preço Baixo — Etiqueta"
+    ],
+    "background": "quarta-frango-retail-v3.png",
+    "seal": "quarta-frango-colecao-2-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-40e0c0e4-8f46-4df7-b171-9f5cb52b1cb6",
+    "musicStyle": "drive",
+    "bpm": 120,
+    "seed": 22093007,
+    "transition": "slide",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "whip",
+      "price": "rise",
+      "camera": "impact",
+      "atmosphere": [
+        "speed-lines",
+        "spotlights"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta do Frango — Preço Baixo",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-frango-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-50fbacc7-ec86-432e-b80e-1fedeb98ab70",
+    "sourceProject": "50fbacc7-ec86-432e-b80e-1fedeb98ab70",
+    "name": "Quarta do Frango — Super Ofertas",
+    "campaign": "QUARTA DO FRANGO",
+    "accent": "#ffce13",
+    "base": "#c90805",
+    "ink": "#e2280d",
+    "label": "banner",
+    "labelNames": [
+      "Quarta do Frango — Super Ofertas — Etiqueta"
+    ],
+    "background": "quarta-frango-retail-v3.png",
+    "seal": "quarta-frango-colecao-3-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-50fbacc7-ec86-432e-b80e-1fedeb98ab70",
+    "musicStyle": "disco",
+    "bpm": 128,
+    "seed": 22093008,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "elastic",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "ribbons"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "pop"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta do Frango — Super Ofertas",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-frango-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-8226c02d-02ad-4a2e-90f0-d3efc67e28fa",
+    "sourceProject": "8226c02d-02ad-4a2e-90f0-d3efc67e28fa",
+    "name": "Quarta do Frango — Frango Fresquinho",
+    "campaign": "QUARTA DO FRANGO",
+    "accent": "#ffce13",
+    "base": "#c90805",
+    "ink": "#e2280d",
+    "label": "banner",
+    "labelNames": [
+      "Quarta do Frango — Frango Fresquinho — Etiqueta"
+    ],
+    "background": "quarta-frango-retail-v3.png",
+    "seal": "quarta-frango-colecao-4-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-8226c02d-02ad-4a2e-90f0-d3efc67e28fa",
+    "musicStyle": "tropical",
+    "bpm": 108,
+    "seed": 22093009,
+    "transition": "blur",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "tracking",
+      "price": "tilt",
+      "camera": "impact",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "snap"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta do Frango — Frango Fresquinho",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-frango-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-79b35576-5450-42a5-964f-cc320e280f21",
+    "sourceProject": "79b35576-5450-42a5-964f-cc320e280f21",
+    "name": "Quarta do Frango — Só Hoje",
+    "campaign": "QUARTA DO FRANGO",
+    "accent": "#ffce13",
+    "base": "#c90805",
+    "ink": "#e2280d",
+    "label": "banner",
+    "labelNames": [
+      "Quarta do Frango — Só Hoje — Etiqueta"
+    ],
+    "background": "quarta-frango-retail-v3.png",
+    "seal": "quarta-frango-colecao-5-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "model-79b35576-5450-42a5-964f-cc320e280f21",
+    "musicStyle": "house",
+    "bpm": 124,
+    "seed": 22093010,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "rise",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "prism",
+        "spotlights"
+      ],
+      "transitionSound": "snap",
+      "accentSound": "sparkle"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 4,
+    "layoutName": "Quarta do Frango — Só Hoje",
+    "vertical": {
+      "seal": [
+        280,
+        65,
+        520,
+        505
+      ],
+      "logo": [
+        110,
+        1515,
+        860,
+        230
+      ],
+      "product": [
+        35,
+        535,
+        1010,
+        610
+      ],
+      "name": [
+        125,
+        1140,
+        830,
+        90
+      ],
+      "condition": [
+        145,
+        1100,
+        790,
+        32
+      ],
+      "price": [
+        125,
+        1242,
+        830,
+        275
+      ],
+      "validity": [
+        70,
+        1770,
+        940,
+        90
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        45,
+        35,
+        600,
+        600
+      ],
+      "logo": [
+        65,
+        715,
+        550,
+        200
+      ],
+      "product": [
+        670,
+        185,
+        1200,
+        860
+      ],
+      "name": [
+        820,
+        638,
+        980,
+        100
+      ],
+      "condition": [
+        950,
+        715,
+        760,
+        30
+      ],
+      "price": [
+        820,
+        750,
+        980,
+        290
+      ],
+      "validity": [
+        60,
+        937,
+        560,
+        70
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-frango-retail-wide-v3.png"
+  },
+  {
+    "id": "flyer-d6dac003-8244-41fd-ad1f-a8b701041bea",
+    "sourceProject": "d6dac003-8244-41fd-ad1f-a8b701041bea",
+    "name": "Leve Mais Pague Menos — Grafite",
+    "campaign": "LEVE MAIS PAGUE MENOS",
+    "accent": "#ffdf00",
+    "base": "#171717",
+    "ink": "#343434",
+    "label": "banner",
+    "labelNames": [
+      "Leve Mais Pague Menos — Grafite — Etiqueta"
+    ],
+    "background": "economia-leve-mais-preto-bg.png",
+    "seal": "economia-leve-mais-preto-seal.png",
+    "sealAspect": 0.9624413145539906,
+    "posterLayout": "thematic-seal",
+    "music": "model-d6dac003-8244-41fd-ad1f-a8b701041bea",
+    "musicStyle": "breakbeat",
+    "bpm": 112,
+    "seed": 23092600,
+    "transition": "iris",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Leve Mais Pague Menos — Grafite",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-leve-mais-preto-wide.png",
+    "posterPriceCornerRadius": 0.005,
+    "posterRetailFinish": {
+      "labelFill": "#ffdf00",
+      "labelInk": "#171717",
+      "labelEdge": "#343434"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-36c8e262-7319-4b2b-a504-8ace9fa1f18e",
+    "sourceProject": "36c8e262-7319-4b2b-a504-8ace9fa1f18e",
+    "name": "Leve Mais Pague Menos — Azul",
+    "campaign": "LEVE MAIS PAGUE MENOS",
+    "accent": "#ffcd19",
+    "base": "#0529a6",
+    "ink": "#124abe",
+    "label": "banner",
+    "labelNames": [
+      "Leve Mais Pague Menos — Azul — Etiqueta"
+    ],
+    "background": "economia-leve-mais-azul-bg.png",
+    "seal": "economia-leve-mais-azul-seal.png",
+    "sealAspect": 1.0925,
+    "posterLayout": "thematic-seal",
+    "music": "model-36c8e262-7319-4b2b-a504-8ace9fa1f18e",
+    "musicStyle": "house",
+    "bpm": 114,
+    "seed": 23092601,
+    "transition": "diagonal",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "rise",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Leve Mais Pague Menos — Azul",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-leve-mais-azul-wide.png",
+    "posterPriceCornerRadius": 0.03,
+    "posterRetailFinish": {
+      "labelFill": "#063ad1",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffcd19"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-29e264e5-f91c-4228-a66d-682e73267981",
+    "sourceProject": "29e264e5-f91c-4228-a66d-682e73267981",
+    "name": "Semana Imbatível",
+    "campaign": "SEMANA IMBATÍVEL",
+    "accent": "#ffd020",
+    "base": "#7b1525",
+    "ink": "#a32e36",
+    "label": "banner",
+    "labelNames": [
+      "Semana Imbatível — Etiqueta"
+    ],
+    "background": "economia-semana-imbativel-bg.png",
+    "seal": "economia-semana-imbativel-seal.png",
+    "sealAspect": 1.2745274527452746,
+    "posterLayout": "thematic-seal",
+    "music": "model-29e264e5-f91c-4228-a66d-682e73267981",
+    "musicStyle": "disco",
+    "bpm": 116,
+    "seed": 23092602,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "tilt",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Semana Imbatível",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-semana-imbativel-wide.png",
+    "posterPriceCornerRadius": 0.07,
+    "posterRetailFinish": {
+      "labelFill": "#ffd020",
+      "labelInk": "#171717",
+      "labelEdge": "#a32e36"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-7689af0a-1e71-411e-be63-f7366a3d46cc",
+    "sourceProject": "7689af0a-1e71-411e-be63-f7366a3d46cc",
+    "name": "Semana dos Eletros",
+    "campaign": "SEMANA DOS ELETROS",
+    "accent": "#ffe52c",
+    "base": "#d51716",
+    "ink": "#840a10",
+    "label": "banner",
+    "labelNames": [
+      "Semana dos Eletros — Etiqueta"
+    ],
+    "background": "economia-semana-eletros-bg.png",
+    "seal": "economia-semana-eletros-seal.png",
+    "sealAspect": 1.2795311091073038,
+    "posterLayout": "thematic-seal",
+    "music": "model-7689af0a-1e71-411e-be63-f7366a3d46cc",
+    "musicStyle": "electro",
+    "bpm": 118,
+    "seed": 23092603,
+    "transition": "slide",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "drop",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "laser-sweep",
+        "speed-lines"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "electric",
+    "revision": 2,
+    "layoutName": "Semana dos Eletros",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        1220,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        1210,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        5,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        90,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        150,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        90,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        1240,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-semana-eletros-wide.png",
+    "posterPriceCornerRadius": 0.002,
+    "posterRetailFinish": {
+      "labelFill": "#dd0715",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe52c"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-30416137-c816-49f9-912d-9a0c0a1f8568",
+    "sourceProject": "30416137-c816-49f9-912d-9a0c0a1f8568",
+    "name": "Oferta do Dia",
+    "campaign": "OFERTA DO DIA",
+    "accent": "#ffe236",
+    "base": "#e65b0b",
+    "ink": "#b9270a",
+    "label": "banner",
+    "labelNames": [
+      "Oferta do Dia — Etiqueta"
+    ],
+    "background": "economia-oferta-dia-bg.png",
+    "seal": "economia-oferta-dia-seal.png",
+    "sealAspect": 1.1550985432733505,
+    "posterLayout": "thematic-seal",
+    "music": "model-30416137-c816-49f9-912d-9a0c0a1f8568",
+    "musicStyle": "funk",
+    "bpm": 120,
+    "seed": 23092604,
+    "transition": "iris",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "tilt",
+      "text": "rise",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "clock",
+    "revision": 2,
+    "layoutName": "Oferta do Dia",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-oferta-dia-wide.png",
+    "posterPriceCornerRadius": 0.08,
+    "posterRetailFinish": {
+      "labelFill": "#ffe236",
+      "labelInk": "#171717",
+      "labelEdge": "#b9270a"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-1149e2e3-3c72-4bc2-8701-140d003ea949",
+    "sourceProject": "1149e2e3-3c72-4bc2-8701-140d003ea949",
+    "name": "Venha Fazer Economia",
+    "campaign": "VENHA FAZER ECONOMIA",
+    "accent": "#ffdc16",
+    "base": "#ce1117",
+    "ink": "#8e0713",
+    "label": "banner",
+    "labelNames": [
+      "Venha Fazer Economia — Etiqueta"
+    ],
+    "background": "economia-venha-economia-bg.png",
+    "seal": "economia-venha-economia-seal.png",
+    "sealAspect": 1.0481632653061224,
+    "posterLayout": "thematic-seal",
+    "music": "model-1149e2e3-3c72-4bc2-8701-140d003ea949",
+    "musicStyle": "drive",
+    "bpm": 122,
+    "seed": 23092605,
+    "transition": "diagonal",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-right",
+      "text": "stomp",
+      "price": "tilt",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Venha Fazer Economia",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-venha-economia-wide.png",
+    "posterPriceCornerRadius": 0.02,
+    "posterRetailFinish": {
+      "labelFill": "#dd0715",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdc16"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-2cd4be76-543e-4d93-b471-b71d389b1fe5",
+    "sourceProject": "2cd4be76-543e-4d93-b471-b71d389b1fe5",
+    "name": "Mês da Economia",
+    "campaign": "MÊS DA ECONOMIA",
+    "accent": "#ffdf12",
+    "base": "#a80816",
+    "ink": "#dc2524",
+    "label": "banner",
+    "labelNames": [
+      "Mês da Economia — Etiqueta"
+    ],
+    "background": "economia-mes-economia-bg.png",
+    "seal": "economia-mes-economia-seal.png",
+    "sealAspect": 1.143222506393862,
+    "posterLayout": "thematic-seal",
+    "music": "model-2cd4be76-543e-4d93-b471-b71d389b1fe5",
+    "musicStyle": "pop",
+    "bpm": 124,
+    "seed": 23092606,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "elastic",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Mês da Economia",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-mes-economia-wide.png",
+    "posterPriceCornerRadius": 0,
+    "posterRetailFinish": {
+      "labelFill": "#ffdf12",
+      "labelInk": "#171717",
+      "labelEdge": "#dc2524"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-9df9264e-8a88-41bc-b4c6-1481fcb75b6c",
+    "sourceProject": "9df9264e-8a88-41bc-b4c6-1481fcb75b6c",
+    "name": "Sempre o Menor Preço",
+    "campaign": "SEMPRE O MENOR PREÇO",
+    "accent": "#ffe226",
+    "base": "#bc0815",
+    "ink": "#8d0711",
+    "label": "banner",
+    "labelNames": [
+      "Sempre o Menor Preço — Etiqueta"
+    ],
+    "background": "economia-sempre-menor-preco-bg.png",
+    "seal": "economia-sempre-menor-preco-seal.png",
+    "sealAspect": 1.0599343185550083,
+    "posterLayout": "thematic-seal",
+    "music": "model-9df9264e-8a88-41bc-b4c6-1481fcb75b6c",
+    "musicStyle": "rock",
+    "bpm": 126,
+    "seed": 23092607,
+    "transition": "slide",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "rise",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Sempre o Menor Preço",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        1220,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        1210,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        5,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        90,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        150,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        90,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        1240,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-sempre-menor-preco-wide.png",
+    "posterPriceCornerRadius": 0.04,
+    "posterRetailFinish": {
+      "labelFill": "#dd0715",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe226"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-eb8b8763-fbc4-420b-9c0a-0bdb6ae2bdad",
+    "sourceProject": "eb8b8763-fbc4-420b-9c0a-0bdb6ae2bdad",
+    "name": "Leve Mais Pague Menos — Vermelho",
+    "campaign": "LEVE MAIS PAGUE MENOS",
+    "accent": "#ffe329",
+    "base": "#cf0909",
+    "ink": "#a1160c",
+    "label": "banner",
+    "labelNames": [
+      "Leve Mais Pague Menos — Vermelho — Etiqueta"
+    ],
+    "background": "economia-leve-mais-vermelho-bg.png",
+    "seal": "economia-leve-mais-vermelho-seal.png",
+    "sealAspect": 1.0795360397680198,
+    "posterLayout": "thematic-seal",
+    "music": "model-eb8b8763-fbc4-420b-9c0a-0bdb6ae2bdad",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 23092608,
+    "transition": "iris",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "tilt",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Leve Mais Pague Menos — Vermelho",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-leve-mais-vermelho-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#dd0715",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe329"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-f7c57c47-7c1d-45d8-a62a-3359a65da3f1",
+    "sourceProject": "f7c57c47-7c1d-45d8-a62a-3359a65da3f1",
+    "name": "Venha Economizar de Verdade",
+    "campaign": "VENHA ECONOMIZAR DE VERDADE",
+    "accent": "#ffdf10",
+    "base": "#08752a",
+    "ink": "#064b23",
+    "label": "banner",
+    "labelNames": [
+      "Venha Economizar de Verdade — Etiqueta"
+    ],
+    "background": "economia-economizar-verdade-bg.png",
+    "seal": "economia-economizar-verdade-seal.png",
+    "sealAspect": 1.133276740237691,
+    "posterLayout": "thematic-seal",
+    "music": "model-f7c57c47-7c1d-45d8-a62a-3359a65da3f1",
+    "musicStyle": "tropical",
+    "bpm": 130,
+    "seed": 23092609,
+    "transition": "diagonal",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Venha Economizar de Verdade",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        1220,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        1210,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        5,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        90,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        150,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        90,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        1240,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-economizar-verdade-wide.png",
+    "posterPriceCornerRadius": 0.09,
+    "posterRetailFinish": {
+      "labelFill": "#ffdf10",
+      "labelInk": "#064823",
+      "labelEdge": "#064b23"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-86b65ef4-ec55-46e0-8361-2a6c31b2f972",
+    "sourceProject": "86b65ef4-ec55-46e0-8361-2a6c31b2f972",
+    "name": "É Barato de Verdade",
+    "campaign": "É BARATO DE VERDADE",
+    "accent": "#ffde20",
+    "base": "#d10b15",
+    "ink": "#0637ad",
+    "label": "banner",
+    "labelNames": [
+      "É Barato de Verdade — Etiqueta"
+    ],
+    "background": "economia-barato-verdade-bg.png",
+    "seal": "economia-barato-verdade-seal.png",
+    "sealAspect": 1.0778145695364238,
+    "posterLayout": "thematic-seal",
+    "music": "model-86b65ef4-ec55-46e0-8361-2a6c31b2f972",
+    "musicStyle": "house",
+    "bpm": 132,
+    "seed": 23092610,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "drop",
+      "text": "rise",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "É Barato de Verdade",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-barato-verdade-wide.png",
+    "posterPriceCornerRadius": 0.015,
+    "posterRetailFinish": {
+      "labelFill": "#073dcc",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffde20"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-c83f1ed2-2fc4-4656-96c5-e18e88a4c9c5",
+    "sourceProject": "c83f1ed2-2fc4-4656-96c5-e18e88a4c9c5",
+    "name": "É Preço Baixo Todo Dia",
+    "campaign": "É PREÇO BAIXO TODO DIA",
+    "accent": "#ffe52a",
+    "base": "#dc1512",
+    "ink": "#182997",
+    "label": "banner",
+    "labelNames": [
+      "É Preço Baixo Todo Dia — Etiqueta"
+    ],
+    "background": "economia-preco-todo-dia-bg.png",
+    "seal": "economia-preco-todo-dia-seal.png",
+    "sealAspect": 1.2105263157894737,
+    "posterLayout": "thematic-seal",
+    "music": "model-c83f1ed2-2fc4-4656-96c5-e18e88a4c9c5",
+    "musicStyle": "disco",
+    "bpm": 134,
+    "seed": 23092611,
+    "transition": "slide",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "tilt",
+      "text": "stomp",
+      "price": "tilt",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "É Preço Baixo Todo Dia",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-preco-todo-dia-wide.png",
+    "posterPriceCornerRadius": 0.035,
+    "posterRetailFinish": {
+      "labelFill": "#ffe52a",
+      "labelInk": "#171717",
+      "labelEdge": "#182997"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-7babe998-b93b-401c-8c82-c13d8f84eb51",
+    "sourceProject": "7babe998-b93b-401c-8c82-c13d8f84eb51",
+    "name": "Preço Baixo É Aqui",
+    "campaign": "PREÇO BAIXO É AQUI",
+    "accent": "#ffe131",
+    "base": "#c91214",
+    "ink": "#780a0f",
+    "label": "banner",
+    "labelNames": [
+      "Preço Baixo É Aqui — Etiqueta"
+    ],
+    "background": "economia-preco-aqui-bg.png",
+    "seal": "economia-preco-aqui-seal.png",
+    "sealAspect": 0.9724842767295597,
+    "posterLayout": "thematic-seal",
+    "music": "model-7babe998-b93b-401c-8c82-c13d8f84eb51",
+    "musicStyle": "drive",
+    "bpm": 136,
+    "seed": 23092612,
+    "transition": "iris",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-right",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Preço Baixo É Aqui",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-preco-aqui-wide.png",
+    "posterPriceCornerRadius": 0.003,
+    "posterRetailFinish": {
+      "labelFill": "#dd0715",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe131"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-1ece6ad9-8b17-4542-9860-d72390cae4d8",
+    "sourceProject": "1ece6ad9-8b17-4542-9860-d72390cae4d8",
+    "name": "Comece o Mês de Carrinho Cheio",
+    "campaign": "COMECE O MÊS DE CARRINHO CHEIO",
+    "accent": "#ffff1a",
+    "base": "#b40c1c",
+    "ink": "#ee8810",
+    "label": "banner",
+    "labelNames": [
+      "Comece o Mês de Carrinho Cheio — Etiqueta"
+    ],
+    "background": "economia-carrinho-cheio-bg.png",
+    "seal": "economia-carrinho-cheio-seal.png",
+    "sealAspect": 1.573,
+    "posterLayout": "thematic-seal",
+    "music": "model-1ece6ad9-8b17-4542-9860-d72390cae4d8",
+    "musicStyle": "funk",
+    "bpm": 138,
+    "seed": 23092613,
+    "transition": "diagonal",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "elastic",
+      "text": "rise",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Comece o Mês de Carrinho Cheio",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        610
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        615,
+        960,
+        745
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        1220,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        1210,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        5,
+        120,
+        1240,
+        880
+      ],
+      "name": [
+        90,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        150,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        90,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        1240,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-carrinho-cheio-wide.png",
+    "posterPriceCornerRadius": 0.06,
+    "posterRetailFinish": {
+      "labelFill": "#ffff1a",
+      "labelInk": "#171717",
+      "labelEdge": "#ee8810"
+    },
+    "preserveBrandLayout": true
   }
 ]

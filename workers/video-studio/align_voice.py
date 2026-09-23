@@ -10,7 +10,10 @@ from num2words import num2words
 
 def tokens(text):
     text = re.sub(r'\d+', lambda m: num2words(int(m.group()), lang='pt_BR'), text.lower())
-    return re.findall(r'[a-z]+', ''.join(c for c in unicodedata.normalize('NFD', text) if not unicodedata.combining(c)))
+    words = re.findall(r'[a-z]+', ''.join(c for c in unicodedata.normalize('NFD', text) if not unicodedata.combining(c)))
+    # Scripts may stretch a name to guide TTS pronunciation ("Rodriiigueeess").
+    # Collapse repeated letters only in those deliberately elongated words.
+    return [re.sub(r'(.)\1+', r'\1', word) if re.search(r'(.)\1{2,}', word) else word for word in words]
 
 
 def scene_boundaries(scripts, words, duration):

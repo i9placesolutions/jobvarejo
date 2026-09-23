@@ -35,6 +35,7 @@ export type ArtLayer = {
   visible: boolean
   locked: boolean
   fill: string
+  richPrice?: boolean
   text?: string
   fontFamily?: string
   fontScaleX?: number

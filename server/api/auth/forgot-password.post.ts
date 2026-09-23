@@ -1,88 +1,63 @@
-import { ensureAuthColumns, normalizeEmail, setResetTokenForEmail } from '../../utils/auth-db'
-import { isSmtpConfigured, sendPasswordResetEmail } from '../../utils/email'
-import { enforceRateLimit } from '../../utils/rate-limit'
-import { createPasswordResetToken, hashOpaqueToken } from '../../utils/session-token'
+import { clearResetTokenForUser, ensureAuthColumns, getProfileByWhatsApp } from '../../utils/auth-db'
+import { ensureWhatsAppChallengeSchema, invalidateWhatsAppChallenge, issueWhatsAppChallenge } from '../../utils/auth-whatsapp'
+import { sendWhatsAppText } from '../../utils/uazapi'
+import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
 
-const getResetTokenTtlMinutes = (): number => {
-  const config = useRuntimeConfig()
-  const raw = Number.parseInt(
-    String((config as any).authResetTokenTtlMinutes || process.env.AUTH_RESET_TOKEN_TTL_MINUTES || '60'),
-    10
-  )
-  if (!Number.isFinite(raw) || raw <= 0) return 60
-  return Math.min(raw, 24 * 60)
+const GENERIC_RESPONSE = {
+  success: true,
+  expires_in: 600,
+  message: 'Se este WhatsApp estiver vinculado à conta, enviaremos um código de recuperação.'
 }
 
-const resolveAppOrigin = (event: any): string => {
-  const config = useRuntimeConfig()
-  const configured = String((config as any).appBaseUrl || process.env.APP_BASE_URL || '').trim()
-  if (configured) {
-    try {
-      const parsed = new URL(configured)
-      return `${parsed.protocol}//${parsed.host}`
-    } catch {
-      // fallback to request origin
-    }
+const waitForMinimumResponseTime = async (startedAt: number): Promise<void> => {
+  const remainingMs = 750 - (Date.now() - startedAt)
+  if (remainingMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remainingMs))
   }
-  return getRequestURL(event).origin
 }
 
 export default defineEventHandler(async (event) => {
-  const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
-  await enforceRateLimit(event, `auth-forgot-password:${ip}`, 15, 60_000)
-  const ttlMinutes = getResetTokenTtlMinutes()
-  const smtpConfigured = isSmtpConfigured()
-  const isProduction = process.env.NODE_ENV === 'production'
-
-  if (isProduction && !smtpConfigured) {
-    throw createError({
-      statusCode: 503,
-      statusMessage: 'Recuperacao de senha indisponivel. Contate o suporte.'
-    })
-  }
-
+  const startedAt = Date.now()
   const body = await readBody<Record<string, any>>(event)
-  const email = normalizeEmail(body?.email)
-  if (!email) {
-    throw createError({ statusCode: 400, statusMessage: 'E-mail invalido' })
+  const whatsapp = normalizeBrazilWhatsApp(body?.whatsapp)
+  if (!whatsapp) {
+    throw createError({ statusCode: 400, statusMessage: 'Informe um WhatsApp brasileiro válido com DDD.' })
   }
 
   await ensureAuthColumns()
-  const token = createPasswordResetToken()
-  const tokenHash = hashOpaqueToken(token)
-  const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString()
+  await ensureWhatsAppChallengeSchema()
 
-  const updated = await setResetTokenForEmail(email, tokenHash, expiresAt)
+  const profile = await getProfileByWhatsApp(whatsapp)
+  if (profile?.id) {
+    try {
+      const code = await issueWhatsAppChallenge({
+        phone: whatsapp,
+        purpose: 'password_reset',
+        userId: profile.id
+      })
 
-  let debugResetUrl: string | null = null
-  if (updated?.id) {
-    const resetUrl = `${resolveAppOrigin(event)}/auth/reset-password?token=${encodeURIComponent(token)}`
-    if (smtpConfigured) {
+      // A recuperação agora é exclusivamente por WhatsApp: qualquer token
+      // legado de redefinição por e-mail deixa de ser válido.
+      await clearResetTokenForUser(profile.id)
+
       try {
-        await sendPasswordResetEmail({
-          to: email,
-          resetUrl,
-          ttlMinutes
+        await sendWhatsAppText({
+          phone: whatsapp,
+          text: `Seu código para redefinir a senha do JobVarejo é ${code}. Ele expira em 10 minutos. Não compartilhe este código.`
         })
-      } catch (error: any) {
-        console.error('[auth] Falha ao enviar e-mail de reset:', error?.message || String(error))
-        throw createError({
-          statusCode: 502,
-          statusMessage: 'Falha ao enviar e-mail de recuperacao. Tente novamente.'
-        })
+      } catch {
+        try {
+          await invalidateWhatsAppChallenge({ phone: whatsapp, purpose: 'password_reset', code })
+        } catch {
+          // Keep the public response generic even if cleanup also fails.
+        }
+        console.warn('[auth] Não foi possível confirmar a entrega do código de recuperação pelo WhatsApp.')
       }
-    } else {
-      debugResetUrl = resetUrl
+    } catch (error: any) {
+      if (Number(error?.statusCode || 0) !== 429) throw error
     }
   }
 
-  // Never expose reset URL in production response — only log server-side
-  if (debugResetUrl && !isProduction) {
-    console.warn(`[auth] Reset link gerado para ${email}: ${debugResetUrl}`)
-  }
-
-  return {
-    success: true,
-    message: 'Se o e-mail existir, enviaremos instrucoes para redefinir a senha.'
-  }
+  await waitForMinimumResponseTime(startedAt)
+  return GENERIC_RESPONSE
 })

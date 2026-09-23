@@ -34,10 +34,15 @@ export default defineEventHandler(async (event) => {
       ...(range ? { Range: `bytes=${range.start ?? ''}-${range.end ?? ''}` } : {})
     }))
     if (!result.Body) throw createError({ statusCode: 404, statusMessage: 'Áudio não encontrado' })
-    const contentType = result.ContentType || (String(track.audio_format || '').toLowerCase() === 'webm' ? 'audio/webm' : 'audio/mpeg')
+    const format = String(track.audio_format || '').toLowerCase()
+    const fallbackContentType = format === 'webm' ? 'audio/webm' :
+      format === 'm4a' || format === 'mp4' || format === 'aac' ? 'audio/mp4' :
+      format === 'wav' ? 'audio/wav' : 'audio/mpeg'
+    const contentType = result.ContentType && result.ContentType !== 'application/octet-stream'
+      ? result.ContentType : fallbackContentType
     const contentLength = Number(result.ContentLength || 0)
-    const extension = String(track.audio_format || '').toLowerCase() === 'webm' ? 'webm' :
-      String(track.audio_format || '').toLowerCase() === 'wav' ? 'wav' : 'mp3'
+    const extension = format === 'webm' ? 'webm' : format === 'wav' ? 'wav' :
+      format === 'm4a' || format === 'mp4' || format === 'aac' ? 'm4a' : 'mp3'
     const safeTitle = String(track.title || 'audio-jobvarejo')
       .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
       .replace(/\s+/g, ' ')
@@ -49,7 +54,7 @@ export default defineEventHandler(async (event) => {
         ? `attachment; filename="${safeTitle}.${extension}"; filename*=UTF-8''${encodeURIComponent(`${safeTitle}.${extension}`)}`
         : 'inline',
       'Accept-Ranges': 'bytes',
-      'Cache-Control': 'private, max-age=86400, stale-while-revalidate=604800',
+      'Cache-Control': playerIdentity ? 'private, no-store' : 'private, max-age=86400, stale-while-revalidate=604800',
       'X-Radio-Track': String(track.id)
     })
     if (contentLength > 0) setResponseHeader(event, 'Content-Length', contentLength)

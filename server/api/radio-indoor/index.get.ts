@@ -10,6 +10,7 @@ import {
 } from '../../utils/radio-indoor'
 import { getRadioStationScope, listAccessibleStations } from '../../utils/radio-access'
 import { musicGptStatusForClient } from '../../utils/musicgpt'
+import { getElevenLabsConfig } from '../../utils/elevenlabs'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
@@ -79,7 +80,8 @@ export default defineEventHandler(async (event) => {
       programs: programResult.rows.map(serializeProgram),
       schedules: scheduleResult.rows,
       summary: trackSummary.rows[0] || { total: 0, ready: 0, genres: 0, artists: 0 },
-      musicGpt: musicGptStatusForClient()
+      musicGpt: musicGptStatusForClient(),
+      elevenLabs: { configured: Boolean(getElevenLabsConfig().apiKey) }
     }
   } catch (error: any) {
     const setup = radioTableErrorResponse(error)

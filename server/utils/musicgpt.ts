@@ -3,6 +3,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { getS3Client } from './s3'
 import { getRadioStorageConfig, isRadioStorageKey } from './radio-indoor'
 import { pgTx } from './postgres'
+import { withRetailMusicDirection } from '../../shared/musicgpt-retail.mjs'
 
 export interface MusicGptSubmission {
   prompt: string
@@ -134,7 +135,7 @@ export const submitMusicGptMusicAi = async (
           Accept: 'application/json'
         },
         body: {
-          prompt: input.prompt,
+          prompt: withRetailMusicDirection(input.prompt),
           ...(input.musicStyle ? { music_style: input.musicStyle } : {}),
           ...(input.lyrics ? { lyrics: input.lyrics } : {}),
           make_instrumental: input.makeInstrumental === true,

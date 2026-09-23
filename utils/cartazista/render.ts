@@ -1,3 +1,4 @@
+import { cartazistaPriceStyles } from './rich-price'
 import type { ArtComposition } from '~/types/art-studio'
 import { loadCartazistaFonts as loadArtFonts } from './fonts'
 
@@ -7,7 +8,7 @@ export async function fitCartazistaComposition(source: ArtComposition): Promise<
   const doc: ArtComposition=JSON.parse(JSON.stringify(source))
   for(const layer of doc.layers.filter(l=>l.kind==='text')) {
     const width=layer.width/(layer.fontScaleX||1)
-    const object=new Textbox(layer.text||'',{width,fontFamily:`Art ${layer.fontFamily||'Barlow'}`,fontSize:layer.fontSize||48,fontWeight:layer.fontWeight||400,lineHeight:layer.lineHeight??1.16})
+    const object=new Textbox(layer.text||'',{styles:cartazistaPriceStyles(layer),width,fontFamily:`Art ${layer.fontFamily||'Barlow'}`,fontSize:layer.fontSize||48,fontWeight:layer.fontWeight||400,lineHeight:layer.lineHeight??1.16})
     while((object.height>layer.height+.01||object.width>width+.01)&&object.fontSize>6){object.set({fontSize:object.fontSize-1,width});object.initDimensions()}
     layer.fontSize=object.fontSize
     object.dispose()
@@ -25,14 +26,14 @@ async function renderCartazista(source: ArtComposition, raster = false): Promise
     for(const layer of doc.layers.filter(l=>l.visible)) {
       const options = {left:layer.x,top:layer.y,originX:'left' as const,originY:'top' as const,fill:layer.fill,opacity:layer.opacity,angle:layer.rotation,strokeWidth:0}
       if(layer.kind==='text') {
-        const object = new Textbox(layer.text||'',{...options,width:layer.width/(layer.fontScaleX||1),scaleX:layer.fontScaleX||1,fontFamily:`Art ${layer.fontFamily||'Barlow'}`,fontWeight:layer.fontWeight||400,fontSize:layer.fontSize||48,textAlign:layer.align||'left',lineHeight:layer.lineHeight??1.16,charSpacing:(layer.letterSpacing||0)/(layer.fontSize||48)*1000})
-        while((object.height>layer.height+.01 || object.width*object.scaleX>layer.width+.01)&&object.fontSize>6){object.set({fontSize:object.fontSize-1,width:layer.width/(layer.fontScaleX||1)});object.initDimensions()}
+        const object = new Textbox(layer.text||'',{...options,styles:cartazistaPriceStyles(layer),width:layer.width/(layer.fontScaleX||1),scaleX:layer.fontScaleX||1,fontFamily:`Art ${layer.fontFamily||'Barlow'}`,fontWeight:layer.fontWeight||400,fontSize:layer.fontSize||48,textAlign:layer.align||'left',lineHeight:layer.lineHeight??1.16,charSpacing:(layer.letterSpacing||0)/(layer.fontSize||48)*1000})
+        while((object.height>layer.height+.01 || object.width*object.scaleX>layer.width+.01)&&object.fontSize>6){object.set({styles:cartazistaPriceStyles(layer,object.fontSize-1),fontSize:object.fontSize-1,width:layer.width/(layer.fontScaleX||1)});object.initDimensions()}
         canvas.add(object)
       } else if(layer.kind==='shape'&&layer.shape==='path'&&layer.pathData) {
         const object=new Path(layer.pathData,options)
         object.set({scaleX:layer.width/object.width,scaleY:layer.height/object.height});canvas.add(object)
       } else if(layer.kind==='shape'&&layer.shape==='ellipse')canvas.add(new Ellipse({...options,rx:layer.width/2,ry:layer.height/2}))
-      else if(layer.kind==='shape')canvas.add(new Rect({...options,width:layer.width,height:layer.height,rx:layer.cornerRadius||0,ry:layer.cornerRadius||0}))
+      else if(layer.kind==='shape')canvas.add(new Rect({...options,styles:cartazistaPriceStyles(layer),width:layer.width,height:layer.height,rx:layer.cornerRadius||0,ry:layer.cornerRadius||0}))
       else if(layer.kind==='image'&&layer.src) {
         const object=await FabricImage.fromURL(layer.src,{crossOrigin:'anonymous'})
         const scale=layer.fit==='cover'?Math.max(layer.width/object.width,layer.height/object.height):Math.min(layer.width/object.width,layer.height/object.height)

@@ -96,16 +96,17 @@ export default defineEventHandler(async (event) => {
              thumbnail_source_url, audio_format, audio_codec, rights_status, status, metadata)
            values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'ready',$21::jsonb)
            on conflict (user_id, source_provider, source_id) do update set
-             station_id = coalesce(radio_catalog_tracks.station_id, excluded.station_id), title = excluded.title, artist = excluded.artist,
+             station_id = null, title = excluded.title, artist = excluded.artist,
              album = excluded.album, release_year = excluded.release_year, release_date = excluded.release_date,
              genre = excluded.genre, duration_ms = excluded.duration_ms, storage_key = excluded.storage_key,
              thumbnail_key = excluded.thumbnail_key, audio_format = excluded.audio_format,
-             audio_codec = excluded.audio_codec, rights_status = excluded.rights_status,
+             audio_codec = excluded.audio_codec,
+             rights_status = case when excluded.rights_status = 'pending' then radio_catalog_tracks.rights_status else excluded.rights_status end,
              status = excluded.status, metadata = excluded.metadata, updated_at = now()
            returning id`,
           [
             ownerUserId,
-            station.id,
+            null,
             cleanText(first(track, ['title', 'name']) || `Faixa ${index + 1}`, 240),
             cleanText(first(track, ['artist', 'author']) || 'Artista desconhecido', 180),
             cleanText(first(track, ['album']) || first(manifest?.playlist || manifest, ['album', 'title']) || '', 180) || null,
@@ -123,7 +124,7 @@ export default defineEventHandler(async (event) => {
             cleanText(first(thumbnail, ['sourceUrl', 'source_url', 'url']) || '', 2048) || null,
             cleanText(first(audio, ['format', 'audioFormat']) || 'webm', 24),
             cleanText(first(audio, ['codec', 'audioCodec']) || 'opus', 40),
-            cleanText(first(track, ['rightsStatus', 'rights_status']) || 'authorized_by_user', 80),
+            cleanText(first(track, ['rightsStatus', 'rights_status']) || 'pending', 80),
             jsonParam(metadata)
           ]
         )

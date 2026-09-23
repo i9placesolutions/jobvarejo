@@ -11,8 +11,10 @@ export function syncCartazistaBoundText(document: CartazistaDocument, compositio
     if(changed('cartaz-unit'))product.unit=value(composition,'cartaz-unit')!
     for(const id of ['cartaz-price','cartaz-secondary-price']){
       if(!changed(id)&&!changed(`${id}-cents`))continue
-      const integer=(value(composition,id)||'').replace(/[^\d]/g,'')
-      const cents=(value(composition,`${id}-cents`)||'').replace(/[^\d]/g,'').padEnd(2,'0').slice(0,2)
+      const rich=composition.layers.find(l=>l.id===id)?.richPrice
+      const full=value(composition,id)||''
+      const integer=(rich?full.split(',')[0]||'':full).replace(/[^\d]/g,'')
+      const cents=(rich?full.split(',')[1]||'':value(composition,`${id}-cents`)||'').replace(/[^\d]/g,'').padEnd(2,'0').slice(0,2)
       const amount=Number(`${integer}.${cents}`)
       if(!integer||!Number.isFinite(amount))continue
       let key:keyof CartazistaProduct='price'

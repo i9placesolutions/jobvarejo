@@ -67,6 +67,7 @@ const lines = (layer: ArtLayer) => {
       <g v-if="layer.kind==='text' && layer.textArc">
         <text v-for="(glyph,index) in arcGlyphs(layer)" :key="index" :transform="`translate(${glyph.x} ${glyph.y}) rotate(${glyph.angle}) scale(${layer.fontScaleX || 1} 1)`" text-anchor="middle" dominant-baseline="central" :font-family="`Art ${layer.fontFamily}`" :font-size="glyph.fontSize" :font-weight="layer.fontWeight" :fill="paint(layer)">{{ glyph.char }}</text>
       </g>
+      <text v-else-if="layer.kind==='text' && layer.richPrice" :x="layer.width/2" :y="(layer.fontSize||48)*.9" text-anchor="middle" :font-family="`Art ${layer.fontFamily}`" :font-size="layer.fontSize" :font-weight="layer.fontWeight" :fill="paint(layer)"><tspan>{{ (layer.text||'').split(',')[0] }}</tspan><tspan :font-size="(layer.fontSize||48)*.55" :dy="-(layer.fontSize||48)*.32">{{ (layer.text||'').includes(',') ? ','+(layer.text||'').split(',')[1] : '' }}</tspan></text>
       <text
         v-else-if="layer.kind === 'text'"
         :fill="paint(layer)"

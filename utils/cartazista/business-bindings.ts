@@ -5,6 +5,7 @@ import type { BusinessProfile } from '~/utils/businessProfile'
 export function hydrateCartazistaBusiness(source: ArtComposition, profile: Pick<BusinessProfile, 'companyName'|'whatsapp'|'address'|'instagram'>, logoSrc: string, showLogo = true): ArtComposition {
   const next = structuredClone(source)
   for (const layer of next.layers) {
+    if(layer.id==='cartaz-logo-backdrop'){layer.visible=showLogo&&!!logoSrc;continue}
     if (layer.binding === 'logo' || layer.id === 'cartaz-logo') {
       layer.src = showLogo ? logoSrc : ''
       layer.visible = !!layer.src

@@ -68,7 +68,7 @@ export const serializeRadioVoice = (row: any) => {
     consentConfirmedAt: row.consent_confirmed_at || null,
     status: row.status || 'active',
     metadata,
-    cloneReady: Boolean(metadata.cloneSampleKey),
+    cloneReady: Boolean(metadata.elevenLabsVoiceId),
     cloneSampleBytes: Number(metadata.cloneSampleBytes || 0) || null,
     sampleUrl: radioVoiceSampleUrl(String(row.id)),
     createdAt: row.created_at || null,
@@ -106,6 +106,18 @@ export const ensureMusicGptCloneSample = async (input: {
 
   const { bucket } = getRadioStorageConfig()
   const meta = jsonObject(row.metadata)
+  if (meta.cloneSampleMode === 'original') {
+    if (sampleKey !== row.sample_storage_key || !sampleKey.toLowerCase().endsWith('.mp3')) {
+      throw createError({ statusCode: 422, statusMessage: 'Amostra original de clonagem inválida' })
+    }
+    const head = await getS3Client().send(new HeadObjectCommand({ Bucket: bucket, Key: sampleKey }))
+    return {
+      key: sampleKey,
+      bytes: Number(head.ContentLength || 0),
+      durationSec: Number(meta.cloneSampleDurationSec || 0),
+      regenerated: false
+    }
+  }
   const existingKey = String(meta.cloneSampleKey || '').trim()
   if (!input.force && existingKey && isRadioStorageKey(existingKey)) {
     try {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Sparkles, Check, Crown } from 'lucide-vue-next'
+import { Eye, EyeOff, Mail, MessageCircle, Lock, User, ArrowRight, Sparkles, Check, Crown } from 'lucide-vue-next'
+import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
 
 definePageMeta({
   layout: 'auth',
@@ -11,16 +12,26 @@ const route = useRoute()
 // Form state
 const name = ref('')
 const email = ref('')
+const whatsapp = ref('')
+const { onInput: maskWhatsAppInput } = useBrazilWhatsAppMask(whatsapp)
+const whatsappCode = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 const isLoading = ref(false)
+const isRequestingWhatsAppCode = ref(false)
+const isWhatsAppCodeSent = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const isFirstUser = ref(false)
 const BUSINESS_PROFILE_ONBOARDING_KEY = 'jobvarejo:business-profile-onboarding-pending'
 const isTrialSignup = computed(() => String(route.query.trial || '') === '15')
+
+watch(whatsapp, () => {
+  isWhatsAppCodeSent.value = false
+  whatsappCode.value = ''
+})
 
 // Check if this will be the first user (super admin)
 const checkFirstUser = async () => {
@@ -64,10 +75,51 @@ const passwordStrengthColor = computed(() => {
   return 'bg-green-500'
 })
 
+const requestWhatsAppCode = async () => {
+  if (isLoading.value || isRequestingWhatsAppCode.value) return
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  if (!name.value.trim() || !email.value.trim()) {
+    errorMessage.value = 'Informe seu nome e o e-mail de recuperação antes de confirmar o WhatsApp.'
+    return
+  }
+
+  const normalizedWhatsApp = normalizeBrazilWhatsApp(whatsapp.value)
+  if (!normalizedWhatsApp) {
+    errorMessage.value = 'Informe um WhatsApp válido com DDD, por exemplo (11) 99999-9999.'
+    return
+  }
+
+  isRequestingWhatsAppCode.value = true
+  try {
+    await $fetch('/api/auth/whatsapp-code', {
+      method: 'POST',
+      body: {
+        purpose: 'register',
+        email: email.value,
+        whatsapp: normalizedWhatsApp
+      }
+    })
+    whatsappCode.value = ''
+    isWhatsAppCodeSent.value = true
+    successMessage.value = 'Código solicitado. Confira seu WhatsApp; ele vale por 10 minutos.'
+  } catch (error: any) {
+    errorMessage.value = error?.data?.statusMessage || error?.message || 'Não foi possível enviar o código pelo WhatsApp.'
+  } finally {
+    isRequestingWhatsAppCode.value = false
+  }
+}
+
 const handleRegister = async () => {
   // Validation
-  if (!name.value || !email.value || !password.value || !confirmPassword.value) {
+  if (!name.value || !email.value || !whatsapp.value || !password.value || !confirmPassword.value) {
     errorMessage.value = 'Por favor, preencha todos os campos'
+    return
+  }
+
+  if (!isWhatsAppCodeSent.value || !/^\d{6}$/.test(whatsappCode.value.trim())) {
+    errorMessage.value = 'Confirme seu WhatsApp com o código enviado antes de criar a conta.'
     return
   }
 
@@ -81,12 +133,17 @@ const handleRegister = async () => {
     return
   }
 
+  if (!normalizeBrazilWhatsApp(whatsapp.value)) {
+    errorMessage.value = 'Informe um WhatsApp válido com DDD.'
+    return
+  }
+
   isLoading.value = true
   errorMessage.value = ''
   successMessage.value = ''
 
   try {
-    await auth.signUp(email.value, password.value, name.value)
+    await auth.signUp(email.value, password.value, name.value, whatsapp.value, whatsappCode.value)
 
     // Success message based on first user
     if (isFirstUser.value) {
@@ -98,8 +155,11 @@ const handleRegister = async () => {
     // Clear form
     name.value = ''
     email.value = ''
+    whatsapp.value = ''
+    whatsappCode.value = ''
     password.value = ''
     confirmPassword.value = ''
+    isWhatsAppCodeSent.value = false
 
     // O primeiro login leva o usuário diretamente ao cadastro comercial, que
     // será reutilizado nos próximos encartes da edição rápida.
@@ -199,7 +259,7 @@ const handleRegister = async () => {
           <!-- Email Input -->
           <div class="flex flex-col gap-1.5">
             <label class="text-[11px] font-bold uppercase tracking-widest text-slate-400 ml-1" for="email">
-              E-mail
+              E-mail para recuperação
             </label>
             <div class="relative group">
               <Mail class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-indigo-500" />
@@ -214,6 +274,56 @@ const handleRegister = async () => {
                 required
               />
             </div>
+          </div>
+
+          <!-- WhatsApp identity and one-time number confirmation -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-400 ml-1" for="whatsapp">
+              WhatsApp para entrar
+            </label>
+            <div class="relative group">
+              <MessageCircle class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 transition-colors group-focus-within:text-indigo-500" />
+              <input
+                id="whatsapp"
+                :value="whatsapp"
+                @input="maskWhatsAppInput"
+                type="tel"
+                inputmode="tel"
+                autocomplete="tel"
+                placeholder="(11) 99999-9999"
+                class="w-full h-12 pl-12 pr-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+                :class="{ 'border-red-400 focus:border-red-400 focus:ring-red-100': errorMessage }"
+                required
+              />
+            </div>
+            <p class="ml-1 text-[10px] text-slate-400">Confirmaremos o número uma vez; sua senha atual continuará sendo usada no login.</p>
+          </div>
+
+          <button
+            type="button"
+            :disabled="isLoading || isRequestingWhatsAppCode"
+            class="w-full h-10 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-wait transition-colors"
+            @click="requestWhatsAppCode"
+          >
+            {{ isRequestingWhatsAppCode ? 'Enviando código...' : isWhatsAppCodeSent ? 'Reenviar código pelo WhatsApp' : 'Confirmar WhatsApp' }}
+          </button>
+
+          <div v-if="isWhatsAppCodeSent" class="flex flex-col gap-1.5">
+            <label class="text-[11px] font-bold uppercase tracking-widest text-slate-400 ml-1" for="whatsapp-code">
+              Código de confirmação
+            </label>
+            <input
+              id="whatsapp-code"
+              v-model="whatsappCode"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              pattern="[0-9]{6}"
+              placeholder="6 dígitos"
+              class="w-full h-12 px-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-center text-lg tracking-[0.35em] text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+              required
+            />
           </div>
 
           <!-- Password Input -->

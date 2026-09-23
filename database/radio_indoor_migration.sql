@@ -225,6 +225,7 @@ CREATE INDEX IF NOT EXISTS radio_programs_station_idx ON public.radio_programs(s
 CREATE INDEX IF NOT EXISTS radio_blocks_program_idx ON public.radio_program_blocks(program_id, position);
 CREATE INDEX IF NOT EXISTS radio_schedules_active_idx ON public.radio_schedules(station_id, enabled, priority, start_time);
 CREATE INDEX IF NOT EXISTS radio_requests_user_idx ON public.radio_requests(user_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS radio_playback_station_recent_idx ON public.radio_playback_events(station_id, played_at DESC) INCLUDE (track_id);
 CREATE INDEX IF NOT EXISTS radio_jobs_due_idx ON public.radio_schedule_jobs(status, due_at);
 CREATE INDEX IF NOT EXISTS radio_worker_heartbeats_seen_idx ON public.radio_worker_heartbeats(status, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS radio_station_members_user_idx ON public.radio_station_members(user_id, status, station_id);

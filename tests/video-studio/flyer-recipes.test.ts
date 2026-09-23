@@ -9,6 +9,7 @@ describe('Encartes em vídeo',()=>{
   const doc=newVideoFromTemplate(r.id)
   expect(videoDocumentSchema.safeParse(doc).success).toBe(true)
   expect(doc.voice.enabled).toBe(false);expect(doc.brand.logo).toBe('');expect(doc.offers).toEqual([])
+  if(r.preferSingleProduct)expect(doc.duplicateProducts).toBe(false)
   for(const format of ['vertical','horizontal'] as const)for(const [x,y,w,h] of Object.values(r[format])){
    expect(x).toBeGreaterThanOrEqual(0);expect(y).toBeGreaterThanOrEqual(0)
    expect(x+w).toBeLessThanOrEqual(VIDEO_FORMATS[format].width);expect(y+h).toBeLessThanOrEqual(VIDEO_FORMATS[format].height)

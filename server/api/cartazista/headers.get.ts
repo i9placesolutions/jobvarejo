@@ -11,6 +11,11 @@ export default defineEventHandler(async event => {
     background: item.background ? `/video-studio/templates/${item.background}` : '',
     seal: `/video-studio/templates/${item.seal}`,
     color: item.base,
+    accent: item.accent,
+    secondary: item.ink,
+    ...('posterRetailFinish' in item ? {retailFinish: item.posterRetailFinish} : {}),
+    ...('posterTagline' in item ? {tagline: item.posterTagline} : {}),
+    ...('posterPriceCornerRadius' in item ? {priceCornerRadius: item.posterPriceCornerRadius} : {}),
     ...('mascot' in item && item.mascot ? {mascot: `/video-studio/templates/${item.mascot}`} : {}),
     ...('posterLayout' in item ? {layout: item.posterLayout} : {})
   })) }

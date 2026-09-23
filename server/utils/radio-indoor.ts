@@ -267,7 +267,7 @@ export const activeLocalSchedule = (schedules: any[], now = new Date()) => {
       parts = new Intl.DateTimeFormat('en-US', {
         timeZone: timezone,
         weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', hour12: false
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
       }).formatToParts(now)
     } catch {
       return false
@@ -281,10 +281,27 @@ export const activeLocalSchedule = (schedules: any[], now = new Date()) => {
     const startMinutes = (start[0] || 0) * 60 + (start[1] || 0)
     const endMinutes = (end[0] || 0) * 60 + (end[1] || 0)
     const days = Array.isArray(schedule.days_of_week) ? schedule.days_of_week.map(Number) : []
-    const inWindow = startMinutes <= endMinutes
-      ? currentMinutes >= startMinutes && currentMinutes < endMinutes
-      : currentMinutes >= startMinutes || currentMinutes < endMinutes
-    return days.includes(day) && inWindow
+    if (typeof day !== 'number') return false
+    // Horários iguais representam uma grade contínua de 24 horas no dia selecionado.
+    const allDay = startMinutes === endMinutes
+    const overnight = startMinutes > endMinutes
+    const afterMidnight = overnight && currentMinutes < endMinutes
+    const inWindow = allDay
+      ? true
+      : overnight
+        ? currentMinutes >= startMinutes || afterMidnight
+        : currentMinutes >= startMinutes && currentMinutes < endMinutes
+    if (!inWindow) return false
+
+    // A madrugada pertence ao dia em que o programa começou.
+    const localDate = `${values.year}-${values.month}-${values.day}`
+    const scheduleDate = afterMidnight
+      ? new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day) - 1)).toISOString().slice(0, 10)
+      : localDate
+    const scheduleDay = afterMidnight ? (day + 6) % 7 : day
+    const startsOn = schedule.starts_on instanceof Date ? schedule.starts_on.toISOString().slice(0, 10) : String(schedule.starts_on || '').slice(0, 10)
+    const endsOn = schedule.ends_on instanceof Date ? schedule.ends_on.toISOString().slice(0, 10) : String(schedule.ends_on || '').slice(0, 10)
+    return days.includes(scheduleDay) && (!startsOn || scheduleDate >= startsOn) && (!endsOn || scheduleDate <= endsOn)
   })
   return candidates.sort((a, b) => Number(a.priority || 100) - Number(b.priority || 100))[0] || null
 }

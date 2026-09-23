@@ -873,7 +873,7 @@ const upsertCatalog = async (db, plan, userId, stationId, importedAt) => {
            audio_format, audio_codec, rights_status, status, metadata)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'ready',$21::jsonb)
          on conflict (user_id, source_provider, source_id) do update set
-           station_id = coalesce(radio_catalog_tracks.station_id, excluded.station_id),
+           station_id = null,
            title = excluded.title, artist = excluded.artist, album = excluded.album,
            release_year = coalesce(excluded.release_year, radio_catalog_tracks.release_year),
            release_date = coalesce(excluded.release_date, radio_catalog_tracks.release_date),
@@ -883,11 +883,12 @@ const upsertCatalog = async (db, plan, userId, stationId, importedAt) => {
            storage_key = excluded.storage_key, thumbnail_key = excluded.thumbnail_key,
            thumbnail_source_url = coalesce(excluded.thumbnail_source_url, radio_catalog_tracks.thumbnail_source_url),
            audio_format = excluded.audio_format, audio_codec = excluded.audio_codec,
-           rights_status = excluded.rights_status, status = 'ready', metadata = excluded.metadata, updated_at = now()
+           rights_status = case when excluded.rights_status = 'pending' then radio_catalog_tracks.rights_status else excluded.rights_status end,
+           status = 'ready', metadata = excluded.metadata, updated_at = now()
          returning id`,
         [
           userId,
-          stationId,
+          null,
           record.title,
           record.artist,
           record.album || null,
@@ -905,7 +906,7 @@ const upsertCatalog = async (db, plan, userId, stationId, importedAt) => {
           record.videoId ? `https://i.ytimg.com/vi/${encodeURIComponent(record.videoId)}/hqdefault.jpg` : null,
           record.extension.slice(1),
           record.sourceCodec || null,
-          'authorized_by_user',
+          'pending',
           JSON.stringify(metadata)
         ]
       )

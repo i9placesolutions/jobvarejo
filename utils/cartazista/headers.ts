@@ -20,6 +20,7 @@ export function applyCartazistaHeader(source: ArtComposition, header?: Cartazist
     Object.assign(seal,{x:next.width*.006,y:next.height*.08,width:next.width*.113,height:next.height*.84})
   }
   next.layers.unshift(...layers)
+  if(header.layout==='thematic-seal') return applyThematicSealHeader(next,header)
   if(header.layout && header.mascot) return applySuinaHeader(next,header)
   return next
 }
@@ -56,5 +57,66 @@ function applySuinaHeader(next: ArtComposition, header: CartazistaHeader): ArtCo
   next.layers.push({id:'cartaz-campaign-contact-bg',name:'Rodapé',kind:'shape',shape:'rect',x:fx,y:fy,width:fw,height:h-fy,fill:light?'#10100e':'#fff000',rotation:0,opacity:1,visible:true,locked:false})
   for(const [id,binding,x,width]of [['phone','phone',fx+fw*.025,fw*.38],['address','address',fx+fw*.44,fw*.53]] as const)next.layers.push({id:'cartaz-campaign-'+id,name:id,kind:'text',binding,x,y:fy+h*.01,width,height:h*.055,fill:light?'#ffffff':'#10100e',text:'',fontFamily:'Barlow Condensed',fontWeight:800,fontSize:h*.022,align:'left',lineHeight:1,rotation:0,opacity:1,visible:false,locked:false})
   next.layers.push({id:'cartaz-campaign-instagram',name:'Instagram',kind:'text',binding:'instagram',x:wide?w*.025:w*.65,y:wide?h*.88:h*.22,width:wide?w*.22:w*.32,height:h*.03,fill:'#ffffff',text:'',fontFamily:'Barlow Condensed',fontSize:h*.016,fontWeight:800,align:'center',rotation:0,opacity:1,visible:false,locked:false})
+  return next
+}
+
+
+/** Selos completos com personagem integrado: uma unica imagem e logo independente. */
+function applyThematicSealHeader(source: ArtComposition, header: CartazistaHeader): ArtComposition {
+  const next=applySuinaHeader(source,{...header,layout:'suina-rustica',mascot:header.seal})
+  const w=next.width,h=next.height,wide=w/h>2,accent=header.accent||'#ffd21c'
+  next.background=header.color
+  // O cenário continua por trás da oferta; a sombra mantém a leitura do texto.
+  if(header.background){
+    next.layers.unshift({id:'cartaz-campaign-scene',name:'Cenário temático',kind:'image',src:header.background,fit:'cover',x:0,y:0,width:w,height:h,rotation:0,opacity:.65,visible:true,locked:false,fill:'transparent'})
+    next.layers.splice(1,0,{id:'cartaz-campaign-scene-shade',name:'Contraste da oferta',kind:'shape',shape:'rect',x:wide?w*.27:0,y:wide?0:h*.285,width:wide?w*.73:w,height:wide?h:h*.64,rotation:0,opacity:.64,visible:true,locked:false,fill:header.color})
+  }
+  if(wide){
+    const name=next.layers.find(layer=>layer.id==='cartaz-product-name')!
+    Object.assign(name,{x:w*.29,width:w*.20,fontSize:h*.13})
+    const unit=next.layers.find(layer=>layer.id==='cartaz-unit')!
+    Object.assign(unit,{x:w*.29,width:w*.20})
+  }
+  next.layers=next.layers.filter(layer=>layer.id!=='cartaz-campaign-mascot')
+  const set=(id:string,patch:Partial<ArtLayer>)=>{const layer=next.layers.find(layer=>layer.id===id);if(layer)Object.assign(layer,patch)}
+  set('cartaz-campaign-seal',{x:wide?w*.015:w*.02,y:h*.008,width:wide?w*.24:w*.48,height:wide?h*.56:h*.27})
+  set('cartaz-logo',{x:wide?w*.025:w*.53,y:wide?h*.62:h*.055,width:wide?w*.22:w*.44,height:wide?h*.25:h*.15})
+  set('cartaz-campaign-instagram',{x:wide?w*.025:w*.53,width:wide?w*.22:w*.44,y:wide?h*.89:h*.252})
+  const logo=next.layers.find(layer=>layer.id==='cartaz-logo')!
+  const logoIndex=next.layers.indexOf(logo)
+  next.layers.splice(logoIndex,0,{id:'cartaz-logo-backdrop',name:'Base da logo',kind:'shape',shape:'rect',x:logo.x-w*.01,y:logo.y-h*.01,width:logo.width+w*.02,height:logo.height+h*.02,fill:'#fff9e9',cornerRadius:w*.018,rotation:0,opacity:1,visible:false,locked:false})
+  set('cartaz-price-brush',{fill:header.secondary||'#d51d13', ...(header.priceCornerRadius !== undefined ? {cornerRadius:w*header.priceCornerRadius} : {})})
+  set('cartaz-price-currency',{fill:accent})
+  set('cartaz-price-unit',{fill:accent})
+  set('cartaz-campaign-contact-bg',{fill:accent})
+  if(!wide)next.layers.push({id:'cartaz-campaign-header-detail',name:'Chamada da campanha',kind:'text',text:'QUALIDADE NA SUA MESA',x:w*.53,y:h*.220,width:w*.44,height:h*.024,fontFamily:'Barlow Condensed',fontWeight:800,fontSize:h*.015,align:'center',fill:accent,rotation:0,opacity:1,visible:true,locked:false})
+  if(header.tagline){
+    set('cartaz-logo-backdrop',{fill:accent,y:logo.y-h*.005,height:logo.height+h*.01})
+    set('cartaz-campaign-header-detail',{text:header.tagline,fontFamily:'Caveat',fontWeight:700,fontSize:h*.022,y:h*.213,height:h*.033,fill:'#ffffff'})
+  }
+  if(header.retailFinish){
+    const finish=header.retailFinish
+    next.layers=next.layers.filter(l=>l.id!=='cartaz-campaign-header-detail')
+    set('cartaz-campaign-background',{height:wide?h:h*.35})
+    set('cartaz-campaign-base',{height:wide?h:h*.35})
+    set('cartaz-campaign-seal',{x:0,y:h*.004,width:wide?w*.29:w*.58,height:wide?h*.64:h*.345})
+    set('cartaz-logo',{x:wide?w*.015:w*.565,y:wide?h*.68:h*.085,width:wide?w*.27:w*.42,height:wide?h*.24:h*.19})
+    const logo=next.layers.find(l=>l.id==='cartaz-logo')!
+    set('cartaz-logo-backdrop',{x:logo.x,y:logo.y,width:logo.width,height:logo.height,fill:accent,cornerRadius:w*.012})
+    set('cartaz-campaign-instagram',{x:logo.x,width:logo.width,y:wide?h*.92:h*.31})
+    set('cartaz-product-name',{y:wide?h*.16:h*.365,height:wide?h*.35:h*.17,fontSize:wide?h*.14:h*.10,fill:'#ffffff'})
+    if(!wide)set('cartaz-unit',{y:h*.54,height:h*.035,fontSize:h*.026,fill:accent})
+    set('cartaz-price-brush',{fill:finish.labelFill})
+    for(const id of ['cartaz-price','cartaz-price-cents'])set(id,{fill:finish.labelInk,fontFamily:'Barlow Condensed',fontWeight:800})
+    for(const id of ['cartaz-price-unit','cartaz-price-currency'])set(id,{fill:finish.labelInk,fontFamily:'Barlow Condensed',fontWeight:800})
+    next.layers=next.layers.filter(l=>l.id!=='cartaz-price-cents')
+    set('cartaz-price',{richPrice:true,align:'center'})
+    const brush=next.layers.find(l=>l.id==='cartaz-price-brush')!
+    const edge={...brush,id:'cartaz-campaign-price-edge',name:'Borda da etiqueta',x:brush.x-w*.009,y:brush.y-h*.009,width:brush.width+w*.018,height:brush.height+h*.018,fill:finish.labelEdge}
+    const depth={...edge,id:'cartaz-campaign-price-depth',name:'Profundidade da etiqueta',y:edge.y+h*.012,fill:'#27100a'}
+    next.layers.splice(next.layers.indexOf(brush),0,depth,edge)
+    const deco:ArtLayer={id:'cartaz-campaign-corner',name:'Acabamento 3D',kind:'image',src:finish.decoration,fit:'contain',x:wide?w*.235:w*.79,y:wide?h*.40:h*.24,width:wide?w*.07:w*.21,height:wide?h*.24:h*.15,rotation:0,opacity:1,visible:true,locked:false,fill:'transparent'}
+    if(finish.decoration)next.layers.splice(next.layers.findIndex(l=>l.id==='cartaz-campaign-seal'),0,deco)
+  }
   return next
 }
