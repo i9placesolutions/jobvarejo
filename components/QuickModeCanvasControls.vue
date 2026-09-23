@@ -97,11 +97,7 @@ const fontLabel = computed(() => {
 })
 const hasNativeText = computed(() => props.nativeTextCount > 0)
 const colorTargets = computed(() => {
-  const targets = Array.isArray(props.colorTargets) ? props.colorTargets : []
-  const selected = targets.find(target => target.id === 'selected-card-backgrounds')
-  if (!selected) return targets
-  const objects = new Set(selected.objects.map(entry => entry.object))
-  return targets.filter(target => target === selected || !target.objects.every(entry => objects.has(entry.object)))
+  return Array.isArray(props.colorTargets) ? props.colorTargets : []
 })
 const colorTargetCount = computed(() => colorTargets.value.length || props.nativeColorCount)
 const hasNativeColor = computed(() => colorTargetCount.value > 0)
@@ -118,18 +114,12 @@ const selectedColorInput = computed(() => {
 })
 const selectedOpacity = computed(() => Math.round(Math.max(0, Math.min(1, Number(selectedColorTarget.value?.opacity ?? 1))) * 100))
 
-watch(() => props.selectedColorObjectId, id => {
-  const target = colorTargets.value.find(item => item.objects.some(entry => entry.object?._customId === id))
-  if (target) selectedColorTargetId.value = target.id
-})
-
-watch(colorTargets, targets => {
-  if (targets.some(target => target.id === 'selected-card-backgrounds')) {
-    selectedColorTargetId.value = 'selected-card-backgrounds'
-    return
-  }
+watch(colorTargets, (targets, previousTargets) => {
   if (!targets.some(target => target.id === selectedColorTargetId.value)) {
-    selectedColorTargetId.value = targets[0]?.id || ''
+    const previous = previousTargets?.find(target => target.id === selectedColorTargetId.value)
+    const sameObjects = previous && targets.find(target => target.objects.some(entry =>
+      previous.objects.some(oldEntry => oldEntry.object === entry.object)))
+    selectedColorTargetId.value = sameObjects?.id || targets[0]?.id || ''
   }
 }, { immediate: true })
 
@@ -308,18 +298,18 @@ const onZoomInput = (event: Event) => {
           :class="{ 'is-active': openPanel === 'color' }"
           :aria-expanded="openPanel === 'color'"
           aria-haspopup="dialog"
-          aria-label="Cores editáveis desta página"
-          title="Alterar cores editáveis desta página"
+          aria-label="Cores globais desta página"
+          title="Alterar cores globais desta página"
           @click="togglePanel('color')"
         >
           <Palette :size="16" aria-hidden="true" />
-          <span>Cores</span>
+          <span>Cores globais</span>
           <em>{{ colorTargetCount }}</em>
         </button>
         <div v-if="openPanel === 'color'" class="quick-mode-canvas-controls__popover quick-mode-canvas-controls__color-popover" role="dialog" aria-label="Cores editáveis">
-          <div class="quick-mode-canvas-controls__popover-title">Cores desta página</div>
+          <div class="quick-mode-canvas-controls__popover-title">Cores globais desta página</div>
           <template v-if="hasNativeColor">
-            <p>Selecione um card ou use Shift + clique para selecionar vários.</p>
+            <p>Altere grupos de cores da página. Para mudar somente um item, clique nele no encarte.</p>
             <div class="quick-mode-canvas-controls__color-targets" role="list" aria-label="Alvos de cor">
               <button
                 v-for="target in colorTargets"
@@ -333,7 +323,7 @@ const onZoomInput = (event: Event) => {
                 <span class="quick-mode-canvas-controls__target-swatch" :class="{ 'is-empty': !target.color, 'is-mixed': target.mixedColor }" :style="target.color ? { backgroundColor: target.color } : undefined" aria-hidden="true"></span>
                 <span class="quick-mode-canvas-controls__target-copy">
                   <strong>{{ target.label }}</strong>
-                  <small>{{ target.id === 'selected-card-backgrounds' ? 'Selecionado no encarte' : target.description }}</small>
+                  <small>{{ target.description }}</small>
                 </span>
                 <span class="quick-mode-canvas-controls__target-check" aria-hidden="true">{{ selectedColorTarget?.id === target.id ? '✓' : '›' }}</span>
               </button>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   collectQuickEditableColorTargets,
+  groupQuickGlobalColorTargets,
   collectQuickNativeColorTargets,
   collectQuickNativeObjects,
   isQuickNativeExcludedObject
@@ -97,4 +98,16 @@ it('permite recolorir quadros transparentes agrupados sem alterar sua borda', ()
   expect(targets).toHaveLength(1)
   expect(targets[0]?.kind).toBe('product-area')
   expect(targets[0]?.objects[0]?.property).toBe('fill')
+})
+
+it('mostra no controle global grupos de cor, sem listar cada card separadamente', () => {
+  const first = { type: 'rect', name: 'offerBackground', fill: '#ffffff' }
+  const second = { type: 'rect', name: 'offerBackground', fill: '#ffff00' }
+  const targets = collectQuickEditableColorTargets([
+    group([first], { isProductCard: true }), group([second], { isProductCard: true })
+  ])
+  const global = groupQuickGlobalColorTargets(targets)
+  expect(global).toHaveLength(1)
+  expect(global[0]?.label).toBe('Fundos de todos os cards')
+  expect(global[0]?.objects.map(item => item.object)).toEqual([first, second])
 })

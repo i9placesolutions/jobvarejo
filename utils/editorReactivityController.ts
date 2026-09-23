@@ -6,6 +6,11 @@ type GlobalStyles = Record<string, any>
 
 export type EditorReactivityContext = Record<string, any>
 
+export const isExplicitCanvasTransformAction = (value: unknown): boolean => {
+    const action = String(value || '').trim().toLowerCase()
+    return ['drag', 'move', 'scale', 'resiz', 'rotate', 'skew'].some(kind => action.includes(kind))
+}
+
 export const createEditorReactivityController = (ctx: EditorReactivityContext) => {
     const { applyCardFrameBinding, applyContainmentConstraints, applyVisibleSelectionChrome, canvas, canvasContextMenu, clamp, collectObjectsDeep, configureDynamicBusinessTextObject, enableCardElementRotationControl, ensureCardZoneBinding, ensureFramesBelowContents, ensurePersistentContentFlags, ensureZoneSanity, fabric, findFrameUnderObject, findProductCardParentGroup, findProductZoneById, fitDynamicBusinessTextObject, flushTextEditSave, focusProductZoneFromDblClickTarget, getCardSizeForPriceGroup, getFrameById, getFrameDescendants, getObjectCenterInParentPlane, getOrCreateFrameClipRect, getResolvedZoneFrameId, getZoneChildren, getZoneGlobalStyles, getZoneRect, hasParentZoneBinding, invalidateContainmentZoneCache, invalidateFrameRuntimeCache, invalidateScrollbarBounds, invalidateZoneRuntimeIndex, isActiveSelectionObject, isCanvasDestroyed, isControlLikeObject, isDesignLoading, isDynamicBusinessFieldObject, isFrameLikeObject, isHistoryProcessing, isLikelyProductZone, isNodeEditing, isPenMode, isPriceGroupBackground, isPriceGroupObject, isProductCardContainer, isProductNameText, isQuickLogoImageObject, isQuickMode, isQuickModeLockedObject, isTextStyleObject, isTransientCanvasObject, isValidFabricCanvasObject, layersContextMenu, makeCanvasObjectId, markFrameLabelsDirty, markPriceGroupAsManuallyCustomized, markPriceGroupTransformAsManual, maybeReparentToFrameOnDrop, moveFrameDescendants, normalizeGlobalStyles, normalizePriceGroupPlacementInCard, priceGroupsWithDeepSelect, productZoneState, queueTextEditSave, reflowDynamicBusinessTextObject, refreshCanvasObjects, refreshSelectedRef, relayoutProductZonesAfterCardRemoval, resizeSmartObject, resolvePriceGroupAncestor, resolveSelectedProductImageActionContext, safeAddWithUpdate, safeRequestRenderAll, sanitizeCanvasObjectStack, scheduleViewportCulling, selectedPriceGroupSelectionKind, selectedPriceGroupSubTarget, setFabricControlsHiddenDuringTransform, setObjectCenterInParentPlane, setPriceGroupInteractionMode, shouldApplyContainmentConstraints, showProductReviewModal, syncCardProductDataNameFromTitleTarget, syncCardProductDataTitleWidthFromTarget, syncFrameClips, syncObjectFrameClip, syncQuickLogoBackdrop, syncZoneCardFrameBindings, trimContainerEmptySpace, updateFloatingUI, updatePriceGroupSelectionIntent, updateProductImageSelectionIntent, updateScrollbars, updateSelection } = ctx
 
@@ -1906,12 +1911,7 @@ const setupReactivity = () => {
         }
         if (obj) {
             const modifiedAction = String(e?.transform?.action || '').trim().toLowerCase();
-            const isExplicitTransform = modifiedAction.includes('drag') ||
-                modifiedAction.includes('move') ||
-                modifiedAction.includes('scale') ||
-                modifiedAction.includes('resize') ||
-                modifiedAction.includes('rotate') ||
-                modifiedAction.includes('skew');
+            const isExplicitTransform = isExplicitCanvasTransformAction(modifiedAction);
             const isFooterCompositionObject = (candidate: any): boolean => {
                 if (!candidate) return false;
                 const name = String(candidate.name || '').trim();

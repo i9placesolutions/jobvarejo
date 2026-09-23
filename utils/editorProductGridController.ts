@@ -2556,7 +2556,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
                 try {
                     const cardTemplateId = String((card as any)?.__cardLabelTemplateId || '').trim();
                     const hasCardTemplate = !!cardTemplateId && labelTemplates.value.some((item: any) => String(item?.id || '').trim() === cardTemplateId);
-                    const keepCardOverride = !applyOptions.forceCardTemplate && cardHasExplicitLabelTemplateOverride(card);
+                    const keepCardOverride = !applyOptions.forceCardTemplate && hasCardTemplate && cardHasExplicitLabelTemplateOverride(card);
                     const templateToApply = keepCardOverride && hasCardTemplate ? cardTemplateId : id;
                     if (templateToApply) {
                         await applyLabelTemplateToCard(card, templateToApply);

@@ -15,7 +15,7 @@ export const layoutHeaderOfferValidity = (text: any, children: any[]): boolean |
   const availableHeight = zone.getBoundingRect().top - Math.min(area.top, box.top) - 6
   if (availableHeight < 60 * scale || area.width < 260 * scale) return null
   const copy = splitFooterValidityText({ startDate: text.quickValidityStartDate, endDate: text.quickValidityEndDate,
-    mode: text.quickValidityMode, whileStocks: text.quickValidityWhileStocks })
+    mode: text.quickValidityMode, whileStocks: text.quickValidityWhileStocks, dateFormat: text.quickValidityDateFormat })
   if (!copy.period) return null
   const original = Object.fromEntries(['text', '__rawText', 'textAlign', 'styles', 'width', 'lineHeight', 'backgroundColor', 'fill', 'fontSize'].map(key => [key, text[key]]))
   const before = JSON.stringify([text.text, text.left, text.top, text.width, text.styles, text.textAlign])

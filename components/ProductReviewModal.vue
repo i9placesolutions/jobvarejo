@@ -3879,14 +3879,6 @@ const getAssetDisplayName = (asset: any): string => {
                                         <template v-else>
                                             <div class="text-[10px] text-zinc-500">{{ thumbnailStatusText(activeReviewRowMeta.product) }}</div>
                                         </template>
-                                        <div :class="isQrofertasPresentation ? 'left-1.5 top-1.5 px-1 text-[7px]' : 'left-2 top-2 px-1.5 text-[8px]'" class="absolute rounded-md bg-black/50 py-0.5 font-bold uppercase text-white">
-                                            {{ activeReviewRowMeta.imageStatusMeta.source }}
-                                        </div>
-                                    </div>
-                                    <div :class="isQrofertasPresentation ? 'gap-1 text-[8px]' : 'gap-1.5 text-[9px]'" class="flex text-zinc-500">
-                                        <span>Conf. {{ activeReviewRowMeta.imageStatusMeta.confidence }}</span>
-                                        <span>•</span>
-                                        <span>{{ activeReviewRowMeta.imageStatusMeta.attemptsText }}</span>
                                     </div>
                                 </div>
 
@@ -3975,8 +3967,8 @@ const getAssetDisplayName = (asset: any): string => {
                                     </div>
 
                                     <!-- Motivo -->
-                                    <p v-if="activeReviewRowMeta.product.imageReviewReason || activeReviewRowMeta.product.imageDecisionReason" class="text-[10px] text-zinc-500 leading-relaxed">
-                                        {{ activeReviewRowMeta.product.imageReviewReason || activeReviewRowMeta.product.imageDecisionReason }}
+                                    <p v-if="activeReviewRowMeta.product.imageReviewReason || activeReviewRowMeta.product.imageDecisionReason || activeReviewRowMeta.product.error" class="text-[10px] text-zinc-400 leading-relaxed">
+                                        Não foi possível encontrar uma imagem adequada. Busque novamente ou envie uma imagem do produto.
                                     </p>
                                 </div>
                             </div>
@@ -4271,14 +4263,6 @@ const getAssetDisplayName = (asset: any): string => {
                             </template>
                             <Loader2 v-else-if="activeReviewRowMeta.product?.status === 'processing'" class="h-5 w-5 animate-spin text-sky-300" />
                             <span v-else class="text-[10px] text-zinc-500">{{ thumbnailStatusText(activeReviewRowMeta.product) }}</span>
-                            <span class="absolute left-1.5 top-1.5 rounded-md bg-black/55 px-1 py-0.5 text-[7px] font-bold uppercase text-white">
-                                {{ activeReviewRowMeta.imageStatusMeta.source }}
-                            </span>
-                        </div>
-                        <div class="flex items-center justify-center gap-1 text-[8px] text-zinc-500">
-                            <span>Conf. {{ activeReviewRowMeta.imageStatusMeta.confidence }}</span>
-                            <span>•</span>
-                            <span>{{ activeReviewRowMeta.imageStatusMeta.attemptsText }}</span>
                         </div>
                     </div>
 
@@ -4305,7 +4289,7 @@ const getAssetDisplayName = (asset: any): string => {
                             <input v-model="removeBackgroundOnUpload" type="checkbox" :disabled="isReviewUploadSubmitting" class="accent-emerald-500" />
                             Remover fundo ao enviar
                         </label>
-                        <p v-if="activeReviewRowMeta.product.error" role="alert" class="text-xs text-rose-300">{{ activeReviewRowMeta.product.error }}</p>
+                        <p v-if="activeReviewRowMeta.product.error || activeReviewRowMeta.product.imageReviewReason || activeReviewRowMeta.product.imageDecisionReason" role="alert" class="text-xs text-rose-300">Não foi possível encontrar uma imagem adequada. Busque novamente ou envie uma imagem do produto.</p>
                         <div class="flex flex-wrap gap-1.5">
                             <button
                                 type="button"

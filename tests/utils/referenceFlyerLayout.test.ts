@@ -14,6 +14,7 @@ describe('layout fiel à referência de varejo',()=>{
   expect(splitFooterValidityText({layout:'reference-ribbon',mode:'single_day',startDate:'2026-09-17',whileStocks:true})).toEqual({heading:'OFERTA VÁLIDA SOMENTE NESTA QUINTA',period:'17/09/2026 OU ENQUANTO DURAREM OS ESTOQUES',stock:''})
   expect(splitFooterValidityText({layout:'reference-ribbon',mode:'single_day',startDate:'2026-09-19',whileStocks:false}).heading).toBe('OFERTA VÁLIDA SOMENTE NESTE SÁBADO')
   expect(splitFooterValidityText({layout:'reference-ribbon',mode:'while_stocks'}).period).toBe('ENQUANTO DURAREM OS ESTOQUES')
+  expect(splitFooterValidityText({layout:'reference-ribbon',mode:'date_range',startDate:'2026-09-24',endDate:'2026-09-25',dateFormat:'long'}).period).toBe('VINTE E QUATRO A VINTE E CINCO DE SETEMBRO OU ENQUANTO DURAREM OS ESTOQUES')
   expect(splitFooterValidityText({layout:'reference-ribbon',mode:'period',startDate:'2026-02-30'}).period).toBe('')
  })
  it('mantém ambas as linhas dentro da parte segura, fora da ponta inclinada',()=>{

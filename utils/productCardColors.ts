@@ -11,9 +11,10 @@ export const resolveFlyerProductStyles = (styles: Partial<GlobalStyles>, roots: 
       ? { templateProductPalette: { ...styles.templateProductPalette, cardColor: styles.cardColor } } : {}),
     cardColorMode: 'auto'
   }
-  if (palette.highlightCardColor) return { ...automatic, highlightCardColor: palette.highlightCardColor }
-  if (overrides.highlightCardColor && styles.highlightCardColor) return automatic
-  return { ...automatic, highlightCardColor: findFlyerAccent(roots) || '#ffffff' }
+  if (styles.productPalette?.highlightCardColor || (overrides.highlightCardColor && styles.highlightCardColor)) return automatic
+  // A paleta do modelo pode conter um amarelo legado. A arte da página aberta
+  // define o destaque automático; uma escolha explícita do usuário prevalece.
+  return { ...automatic, highlightCardColor: findFlyerAccent(roots) || palette.highlightCardColor || '#ffffff' }
 }
 
 const imageAccentSamples = new WeakMap<object, { signature: string; colors: Array<[number, number, number]> }>()
@@ -24,7 +25,9 @@ export const resolveProductCardColor = (styles: Partial<GlobalStyles>, highlight
   if (typeof overrides.cardColor === 'string') return overrides.cardColor
   if (styles.isProdBgTransparent) return 'transparent'
   const palette = getProductPalette(styles)
-  const color = highlighted ? palette.highlightCardColor : palette.cardColor
+  const color = highlighted
+    ? (styles.productPalette?.highlightCardColor || (styles.cardColorMode === 'auto' ? styles.highlightCardColor : null) || palette.highlightCardColor)
+    : palette.cardColor
   if (styles.cardColorMode !== 'manual' && color) return color
   if (styles.cardColorMode === 'auto') return highlighted ? (styles.highlightCardColor || '#ffffff') : '#ffffff'
   return styles.cardColor || '#ffffff'
@@ -40,7 +43,7 @@ export const findFlyerAccent = (roots: any[]): string | null => {
     scores.set(hex, (scores.get(hex) || 0) + weight)
   }
   const walk = (node: any) => {
-    if (!node || node.isProductZone || node.parentZoneId || node._productData || node.name === 'offerBackground' || node.name === 'priceGroup' || node.isPriceGroup || node.businessProfileField === 'logo') return
+    if (!node || node.isProductZone || node.parentZoneId || node._productData || node.name === 'offerBackground' || node.name === 'product-area-background' || node.name === 'priceGroup' || node.isPriceGroup || node.businessProfileField === 'logo') return
     const area = Math.max(1, Math.abs((node.width || 1) * (node.scaleX || 1) * (node.height || 1) * (node.scaleY || 1)))
     if (typeof node.fill === 'string' && /^#[\da-f]{6}$/i.test(node.fill)) {
       add(parseInt(node.fill.slice(1, 3), 16), parseInt(node.fill.slice(3, 5), 16), parseInt(node.fill.slice(5, 7), 16), area)

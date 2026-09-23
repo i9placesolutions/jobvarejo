@@ -1,12 +1,14 @@
-/** Duas linhas da faixa inclinada, preservando o período real do modelo. */
-export const referenceValidityCopy = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean }) => {
+import { formatOfferDate, formatOfferDateInterval, type OfferDateFormat } from './offerValidity'
+
+/** Duas linhas da faixa inclinada, respeitando o formato escolhido na edição rápida. */
+export const referenceValidityCopy = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; dateFormat?: OfferDateFormat }) => {
   const parse = (raw?: string) => {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw || '')
     if (!match) return null
     const [, year, month, day] = match
     const date = new Date(Number(year), Number(month) - 1, Number(day))
     return date.getFullYear() === Number(year) && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day)
-      ? { label: `${day}/${month}/${year}`, date } : null
+      ? { label: formatOfferDate(raw, value.dateFormat || 'numeric'), date } : null
   }
   const start = parse(value.startDate), end = parse(value.endDate)
   if (value.mode === 'while_stocks') return { heading: 'OFERTAS VÁLIDAS', period: 'ENQUANTO DURAREM OS ESTOQUES', stock: '' }
@@ -15,6 +17,8 @@ export const referenceValidityCopy = (value: { startDate?: string; endDate?: str
   const day = (start || end)!
   const weekday = day.date.toLocaleDateString('pt-BR', { weekday: 'long' }).toUpperCase().replace('-FEIRA', '')
   const heading = single ? `OFERTA VÁLIDA SOMENTE ${weekday === 'SÁBADO' || weekday === 'DOMINGO' ? 'NESTE' : 'NESTA'} ${weekday}` : 'OFERTAS VÁLIDAS NESTE PERÍODO'
-  const period = single ? day.label : `${start!.label} A ${end!.label}`
-  return { heading, period: period + (value.whileStocks !== false ? ' OU ENQUANTO DURAREM OS ESTOQUES' : ''), stock: '' }
+  const period = single ? day.label : value.dateFormat === 'long'
+    ? formatOfferDateInterval(start!.label, end!.label)
+    : `${start!.label} A ${end!.label}`
+  return { heading, period: period.toLocaleUpperCase('pt-BR') + (value.whileStocks !== false ? ' OU ENQUANTO DURAREM OS ESTOQUES' : ''), stock: '' }
 }

@@ -621,6 +621,7 @@ const QuickModeControls = defineAsyncComponent(() => import('./QuickModeControls
 const OfferValidityPrompt = defineAsyncComponent(() => import('./OfferValidityPrompt.vue'))
 const QuickModePageToolbar = defineAsyncComponent(() => import('./QuickModePageToolbar.vue'))
 const QuickModeCanvasControls = defineAsyncComponent(() => import('./QuickModeCanvasControls.vue'))
+const QuickModeElementColorMenu = defineAsyncComponent(() => import('./QuickModeElementColorMenu.vue'))
 import {
   Undo,
   Redo,
@@ -4252,9 +4253,11 @@ import {
 import { GOOGLE_WEBFONT_FAMILIES } from '~/utils/font-catalog'
 import {
     collectQuickEditableColorTargets,
+    groupQuickGlobalColorTargets,
     collectQuickNativeTextObjects,
     collectQuickNativeObjects,
-    isQuickNativeTextObject
+    isQuickNativeTextObject,
+    type QuickEditableColorTarget
 } from '~/utils/quickModeNativeTools'
 import {
     captureDynamicBusinessTextBaseline,
@@ -5028,6 +5031,25 @@ const getQuickModePrimaryFrame = (objects: any[]): any | null => {
     )) || objects.find((object: any) => object?.isFrame) || null
 }
 
+// Alguns modelos antigos guardaram o frame deslocado, embora os elementos do
+// encarte estejam posicionados nas coordenadas da página. Ao copiar ou trocar
+// o formato, o preenchimento do frame aparece como uma faixa e corta a logo.
+const alignQuickModeFrameToPage = (page: any): boolean => {
+    const objects = canvas.value?.getObjects?.() || []
+    const frame = getQuickModePrimaryFrame(objects)
+    if (!frame || !page) return false
+    const bounds = getFrameBounds(frame)
+    const width = Number(page.width || 0)
+    const height = Number(page.height || 0)
+    if (!bounds || Math.abs(bounds.width - width) > 2 || Math.abs(bounds.height - height) > 2) return false
+    if (Math.abs(bounds.left) <= 1 && Math.abs(bounds.top) <= 1) return false
+    frame.set?.({ left: width / 2, top: height / 2, originX: 'center', originY: 'center', dirty: true })
+    frame.setCoords?.()
+    syncFrameClips(frame, { includeSpatialChildren: false, requestRender: false })
+    safeRequestRenderAll()
+    return true
+}
+
 /**
  * Corrige páginas legadas que foram criadas a partir de outro formato.
  *
@@ -5202,6 +5224,9 @@ const duplicateQuickModePage = (pageId: string) => {
                 resolveQuickModeTemplateModelId(sourcePage) || String(sourcePage?.templateModelId || '').trim() || `model-${makeId()}`
             )
             if (!await waitForTemplatePageReady(duplicatedPage.id)) return
+            if (alignQuickModeFrameToPage(duplicatedPage)) {
+                await Promise.resolve(saveCurrentState({ reason: 'quick-page-duplicate-frame-alignment', source: 'system', skipCoalesce: true }))
+            }
             await ensureQuickPageThumbnail(duplicatedPage, true)
         }
         await flushPersistenceNow('quick-page-duplicate', { force: true })
@@ -5609,6 +5634,7 @@ const resizeQuickModePage = (formatId: string) => {
                         restoreFormatDynamicContent(canvas.value?.getObjects?.() || [], dynamicContent)
                         await applyQuickBusinessProfileBindings(profileForResize, { persist: false })
                         handleQuickModeValidityUpdate(validity, { persist: false })
+                        alignQuickModeFrameToPage(resizedPage)
 
                         await Promise.resolve(saveCurrentState({
                             allowEmptyOverwrite: true,
@@ -5648,6 +5674,18 @@ const resizeQuickModePage = (formatId: string) => {
             }
 
             if (oldWidth === nextWidth && oldHeight === nextHeight) {
+                // Selecionar o formato já aberto não deve reorganizar os cards
+                // nem reescrever uma composição personalizada.
+                if (currentFormat.id === format.id) {
+                    if (alignQuickModeFrameToPage(page)) {
+                        await Promise.resolve(saveCurrentState({
+                            reason: 'quick-page-frame-alignment', source: 'user', skipCoalesce: true
+                        }))
+                        await ensureQuickPageThumbnail(page, true)
+                        await flushPersistenceNow('quick-page-frame-alignment', { force: true })
+                    }
+                    return
+                }
                 applyQuickPageTemplateMetadata(page, format, getQuickPageModelName(page))
                 resizePage(pageIndex, nextWidth, nextHeight)
                 await reflowQuickModeProductsForSelectedFormat()
@@ -7340,6 +7378,35 @@ const quickCardColorSettings = computed(() => {
     const styles = zone ? getZoneGlobalStyles(zone) : {}
     return { styles, mode: styles.cardColorMode || 'auto', color: styles.cardColorMode === 'manual' ? (styles.cardColor || '#ffffff') : (styles.highlightCardColor || '#ffffff') }
 })
+const syncQuickModeHighlightColors = (): boolean => {
+    if (!isQuickMode.value || !canvas.value) return false
+    const objects = flattenCardColorObjects(canvas.value.getObjects())
+    let changed = false
+    for (const zone of objects.filter(object => object.isProductZone && object._customId)) {
+        const styles = getZoneGlobalStyles(zone)
+        if (styles.cardColorMode !== 'auto' || styles.productPalette?.highlightCardColor || getZoneStyleOverrides(zone).highlightCardColor) continue
+        const cards = objects.filter(object => object._productData && object.parentZoneId === zone._customId)
+            .sort((a, b) => (a._zoneOrder || 0) - (b._zoneOrder || 0))
+        const highlight = getZoneHighlightPredicate(zone, cards)
+        cards.forEach((card, index) => {
+            const background = (card.getObjects?.() || []).find((object: any) => object.name === 'offerBackground')
+            if (!background) return
+            const isHighlighted = highlight.isHighlighted(card, index)
+            const color = resolveProductCardColor(styles, isHighlighted, card._cardStyleOverrides)
+            if (background.fill === color && card._cardHighlighted === isHighlighted) return
+            background.set?.('fill', color)
+            card._cardHighlighted = isHighlighted
+            syncProductNameColor(card, styles)
+            card.dirty = true
+            changed = true
+        })
+    }
+    if (changed) {
+        refreshCanvasObjects({ immediate: true })
+        safeRequestRenderAll()
+    }
+    return changed
+}
 const applyQuickCardColors = async (settings: { mode: 'auto' | 'manual'; color?: string; allPages: boolean }) => {
     if (!canvas.value || isProcessing.value) return
     const current = project.pages[project.activePageIndex]
@@ -7418,6 +7485,52 @@ const quickModeColorTargets = computed(() => {
     return targets
 })
 
+const quickModeGlobalColorTargets = computed(() => groupQuickGlobalColorTargets(
+    quickModeColorTargets.value.filter(target => target.id !== 'selected-card-backgrounds')
+))
+
+const quickModeSelectedColorTargets = computed((): QuickEditableColorTarget[] => {
+    void selectedObjectRef.value
+    void canvasObjects.value
+    if (!isQuickMode.value) return []
+    const active = canvas.value?.getActiveObject?.()
+    if (!active || isActiveSelectionObject(active)) return []
+    if (isProductNameText(active)) return [{
+        id: 'selected-product-name', kind: 'native', label: 'Nome deste produto',
+        description: 'Altera somente o texto selecionado', count: 1,
+        objects: [{ object: active, property: 'fill' }],
+        color: typeof active.fill === 'string' ? active.fill : null,
+        opacity: Number(active.opacity ?? 1), mixedColor: false, mixedOpacity: false, canClear: true
+    }]
+    if (isDynamicBusinessFieldObject(active)) return [{
+        id: `selected-dynamic-text:${String(active._customId || '')}`,
+        kind: 'native', label: 'Texto selecionado',
+        description: 'Altera somente este texto', count: 1,
+        objects: [{ object: active, property: 'fill' }],
+        color: typeof active.fill === 'string' ? active.fill : null,
+        opacity: Number(active.opacity ?? 1), mixedColor: false, mixedOpacity: false, canClear: false
+    }]
+    const matches = quickModeColorTargets.value.filter(target => target.id !== 'selected-card-backgrounds' &&
+        target.objects.some(({ object }) => {
+            let node = object
+            while (node) {
+                if (node === active) return true
+                node = node.group
+            }
+            return false
+        }))
+    if (isLikelyProductCard(active)) return matches.filter(target => target.kind === 'product-card')
+    return matches
+})
+const quickModeElementColorDismissed = ref(false)
+watch(() => selectedObjectRef.value?._customId, () => { quickModeElementColorDismissed.value = false })
+
+const quickModeAllColorTargets = computed(() => [
+    ...quickModeColorTargets.value,
+    ...quickModeGlobalColorTargets.value,
+    ...quickModeSelectedColorTargets.value.filter(target => target.id === 'selected-product-name' || target.id.startsWith('selected-dynamic-text:'))
+])
+
 const quickModeNativeFontFamily = computed(() => {
     const families = Array.from(new Set(
         quickModeNativeTextObjects.value
@@ -7481,10 +7594,11 @@ type QuickModeColorChange = { targetId: string; value: string }
 type QuickModeOpacityChange = { targetId: string; value: number }
 
 const getQuickModeColorTarget = (targetId: string) => (
-    quickModeColorTargets.value.find(target => target.id === String(targetId || '').trim()) || null
+    quickModeAllColorTargets.value.find(target => target.id === String(targetId || '').trim()) || null
 )
 
 const persistQuickModeColorChange = async (reason: string) => {
+    syncQuickModeHighlightColors()
     refreshCanvasObjects({ immediate: true })
     safeRequestRenderAll()
     refreshSelectedRef()
@@ -7498,6 +7612,11 @@ const persistQuickModeColorChange = async (reason: string) => {
 
 const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
     if (!isQuickMode.value || !canvas.value) return
+    if (payload?.targetId === 'selected-product-name') {
+        quickProductNameColorScope.value = 'selected'
+        await applyQuickProductNameColor(payload.value)
+        return
+    }
     const target = getQuickModeColorTarget(payload?.targetId)
     const color = target?.kind === 'product-area' && payload?.value === 'transparent'
         ? 'transparent' : normalizeQuickModeColor(payload?.value)
@@ -7521,6 +7640,11 @@ const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
 
 const clearQuickModeColor = async (targetId: string) => {
     if (!isQuickMode.value || !canvas.value) return
+    if (targetId === 'selected-product-name') {
+        quickProductNameColorScope.value = 'selected'
+        await applyQuickProductNameColor(null)
+        return
+    }
     const target = getQuickModeColorTarget(targetId)
     if (!target) return
 
@@ -7579,6 +7703,18 @@ const refreshSelectedRef = (extra?: Record<string, any>) => {
 }
 
 const selectedObjectPos = ref<{top: number, left: number, width: number, height: number, visible: boolean}>({ top: 0, left: 0, width: 0, height: 0, visible: false })
+const quickModeElementColorPosition = computed(() => {
+    const anchor = selectedObjectPos.value
+    const viewportWidth = wrapperEl.value?.clientWidth || 800
+    const viewportHeight = wrapperEl.value?.clientHeight || 600
+    const menuWidth = 280
+    const menuHeight = 286
+    const right = anchor.left + anchor.width + 12
+    return {
+        left: `${right + menuWidth <= viewportWidth - 8 ? right : Math.max(8, anchor.left - menuWidth - 12)}px`,
+        top: `${Math.max(8, Math.min(anchor.top, viewportHeight - menuHeight - 8))}px`
+    }
+})
 
 const priceGroupsWithDeepSelect = new Set<any>()
 const priceGroupUiVersion = ref(0)
@@ -9132,6 +9268,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
     }
     if (loadedOk) await ensureTemplateProductZone();
     if (isStaleLoad()) return;
+    const quickHighlightPaletteUpdated = loadedOk && isQuickMode.value && syncQuickModeHighlightColors()
     historyStack.value = [];
     historyIndex.value = -1;
 
@@ -9144,7 +9281,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
         nextTick(() => {
             if (isStaleLoad() || !canvas.value) return;
             try {
-                saveCurrentState({ reason: 'initial-history-capture', source: 'system', skipIfUnchanged: true });
+                saveCurrentState({ reason: quickHighlightPaletteUpdated ? 'quick-highlight-palette-sync' : 'initial-history-capture', source: 'system', markUnsaved: quickHighlightPaletteUpdated, skipIfUnchanged: !quickHighlightPaletteUpdated });
                 console.log('[activePageWatch] ✅ Estado inicial do histórico capturado após loadFromJSON');
             } catch (e) {
                 console.warn('[activePageWatch] ⚠️ Falha ao capturar estado inicial do histórico:', e);
@@ -18943,11 +19080,12 @@ const formatQuickValidity = (
     endDate: unknown,
     scope: unknown = quickOfferScope.value,
     mode: unknown = quickValidityMode.value,
-    whileStocks: boolean = quickValidityWhileStocks.value
+    whileStocks: boolean = quickValidityWhileStocks.value,
+    dateFormat: OfferDateFormat = quickValidityDateFormat.value
 ): string => {
-    if (quickValidityDateFormat.value === 'hidden') return ''
-    const start = formatOfferDate(startDate, quickValidityDateFormat.value)
-    const end = formatOfferDate(endDate, quickValidityDateFormat.value)
+    if (dateFormat === 'hidden') return ''
+    const start = formatOfferDate(startDate, dateFormat)
+    const end = formatOfferDate(endDate, dateFormat)
     const dates = formatOfferValidityPeriod(start, end, mode, whileStocks)
     const location = formatOfferValidityScope(scope)
     return [dates, location].filter(Boolean).join(' · ')
@@ -19374,7 +19512,7 @@ const persistInactiveQuickBusinessFields = async () => {
     const profile = { ...quickBusinessProfile.value }
     const overrides = { ...quickBusinessFieldOverrides.value }
     const validity = project.templateConfig?.quickValidity ? { ...project.templateConfig.quickValidity } : null
-    const validityText = validity ? formatQuickValidity(validity.startDate, validity.endDate, validity.scope, validity.mode, validity.whileStocks) : null
+    const validityText = validity ? formatQuickValidity(validity.startDate, validity.endDate, validity.scope, validity.mode, validity.whileStocks, normalizeOfferDateFormat(validity.dateFormat)) : null
     for (const pageId of pageIds) {
         if (project.id !== projectId || isCanvasDestroyed.value) return
         if (pageId === getActiveProjectPageId()) continue
@@ -19592,10 +19730,10 @@ const handleQuickModeValidityUpdate = (payload: {
             visible: quickShowValidity.value && !!nextText
         })
         const split = isSplitFooterValidity(object)
-        const splitText = splitFooterValidityText({ startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value, layout: object.quickValidityLayout })
+        const splitText = splitFooterValidityText({ startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value, dateFormat: quickValidityDateFormat.value, layout: object.quickValidityLayout })
         const siblings = canvas.value?.getObjects() || []
         const separateFields = split && hasSplitFooterValidityCompanions(object, siblings)
-        setQuickDynamicTextValue(object, split ? resolveSplitFooterValidityText(object, siblings, { startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value }) : nextText)
+        setQuickDynamicTextValue(object, split ? resolveSplitFooterValidityText(object, siblings, { startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value, dateFormat: quickValidityDateFormat.value }) : nextText)
         if (split) {
             object.set({ quickValidityLayout: ['calendar-card', 'inline-footer', 'offer-banner', 'reference-ribbon'].includes(object.quickValidityLayout) ? object.quickValidityLayout : 'split-footer', visible: quickShowValidity.value && !!splitText.period })
             for (const sibling of canvas.value?.getObjects() || []) {
@@ -29563,8 +29701,8 @@ const cardLabelVisualDriftsFromTemplate = (card: any, template: any): boolean =>
  * O JSON do projeto pode carregar `_zoneTemplateSnapshot` antigo. Ele é
  * apenas compatibilidade: quando a biblioteca externa está carregada, o
  * template pelo ID e o seu `group` atual vencem o snapshot. Se o ID foi
- * excluído da biblioteca, removemos a referência e voltamos ao preço padrão
- * para não ressuscitar uma etiqueta que não existe mais globalmente.
+ * excluído da biblioteca, substituímos pela etiqueta Padrão disponível;
+ * sem ela, voltamos ao preço básico para não ressuscitar a etiqueta apagada.
  */
 const applyGlobalLabelTemplatesToCanvas = async (reason = 'global-label-template-update'): Promise<void> => {
     if (!canvas.value || !hasUsableLabelTemplateCatalog()) return;
@@ -29577,9 +29715,11 @@ const applyGlobalLabelTemplatesToCanvas = async (reason = 'global-label-template
     }
 
     const run = (async () => {
-        const zones = canvas.value?.getObjects?.().filter((obj: any) => (
-            isLikelyProductZone(obj) && !isTemplateCompositionManagedZone(obj)
-        )) || [];
+        const availableTemplates = new Map((labelTemplates.value || []).map((item: any) => [String(item?.id || '').trim(), item]));
+        const fallbackTemplateId = availableTemplates.has(BUILTIN_DEFAULT_LABEL_TEMPLATE_ID)
+            ? BUILTIN_DEFAULT_LABEL_TEMPLATE_ID
+            : '';
+        const zones = canvas.value?.getObjects?.().filter((obj: any) => isLikelyProductZone(obj)) || [];
         if (!zones.length) return;
 
         let changed = false;
@@ -29588,13 +29728,21 @@ const applyGlobalLabelTemplatesToCanvas = async (reason = 'global-label-template
             const styleTemplateId = String(styles?.splashTemplateId || '').trim();
             const snapshotTemplateId = String((zone as any)?._zoneTemplateSnapshotId || '').trim();
             const templateId = styleTemplateId || snapshotTemplateId;
+            const zoneCards = getZoneChildren(zone);
+            const hasDeletedZoneTemplate = isLabelTemplateLibraryAuthoritative.value && !!templateId && !availableTemplates.has(templateId);
+            const hasDeletedCardTemplate = isLabelTemplateLibraryAuthoritative.value && zoneCards.some((card: any) => {
+                const cardId = String((card as any)?.__cardLabelTemplateId || '').trim();
+                return !!cardId && !availableTemplates.has(cardId);
+            });
+            // Modelos com composição própria mantêm sua arte. Só entram na
+            // migração quando realmente apontam para uma etiqueta excluída.
+            if (isTemplateCompositionManagedZone(zone) && !hasDeletedZoneTemplate && !hasDeletedCardTemplate) continue;
             const template = templateId
-                ? labelTemplates.value.find((item: any) => String(item?.id || '').trim() === templateId)
+                ? availableTemplates.get(templateId)
                 : undefined;
             const snapshotGroup = (zone as any)?._zoneTemplateSnapshot;
 
             if (template) {
-                const zoneCards = getZoneChildren(zone);
                 // O snapshot da zona pode estar atualizado mesmo quando os
                 // grupos reais dos cards ainda apontam para etiquetas antigas.
                 // Esse era o motivo de uma zona mostrar Barlow Black enquanto
@@ -29607,7 +29755,7 @@ const applyGlobalLabelTemplatesToCanvas = async (reason = 'global-label-template
                     const cardTemplateStillExists = labelTemplates.value.some((item: any) => (
                         String(item?.id || '').trim() === cardTemplateId
                     ));
-                    if (!cardTemplateStillExists) return !cardHasExplicitLabelTemplateOverride(card);
+                    if (!cardTemplateStillExists) return isLabelTemplateLibraryAuthoritative.value;
                     // A card explicitly customized in the quick editor keeps
                     // its own label by design. Inherited cards, however, must
                     // match both the selected ID and the library's visual
@@ -29635,10 +29783,11 @@ const applyGlobalLabelTemplatesToCanvas = async (reason = 'global-label-template
                 continue;
             }
 
-            if (templateId) {
-                // A deleted/renamed global template must not fall back to the
-                // immutable project snapshot. Clear the zone and its cards.
-                const applied = await applyLabelTemplateToZone(zone, undefined, {
+            if (hasDeletedZoneTemplate || hasDeletedCardTemplate) {
+                // A etiqueta removida não volta pelo snapshot do projeto.
+                // Aplicamos uma alternativa existente e preservamos overrides
+                // individuais que ainda apontam para etiquetas válidas.
+                const applied = await applyLabelTemplateToZone(zone, fallbackTemplateId || undefined, {
                     applyToExisting: true,
                     requestRender: false,
                     save: false
@@ -30120,8 +30269,8 @@ const handleAutoOfferLayout = async () => {
                 v-if="isQuickMode && project.pages?.length"
                 :current-zoom="currentZoom"
                 :native-text-count="quickModeNativeTextObjects.length"
-                :native-color-count="quickModeColorTargets.length"
-                :color-targets="quickModeColorTargets"
+                :native-color-count="quickModeGlobalColorTargets.length"
+                :color-targets="quickModeGlobalColorTargets"
                 :selected-color-object-id="selectedObjectRef?._customId"
                 :native-font-family="quickModeNativeFontFamily"
                 :native-font-size="quickFontSize"
@@ -30146,25 +30295,21 @@ const handleAutoOfferLayout = async () => {
 
 
 
-              <section v-if="quickSelectedProductName" class="quick-product-name-colors flex flex-wrap items-center gap-3 rounded-lg border border-white/15 bg-zinc-900 px-3 py-2 text-xs text-white" @pointerdown.stop>
-                <label class="flex items-center gap-2">Cor do nome
-                  <input type="color" aria-label="Cor do nome do produto" :value="quickSelectedProductName.fill || '#000000'" @change="applyQuickProductNameColor(($event.target as HTMLInputElement).value)" />
-                </label>
-                <label class="flex items-center gap-2">Aplicar a
-                  <select v-model="quickProductNameColorScope" class="rounded bg-zinc-800 px-2 py-1" aria-label="Produtos que receberão a cor">
-                    <option value="selected">Este produto</option>
-                    <option value="all">Todos os produtos da zona</option>
-                    <option v-if="quickSelectedNameCard?._cardHighlighted" value="highlights">Somente destaques</option>
-                  </select>
-                </label>
-                <button type="button" class="rounded bg-white/10 px-3 py-2" @click="applyQuickProductNameColor(quickSelectedProductName.fill)">Aplicar cor atual</button>
-                <button type="button" class="rounded bg-violet-500/25 px-3 py-2" @click="applyQuickProductNameColor(null)">Cor automática</button>
-              </section>
-
               <!-- Infinite Canvas Effect (Wrapper) -->
               <div class="canvas-workspace" :class="{ 'has-logo-panel': selectedQuickLogo }">
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
+                  <QuickModeElementColorMenu
+                    v-if="isQuickMode && quickModeSelectedColorTargets.length && selectedObjectPos.visible && !quickModeElementColorDismissed && !isDesignLoading && !figmaCrop.isCropActive.value"
+                    :key="selectedObjectRef?._customId || quickModeSelectedColorTargets[0]?.id"
+                    :targets="quickModeSelectedColorTargets"
+                    :busy="isParsingProducts || isProcessing"
+                    :style="quickModeElementColorPosition"
+                    @apply-color="applyQuickModeColorChange"
+                    @clear-color="clearQuickModeColor"
+                    @apply-opacity="applyQuickModeOpacityChange"
+                    @close="quickModeElementColorDismissed = true"
+                  />
                    <label
                      v-if="quickSelectedCardConfiguration && quickCardConfigurationOptions.length > 1 && selectedObjectPos.visible && !showProductImageQuickActions && !isDesignLoading && !figmaCrop.isCropActive.value"
                      class="absolute z-[118] flex max-w-[calc(100%-16px)] items-center gap-2 rounded-lg border border-violet-400/30 bg-[#18181b]/95 px-2 py-1.5 text-xs text-white shadow-xl"
@@ -30930,7 +31075,6 @@ main {
     transform: none;
 }
 
-.quick-product-name-colors { position: absolute; top: 70px; left: 12px; right: 12px; z-index: 116; }
 
 .quick-mode-stage > .canvas-workspace {
     background-color: #303133;

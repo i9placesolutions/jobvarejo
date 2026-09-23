@@ -19,6 +19,10 @@ describe('cores dos cards', () => {
       { fill: '#0000ff', width: 30, height: 30 }
     ])).toBe('#ffcc00')
     expect(findFlyerAccent([{ fill: '#ffffff' }])).toBeNull()
+    expect(findFlyerAccent([
+      { name: 'product-area-background', fill: '#ffe529', width: 1000, height: 1000 },
+      { fill: '#b91c1c', width: 900, height: 900 }
+    ])).toBe('#b91c1c')
   })
 })
 
@@ -31,12 +35,13 @@ it('troca amarelo legado pela arte de cada modelo e reage à troca da paleta', (
     expect(resolveProductCardColor(resolved, false)).toBe('#ffffff')
   }
 })
-it('paleta configurada e escolhas explícitas prevalecem sobre amostragem', () => {
+it('a arte define o destaque automático; escolha explícita prevalece', () => {
   const roots = [{ fill: '#135ab4', width: 1000, height: 1000 }]
   const configured = resolveFlyerProductStyles({ templateProductPalette: { highlightCardColor: '#228833' } }, roots)
-  expect(resolveProductCardColor(configured, true)).toBe('#228833')
+  expect(resolveProductCardColor(configured, true)).toBe('#135ab4')
   const custom = resolveFlyerProductStyles({ productPalette: { highlightCardColor: '#ffcc00' } }, roots)
   expect(resolveProductCardColor(custom, true)).toBe('#ffcc00')
+  expect(resolveProductCardColor(resolveFlyerProductStyles({ templateProductPalette: { highlightCardColor: '#228833' } }, []), true)).toBe('#228833')
   const manual = { cardColorMode: 'manual' as const, cardColor: '#ffffff' }
   expect(resolveFlyerProductStyles(manual, roots)).toBe(manual)
 })

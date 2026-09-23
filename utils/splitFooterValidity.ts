@@ -1,10 +1,11 @@
 import { referenceValidityCopy } from './referenceValidityCopy'
+import { formatOfferDate, formatOfferDateInterval, type OfferDateFormat } from './offerValidity'
 /** A validade em três linhas mantém a composição do modelo ao trocar as datas. */
 export const isSplitFooterValidity = (object: any): boolean =>
   ['split-footer', 'calendar-card', 'inline-footer', 'offer-banner', 'reference-ribbon'].includes(object?.quickValidityLayout) ||
   (object?.name === 'dynamic-validity' && object?.quickDataField === 'validity')
 
-export const splitFooterValidityText = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; layout?: string }) => {
+export const splitFooterValidityText = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; layout?: string; dateFormat?: OfferDateFormat }) => {
   if (value.layout === 'reference-ribbon') return referenceValidityCopy(value)
   const parse = (raw?: string) => {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw || ''))
@@ -24,8 +25,15 @@ export const splitFooterValidityText = (value: { startDate?: string; endDate?: s
       ? `${start.day} A ${full(end)}`
       : `${full(start, start.year !== end.year)} A ${full(end, start.year !== end.year)}`
   } else if (start || end) period = full((start || end)!)
+  if (value.dateFormat === 'long' && !stocksOnly) {
+    const first = formatOfferDate(value.startDate, 'long')
+    const last = formatOfferDate(value.endDate, 'long')
+    period = (start && end && value.mode !== 'single_day' && value.startDate !== value.endDate
+      ? formatOfferDateInterval(first, last)
+      : first || last).toLocaleUpperCase('pt-BR')
+  }
   if (value.layout === 'calendar-card') {
-    if (start && end && !stocksOnly && value.mode !== 'single_day' && start.year === end.year && start.month === end.month && value.startDate !== value.endDate) {
+    if (value.dateFormat !== 'long' && start && end && !stocksOnly && value.mode !== 'single_day' && start.year === end.year && start.month === end.month && value.startDate !== value.endDate) {
       // E só representa dois dias quando são consecutivos; intervalos maiores usam A.
       period = `${start.day} ${end.day === start.day + 1 ? 'E' : 'A'} ${end.day} DE\n${end.label}`
     }

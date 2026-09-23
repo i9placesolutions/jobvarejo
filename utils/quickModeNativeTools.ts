@@ -382,3 +382,37 @@ export const collectQuickEditableColorTargets = (objects: any[]): QuickEditableC
   append(nativeObjects, 'native', 'Elemento')
   return targets
 }
+
+/** Agrupa as cores da página para o controle global, sem listar objetos individuais. */
+export const groupQuickGlobalColorTargets = (targets: QuickEditableColorTarget[]): QuickEditableColorTarget[] => {
+  const groups = new Map<string, QuickEditableColorTarget[]>()
+  for (const target of targets) {
+    const object = target.objects[0]?.object
+    const type = target.kind === 'native' && isQuickNativeTextObject(object) ? 'text' : target.kind
+    // Nas etiquetas, cores distintas representam partes distintas do desenho.
+    // A troca global deve preservar essa separação.
+    const colorKey = target.kind === 'price-label' || target.kind === 'native'
+      ? target.color || 'transparent'
+      : 'all'
+    const key = `${type}:${colorKey}`
+    groups.set(key, [...(groups.get(key) || []), target])
+  }
+  return [...groups.entries()].map(([key, members]) => {
+    const objects = members.flatMap(target => target.objects)
+    const colors = new Set(members.map(target => target.color))
+    const opacities = new Set(members.map(target => target.opacity))
+    const kind = members[0]!.kind
+    const label = kind === 'product-area' ? 'Fundos das áreas de produtos'
+      : kind === 'product-card' ? 'Fundos de todos os cards'
+      : kind === 'price-label' ? `Formas das etiquetas · ${members[0]!.color || 'sem cor'}`
+      : key.startsWith('text:') ? `Textos · ${members[0]!.color || 'sem cor'}`
+      : `Formas · ${members[0]!.color || 'sem cor'}`
+    const description = `${objects.length} elemento${objects.length === 1 ? '' : 's'} desta página`
+    return {
+      id: `global:${key}`, kind, label, description, objects, count: objects.length,
+      color: colors.size === 1 ? members[0]!.color : null,
+      opacity: members[0]!.opacity, mixedColor: colors.size > 1,
+      mixedOpacity: opacities.size > 1, canClear: members.every(target => target.canClear)
+    }
+  })
+}

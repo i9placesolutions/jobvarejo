@@ -26,6 +26,7 @@ import {
 } from '~/utils/labelTemplateHelpers'
 import { createEditableLabelTemplateGroup } from '~/utils/labelTemplateFactory'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
+import { renderLabelTemplateCatalogPreview } from '~/utils/labelTemplateCatalogPreview'
 
 definePageMeta({
   layout: false,
@@ -75,6 +76,8 @@ const isSaving = ref(false)
 const isDuplicating = ref(false)
 const deletingTemplateId = ref<string | null>(null)
 const failedPreviewIds = ref<Set<string>>(new Set())
+const generatedPreviews = ref<Record<string, string>>({})
+const pendingPreviewIds = new Set<string>()
 const toast = ref<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -134,19 +137,58 @@ const upsertLocalTemplate = (template: LabelTemplate) => {
   const failed = new Set(failedPreviewIds.value)
   failed.delete(template.id)
   failedPreviewIds.value = failed
+  if (generatedPreviews.value[template.id]) {
+    const next = { ...generatedPreviews.value }
+    delete next[template.id]
+    generatedPreviews.value = next
+  }
   const index = templates.value.findIndex((item) => item.id === template.id)
   if (index === -1) {
     templates.value = sortTemplates([...templates.value, template])
+    if (!template.previewDataUrl) void generatePreview(template)
     return
   }
   const next = [...templates.value]
   next[index] = template
   templates.value = sortTemplates(next)
+  if (!template.previewDataUrl) void generatePreview(template)
 }
 
 const markPreviewFailed = (templateId: string) => {
   if (failedPreviewIds.value.has(templateId)) return
   failedPreviewIds.value = new Set([...failedPreviewIds.value, templateId])
+  const template = templates.value.find((item) => item.id === templateId)
+  if (template) void generatePreview(template)
+}
+
+const previewSrc = (template: LabelTemplate): string | undefined =>
+  !failedPreviewIds.value.has(template.id) && template.previewDataUrl
+    ? template.previewDataUrl
+    : generatedPreviews.value[template.id]
+
+const generatePreview = async (template: LabelTemplate): Promise<void> => {
+  if (pendingPreviewIds.has(template.id) || generatedPreviews.value[template.id]) return
+  pendingPreviewIds.add(template.id)
+  try {
+    const image = await renderLabelTemplateCatalogPreview(template.group)
+    if (image) generatedPreviews.value = { ...generatedPreviews.value, [template.id]: image }
+  } catch (error) {
+    console.warn('[label-templates] Não foi possível gerar a prévia da etiqueta', template.id, error)
+  } finally {
+    pendingPreviewIds.delete(template.id)
+  }
+}
+
+const generateMissingPreviews = async (items: LabelTemplate[]): Promise<void> => {
+  const queue = items.filter((template) => !template.previewDataUrl)
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < queue.length) {
+      const template = queue[cursor++]
+      if (template) await generatePreview(template)
+    }
+  }
+  await Promise.all([worker(), worker()])
 }
 
 const loadTemplates = async () => {
@@ -161,6 +203,7 @@ const loadTemplates = async () => {
     const rows = Array.isArray(response?.templates) ? response.templates : []
     templates.value = sortTemplates(rows.map(mapTemplateRow).filter(Boolean) as LabelTemplate[])
     await ensureStarterTemplate()
+    void generateMissingPreviews(templates.value)
   } catch (error: any) {
     loadError.value = String(error?.data?.statusMessage || error?.message || 'Não foi possível carregar os modelos.')
     templates.value = []
@@ -627,7 +670,7 @@ onBeforeUnmount(() => {
         <div v-else class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <article v-for="template in filteredTemplates" :key="template.id" class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/5">
             <div class="relative flex h-44 items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc] p-5">
-              <img v-if="template.previewDataUrl && !failedPreviewIds.has(template.id)" :src="template.previewDataUrl" :alt="template.name" class="max-h-full max-w-full object-contain drop-shadow-xl" loading="lazy" decoding="async" @error="markPreviewFailed(template.id)" />
+              <img v-if="previewSrc(template)" :src="previewSrc(template)" :alt="template.name" class="max-h-full max-w-full object-contain drop-shadow-xl" loading="lazy" decoding="async" @error="markPreviewFailed(template.id)" />
               <div v-else class="flex h-24 w-44 items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-white/70 text-blue-300">
                 <ImagePlus class="h-8 w-8" />
               </div>
