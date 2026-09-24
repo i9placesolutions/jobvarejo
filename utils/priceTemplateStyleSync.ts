@@ -1,10 +1,10 @@
-import { applyRichPriceTextValue, PRICE_RICH_TEXT_OFFSET_PROPS, PRICE_RICH_TEXT_PROPS, createRichPriceTextFromSplit } from './priceRichText'
+import { positionRichPriceUnit, applyRichPriceTextValue, PRICE_RICH_TEXT_OFFSET_PROPS, PRICE_RICH_TEXT_PROPS, createRichPriceTextFromSplit } from './priceRichText'
 import { fitAuthoredPriceTier } from './manualPriceFitPolicy'
 import { getSinglePriceBackgroundCandidate } from './priceLayoutClassifiers'
 
 const migratedTemplatePrices = new WeakMap<object, Map<string, { signature: string; source: any }>>()
 const PRICE_TIERS = [
-  { value: 'price_value_text', integer: ['price_integer_text', 'priceInteger', 'price_integer'], decimal: ['price_decimal_text', 'priceDecimal', 'price_decimal'], parts: ['price_currency_text', 'price_value_text', 'smart_price', 'price_unit_text', 'price_currency_bg', 'price_currency_circle', 'currency_circle'], background: 'price_bg' },
+  { value: 'price_value_text', integer: ['price_integer_text', 'priceInteger', 'price_integer'], decimal: ['price_decimal_text', 'priceDecimal', 'price_decimal'], parts: ['price_currency_text', 'price_value_text', 'smart_price', 'price_unit_text', 'price_currency_bg', 'price_currency_circle', 'currency_circle', 'label-badge'], background: 'price_bg' },
   { value: 'retail_price_text', integer: ['retail_integer_text'], decimal: ['retail_decimal_text'], parts: ['retail_currency_text', 'retail_price_text', 'retail_unit_text'], background: 'atac_retail_bg' },
   { value: 'wholesale_price_text', integer: ['wholesale_integer_text'], decimal: ['wholesale_decimal_text'], parts: ['wholesale_currency_text', 'wholesale_price_text', 'wholesale_unit_text'], background: 'atac_wholesale_bg' }
 ]
@@ -128,7 +128,14 @@ export const syncPriceTemplateStyle = (group: any, template: any, revivePaint: (
         const originFactor = value.originX === 'center' ? 0.5 : value.originX === 'right' ? 1 : 0
         const widthDelta = Number(value.width) * Math.abs(Number(value.scaleX ?? 1))
           - Number(source.width) * Math.abs(Number(source.scaleX ?? 1))
-        if (Number.isFinite(widthDelta)) value.set?.({ left: Number(value.left) + widthDelta * originFactor })
+        if (Number.isFinite(widthDelta)) {
+          value.set?.({ left: Number(value.left) + widthDelta * originFactor })
+          // A unidade acompanha os centavos quando muda a quantidade de dígitos.
+          const unit = parts.find((node: any) => node.name === (tier.value === 'price_value_text' ? 'price_unit_text' : tier.value.replace('_price_text', '_unit_text')))
+          if (unit) unit.set?.({ left: Number(unit.left) + widthDelta })
+        }
+        const unit = parts.find((node: any) => node.name === (tier.value === 'price_value_text' ? 'price_unit_text' : tier.value.replace('_price_text', '_unit_text')))
+        if (value.__priceRichText && unit) positionRichPriceUnit(value, unit, Number(unit.top))
         const authoredCenter = bounds(parts.map((node: any) => sources.get(node.name)))
         const currentCenter = bounds(parts)
         if (authoredCenter !== null && currentCenter !== null) {

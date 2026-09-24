@@ -127,3 +127,26 @@ it('o fundo do R$ acompanha o símbolo ao reduzir um preço comprido', () => {
     expect(nodes[1].scaleX).toBeLessThan(1)
   }
 })
+
+it('Torra Tudo mantém R$ no badge e unidade junto aos centavos em preços curtos e longos',()=>{
+ const objects=[
+  {name:'price_bg',width:260,height:127,left:0,top:-3,originX:'center',originY:'center'},
+  {name:'label-badge',width:42,height:42,left:-104,top:-2,originX:'center',originY:'center'},
+  {name:'price_currency_text',text:'R$',width:30,height:29,left:-105,top:0,originX:'center',originY:'center'},
+  {name:'price_value_text',text:'22,99',width:195,height:112,left:-73,top:-1,originX:'left',originY:'center'},
+  {name:'price_unit_text',text:'UN',width:31,height:28,left:65,top:34,originX:'center',originY:'center'}
+ ]
+ const template={__preserveManualLayout:true,width:276,height:150,objects}
+ for(const width of [140,195,300]){
+  const nodes:any[]=objects.map(o=>({...o,scaleX:1,scaleY:1,set(p:any){Object.assign(this,p)},initDimensions(){if(this.name==='price_value_text')this.width=width}}))
+  nodes[3].text=width===140?'0,99':width===195?'22,99':'1.299,99'
+  const group={__preserveManualLayout:true,getObjects:()=>nodes}
+  for(let i=0;i<3;i++){
+   syncPriceTemplateStyle(group,template)
+   const [,badge,currency,value,unit]=nodes
+   expect((currency.left-badge.left)/currency.scaleX).toBeCloseTo(-1)
+   expect((unit.left-value.left)/value.scaleX).toBeCloseTo(138+width-195)
+   expect(value.text).toBe(width===140?'0,99':width===195?'22,99':'1.299,99')
+  }
+ }
+})
