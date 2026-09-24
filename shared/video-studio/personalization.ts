@@ -3,6 +3,7 @@ import type {FlyerRecipe,FlyerLayout} from './flyer-recipes'
 import {isAlcoholicProduct} from '../../utils/product-card-configuration'
 import type {VideoOffer} from './model'
 import {videoTemplateCopy} from './template-copy'
+import {reelsOfferLayout,REELS_OFFER_LAYOUT} from './reels-layout'
 
 export const showVideoAlcoholBadge = (offer:VideoOffer) => offer.alcoholBadgeEnabled ?? isAlcoholicProduct(offer)
 export const VIDEO_COLOR_PALETTES=[
@@ -15,7 +16,9 @@ export const VIDEO_COLOR_PALETTES=[
 
 export function personalizedRecipe(recipe:FlyerRecipe,doc:VideoDocument):FlyerRecipe {
   const titleChanged=doc.campaign.trim()!==videoTemplateCopy(recipe).title.trim()
-  return {...recipe,vertical:recipe.preserveBrandLayout?recipe.vertical:videoFooterLayout(recipe.vertical,true),horizontal:videoTvOfferLayout(recipe.preserveBrandLayout?recipe.horizontal:videoFooterLayout(recipe.horizontal,false)),
+  // Mascotes já têm uma coluna própria ao lado do selo; preserve essa separação.
+  const vertical:FlyerLayout=recipe.mascot?{...REELS_OFFER_LAYOUT,seal:[recipe.vertical.seal[0],65,recipe.vertical.seal[2],560]}:reelsOfferLayout(titleChanged?undefined:recipe.sealAspect)
+  return {...recipe,vertical,horizontal:videoTvOfferLayout(recipe.preserveBrandLayout?recipe.horizontal:videoFooterLayout(recipe.horizontal,false)),
     ...(doc.appearance?.accent?{accent:doc.appearance.accent,nativeTitleColor:doc.appearance.accent}:{}),
     ...(titleChanged?{seal:'',nativeTitle:doc.campaign,sealAspect:1}:{}),
   }

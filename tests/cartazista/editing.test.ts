@@ -7,12 +7,14 @@ describe('edição isolada de cartazes',()=>{
     const doc=createCartazistaDocument()
     doc.settings.header={id:'11111111-1111-4111-8111-111111111111',name:'Economia',background:'',seal:'/video-studio/templates/seal.png',color:'#bb0011',layout:'thematic-seal',retailFinish:{labelFill:'#ffdd00',labelInk:'#111111',labelEdge:'#990000'}}
     const current=rebuildCartazistaComposition(doc),composition=structuredClone(current.composition)
-    composition.layers.find(l=>l.id==='cartaz-price')!.text='1.299,90'
+    // Documentos antigos com richPrice continuam editáveis.
+    composition.layers = composition.layers.filter(l=>l.id!=='cartaz-price-cents')
+    Object.assign(composition.layers.find(l=>l.id==='cartaz-price')!,{text:'1.299,90',richPrice:true})
     const edited=syncCartazistaBoundText(current,composition)
     expect(edited.products[0]!.price).toBe(1299.90)
     const parsed=cartazistaDocumentSchema.parse(JSON.parse(JSON.stringify(edited)))
     expect(parsed.composition.layers.find(l=>l.id==='cartaz-price')?.richPrice).toBe(true)
-    expect(rebuildCartazistaComposition(parsed as typeof edited).composition.layers.find(l=>l.id==='cartaz-price')?.text).toBe('1.299,90')
+    expect(rebuildCartazistaComposition(parsed as typeof edited).composition.layers.find(l=>l.id==='cartaz-price')?.text).toBe('1.299')
   })
   it('preserva elementos próprios ao mudar o formato',()=>{
     const doc=createCartazistaDocument();const layer=newCartazistaLayer(doc.composition,'text');doc.composition.layers.push(layer)

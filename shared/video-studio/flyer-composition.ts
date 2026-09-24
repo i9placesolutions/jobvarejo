@@ -6,7 +6,7 @@ import {useRetailFonts} from './font-readiness'
 import {videoBackground,backgroundAsset} from './backgrounds'
 import {productEffects} from './native-effects'
 import React,{createElement as h} from 'react'
-import {AbsoluteFill,Audio,Img,CanvasImage,Sequence,useCurrentFrame,useVideoConfig,interpolate,Easing} from 'remotion'
+import {AbsoluteFill,Audio,Img,CanvasImage,Sequence,Loop,OffthreadVideo,useCurrentFrame,useVideoConfig,interpolate,Easing} from 'remotion'
 import {flyerRecipe,type FlyerRecipe,type LayoutBox} from './flyer-recipes'
 import {Logo,Ending,RetailCamera,SocialIcon} from './showcase'
 import {displayPrice,type VideoRenderProps,type VideoScene} from './model'
@@ -24,12 +24,15 @@ const fit=(text:string,size:number,limit:number)=>Math.max(size*.48,size*Math.mi
 const mix=(f:number,a:number,b:number,x:number,y:number)=>interpolate(f,[a,b],[x,y],{extrapolateLeft:'clamp',extrapolateRight:'clamp',easing:Easing.bezier(.16,1,.3,1)})
 const random=(n:number)=>{const x=Math.sin(n*93.17+21)*42817;return x-Math.floor(x)}
 function Backdrop({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
- const f=useCurrentFrame(),{width:w,height:ht}=useVideoConfig(),intensity=props.document.intensity,kind=r.backgroundKind||r.id,seed=r.seed||0,items:React.ReactNode[]=[]
+ const f=useCurrentFrame(),{width:w,height:ht,fps}=useVideoConfig(),intensity=props.document.intensity,kind=r.backgroundKind||r.id,seed=r.seed||0,items:React.ReactNode[]=[]
  const asset=(props.templateBase||'/video-studio/templates')+'/'+(props.format==='horizontal'?(r.backgroundHorizontal||r.background):r.background)
  // A arte de origem mantém suas cores; fundos alternativos exigem escolha explícita.
  const variant=r.backgroundVariant||0,chosen=videoBackground(props.document.background),energy=chosen?backgroundAsset(chosen.id,props.format):ht>w?(r.energyBackgroundVertical||r.energyBackground):r.energyBackground
  if(energy)items.push(h(Img,{key:'energy-art',src:(props.templateBase||'/video-studio/templates')+'/'+energy,style:{position:'absolute',inset:'-7%',width:'114%',height:'114%',objectFit:'cover',transform:`translate(${Math.sin(f/(28+variant*3))*18}px,${Math.cos(f/(36+variant*4))*20}px) scale(${1.04+Math.sin(f/45)*.035}) rotate(${Math.sin(f/70+variant)*.6}deg)`,opacity:1}}))
- if(r.background&&!chosen)items.push(h(Img,{key:'art',src:asset,style:{position:'absolute',inset:'-6%',width:'112%',height:'112%',objectFit:'cover',transform:`translate(${Math.sin(f/42)*14}px,${Math.cos(f/51)*18}px) scale(${1.02+Math.sin(f/65)*.025})`,opacity:1}}))
+ if(r.backgroundVideo&&!chosen){
+  items.push(h(Loop,{key:'background-video',durationInFrames:Math.max(1,Math.round((r.backgroundVideoDuration||12)*fps)),children:h(OffthreadVideo,{src:(props.templateBase||'/video-studio/templates')+'/'+r.backgroundVideo,muted:true,style:{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}})}))
+  items.push(div({position:'absolute',inset:0,background:'rgba(20,5,0,.28)'}))
+ }else if(r.background&&!chosen)items.push(h(Img,{key:'art',src:asset,style:{position:'absolute',inset:'-6%',width:'112%',height:'112%',objectFit:'cover',transform:`translate(${Math.sin(f/42)*14}px,${Math.cos(f/51)*18}px) scale(${1.02+Math.sin(f/65)*.025})`,opacity:1}}))
  items.push(div({position:'absolute',inset:0,background:`radial-gradient(ellipse at 50% 55%,transparent,${r.base}22 95%)`}))
  if(props.document.effects.includes('rays')){
  if(kind==='alarm'||kind==='alerta'){
@@ -50,7 +53,7 @@ function Backdrop({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
  if(kind==='clock')for(let i=0;i<3;i++)items.push(div({position:'absolute',left:i%2?w*.75:-w*.35,top:ht*(i*.38-.05),width:w*.6,height:w*.6,borderRadius:'50%',border:`8px dashed ${r.accent}66`,rotate:`${f*(i%2?-1.5:2.3)}deg`,opacity:.65},div({position:'absolute',left:'49%',top:'10%',width:7,height:'40%',transformOrigin:'50% 100%',rotate:`${f*4}deg`,background:r.accent})))
  if(kind==='spotlight'||kind==='industrial')for(let i=0;i<5;i++)items.push(div({position:'absolute',left:w*(i*.25-.15),top:-ht*.2,width:w*.32,height:ht*1.5,transformOrigin:'50% 0%',rotate:`${Math.sin(f/23+i+seed%10)*26}deg`,background:`linear-gradient(${r.accent}44,transparent)`,clipPath:'polygon(47% 0,53% 0,100% 100%,0 100%)',opacity:.55}))
  }
- if(props.document.effects.includes('glow'))for(let i=0;i<44;i++){const speed=4+random(i)*11;items.push(div({position:'absolute',left:random(i+99)*w,top:(random(i+80)*ht+f*speed)%(ht+80)-40,width:i%4?4:12,height:i%4?22:12,background:i%3?r.accent:'#fff',borderRadius:r.id==='saldao'?2:6,rotate:`${i*47+f*(i%2?3:-3)}deg`,opacity:(.15+random(i+6)*.4)*intensity,boxShadow:i%4?'none':`0 0 16px ${r.accent}`}))}
+ if(props.document.effects.includes('glow'))for(let i=0;i<(props.fastPreview?16:44);i++){const speed=4+random(i)*11;items.push(div({position:'absolute',left:random(i+99)*w,top:(random(i+80)*ht+f*speed)%(ht+80)-40,width:i%4?4:12,height:i%4?22:12,background:i%3?r.accent:'#fff',borderRadius:r.id==='saldao'?2:6,rotate:`${i*47+f*(i%2?3:-3)}deg`,opacity:(.15+random(i+6)*.4)*intensity,boxShadow:i%4?'none':`0 0 16px ${r.accent}`}))}
  return h(AbsoluteFill,{style:{background:r.backgroundGradient||r.base,overflow:'hidden'}},...items,h(CatalogAtmosphere,{props}),h(BoomExplosion,{props}),h(CampaignAtmosphere,{props}))
 }
 function DateLine({props,large=false}:{props:VideoRenderProps;large?:boolean}){const text=videoValidityText(props.document);if(!text)return null;return div({...font,display:'flex',alignItems:'center',justifyContent:'center',gap:9,height:'100%',fontSize:fit(text,large?42:30,large?40:68),color:'var(--video-validity-color, var(--video-text-color, white))',textShadow:props.document.appearance?.validityColor?'none':'0 2px 5px #000',lineHeight:1.2},h(SocialIcon,{kind:'calendar',size:large?35:22}),text)}
@@ -70,7 +73,7 @@ function Identity({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
  return h(AbsoluteFill,null,
  r.mascot&&mascotBox?div({position:'absolute',left:p?20:20,top:p?610:535,width:p?1040:650,height:p?34:28,opacity:progress*(1-end),borderTop:'6px solid #ffe197',borderBottom:'6px solid #63300d',borderRadius:5,background:'repeating-linear-gradient(2deg,#98531f 0px,#c1843d 4px,#e0aa5d 7px,#a76129 11px)',boxShadow:'0 12px 18px #0009'}):null,
  r.mascot&&mascotBox?h(EditableElement,{props,scene:sceneId,id:'mascot',style:{...box(mascotBox),opacity:progress*(1-end),translate:`0px ${Math.max(0,1-progress)*70}px`}},h(Img,{src:(props.templateBase||'/video-studio/templates')+'/'+r.mascot,style:{width:'100%',height:'100%',objectFit:'contain',objectPosition:'center bottom'}})):null,
- h(EditableElement,{props,scene:sceneId,id:'seal',style:{...box(sealBox),opacity:sealAlpha,scale:seal.scale,rotate:`${seal.rotation+Math.sin(f/39)*.65}deg`}},r.seal?h(CanvasImage,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,width:Math.round(1280*Math.max(.2,r.sealAspect||1)),height:1280,fit:'contain',effects:props.document.effects.includes('glow')?productEffects((f%95),'shine',props.document.intensity):[],style:{width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 14px 12px #0006)'}}):div({...font,fontSize:nativeSize(sealBox[2],sealBox[3]),height:'100%',display:'flex',alignItems:'center',justifyContent:'center',whiteSpace:'pre',color:r.nativeTitleColor||r.accent,textShadow:'0 5px #573205,0 10px #382003,0 18px 20px #0008'},nativeLines.join('\n'))),
+ h(EditableElement,{props,scene:sceneId,id:'seal',style:{...box(sealBox),opacity:sealAlpha,scale:seal.scale,rotate:`${seal.rotation+Math.sin(f/39)*.65}deg`}},r.seal?(props.fastPreview?h(Img,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,style:{width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 14px 12px #0006)'}}):h(CanvasImage,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,width:Math.round(1280*Math.max(.2,r.sealAspect||1)),height:1280,fit:'contain',effects:props.document.effects.includes('glow')?productEffects((f%95),'shine',props.document.intensity):[],style:{width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 14px 12px #0006)'}})):div({...font,fontSize:nativeSize(sealBox[2],sealBox[3]),height:'100%',display:'flex',alignItems:'center',justifyContent:'center',whiteSpace:'pre',color:r.nativeTitleColor||r.accent,textShadow:'0 5px #573205,0 10px #382003,0 18px 20px #0008'},nativeLines.join('\n'))),
  h(EditableElement,{props,scene:sceneId,id:'logo',style:{...box(logoBox),opacity:logoAlpha,scale:logo.scale,translate:`0px ${logo.y}px`}},h(Logo,{props,width:logoBox[2],height:logoBox[3]})))
 }
 function Price({props,price,unit}:{props:VideoRenderProps;r:FlyerRecipe;price:string;unit:string}){

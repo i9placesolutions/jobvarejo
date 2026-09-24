@@ -4,7 +4,7 @@ import AdminWorkspaceShell from '~/components/AdminWorkspaceShell.vue'
 import {defaultTransform,elementTransform,setElementTransform,elementNames,type VideoElementTransform} from '~/shared/video-studio/layout-editing'
 import {VIDEO_BACKGROUNDS} from '~/shared/video-studio/backgrounds'
 import { Store, ShoppingBasket, SlidersHorizontal, ArrowLeft, ArrowRight, Check, ChevronDown, ChevronUp, Clapperboard, Copy, Download, Headphones, ImagePlus, LoaderCircle, Monitor, Music2, Play, Plus, Save, Smartphone, Sparkles, Trash2, Upload, Volume2, X } from 'lucide-vue-next'
-import { VIDEO_THEMES, VIDEO_EFFECTS, VIDEO_FORMATS, newVideoDocument, suggestVideoScripts, narrationScripts, videoNarrationText, videoSpeechSource, videoSpeechSourceMatches, videoAudioIdentity, buildVideoTimeline, validateVideoForGeneration, type VideoDocument, type VideoFormat, type VideoRenderProps } from '~/shared/video-studio/model'
+import { VIDEO_THEMES, VIDEO_EFFECTS, VIDEO_FORMATS, newVideoDocument, suggestVideoScripts, narrationScripts, videoNarrationText, videoSpeechSource, videoSpeechSourceMatches, videoAudioIdentityMatches, buildVideoTimeline, validateVideoForGeneration, type VideoDocument, type VideoFormat, type VideoRenderProps } from '~/shared/video-studio/model'
 import {isVideoModel} from '~/shared/video-studio/project-kind'
 import {showVideoAlcoholBadge} from '~/shared/video-studio/personalization'
 import {newVideoFromTemplate,applyVideoTemplate} from '~/shared/video-studio/templates'
@@ -57,7 +57,7 @@ const serialize=()=>JSON.stringify({document:doc.value,scriptSource:scriptSource
 const dirty=computed(()=>serialize()!==baseline.value)
 const theme=computed(()=>VIDEO_THEMES.find(t=>t.id===doc.value.theme)!)
 const narrationInvalid=computed(()=>doc.value.narrationText!==undefined&&JSON.stringify(narrationScripts(doc.value,doc.value.narrationText))!==JSON.stringify(doc.value.scripts))
-const voiceJob=computed(()=>narrationInvalid.value?undefined:jobs.value.find(j=>j.kind==='voice'&&j.status==='ready'&&j.result?.provider==='elevenlabs'&&j.result?.audioIdentity===videoAudioIdentity(doc.value)))
+const voiceJob=computed(()=>narrationInvalid.value?undefined:jobs.value.find(j=>j.kind==='voice'&&j.status==='ready'&&j.result?.provider==='elevenlabs'&&videoAudioIdentityMatches(j.result?.audioIdentity,doc.value)))
 const renderJob=computed(()=>jobs.value.find(j=>j.kind==='render'&&j.status==='ready'&&!dirty.value&&j.revision===revision.value&&(!doc.value.voice.enabled||j.voice_asset_id===voiceJob.value?.result?.fullVoice?.assetId)))
 const activeJobs=computed(()=>jobs.value.filter(j=>['queued','running'].includes(j.status)))
 const scriptChanged=computed(()=>doc.value.voice.enabled&&!videoSpeechSourceMatches(doc.value,scriptSource.value))

@@ -16,7 +16,7 @@ const seekRequested=()=>{const request=props.previewRequest;if(request&&player.c
 let root:Root|undefined,generation=0,disposed=false,loadedKey='',media:Record<string,string>={}
 const render=()=>{
  if(!root||preparing.value||loadError.value)return
- const c={...props.composition,document:JSON.parse(JSON.stringify(props.composition.document)),media},size=VIDEO_FORMATS[c.format],duration=c.scenes.reduce((n,s)=>Math.max(n,s.from+s.frames),1)
+ const c={...props.composition,fastPreview:true,document:JSON.parse(JSON.stringify(props.composition.document)),media},size=VIDEO_FORMATS[c.format],duration=c.scenes.reduce((n,s)=>Math.max(n,s.from+s.frames),1)
  root.render(createElement(Player<AnyZodObject, VideoRenderProps>,{ref:player,component:VideoComposition,inputProps:c,durationInFrames:duration,fps:30,compositionWidth:size.width,compositionHeight:size.height,controls:!c.editor?.enabled,numberOfSharedAudioTags:16,loop:true,autoPlay:false,initialFrame:props.editingFrame||0,style:{width:'100%',borderRadius:18}}))
  requestAnimationFrame(()=>{if(!disposed)seekRequested()})
 }

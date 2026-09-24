@@ -5,12 +5,28 @@ import {personalizedRecipe,showVideoAlcoholBadge} from '../../shared/video-studi
 import {videoDocumentSchema} from '../../server/utils/video-studio/schema'
 import {videoOfferFromList} from '../../shared/video-studio/list-import'
 import {isVideoModel} from '../../shared/video-studio/project-kind'
+import {productLayers} from '../../shared/video-studio/product-layout'
 
 describe('personalização privada de vídeos',()=>{
+ it('aplica a hierarquia de Reels ao catálogo inteiro, com nome fora da foto e preço destacado',()=>{
+  for(const recipe of Object.values(FLYER_RECIPES)){
+   const l=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id)).vertical
+   expect(l.name[1]-(l.seal[1]+l.seal[3])).toBe(24)
+   expect(l.product[1]-(l.name[1]+l.name[3])).toBe(20)
+   expect(l.price[2]).toBeGreaterThanOrEqual(900)
+   expect(l.price[3]).toBeGreaterThanOrEqual(330)
+   expect(l.price[1]+l.price[3]).toBeLessThan(l.condition[1])
+   expect(l.condition[1]+l.condition[3]).toBeLessThan(l.logo[1])
+   expect(l.logo[1]+l.logo[3]).toBeLessThan(l.validity[1])
+   expect(productLayers(l.product,true,true,.4)).toHaveLength(2)
+   expect(productLayers(l.product,true,true,l.product[2]/l.product[3])).toHaveLength(1)
+   expect(productLayers(l.product,true,false,.4)).toHaveLength(1)
+  }
+ })
  it('preserva a identidade ampliada com validade dentro da margem do zoom',()=>{
   for(const recipe of Object.values(FLYER_RECIPES).filter(r=>r.preserveBrandLayout)){
    const result=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id))
-   expect(result.vertical.logo).toEqual(recipe.vertical.logo)
+   expect(result.vertical.logo[1]).toBeGreaterThan(result.vertical.price[1]+result.vertical.price[3])
    for(const [layout,height] of [[result.vertical,1920],[result.horizontal,1080]] as const){
     const [,y,,h]=layout.validity
     expect((y+h-height/2)*1.045+height/2).toBeLessThan(height)
@@ -44,15 +60,13 @@ describe('personalização privada de vídeos',()=>{
   expect(JSON.stringify(recipe)).toBe(before)
   expect(personalizedRecipe(recipe,newVideoFromTemplate(recipe.id)).seal).toBe(recipe.seal)
  })
- it('reserva faixa acima da foto em todos os modelos TV sem alterar Reels',()=>{
+ it('reserva faixa acima da foto em todos os modelos TV',()=>{
   for(const recipe of Object.values(FLYER_RECIPES)){
    const result=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id))
    const [x,y,w,h]=result.horizontal.product,[nx,ny,nw,nh]=result.horizontal.name
    expect(ny+nh+25).toBeLessThanOrEqual(y)
    expect(nx).toBe(x);expect(nw).toBe(w)
    expect(h).toBeGreaterThan(100);expect(y+h).toBeLessThanOrEqual(1080)
-   expect(result.vertical.product).toEqual(recipe.vertical.product)
-   expect(result.vertical.name).toEqual(recipe.vertical.name)
   }
  })
  it('persiste cores e selo e recusa valores CSS arbitrários',()=>{

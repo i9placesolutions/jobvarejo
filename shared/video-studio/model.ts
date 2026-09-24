@@ -46,7 +46,7 @@ export interface VideoDocument {
 }
 export interface VideoScene { id: string; from: number; frames: number; audio?: string; playbackRate?: number; speechFrames?: number }
 import type { VideoLabel } from './labels'
-export interface VideoRenderProps extends Record<string, unknown> { editor?: VideoEditorState; document: VideoDocument; scenes: VideoScene[]; media: Record<string, string>; format: VideoFormat; voiceAudio?: string; music?: string; impact?: string; whoosh?: string; audioBase?: string; fontBase?: string; templateBase?: string; label?: VideoLabel }
+export interface VideoRenderProps extends Record<string, unknown> { editor?: VideoEditorState; fastPreview?: boolean; document: VideoDocument; scenes: VideoScene[]; media: Record<string, string>; format: VideoFormat; voiceAudio?: string; music?: string; impact?: string; whoosh?: string; audioBase?: string; fontBase?: string; templateBase?: string; label?: VideoLabel }
 export function newVideoDocument(): VideoDocument {
   return { layoutVersion:2,duplicateProducts:true,priceLabel:'',version: 1, title: 'Meu vídeo de ofertas', theme: 'impact', campaign: 'FECHA MÊS', formats: ['vertical','horizontal'], duration: 30,
     brand: { logoStyle:'sticker',name: '', logo: '', address: '', whatsapp: '', instagram: '' }, validityMode:'none', validity: '', offers: [], scripts: [],
@@ -102,6 +102,16 @@ export function videoSpeechSourceMatches(doc: VideoDocument, source: string | nu
   return speechSourceEquals(source,videoSpeechSource(doc))||speechSourceEquals(source,legacyVideoSpeechSource(doc))
 }
 export function videoAudioIdentity(doc: VideoDocument): string { return JSON.stringify({source:videoSpeechSource(doc),scripts:doc.scripts,voice:doc.voice}) }
+export function videoAudioIdentityMatches(identity: unknown, doc: VideoDocument): boolean {
+  if(typeof identity!=='string')return false
+  try {
+    const stored=JSON.parse(identity)
+    if(typeof stored?.source!=='string'||!Array.isArray(stored.scripts)||!stored.voice||typeof stored.voice!=='object')return false
+    return speechSourceEquals(stored.source,videoSpeechSource(doc))
+      && canonicalJson(stored.scripts)===canonicalJson(doc.scripts)
+      && canonicalJson(stored.voice)===canonicalJson(doc.voice)
+  } catch { return false }
+}
 export function estimateSpeechSeconds(text: string): number { return Math.max(1.2, text.trim().split(/\s+/).filter(Boolean).length / 2.35 + .35) }
 export function buildVideoTimeline(doc: VideoDocument, durations?: Record<string, number>): VideoScene[] {
   const ids = ['intro', ...doc.offers.map(o=>o.id), 'outro']

@@ -1,3 +1,4 @@
+import {REELS_OFFER_LAYOUT as reels} from './reels-layout'
 import {videoValidityText} from './validity'
 import {productLayers} from './product-layout'
 import {VideoBackgroundImage} from './background-image'
@@ -82,8 +83,8 @@ function Identity({props}:{props:VideoRenderProps}){
  const move=mix(f,first-5,first+5,0,1),ending=mix(f,outro-5,outro+7,0,1)
  const intro=retailEntrance(f,p?12:split).scale,settle=retailEntrance(f,4).scale
  const blend=(a:number,b:number,c:number)=>a+(b-a)*move+(c-b)*ending
- const logo=p?{x:blend(45,115,70),y:blend(1180,1555,370),w:blend(990,850,940),h:blend(480,200,450)}:{x:blend(400,70,65),y:blend(225,775,205),w:blend(1120,630,820),h:blend(630,175,450)}
- const badge=p?{x:blend(20,145,145),y:blend(190,170,160),w:blend(1040,790,790),h:blend(1140,695,695)}:{x:blend(455,110,110),y:blend(30,170,170),w:blend(1010,540,540),h:blend(980,610,610)}
+ const logo=p?{x:blend(45,115,70),y:blend(1180,reels.logo[1],370),w:blend(990,850,940),h:blend(480,reels.logo[3],450)}:{x:blend(400,70,65),y:blend(225,775,205),w:blend(1120,630,820),h:blend(630,175,450)}
+ const badge=p?{x:blend(20,reels.seal[0],145),y:blend(190,reels.seal[1],160),w:blend(1040,reels.seal[2],790),h:blend(1140,reels.seal[3],695)}:{x:blend(455,110,110),y:blend(30,170,170),w:blend(1010,540,540),h:blend(980,610,610)}
  const logoOpacity=mix(f,p?12:split,p?16:split+4,0,1)
  const badgeOpacity=(1-ending)*mix(f,4,9,0,1)*(p?1:(1-move)*(1-swap)+move)
  return h(AbsoluteFill,{style:{pointerEvents:'none'}},
@@ -101,18 +102,18 @@ function Price({props,price,unit}:{props:VideoRenderProps;price:string;unit:stri
 function Product({props,scene,index}:{props:VideoRenderProps;scene:VideoScene;index:number}){
  const f=useCurrentFrame(),{width:w,height:ht}=useVideoConfig(),p=ht>w,offer=props.document.offers[index]!,src=props.media[offer.image],d=props.document
  const m=motionSettings(d.motion),exit=retailExit(f,scene.frames),a=elementMotion(f,m.product,0,m.speed),price=elementMotion(f-5,m.price,0,m.speed),copy=elementMotion(f,m.product,1,m.speed)
- const product=p?{x:55,y:840,w:590,h:755}:{x:735,y:210,w:610,h:700}
+ const product=p?{x:reels.product[0],y:reels.product[1],w:reels.product[2],h:reels.product[3]}:{x:735,y:210,w:610,h:700}
  const layers=productLayers([product.x,product.y,product.w,product.h],p,d.duplicateProducts!==false,offer.imageAspectRatio||1,offer.copies)
  const float=f>16&&d.effects.includes('pulse')?Math.sin((f-16)/22)*4:0
  const imageStyle:React.CSSProperties={width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 19px 14px #002c2066)'}
- const productImage=src?(d.motion&&m.finish!=='clean'?h(CanvasImage,{src,width:650,height:850,fit:'contain',effects:productEffects(f,m.finish,d.intensity),style:imageStyle}):h(Img,{src,style:imageStyle})):div({...imageStyle,...type,fontSize:45,display:'grid',placeItems:'center'},'ADICIONE A FOTO')
+ const productImage=src?(d.motion&&m.finish!=='clean'&&!props.fastPreview?h(CanvasImage,{src,width:p?Math.round(1000*Math.max(.05,offer.imageAspectRatio||1)):650,height:p?1000:850,fit:'contain',effects:productEffects(f,m.finish,d.intensity),style:imageStyle}):h(Img,{src,style:imageStyle})):div({...imageStyle,...type,fontSize:45,display:'grid',placeItems:'center'},'ADICIONE A FOTO')
  const name=offer.name.toLocaleUpperCase('pt-BR'),weight=name.match(/\s+(\d+(?:[.,]\d+)?\s*(?:KG|G|ML|L))$/),title=weight?name.slice(0,-weight[0].length):name
  return h(AbsoluteFill,{style:{opacity:exit.opacity,scale:exit.scale,filter:exit.blur?`blur(${exit.blur}px)`:undefined,pointerEvents:'none'}},
  div({...box(p?85:70,p?1780:975,p?910:630),opacity:mix(f,4,9,0,1)},h(Validity,{props,compact:true})),
  ...layers.map(layer=>{const motion=elementMotion(f,m.product,layer.motionIndex,m.speed);return h('div',{key:layer.motionIndex,style:{...box(...layer.box),translate:`${motion.x}px ${motion.y+float}px`,rotate:`${layer.rotation+motion.rotation}deg`,scale:d.effects.includes('zoom')?motion.scale:1,opacity:motion.opacity}},productImage)}),
- div({...box(p?660:715,p?880:60,p?350:650,p?245:120),...type,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:13,color:'var(--video-name-color, var(--video-text-color, white))',fontSize:fit(title,p?64:50,26),textShadow:'0 3px 0 #164b25,0 7px 9px #16371760',},h(AnimatedRetailText,{text:title,mode:m.text,speed:m.speed}),weight?div({fontSize:p?43:30,color:'#e8f7ad',lineHeight:1,letterSpacing:1},weight[1]):null),
- div({...box(p?610:1325,p?1150:485,p?380:445,p?395:445),translate:`${price.x}px ${price.y}px`,scale:price.scale,rotate:`${price.rotation}deg`,opacity:price.opacity},h(Price,{props,price:offer.price,unit:offer.unit}),f>=8&&f<19?div({position:'absolute',inset:-20,border:'4px solid #eaff9755',borderRadius:'50%',scale:1+(f-8)*.035,opacity:(19-f)/11,pointerEvents:'none'}):null),
- offer.condition?line(offer.condition,p?600:1310,p?1590:950,p?430:470,p?29:28,{color:'var(--video-condition-color, #f8ffd2)',opacity:price.opacity}):null)
+ div({...box(...(p?reels.name:[715,60,650,120] as const)),...type,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:p?4:13,color:'var(--video-name-color, var(--video-text-color, white))',fontSize:fit(title,p?48:50,p?36:26),textShadow:'0 3px 0 #164b25,0 7px 9px #16371760',},h(AnimatedRetailText,{text:title,mode:m.text,speed:m.speed}),weight?div({fontSize:p?30:30,color:'#e8f7ad',lineHeight:1,letterSpacing:1},weight[1]):null),
+ div({...box(...(p?reels.price:[1325,485,445,445] as const)),translate:`${price.x}px ${price.y}px`,scale:price.scale,rotate:`${price.rotation}deg`,opacity:price.opacity},h(Price,{props,price:offer.price,unit:offer.unit}),f>=8&&f<19?div({position:'absolute',inset:-20,border:'4px solid #eaff9755',borderRadius:'50%',scale:1+(f-8)*.035,opacity:(19-f)/11,pointerEvents:'none'}):null),
+ offer.condition?line(offer.condition,p?reels.condition[0]:1310,p?reels.condition[1]:950,p?reels.condition[2]:470,p?29:28,{color:'var(--video-condition-color, #f8ffd2)',opacity:price.opacity}):null)
 }
 
 export function Ending({props}:{props:VideoRenderProps}){

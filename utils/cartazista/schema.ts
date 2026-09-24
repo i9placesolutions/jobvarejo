@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { CARTAZISTA_MODEL_KEYS, CARTAZISTA_FORMATS, CARTAZISTA_THEMES } from '~/types/cartazista'
 
+const headerAsset = z.string().max(2048).regex(/^(?:\/video-studio\/templates\/[a-zA-Z0-9/_\-.]+|\/api\/storage\/p\?key=[a-zA-Z0-9%/_\-.]+)$/)
+
 const product = z.object({
   id: z.string().min(1).max(120),
   name: z.string().trim().min(1).max(180),
@@ -25,17 +27,17 @@ const settings = z.object({
   foldGuide: z.boolean().optional(),
   removeBackground: z.boolean().optional(),
   header: z.object({
-    retailFinish: z.object({ decoration: z.string().regex(/^\/video-studio\/templates\/[a-zA-Z0-9/_\-.]+$/).optional(), labelFill: z.string().regex(/^#[0-9a-fA-F]{6}$/), labelInk: z.string().regex(/^#[0-9a-fA-F]{6}$/), labelEdge: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
+    retailFinish: z.object({ decoration: headerAsset.optional(), labelFill: z.string().regex(/^#[0-9a-fA-F]{6}$/), labelInk: z.string().regex(/^#[0-9a-fA-F]{6}$/), labelEdge: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
     tagline: z.string().max(100).optional(),
     priceCornerRadius: z.number().min(0).max(0.15).optional(),
-    mascot: z.string().regex(/^\/video-studio\/templates\/[a-zA-Z0-9/_\-.]+$/).optional(),
+    mascot: headerAsset.optional(),
     layout: z.enum(['suina-ouro','suina-rustica','thematic-seal']).optional(),
     accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
     secondary: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
     id: z.string().uuid(),
     name: z.string().max(180),
-    background: z.string().regex(/^(?:|\/video-studio\/templates\/[a-zA-Z0-9/_\-.]+)$/),
-    seal: z.string().regex(/^\/video-studio\/templates\/[a-zA-Z0-9/_\-.]+$/),
+    background: z.union([z.literal(''), headerAsset]),
+    seal: headerAsset,
     color: z.string().regex(/^#[\da-fA-F]{6}$/)
   }).optional(),
   validity: z.string().max(120),

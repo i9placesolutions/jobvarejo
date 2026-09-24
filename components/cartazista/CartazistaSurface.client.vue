@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { cartazistaLogoSource } from '~/utils/cartazista/logo'
 import { cartazistaPriceStyles } from '~/utils/cartazista/rich-price'
 const { preference: logoPreference } = useLogoPreference()
 const artLayerImageSrc = (layer: ArtLayer) => baseArtLayerImageSrc(layer, logoPreference.value)
@@ -196,7 +197,7 @@ async function render(doc: ArtComposition) {
         obj = text
       } else if (layer.kind === 'image' && layer.src) {
         try {
-          const img = new FabricImage(await imageResource(artLayerImageSrc(layer)))
+          const img = new FabricImage(await imageResource(layer.binding === 'logo' ? await cartazistaLogoSource(layer, doc) : artLayerImageSrc(layer)))
           const crop = artImageCrop(img.width, img.height, layer)
           dx = (layer.width - crop.width * crop.scale) / 2
           dy = (layer.height - crop.height * crop.scale) / 2

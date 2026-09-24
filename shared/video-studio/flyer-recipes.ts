@@ -1,6 +1,11 @@
 import generated from './generated-flyer-recipes.json'
 import type {VideoMotionSettings, SceneTransition} from './effect-catalog'
 export type FlyerRecipeId = string
+export interface FlyerRecipe {
+  /** Clipe de fundo local, sem áudio, repetido na duração informada. */
+  backgroundVideo?: string
+  backgroundVideoDuration?: number
+}
 export type LayoutBox = readonly [number,number,number,number]
 export interface FlyerLayout {seal:LayoutBox;logo:LayoutBox;product:LayoutBox;name:LayoutBox;price:LayoutBox;validity:LayoutBox;condition:LayoutBox}
 export interface FlyerRecipe {preserveBrandLayout?:boolean;backgroundHorizontal?:string;preferSingleProduct?:boolean;mascot?:string;mascotVertical?:LayoutBox;mascotHorizontal?:LayoutBox;posterLayout?:'suina-ouro'|'suina-rustica'|'thematic-seal';semanticMotifs?:boolean;emptyOutroSeal?:boolean;revision?:number;energyBackground?:string;energyBackgroundVertical?:string;backgroundVariant?:number;backgroundGradient?:string;backgroundKind?:string;seed?:number;nativeTitle?:string;nativeTitleColor?:string;sealAspect?:number;layoutName?:string;musicStyle?:string;bpm?:number;id:FlyerRecipeId;name:string;campaign:string;sourceProject:string;accent:string;base:string;ink:string;label:'ticket'|'bolt'|'banner';labelNames:string[];background:string;seal:string;music:string;transition:SceneTransition;motion:VideoMotionSettings;vertical:FlyerLayout;horizontal:FlyerLayout}

@@ -1,11 +1,20 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { speechReadinessIssue } from '../../../shared/video-studio/speech-readiness.mjs'
 
 type SpeechLine = { id: string; text: string }
 
-const normalizerPath = resolve('workers/video-studio/normalize.py')
+const normalizerRelativePath = 'workers/video-studio/normalize.py'
 const unavailableCode = 'VIDEO_SPEECH_PYTHON_UNAVAILABLE'
+
+export function videoSpeechNormalizerPath(cwd = process.cwd()) {
+  for (const directory of [cwd, resolve(cwd, '..'), resolve(cwd, '../..')]) {
+    const path = resolve(directory, normalizerRelativePath)
+    if (existsSync(path)) return path
+  }
+  return null
+}
 
 export function videoSpeechPythonCandidates() {
   return [...new Set([
@@ -22,7 +31,7 @@ function unavailableError() {
   return error
 }
 
-function runNormalizer(python: string, scripts: SpeechLine[], pronunciations: Array<{ from: string; to: string }>) {
+function runNormalizer(python: string, normalizerPath: string, scripts: SpeechLine[], pronunciations: Array<{ from: string; to: string }>) {
   return new Promise<Array<{ id: string; text: string }>>((resolveResult, reject) => {
     const child = spawn(python, [normalizerPath], { stdio: ['pipe', 'pipe', 'pipe'] })
     let output = '', stderr = ''
@@ -57,11 +66,16 @@ function runNormalizer(python: string, scripts: SpeechLine[], pronunciations: Ar
 }
 
 export async function normalizeVideoSpeech(scripts: SpeechLine[], pronunciations: Array<{ from: string; to: string }>) {
+  const normalizerPath = videoSpeechNormalizerPath()
+  if (!normalizerPath) {
+    console.error('[video-speech] Script de normalização ausente.', { cwd: process.cwd() })
+    throw unavailableError()
+  }
   const attempted: string[] = []
   for (const python of videoSpeechPythonCandidates()) {
     attempted.push(python)
     try {
-      return await runNormalizer(python, scripts, pronunciations)
+      return await runNormalizer(python, normalizerPath, scripts, pronunciations)
     } catch (error) {
       if ((error as Error & { code?: string })?.code !== unavailableCode) throw error
     }

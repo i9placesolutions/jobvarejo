@@ -3634,5 +3634,143 @@
       "labelEdge": "#ee8810"
     },
     "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-e69be142-fce7-4c83-8775-66e03030c071",
+    "sourceProject": "e69be142-fce7-4c83-8775-66e03030c071",
+    "name": "Operação Torra Tudo — Preços Imperdíveis",
+    "campaign": "OPERAÇÃO TORRA TUDO",
+    "accent": "#ffd331",
+    "base": "#24100b",
+    "ink": "#29120b",
+    "label": "banner",
+    "labelNames": [
+      "Operação Torra Tudo — Preços Imperdíveis — Etiqueta"
+    ],
+    "background": "torra-tudo-bg.png",
+    "seal": "torra-tudo-seal.png",
+    "sealAspect": 1.0942452043369475,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 23092608,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "embers"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Operação Torra Tudo — Preços Imperdíveis",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "torra-tudo-bg.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#dd0715",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd331"
+    },
+    "preserveBrandLayout": true,
+    "backgroundVideo": "torra-tudo-fire-v1.mp4",
+    "backgroundVideoDuration": 12
   }
 ]

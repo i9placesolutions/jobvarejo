@@ -21,7 +21,7 @@ export default defineEventHandler(async event=>{
  if(input.kind==='voice'&&!process.env.ELEVENLABS_API_KEY)throw createError({statusCode:503,statusMessage:'Configure ELEVENLABS_API_KEY no servidor para gerar a locução.'})
  const label=resolveVideoLabel((doc.priceLabel||flyerRecipe(doc.theme)?await listVideoLabels(u.id,doc.priceLabel||undefined):[]).filter((l):l is NonNullable<typeof l>=>!!l),doc.theme,doc.priceLabel)
  if((doc.priceLabel||flyerRecipe(doc.theme))&&!label)throw createError({statusCode:422,statusMessage:'Esta etiqueta não está disponível para este vídeo.'})
- trace('label');const audioHash=videoHash(videoAudioIdentity(doc));const fingerprint=videoHash(input.kind==='voice'?{audioHash,voice,voiceMode:'full-v1',provider:'elevenlabs',model:'eleven_v3',speechVersion:3,pacingVersion:'retail-pauses-v1'}:input.kind==='render'?{doc,label,revision:p.revision,renderVersion:5}: {prompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado',project:p.id})
+ trace('label');const audioHash=videoHash(videoAudioIdentity(doc));const fingerprint=videoHash(input.kind==='voice'?{audioHash,voice,voiceMode:'full-v1',provider:'elevenlabs',model:'eleven_v3',speechVersion:3,pacingVersion:'retail-pauses-v1'}:input.kind==='render'?{doc,label,revision:p.revision,renderVersion:6}: {prompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado',project:p.id})
  return pgTx(async client=>{
   await client.query("SET LOCAL idle_in_transaction_session_timeout='30s'")
   await client.query("SET LOCAL statement_timeout='30s'")

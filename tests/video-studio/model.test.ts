@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest'
-import { newVideoDocument,parseOfferPrice,videoAudioIdentity,videoSpeechSource,videoSpeechSourceMatches,suggestVideoScripts,narrationScripts,videoNarrationText,buildVideoTimeline,validateVideoForGeneration } from '../../shared/video-studio/model'
+import { newVideoDocument,parseOfferPrice,videoAudioIdentity,videoAudioIdentityMatches,videoSpeechSource,videoSpeechSourceMatches,suggestVideoScripts,narrationScripts,videoNarrationText,buildVideoTimeline,validateVideoForGeneration } from '../../shared/video-studio/model'
 import { videoDocumentSchema } from '../../server/utils/video-studio/schema'
 const fixture=()=>{const d=newVideoDocument();d.brand.name='Mercado Teste';d.offers=[{id:'00000000-0000-4000-8000-000000000001',name:'Café 500 g',price:'19,90',unit:'un',condition:'',image:'00000000-0000-4000-8000-000000000002'}];d.scripts=suggestVideoScripts(d);return d}
 describe('vídeos: preços, revisões e isolamento do contrato',()=>{
@@ -10,6 +10,18 @@ describe('vídeos: preços, revisões e isolamento do contrato',()=>{
  it('aceita confirmação salva pela assinatura anterior sem liberar produto alterado',()=>{const d=fixture();d.validity='Ofertas válidas em 24/09/2026';const legacy=JSON.stringify({brand:d.brand.name,campaign:d.campaign,validity:d.validity,offers:d.offers.map(({id,name,price,unit,condition})=>({id,name,price,unit,condition}))});expect(videoSpeechSourceMatches(d,legacy)).toBe(true);d.offers[0]!.price='20,90';expect(videoSpeechSourceMatches(d,legacy)).toBe(false)})
  it('não invalida confirmação quando JSONB reordena as chaves do período',()=>{const d=fixture();d.validityMode='single_day';d.validityDateFormat='numeric';d.validity='Ofertas válidas em 24 de setembro de 2026';d.validityRange={start:'2026-09-24',end:'2026-09-24'};const source=videoSpeechSource(d),saved=JSON.parse(source);saved.validityRange={end:'2026-09-24',start:'2026-09-24'};const reordered=JSON.stringify(saved);expect(reordered).not.toBe(source);expect(videoSpeechSourceMatches(d,reordered)).toBe(true);d.validityRange={start:'2026-09-25',end:'2026-09-25'};expect(videoSpeechSourceMatches(d,reordered)).toBe(false)})
  it('edição de texto e pronúncia invalidam locução',()=>{const d=fixture(),before=videoAudioIdentity(d);d.scripts[0]!.text='Uma nova chamada';expect(videoAudioIdentity(d)).not.toBe(before);const changed=videoAudioIdentity(d);d.voice.pronunciations=[{from:'Teste',to:'Téste'}];expect(videoAudioIdentity(d)).not.toBe(changed)})
+ it('reconhece locução pronta mesmo quando JSONB reordena a faixa de validade',()=>{
+  const d=fixture();d.validityMode='single_day';d.validity='Ofertas válidas em 24 de setembro de 2026';d.validityRange={start:'2026-09-24',end:'2026-09-24'}
+  const stored=JSON.parse(videoAudioIdentity(d))
+  const source=JSON.parse(stored.source)
+  source.validityRange={end:'2026-09-24',start:'2026-09-24'}
+  stored.source=JSON.stringify(source)
+  const identity=JSON.stringify(stored)
+  expect(identity).not.toBe(videoAudioIdentity(d))
+  expect(videoAudioIdentityMatches(identity,d)).toBe(true)
+  d.offers[0]!.price='20,90'
+  expect(videoAudioIdentityMatches(identity,d)).toBe(false)
+ })
  it('um único campo mantém o roteiro associado às cenas e bloqueia linhas faltantes',()=>{const d=fixture();d.narrationText='Abertura da loja.\nCafé por dezenove reais e noventa centavos a unidade.\nAproveite hoje.';const mapped=narrationScripts(d,d.narrationText);expect(mapped?.map(s=>s.id)).toEqual(['intro',d.offers[0]!.id,'outro']);d.scripts=mapped!;expect(videoNarrationText(d)).toBe(d.narrationText);expect(validateVideoForGeneration(d)).toEqual([]);d.narrationText='Abertura.\nEncerramento.';expect(validateVideoForGeneration(d)).toContain('Mantenha 3 linhas no roteiro: abertura, uma por produto e encerramento.')})
  it('recusa URLs arbitrárias e efeitos inválidos',()=>{const d=fixture();expect(videoDocumentSchema.safeParse(d).success).toBe(true);d.offers[0]!.image='http://127.0.0.1/secret';expect(videoDocumentSchema.safeParse(d).success).toBe(false)})
  it('não permite formatos duplicados ou mais de seis produtos',()=>{const d=fixture();d.formats=['vertical','vertical'];expect(videoDocumentSchema.safeParse(d).success).toBe(false)})

@@ -102,7 +102,7 @@ const baseComposition = (
 ): ArtComposition => {
   const wide = settings.orientation === 'landscape' && format.id !== 'banner-2m'
   if(settings.freeDesign)return {version:1,width:wide?format.height:format.width,height:wide?format.width:format.height,background:themeFor(themeId).background,layers:[]}
-  const composition = posterLettering(wide ? format.height : format.width, wide ? format.width : format.height, modelId, themeFor(themeId))
+  const composition = posterLettering(wide ? format.height : format.width, wide ? format.width : format.height, modelId, themeFor(settings.header && ['suina-ouro', 'suina-rustica'].includes(themeId) ? 'classic-yellow' : themeId))
   const logo = composition.layers.find(l => l.id === 'cartaz-logo')!
   logo.src = settings.showLogo ? logoSrc : ''
   logo.visible = !!logo.src

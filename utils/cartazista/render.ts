@@ -1,3 +1,4 @@
+import { cartazistaLogoSource } from './logo'
 import { cartazistaPriceStyles } from './rich-price'
 import type { ArtComposition } from '~/types/art-studio'
 import { loadCartazistaFonts as loadArtFonts } from './fonts'
@@ -35,7 +36,7 @@ async function renderCartazista(source: ArtComposition, raster = false): Promise
       } else if(layer.kind==='shape'&&layer.shape==='ellipse')canvas.add(new Ellipse({...options,rx:layer.width/2,ry:layer.height/2}))
       else if(layer.kind==='shape')canvas.add(new Rect({...options,styles:cartazistaPriceStyles(layer),width:layer.width,height:layer.height,rx:layer.cornerRadius||0,ry:layer.cornerRadius||0}))
       else if(layer.kind==='image'&&layer.src) {
-        const object=await FabricImage.fromURL(layer.src,{crossOrigin:'anonymous'})
+        const object=await FabricImage.fromURL(await cartazistaLogoSource(layer,doc),{crossOrigin:'anonymous'})
         const scale=layer.fit==='cover'?Math.max(layer.width/object.width,layer.height/object.height):Math.min(layer.width/object.width,layer.height/object.height)
         if(layer.fit==='cover') {
           const w=layer.width/scale,h=layer.height/scale
