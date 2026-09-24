@@ -53,6 +53,7 @@ ENV NODE_ENV=production \
 
 # Runtime Python real: Chromium e BiRefNet fazem parte da imagem publicada.
 ENV PRODUCT_IMAGE_PYTHON=/opt/image-worker/bin/python \
+    VIDEO_STUDIO_PYTHON=/opt/video-python/bin/python \
     U2NET_HOME=/opt/image-models \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright \
     BIREFNET_MODEL=birefnet-general-lite \
@@ -61,10 +62,14 @@ ENV PRODUCT_IMAGE_PYTHON=/opt/image-worker/bin/python \
 # curl: healthcheck; ffmpeg: clip curto de voz para MusicGPT TTS
 RUN apt-get update && apt-get install -y --no-install-recommends curl ffmpeg python3 python3-venv && rm -rf /var/lib/apt/lists/*
 COPY workers/requirements.txt /tmp/image-worker-requirements.txt
+COPY workers/video-studio/requirements-speech.txt /tmp/video-speech-requirements.txt
 # Camadas independentes: falhar no modelo não refaz Python e Chromium.
 RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m venv /opt/image-worker \
     && /opt/image-worker/bin/pip install -r /tmp/image-worker-requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m venv /opt/video-python \
+    && /opt/video-python/bin/pip install -r /tmp/video-speech-requirements.txt
 RUN /opt/image-worker/bin/python -m playwright install-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 RUN /opt/image-worker/bin/python -m playwright install --only-shell chromium
@@ -86,6 +91,10 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked npm install --omit=dev -
 # Copiar output do build (self-contained)
 COPY --from=builder /app/.output ./.output
 COPY workers/ ./workers/
+# Confirma que a API tem o mesmo normalizador de fala que o worker de vídeo.
+RUN printf '%s' '{"scripts":[{"id":"intro","text":"Oferta R$ 19,90 em 24/09/2026"}],"pronunciations":[]}' \
+    | /opt/video-python/bin/python workers/video-studio/normalize.py \
+    | /opt/video-python/bin/python -c "import json,sys; text=json.load(sys.stdin)['scripts'][0]['text']; assert 'dezenove reais' in text and 'setembro' in text"
 # Valida o motor isolado do Estúdio de Artes e suas fontes empacotadas.
 RUN /opt/image-worker/bin/python workers/art_studio.py --self-test
 

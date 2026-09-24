@@ -1,0 +1,2 @@
+# Dependência usada pela API para preparar o roteiro antes da locução.
+num2words==0.5.14
