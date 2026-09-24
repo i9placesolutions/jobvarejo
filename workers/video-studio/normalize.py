@@ -1,6 +1,68 @@
 import json, sys
-from num2words import num2words
 from re import sub, escape, IGNORECASE
+
+try:
+    from num2words import num2words as _external_num2words
+except ImportError:
+    _external_num2words = None
+
+_SMALL = (
+    'zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove',
+    'dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze',
+    'dezes' + 'seis', 'dezes' + 'sete', 'dezoito', 'dezenove',
+)
+_TENS = ('', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa')
+_HUNDREDS = ('', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos')
+
+def _integer_words(number):
+    number = int(number)
+    if number < 0:
+        return 'menos ' + _integer_words(-number)
+    if number < 20:
+        return _SMALL[number]
+    if number < 100:
+        tens, rest = divmod(number, 10)
+        return _TENS[tens] + ((' e ' + _SMALL[rest]) if rest else '')
+    if number < 1000:
+        if number == 100:
+            return 'cem'
+        hundreds, rest = divmod(number, 100)
+        return _HUNDREDS[hundreds] + ((' e ' + _integer_words(rest)) if rest else '')
+    if number < 1_000_000:
+        thousands, rest = divmod(number, 1000)
+        head = 'mil' if thousands == 1 else _integer_words(thousands) + ' mil'
+        if not rest:
+            return head
+        connector = ' e ' if rest < 100 or rest % 100 == 0 else ' '
+        return head + connector + _integer_words(rest)
+    if number < 1_000_000_000:
+        millions, rest = divmod(number, 1_000_000)
+        head = 'um milhão' if millions == 1 else _integer_words(millions) + ' milhões'
+        if not rest:
+            return head
+        connector = ' e ' if rest < 1000 else ' '
+        return head + connector + _integer_words(rest)
+    if number < 1_000_000_000_000:
+        billions, rest = divmod(number, 1_000_000_000)
+        head = 'um bilhão' if billions == 1 else _integer_words(billions) + ' bilhões'
+        if not rest:
+            return head
+        connector = ' e ' if rest < 1000 else ' '
+        return head + connector + _integer_words(rest)
+    raise ValueError('Número fora do limite da locução.')
+
+def _builtin_num2words(value):
+    if isinstance(value, float) and not value.is_integer():
+        raw = format(value, '.12g')
+        whole, decimal = raw.split('.', 1)
+        digits = ' '.join(_SMALL[int(digit)] for digit in decimal.rstrip('0'))
+        return _integer_words(int(whole)) + ' vírgula ' + digits
+    return _integer_words(int(value))
+
+def num2words(value, lang='pt_BR'):
+    if _external_num2words is not None:
+        return _external_num2words(value, lang=lang)
+    return _builtin_num2words(value)
 
 def normalize(text, pronunciations=None):
     for item in sorted(pronunciations or [], key=lambda x: -len(x['from'])):
