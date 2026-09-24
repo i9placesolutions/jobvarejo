@@ -9,8 +9,11 @@ RUN /opt/video-python/bin/python -c "from faster_whisper import download_model; 
 ENV VIDEO_ALIGNMENT_MODEL=/opt/video-alignment-model
 ENV VIDEO_STUDIO_PYTHON=/opt/video-python/bin/python
 COPY shared/video-studio ./shared/video-studio
+COPY shared/musicgpt-retail.mjs shared/elevenlabs-retail.mjs ./shared/
+COPY utils/offerValidity.ts utils/product-card-configuration.ts utils/priceTagText.ts ./utils/
 COPY workers/video-studio ./workers/video-studio
 COPY public/art-studio/fonts ./public/art-studio/fonts
 COPY public/video-studio ./public/video-studio
+RUN node --input-type=module -e "import {register} from 'tsx/esm/api'; register(); await Promise.all([import('./shared/musicgpt-retail.mjs'), import('./shared/elevenlabs-retail.mjs'), import('./shared/video-studio/model.ts'), import('./shared/video-studio/composition.ts'), import('./workers/video-studio/engine.mjs'), import('./workers/video-studio/full-voice.mjs')]);"
 RUN node --input-type=module -e "import {ensureBrowser} from '@remotion/renderer'; await ensureBrowser();"
 CMD ["node","workers/video-studio/runner.mjs"]
