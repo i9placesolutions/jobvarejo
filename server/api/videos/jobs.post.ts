@@ -7,7 +7,7 @@ import { videoUser,ownedVideo,videoWorkerReady,videoHash,videoJson,validateVideo
 import { pgTx } from '../../utils/postgres'
 import { resolveVideoVoice } from '../../utils/video-studio/voices'
 import { videoDocumentSchema } from '../../utils/video-studio/schema'
-import { validateVideoForGeneration,videoAudioIdentity,videoSpeechSource } from '../../../shared/video-studio/model'
+import { validateVideoForGeneration,videoAudioIdentity,videoSpeechSourceMatches } from '../../../shared/video-studio/model'
 export default defineEventHandler(async event=>{
  const traceStarted=Date.now();const trace=(stage:string)=>console.info('[video-enqueue]',stage,Date.now()-traceStarted);trace('start')
  const u=await videoUser(event,12);trace('authenticated');const parsed=z.object({projectId:z.string().uuid(),revision:z.number().int(),kind:z.enum(['voice','render','music']),musicPrompt:z.string().max(500).optional()}).safeParse(await readBody(event));if(!parsed.success)throw createError({statusCode:422,statusMessage:'Solicitação inválida.'})
@@ -15,7 +15,7 @@ export default defineEventHandler(async event=>{
  const input=parsed.data,p=await ownedVideo(input.projectId,u.id);if(p.revision!==input.revision)throw createError({statusCode:409,statusMessage:'Salve a versão atual antes de gerar.'})
  trace('project');const doc=videoDocumentSchema.parse(p.document);await validateVideoAssets(doc,u.id)
  const errors=validateVideoForGeneration(doc);if(input.kind!=='music'&&errors.length)throw createError({statusCode:422,statusMessage:errors[0]})
- if(doc.voice.enabled&&input.kind!=='music'&&p.script_source!==videoSpeechSource(doc))throw createError({statusCode:422,statusMessage:'Os produtos mudaram. Revise e confirme o roteiro antes de gerar.'})
+ if(doc.voice.enabled&&input.kind!=='music'&&!videoSpeechSourceMatches(doc,p.script_source))throw createError({statusCode:422,statusMessage:'Os produtos mudaram. Revise e confirme o roteiro antes de gerar.'})
  const voice=input.kind==='voice'?await resolveVideoVoice(doc.voice.id,u.id):null
  if(input.kind==='voice'&&!doc.voice.enabled)throw createError({statusCode:422,statusMessage:'Ative a locução primeiro.'})
  if(input.kind==='voice'&&!process.env.ELEVENLABS_API_KEY)throw createError({statusCode:503,statusMessage:'Configure ELEVENLABS_API_KEY no servidor para gerar a locução.'})

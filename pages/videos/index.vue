@@ -4,7 +4,7 @@ import AdminWorkspaceShell from '~/components/AdminWorkspaceShell.vue'
 import {defaultTransform,elementTransform,setElementTransform,elementNames,type VideoElementTransform} from '~/shared/video-studio/layout-editing'
 import {VIDEO_BACKGROUNDS} from '~/shared/video-studio/backgrounds'
 import { Store, ShoppingBasket, SlidersHorizontal, ArrowLeft, ArrowRight, Check, ChevronDown, ChevronUp, Clapperboard, Copy, Download, Headphones, ImagePlus, LoaderCircle, Monitor, Music2, Play, Plus, Save, Smartphone, Sparkles, Trash2, Upload, Volume2, X } from 'lucide-vue-next'
-import { VIDEO_THEMES, VIDEO_EFFECTS, VIDEO_FORMATS, newVideoDocument, suggestVideoScripts, narrationScripts, videoNarrationText, videoSpeechSource, videoAudioIdentity, buildVideoTimeline, validateVideoForGeneration, type VideoDocument, type VideoFormat, type VideoRenderProps } from '~/shared/video-studio/model'
+import { VIDEO_THEMES, VIDEO_EFFECTS, VIDEO_FORMATS, newVideoDocument, suggestVideoScripts, narrationScripts, videoNarrationText, videoSpeechSource, videoSpeechSourceMatches, videoAudioIdentity, buildVideoTimeline, validateVideoForGeneration, type VideoDocument, type VideoFormat, type VideoRenderProps } from '~/shared/video-studio/model'
 import {isVideoModel} from '~/shared/video-studio/project-kind'
 import {showVideoAlcoholBadge} from '~/shared/video-studio/personalization'
 import {newVideoFromTemplate,applyVideoTemplate} from '~/shared/video-studio/templates'
@@ -60,7 +60,7 @@ const narrationInvalid=computed(()=>doc.value.narrationText!==undefined&&JSON.st
 const voiceJob=computed(()=>narrationInvalid.value?undefined:jobs.value.find(j=>j.kind==='voice'&&j.status==='ready'&&j.result?.provider==='elevenlabs'&&j.result?.audioIdentity===videoAudioIdentity(doc.value)))
 const renderJob=computed(()=>jobs.value.find(j=>j.kind==='render'&&j.status==='ready'&&!dirty.value&&j.revision===revision.value&&(!doc.value.voice.enabled||j.voice_asset_id===voiceJob.value?.result?.fullVoice?.assetId)))
 const activeJobs=computed(()=>jobs.value.filter(j=>['queued','running'].includes(j.status)))
-const scriptChanged=computed(()=>doc.value.voice.enabled&&scriptSource.value!==videoSpeechSource(doc.value))
+const scriptChanged=computed(()=>doc.value.voice.enabled&&!videoSpeechSourceMatches(doc.value,scriptSource.value))
 const voiceGenerationBlocker=computed(()=>{
  if(!workerReady.value)return 'O serviço de geração está indisponível no momento. Atualize o estado para tentar novamente.'
  if(!elevenlabs.value)return 'O serviço de locução ainda não está disponível. Entre em contato com o suporte.'
@@ -239,7 +239,7 @@ async function goStep(target:number){
  if(target>step.value){
   if(!doc.value.brand.name.trim()){step.value=0;error.value='Informe o nome da empresa para continuar.';return}
   if(target>1){const productIssues=validateVideoForGeneration({...doc.value,voice:{...doc.value.voice,enabled:false}});if(productIssues.length){step.value=1;error.value=productIssues[0]!;return}}
-  if(target===3){const ids=['intro',...doc.value.offers.map(o=>o.id),'outro'];const stale=()=>!!scriptSource.value&&scriptSource.value!==videoSpeechSource(doc.value);const needsSuggestion=ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale();if(needsSuggestion){await suggestWithAI();if(ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale())await suggest();if(ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale())return}await previewLegacyNarration()}
+  if(target===3){const ids=['intro',...doc.value.offers.map(o=>o.id),'outro'];const stale=()=>!!scriptSource.value&&!videoSpeechSourceMatches(doc.value,scriptSource.value);const needsSuggestion=ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale();if(needsSuggestion){await suggestWithAI();if(ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale())await suggest();if(ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale())return}await previewLegacyNarration()}
  }
  await action('Salvando',async()=>{await save();step.value=target;editingLayout.value=false;document.querySelector('.vs-editor-title')?.scrollIntoView({behavior:'smooth',block:'start'})})
 }

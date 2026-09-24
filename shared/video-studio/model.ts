@@ -80,6 +80,11 @@ export function videoNarrationText(doc: VideoDocument): string {
 }
 // Fonte comercial permanece separada do texto editável. O usuário confirma o roteiro após mudanças.
 export function videoSpeechSource(doc: VideoDocument): string { return JSON.stringify({brand:doc.brand.name,campaign:doc.campaign,validity:doc.validityMode==='none'?'':doc.validity,validityMode:doc.validityMode,validityDateFormat:doc.validityDateFormat,validityRange:doc.validityMode==='none'?undefined:doc.validityRange,offers:doc.offers.map(({id,name,price,unit,condition})=>({id,name,price,unit,condition}))}) }
+function legacyVideoSpeechSource(doc: VideoDocument): string { return JSON.stringify({brand:doc.brand.name,campaign:doc.campaign,validity:doc.validity,offers:doc.offers.map(({id,name,price,unit,condition})=>({id,name,price,unit,condition}))}) }
+export function videoSpeechSourceMatches(doc: VideoDocument, source: string | null | undefined): boolean {
+  if(!source)return false
+  return source===videoSpeechSource(doc)||source===legacyVideoSpeechSource(doc)
+}
 export function videoAudioIdentity(doc: VideoDocument): string { return JSON.stringify({source:videoSpeechSource(doc),scripts:doc.scripts,voice:doc.voice}) }
 export function estimateSpeechSeconds(text: string): number { return Math.max(1.2, text.trim().split(/\s+/).filter(Boolean).length / 2.35 + .35) }
 export function buildVideoTimeline(doc: VideoDocument, durations?: Record<string, number>): VideoScene[] {
