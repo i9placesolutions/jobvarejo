@@ -155,8 +155,13 @@ export const startEnhancement = async (userId: string, body: any) => {
     const alpha = await sharp(overlay).extractChannel('alpha').raw().toBuffer()
   if (!alpha.some(v => v > 0) || !alpha.some(v => v < 255)) throw createError({statusCode:422,statusMessage:'Não foi possível separar o conteúdo e o design desta página. Revise a arte e tente novamente.'})
   }
-  const pixels=await sharp(mask).removeAlpha().greyscale().raw().toBuffer();const coverage=pixels.reduce((n,v)=>n+(v>=128?1:0),0)/pixels.length
-  if(coverage<=0||coverage>=0.995)throw createError({statusCode:422,statusMessage:'Não há áreas decorativas suficientes para melhorar esta página. Revise a arte e tente novamente.'})
+  // Só o acabamento leve usa a máscara para limitar os pixels editáveis.
+  // No redesign, a imagem gerada é usada por inteiro; a máscara participa
+  // apenas da identidade do pedido e pode cobrir quase toda a página.
+  if (mode === 'finish') {
+    const pixels=await sharp(mask).removeAlpha().greyscale().raw().toBuffer();const coverage=pixels.reduce((n,v)=>n+(v>=128?1:0),0)/pixels.length
+    if(coverage<=0||coverage>=0.995)throw createError({statusCode:422,statusMessage:'Não há áreas decorativas suficientes para melhorar esta página. Revise a arte e tente novamente.'})
+  }
   const id=createHash('sha256').update(mode === 'redesign' ? REDESIGN_VERSION : 'v2').update(guide || '').update(mode).update(overlay || '').update(JSON.stringify(redesignArea || '')).update(projectId).update(pageId).update(model).update(quality).update(original).update(mask).digest('hex').slice(0,32)
   let created=false
   const receipt=await pgTx(async client=>{

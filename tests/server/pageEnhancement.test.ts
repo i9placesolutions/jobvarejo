@@ -170,6 +170,17 @@ describe('startEnhancement admission (mock storage/database, no paid calls)', ()
     expect(duplicate.receipt.id).toBe(first.receipt.id)
   })
 
+  it('admits redesign when its unused mask protects the whole page', async () => {
+    const body = await bodyFor([255, 255])
+    const overlay = dataUrl(await png(2, 1, [10, 20, 30, 255, 0, 0, 0, 0]))
+    const result = await startEnhancement(userId, {
+      ...body, mode: 'redesign', pipelineVersion: 'retail-layout-v11',
+      guide: body.original, overlay, redesignArea: { left: 0, top: 0, width: 2, height: 1 }
+    })
+    expect(result.receipt.mode).toBe('redesign')
+    expect(result.run).toBeTypeOf('function')
+  })
+
   it('rejects attempt 21 without writing a receipt or changing the ledger', async () => {
     objects.set(ledgerKey, JSON.stringify({ day: new Date().toISOString().slice(0, 10),
       attempts: Array.from({ length: 20 }, () => ({ projectId, id: 'a'.repeat(32) })) }))
