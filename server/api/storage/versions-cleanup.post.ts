@@ -5,6 +5,7 @@ import {
 import { getS3Client } from '~/server/utils/s3'
 import { requireAdminUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
+import { isServerManagedStorageKey } from '../../utils/storage-scope'
 
 /**
  * Admin endpoint to analyze and clean up old (noncurrent) S3 object versions.
@@ -134,7 +135,7 @@ export default defineEventHandler(async (event) => {
 
         const key = String(v.Key || '')
         const versionId = String(v.VersionId || '')
-        if (!key || !versionId) continue
+        if (!key || !versionId || isServerManagedStorageKey(key)) continue
 
         allVersions.push({
           key,

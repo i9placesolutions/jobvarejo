@@ -3,6 +3,8 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import {
+  assertClientStorageWriteAllowed,
+  assertClientStorageReadAllowed,
   isPublicStorageKey,
   isProjectsKey,
   isStorageKeyAllowedForUser,
@@ -65,6 +67,8 @@ export default defineEventHandler(async (event) => {
         statusMessage: 'Invalid key prefix'
       })
     }
+    if (operation === 'put') assertClientStorageWriteAllowed(key)
+    else assertClientStorageReadAllowed(key)
     if (contentType && operation === 'put') {
       const invalidContentType =
         contentType.length > 120 ||

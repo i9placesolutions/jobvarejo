@@ -9,6 +9,17 @@ export const positionProductLimitBelowName = (card: any, width: number, height: 
     return
   }
   if (limit.visible === false) return
+  // Faixa opaca acompanha o próprio Textbox em clones, exportação e edição.
+  // Amarelo + marrom escuro mantém contraste em cards vermelhos ou claros.
+  limit.set?.({ backgroundColor: '#facc15', fill: '#451a03', textBackgroundColor: '', stroke: null, strokeWidth: 0 })
+  for (const line of Object.values(limit.styles || {})) {
+    for (const style of Object.values(line as any)) {
+      if (style && typeof style === 'object') {
+        delete (style as any).fill
+        delete (style as any).textBackgroundColor
+      }
+    }
+  }
   title.initDimensions?.()
   limit.initDimensions?.()
   const titleHeight = Math.abs(Number(title.height || 0) * Number(title.scaleY ?? 1))

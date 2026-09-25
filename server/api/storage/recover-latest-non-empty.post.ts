@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
-import { isLegacyUserProjectKey, isUserProjectKey, isValidStoragePath } from '../../utils/storage-scope'
+import { assertClientStorageWriteAllowed, isLegacyUserProjectKey, isUserProjectKey, isValidStoragePath } from '../../utils/storage-scope'
 import { getOwnedProjectStorageRow, updateOwnedProjectCanvasData } from '../../utils/project-repository'
 import { getS3Client } from '../../utils/s3'
 import { isValidityOnlyCanvas } from '~/utils/canvasIntegrity'
@@ -271,6 +271,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  assertClientStorageWriteAllowed(targetKey)
   const projectPrefix = `projects/${projectRow.user_id}/${projectId}/page_`
   const pageDirectoryPrefix = `projects/${projectRow.user_id}/${projectId}/pages/${pageId}/`
   const legacyPageDirectoryPrefix = `${projectRow.user_id}/${projectId}/pages/${pageId}/`

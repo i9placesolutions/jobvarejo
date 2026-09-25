@@ -1,7 +1,7 @@
 import { S3Client, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
-import { getUserProjectsPrefix, isValidStoragePath, normalizeStoragePath } from '../../utils/storage-scope'
+import { assertClientStorageWriteAllowed, isServerManagedStorageKey, getUserProjectsPrefix, isValidStoragePath, normalizeStoragePath } from '../../utils/storage-scope'
 
 /**
  * API Route para deletar arquivos da Wasabi Storage
@@ -36,6 +36,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
+    assertClientStorageWriteAllowed(prefix)
     // Configurações da Wasabi
     const endpoint = process.env.WASABI_ENDPOINT || 's3.wasabisys.com'
     const bucket = process.env.WASABI_BUCKET || 'jobvarejo'
@@ -74,6 +75,8 @@ export default defineEventHandler(async (event) => {
       const objectKeys = (listResult.Contents || [])
         .map(obj => String(obj?.Key || '').trim())
         .filter(Boolean)
+        // Prefixos ancestrais/parciais também podem listar recibos e o ledger.
+        .filter(key => !isServerManagedStorageKey(key))
 
       if (objectKeys.length > 0) {
         const deleteResult = await s3Client.send(new DeleteObjectsCommand({

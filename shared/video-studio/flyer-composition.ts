@@ -4,9 +4,8 @@ import {CampaignAtmosphere} from './campaign-atmosphere'
 import {BoomExplosion} from './boom-effects'
 import {useRetailFonts} from './font-readiness'
 import {videoBackground,backgroundAsset} from './backgrounds'
-import {productEffects} from './native-effects'
 import React,{createElement as h} from 'react'
-import {AbsoluteFill,Audio,Img,CanvasImage,Sequence,Loop,OffthreadVideo,useCurrentFrame,useVideoConfig,interpolate,Easing} from 'remotion'
+import {AbsoluteFill,Audio,Img,Sequence,Loop,OffthreadVideo,useCurrentFrame,useVideoConfig,interpolate,Easing} from 'remotion'
 import {flyerRecipe,type FlyerRecipe,type LayoutBox} from './flyer-recipes'
 import {Logo,Ending,RetailCamera,SocialIcon} from './showcase'
 import {displayPrice,type VideoRenderProps,type VideoScene} from './model'
@@ -73,7 +72,7 @@ function Identity({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
  return h(AbsoluteFill,null,
  r.mascot&&mascotBox?div({position:'absolute',left:p?20:20,top:p?610:535,width:p?1040:650,height:p?34:28,opacity:progress*(1-end),borderTop:'6px solid #ffe197',borderBottom:'6px solid #63300d',borderRadius:5,background:'repeating-linear-gradient(2deg,#98531f 0px,#c1843d 4px,#e0aa5d 7px,#a76129 11px)',boxShadow:'0 12px 18px #0009'}):null,
  r.mascot&&mascotBox?h(EditableElement,{props,scene:sceneId,id:'mascot',style:{...box(mascotBox),opacity:progress*(1-end),translate:`0px ${Math.max(0,1-progress)*70}px`}},h(Img,{src:(props.templateBase||'/video-studio/templates')+'/'+r.mascot,style:{width:'100%',height:'100%',objectFit:'contain',objectPosition:'center bottom'}})):null,
- h(EditableElement,{props,scene:sceneId,id:'seal',style:{...box(sealBox),opacity:sealAlpha,scale:seal.scale,rotate:`${seal.rotation+Math.sin(f/39)*.65}deg`}},r.seal?(props.fastPreview?h(Img,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,style:{width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 14px 12px #0006)'}}):h(CanvasImage,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,width:Math.round(1280*Math.max(.2,r.sealAspect||1)),height:1280,fit:'contain',effects:props.document.effects.includes('glow')?productEffects((f%95),'shine',props.document.intensity):[],style:{width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 14px 12px #0006)'}})):div({...font,fontSize:nativeSize(sealBox[2],sealBox[3]),height:'100%',display:'flex',alignItems:'center',justifyContent:'center',whiteSpace:'pre',color:r.nativeTitleColor||r.accent,textShadow:'0 5px #573205,0 10px #382003,0 18px 20px #0008'},nativeLines.join('\n'))),
+ h(EditableElement,{props,scene:sceneId,id:'seal',style:{...box(sealBox),opacity:sealAlpha,scale:seal.scale,rotate:`${seal.rotation+Math.sin(f/39)*.65}deg`}},r.seal?h(Img,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,style:{width:'100%',height:'100%',objectFit:'contain',filter:`drop-shadow(0 14px 12px #0006) brightness(${props.document.effects.includes('glow')?1+Math.max(0,Math.sin((f%95)/95*Math.PI))*.12*props.document.intensity:1})`}}):div({...font,fontSize:nativeSize(sealBox[2],sealBox[3]),height:'100%',display:'flex',alignItems:'center',justifyContent:'center',whiteSpace:'pre',color:r.nativeTitleColor||r.accent,textShadow:'0 5px #573205,0 10px #382003,0 18px 20px #0008'},nativeLines.join('\n'))),
  h(EditableElement,{props,scene:sceneId,id:'logo',style:{...box(logoBox),opacity:logoAlpha,scale:logo.scale,translate:`0px ${logo.y}px`}},h(Logo,{props,width:logoBox[2],height:logoBox[3]})))
 }
 function Price({props,price,unit}:{props:VideoRenderProps;r:FlyerRecipe;price:string;unit:string}){

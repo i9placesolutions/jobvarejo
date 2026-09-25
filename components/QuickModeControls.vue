@@ -150,6 +150,7 @@ const emit = defineEmits<{
   (event: 'restore-grid', payload: { zoneId: string; preset: 'model' | '2' | '3' }): void
   (event: 'mobile-section', value: string): void
   (event: 'export'): void
+  (event: 'enhance'): void
   (event: 'product-palette', value: Partial<ProductPalette>): void
   (event: 'card-colors', payload: { mode: 'auto' | 'manual'; color?: string; allPages: boolean }): void
   (event: 'select-zone', zoneId: string): void
@@ -199,8 +200,12 @@ const autoFillImages = ref(true)
 const oneProductPerPage = ref(false)
 // Os dados da loja não devem competir com a revisão dos produtos.
 const dataPanelOpen = ref(false)
-const validityDateFormat = ref<OfferDateFormat>(normalizeOfferDateFormat(props.validityDateFormat))
-watch(() => props.validityDateFormat, value => { validityDateFormat.value = normalizeOfferDateFormat(value) })
+const validityDateFormat = ref<OfferDateFormat>(
+  props.validityDateFormat === undefined ? 'long' : normalizeOfferDateFormat(props.validityDateFormat)
+)
+watch(() => props.validityDateFormat, value => {
+  validityDateFormat.value = value === undefined ? 'long' : normalizeOfferDateFormat(value)
+})
 const validityStartDate = ref(String(props.validityStartDate || ''))
 const validityEndDate = ref(String(props.validityEndDate || ''))
 const validityMode = ref<OfferValidityMode>(normalizeOfferValidityMode(
@@ -659,12 +664,12 @@ const handleValidityModeChange = (event: Event) => {
   selectValidityMode(mode)
   if (validityMode.value === 'while_stocks') {
     validityFormatRequired.value = false
-    validityDateFormat.value = 'numeric'
+    validityDateFormat.value = 'long'
     showValidity.value = true
   } else {
-    validityFormatRequired.value = true
-    validityDateFormat.value = 'hidden'
-    showValidity.value = false
+    validityFormatRequired.value = false
+    if (validityDateFormat.value === 'hidden') validityDateFormat.value = 'long'
+    showValidity.value = true
   }
   updateValidity()
 }
@@ -852,6 +857,7 @@ const useTemplateModel = (modelId: string) => {
     </nav>
     <aside class="quick-mode-sidebar" :aria-label="mobileSection === 'tools' ? 'Ajustes da edição rápida' : 'Produtos da edição rápida'">
     <div class="quick-mode-sidebar__content">
+      <button v-if="mobileSection === 'tools'" type="button" class="w-full rounded-lg bg-amber-400 px-3 py-3 text-sm font-bold text-zinc-950" :disabled="props.busy" @click="emit('enhance')">Melhorar todas as páginas com IA</button>
       <p v-if="mobileSection === 'tools' && !productsReviewed" class="quick-mobile-import-copy">Confira os produtos para liberar a grade, as cores e as outras opções.</p>
       <div class="quick-mode-sidebar__topbar">
         <div class="quick-mode-sidebar__title-wrap">
@@ -1176,7 +1182,7 @@ const useTemplateModel = (modelId: string) => {
           </div>
           <fieldset v-if="(showValidity || validityFormatRequired) && validityMode !== 'while_stocks'" class="quick-mode-date-format">
             <legend>Como a data aparece? <span>Obrigatório</span></legend>
-            <div><button type="button" :class="{active:!validityFormatRequired && validityDateFormat==='numeric'}" :aria-pressed="!validityFormatRequired && validityDateFormat==='numeric'" @click="selectValidityDateFormat('numeric')">24/09/2026 <small>Numérico</small></button><button type="button" :class="{active:!validityFormatRequired && validityDateFormat==='long'}" :aria-pressed="!validityFormatRequired && validityDateFormat==='long'" @click="selectValidityDateFormat('long')">vinte e quatro de setembro <small>Por extenso</small></button></div>
+            <div><button type="button" :class="{active:!validityFormatRequired && validityDateFormat==='numeric'}" :aria-pressed="!validityFormatRequired && validityDateFormat==='numeric'" @click="selectValidityDateFormat('numeric')">{{ validityMode === 'date_range' ? '25/09/2026 a 26/09/2026' : '25/09/2026' }} <small>Numérico</small></button><button type="button" :class="{active:!validityFormatRequired && validityDateFormat==='long'}" :aria-pressed="!validityFormatRequired && validityDateFormat==='long'" @click="selectValidityDateFormat('long')">{{ validityMode === 'date_range' ? '25 a 26 de setembro' : '25 de setembro' }} <small>Mês por extenso</small></button></div>
           </fieldset>
           <p v-else-if="showValidity && validityDateFormat !== 'hidden'" class="quick-mode-validity-stocks-hint">Sem datas: a oferta vale até o estoque acabar.</p>
           <p v-else class="quick-mode-validity-stocks-hint">Nenhuma validade aparecerá no encarte.</p>

@@ -11,7 +11,7 @@ const exec=promisify(execFile)
 export const root=resolve(import.meta.dirname,'../..')
 export async function probe(file){const {stdout}=await exec('ffprobe',['-v','error','-show_entries','format=duration:stream=codec_type,width,height','-of','json',file],{timeout:20000});return JSON.parse(stdout)}
 let bundlePromise
-export async function videoBundle(){bundlePromise ||= bundle({entryPoint:join(root,'workers/video-studio/entry.ts'),publicDir:join(root,'public'),outDir:process.env.VIDEO_BUNDLE_DIR||undefined});return bundlePromise}
+export async function videoBundle(){bundlePromise ||= bundle({entryPoint:join(root,'workers/video-studio/entry.ts'),outDir:process.env.VIDEO_BUNDLE_DIR||undefined});return bundlePromise}
 export async function renderVideo(input,directory,output,onProgress=()=>{},options={}){
  await ensureBrowser()
  await mkdir(join(directory,'fonts'),{recursive:true})

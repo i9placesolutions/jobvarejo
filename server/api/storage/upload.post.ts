@@ -4,6 +4,7 @@ import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { getS3Client, resetS3Client } from '../../utils/s3'
 import {
+  assertClientStorageWriteAllowed,
   isBuilderKey,
   isProjectsKey,
   isStorageKeyAllowedForUser,
@@ -51,6 +52,7 @@ export default defineEventHandler(async (event) => {
   if (!isValidStoragePath(key)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid key format' })
   }
+  assertClientStorageWriteAllowed(key)
   if (isBuilderKey(key)) {
     throw createError({ statusCode: 400, statusMessage: 'Builder keys must use /api/builder/storage/upload' })
   }

@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 import { Readable } from 'node:stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
-import { isUserProjectKey, isValidStoragePath } from '../../utils/storage-scope'
+import { assertClientStorageWriteAllowed, isUserProjectKey, isValidStoragePath } from '../../utils/storage-scope'
 import { getOwnedProjectStorageRow, updateOwnedProjectCanvasData } from '../../utils/project-repository'
 import { getS3Client } from '../../utils/s3'
 
@@ -97,6 +97,7 @@ export default defineEventHandler(async (event) => {
     ? targetKeyCandidate
     : defaultTargetKey
 
+  assertClientStorageWriteAllowed(targetKey)
   const s3 = getS3Client()
 
   // Read the chosen version/snapshot

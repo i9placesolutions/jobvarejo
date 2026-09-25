@@ -5,12 +5,59 @@ import re
 import unicodedata
 import sys
 from urllib.parse import quote, urlparse, parse_qs
+from urllib.request import Request, urlopen
 from playwright.sync_api import sync_playwright
 
 RETAILER_DOMAINS = ("atacadao.com.br", "bretas.com.br", "carrefour.com.br", "paodeacucar.com")
 
 
+def query_tokens(value):
+    value = unicodedata.normalize('NFD', value.lower())
+    return set(re.findall(r'[a-z0-9]+', ''.join(c for c in value if not unicodedata.combining(c)))) - {'de', 'do', 'da', 'sabores', 'sabor', 'produto', 'imagem'}
+
+
+def relevant_candidates(results, query):
+    requested = query_tokens(query)
+    if not requested:
+        return []
+    return [item for item in results if len(requested & query_tokens(' '.join(str(item.get(k, '')) for k in ('title', 'source', 'url')))) / len(requested) >= 0.5]
+
+
+def search_retailer_catalog(query, limit=10):
+    """Catálogo público: fallback independente de páginas de busca bloqueadas."""
+    cleaned = re.sub(r'\b(sabores|sortidos|diversos)\b', '', query, flags=re.I)
+    cleaned = re.sub(r'\bsalgadinhos\b', 'salgadinho', cleaned, flags=re.I)
+    requested = {t.rstrip('s') for t in query_tokens(cleaned) if not t.isdigit()}
+    sizes = set(re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:kg|ml|g|l)\b', cleaned.lower()))
+    result = []
+    try:
+        request = Request('https://www.bretas.com.br/api/catalog_system/pub/products/search?ft=' + quote(cleaned.strip()), headers={'Accept': 'application/json'})
+        with urlopen(request, timeout=8) as response:
+            products = json.load(response)
+        if not isinstance(products, list):
+            return []
+        for product in products:
+            title = str(product.get('productName', ''))
+            tokens = {t.rstrip('s') for t in query_tokens(title)}
+            if not requested or len(requested & tokens) / len(requested) < 0.6:
+                continue
+            title_sizes = set(re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:kg|ml|g|l)\b', title.lower()))
+            if sizes and not {v.replace(' ', '') for v in sizes}.issubset({v.replace(' ', '') for v in title_sizes}):
+                continue
+            for item in product.get('items', []):
+                for image in item.get('images', [])[:1]:
+                    url = image.get('imageUrl', '')
+                    if urlparse(url).scheme == 'https':
+                        result.append({'url': url, 'title': title, 'source': product.get('link', ''), 'provider': 'bretas-catalog', 'retailer': 'bretas.com.br'})
+        return result[:limit]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
 def search_images(query, limit=10):
+    catalog = search_retailer_catalog(query, limit)
+    if catalog:
+        return catalog
     with sync_playwright() as p:
         options = {'headless': True}
         if os.environ.get('CHROMIUM_EXECUTABLE_PATH'):
@@ -43,6 +90,7 @@ def search_images(query, limit=10):
                             continue
                 except Exception:
                     continue
+            results = relevant_candidates(results, query)
             if results:
                 def tokens(value):
                     value = unicodedata.normalize('NFD', value.lower())

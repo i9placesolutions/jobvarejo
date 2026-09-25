@@ -10,6 +10,7 @@ import {
   Maximize2,
   Move,
   Palette,
+  Sparkles,
   Type,
   ZoomIn,
   ZoomOut
@@ -41,10 +42,12 @@ const props = defineProps<{
   selectedText?: boolean
   applyAllLabel?: string
   busy?: boolean
+  enhancementBusy?: boolean
 }>()
 
 const emit = defineEmits<{
   (event: 'export'): void
+  (event: 'enhance'): void
   (event: 'zoom-in'): void
   (event: 'zoom-out'): void
   (event: 'zoom-fit'): void
@@ -358,7 +361,13 @@ const onZoomInput = (event: Event) => {
         </div>
       </div>
     </div>
-    <button type="button" class="quick-export-button" aria-label="Exportar encarte" @click="emit('export')"><Download :size="18" /><span>Exportar</span></button>
+    <div class="quick-mode-canvas-controls__primary-actions" aria-label="Ações do encarte">
+      <button type="button" class="quick-enhance-button" :aria-busy="!!enhancementBusy" :aria-label="enhancementBusy ? 'Preparando melhoria com IA' : 'Melhorar encarte com IA'" :title="enhancementBusy ? 'Preparando sua melhoria com IA' : 'Melhorar o encarte com IA'" :disabled="busy || enhancementBusy" @click="emit('enhance')">
+        <Sparkles :size="16" aria-hidden="true" />
+        <span>IA</span>
+      </button>
+      <button type="button" class="quick-export-button" aria-label="Exportar encarte" title="Exportar encarte" @click="emit('export')"><Download :size="18" /><span>Exportar</span></button>
+    </div>
   </div>
 </template>
 
@@ -861,6 +870,11 @@ const onZoomInput = (event: Event) => {
 </style>
 
 <style scoped>
+.quick-mode-canvas-controls__primary-actions { order:3; display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+.quick-enhance-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; flex:0 0 auto; min-height:38px; padding:0 11px; border:1px solid rgba(253,224,71,.72); border-radius:11px; background:linear-gradient(135deg,#fde047,#facc15 62%,#eab308); color:#302406; box-shadow:0 5px 15px rgba(234,179,8,.17); font-size:12px; font-weight:750; transition:transform .16s ease,filter .16s ease,box-shadow .16s ease; }
+.quick-enhance-button:hover:not(:disabled) { filter:brightness(1.04); transform:translateY(-1px); box-shadow:0 8px 20px rgba(234,179,8,.24); }
+.quick-enhance-button > svg { color:#694600; }
+.quick-enhance-button:disabled { opacity:.58; }
 .quick-export-button { order:3; flex-shrink:0; display:flex; align-items:center; gap:7px; min-height:36px; padding:0 14px; border-radius:9px; background:#7c3aed; color:white; font-size:12px; font-weight:600; }
 .quick-export-button:hover { background:#8b5cf6; }
 .quick-mode-canvas-controls__zoom { order:0; flex-shrink:0; }
@@ -870,12 +884,20 @@ const onZoomInput = (event: Event) => {
 .quick-mode-canvas-controls__tool-button > svg, .quick-mode-canvas-controls__fit > svg { width:17px; height:17px; }
 .quick-mode-canvas-controls__zoom-value { gap:8px; }
 .quick-mode-canvas-controls button:focus-visible { outline:2px solid #c4b5fd; outline-offset:2px; }
+@media(min-width:1500px) {
+ .quick-mode-canvas-controls { flex-wrap:nowrap; width:fit-content; max-width:calc(100% - 24px); }
+ .quick-mode-canvas-controls__primary-actions { flex-wrap:nowrap; }
+}
+@media(max-width:1199px) { .quick-mode-canvas-controls { flex-wrap:wrap; } }
 @media(max-width:767px) {
  .quick-mode-canvas-controls { gap:4px; padding:6px; }
  .quick-mode-canvas-controls__zoom { gap:0; }
  .quick-mode-canvas-controls__divider { display:none; }
  .quick-mode-canvas-controls__tool-button, .quick-mode-canvas-controls__fit { padding:0; }
  .quick-mode-canvas-controls__tool-group { gap:0; }
+ .quick-mode-canvas-controls__primary-actions { flex:1 1 100%; justify-content:center; }
+ .quick-enhance-button { flex:0 0 auto; min-width:0; }
+ .quick-export-button { min-height:42px; }
 }
 
 .quick-mode-canvas-controls__zoom-value > span { min-width:38px; font-size:12px; font-weight:600; }

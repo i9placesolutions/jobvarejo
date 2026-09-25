@@ -1,7 +1,7 @@
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
-import { isStorageKeyAllowedForUser, isValidStoragePath, normalizeStoragePath } from '../../utils/storage-scope'
+import { assertClientStorageWriteAllowed, isStorageKeyAllowedForUser, isValidStoragePath, normalizeStoragePath } from '../../utils/storage-scope'
 
 /**
  * API Route para deletar um único asset da Wasabi Storage
@@ -35,6 +35,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
+    assertClientStorageWriteAllowed(key)
     const config = useRuntimeConfig()
     const endpoint = config.wasabiEndpoint
     const region = config.wasabiRegion || 'us-east-1'

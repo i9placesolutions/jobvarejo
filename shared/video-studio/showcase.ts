@@ -7,14 +7,13 @@ import {EditableElement} from './editable-element'
 import {StickerLogo} from './sticker-logo'
 import {OPENING_SOUNDS, musicGain} from './sound-design'
 import React, {createElement as h} from 'react'
-import {AbsoluteFill, Audio, Img, CanvasImage, Sequence, Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion'
+import {AbsoluteFill, Audio, Img, Sequence, Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion'
 import {displayPrice, type VideoRenderProps, type VideoScene} from './model'
 import {VideoPriceLabel} from './label-renderer'
 import {retailEntrance, retailExit} from './retail-motion'
 import {elementMotion,cameraMotion,transitionMotion} from './catalog-motion'
 import {motionSettings,soundAsset,SOUND_EFFECTS} from './effect-catalog'
 import {CatalogAtmosphere,CatalogTransition,AnimatedRetailText} from './catalog-effects'
-import {productEffects} from './native-effects'
 import {flyerRecipe} from './flyer-recipes'
 
 const div=(style:React.CSSProperties,...children:React.ReactNode[])=>h('div',{style},...children)
@@ -106,7 +105,9 @@ function Product({props,scene,index}:{props:VideoRenderProps;scene:VideoScene;in
  const layers=productLayers([product.x,product.y,product.w,product.h],p,d.duplicateProducts!==false,offer.imageAspectRatio||1,offer.copies)
  const float=f>16&&d.effects.includes('pulse')?Math.sin((f-16)/22)*4:0
  const imageStyle:React.CSSProperties={width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 19px 14px #002c2066)'}
- const productImage=src?(d.motion&&m.finish!=='clean'&&!props.fastPreview?h(CanvasImage,{src,width:p?Math.round(1000*Math.max(.05,offer.imageAspectRatio||1)):650,height:p?1000:850,fit:'contain',effects:productEffects(f,m.finish,d.intensity),style:imageStyle}):h(Img,{src,style:imageStyle})):div({...imageStyle,...type,fontSize:45,display:'grid',placeItems:'center'},'ADICIONE A FOTO')
+ const arrival=Math.max(0,1-f/8)*d.intensity
+ const finishFilter=m.finish==='glow'?' drop-shadow(0 0 16px #dbff9b)':m.finish==='outline'?' drop-shadow(2px 0 #e8ffbc) drop-shadow(-2px 0 #e8ffbc)':m.finish==='chromatic'?` drop-shadow(${arrival*6}px 0 #ff4967) drop-shadow(${-arrival*6}px 0 #62e8ff)`:m.finish==='zoom-blur'?` blur(${arrival*5}px)`:m.finish==='shine'?` brightness(${1+Math.max(0,Math.sin(Math.min(1,Math.max(0,(f-10)/26))*Math.PI))*.2*d.intensity})`:''
+ const productImage=src?h(Img,{src,style:{...imageStyle,filter:imageStyle.filter+finishFilter}}):div({...imageStyle,...type,fontSize:45,display:'grid',placeItems:'center'},'ADICIONE A FOTO')
  const name=offer.name.toLocaleUpperCase('pt-BR'),weight=name.match(/\s+(\d+(?:[.,]\d+)?\s*(?:KG|G|ML|L))$/),title=weight?name.slice(0,-weight[0].length):name
  return h(AbsoluteFill,{style:{opacity:exit.opacity,scale:exit.scale,filter:exit.blur?`blur(${exit.blur}px)`:undefined,pointerEvents:'none'}},
  div({...box(p?85:70,p?1780:975,p?910:630),opacity:mix(f,4,9,0,1)},h(Validity,{props,compact:true})),

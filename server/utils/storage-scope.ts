@@ -10,6 +10,31 @@ const LEGACY_PROJECT_PAGE_KEY_RE = new RegExp(
 export const normalizeStoragePath = (value: unknown): string =>
   String(value || '').trim().replace(/^\/+/, '')
 
+// Registros de cobrança e resultados são escritos exclusivamente pelo worker.
+// Ownership permite leitura, mas nunca alteração pelas APIs genéricas de storage.
+export const isServerManagedStorageKey = (key: string): boolean => {
+  const normalized = normalizeStoragePath(key)
+  return /^projects\/[^/]+\/enhancement-ledger\.json(?:\/|$)/.test(normalized) ||
+    /^projects\/[^/]+\/[^/]+\/enhancements(?:\/|$)/.test(normalized)
+}
+
+// O cliente só precisa ler os PNGs usados na prévia e no download. Recibos,
+// máscaras e arquivos intermediários ficam restritos ao fluxo interno do servidor.
+export const assertClientStorageReadAllowed = (key: string): void => {
+  const normalized = normalizeStoragePath(key)
+  if (!isServerManagedStorageKey(normalized)) return
+  const isPublicEnhancementImage = /^projects\/[^/]+\/[^/]+\/enhancements\/[^/]+\/(?:original|result(?:-v\d+)?)\.png$/.test(normalized)
+  if (!isPublicEnhancementImage) {
+    throw createError({ statusCode: 403, statusMessage: 'Este arquivo não está disponível para leitura direta.' })
+  }
+}
+
+export const assertClientStorageWriteAllowed = (key: string): void => {
+  if (isServerManagedStorageKey(key)) {
+    throw createError({ statusCode: 403, statusMessage: 'Este arquivo é gerenciado exclusivamente pelo servidor.' })
+  }
+}
+
 type StoragePathOptions = {
   allowTrailingSlash?: boolean
 }

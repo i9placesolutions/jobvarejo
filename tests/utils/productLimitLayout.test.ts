@@ -34,3 +34,13 @@ it('preserva alinhamento lateral e oculta limite vazio', () => {
   positionProductLimitBelowName(card, 320, 360)
   expect(limit.visible).toBe(false)
 })
+it('mantém uma faixa opaca contrastante em limites antigos com preenchimento por caractere', () => {
+  const title = node({ name: 'smart_title', top: 0, height: 30, width: 280 })
+  const limit = node({ name: 'smart_limit', text: 'LIMITE 10 UN POR CLIENTE', fill: '#ef4444', styles: { 0: { 0: { fill: '#ef4444', fontWeight: '900' } } } })
+  const card = { getObjects: () => [title, limit] }
+  positionProductLimitBelowName(card, 320, 360)
+  expect(limit.backgroundColor).toBe('#facc15')
+  expect(limit.fill).toBe('#451a03')
+  expect(limit.styles[0][0]).toEqual({ fontWeight: '900' })
+  expect(limit.text).toBe('LIMITE 10 UN POR CLIENTE')
+})

@@ -6,6 +6,7 @@ import { enforceRateLimit } from '../../utils/rate-limit'
 import { getS3Client, resetS3Client } from '../../utils/s3'
 import {
   getProjectOwnerIdFromKey,
+  assertClientStorageReadAllowed,
   isLegacyProjectPageKey,
   isLegacyUserProjectKey,
   isPublicStorageKey,
@@ -110,6 +111,7 @@ export default defineEventHandler(async (event) => {
         statusMessage: 'Invalid key format'
       })
     }
+    assertClientStorageReadAllowed(key)
 
     const bucket = process.env.WASABI_BUCKET || 'jobvarejo'
     const isAllowedRequestedBucket =

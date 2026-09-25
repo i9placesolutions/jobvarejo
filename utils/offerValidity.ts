@@ -137,41 +137,6 @@ export const formatOfferValidityPeriod = (
 export type OfferDateFormat = 'numeric' | 'long' | 'hidden'
 export const normalizeOfferDateFormat = (value: unknown): OfferDateFormat => value === 'long' || value === 'hidden' ? value : 'numeric'
 
-const OFFER_DAY_WORDS: Record<number, string> = {
-  1: 'um',
-  2: 'dois',
-  3: 'três',
-  4: 'quatro',
-  5: 'cinco',
-  6: 'seis',
-  7: 'sete',
-  8: 'oito',
-  9: 'nove',
-  10: 'dez',
-  11: 'onze',
-  12: 'doze',
-  13: 'treze',
-  14: 'quatorze',
-  15: 'quinze',
-  16: 'dezesseis',
-  17: 'dezessete',
-  18: 'dezoito',
-  19: 'dezenove',
-  20: 'vinte',
-  30: 'trinta'
-}
-
-export const formatOfferDayInWords = (value: unknown): string | null => {
-  const day = Number(value)
-  if (!Number.isInteger(day) || day < 1 || day > 31) return null
-  if (OFFER_DAY_WORDS[day]) return OFFER_DAY_WORDS[day]
-  const tens = day >= 30 ? 30 : 20
-  const unit = day - tens
-  return unit && OFFER_DAY_WORDS[tens] && OFFER_DAY_WORDS[unit]
-    ? `${OFFER_DAY_WORDS[tens]} e ${OFFER_DAY_WORDS[unit]}`
-    : null
-}
-
 export const formatOfferDate = (value: unknown, format: OfferDateFormat = 'numeric'): string => {
   if (format === 'hidden') return ''
   const raw = String(value || '').trim()
@@ -182,8 +147,10 @@ export const formatOfferDate = (value: unknown, format: OfferDateFormat = 'numer
   if (format === 'numeric') return `${day}/${month}/${year}`
   const months = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
   const name = months[Number(month) - 1]
-  const dayInWords = formatOfferDayInWords(day)
-  return name && dayInWords ? `${dayInWords} de ${name}` : raw
+  const numericDay = Number(day)
+  return name && Number.isInteger(numericDay) && numericDay >= 1 && numericDay <= 31
+    ? `${numericDay} de ${name}`
+    : raw
 }
 
 /** Inclui o fundo/ícone quando pertencem ao mesmo grupo exclusivo da validade. */
@@ -202,7 +169,7 @@ export const getOfferValidityVisibilityTarget = (text: any): any => {
   return target
 }
 
-/** Compacta datas por extenso já formatadas, mantendo intervalos numéricos legados. */
+/** Compacta intervalos com o mês por extenso, mantendo datas numéricas legadas. */
 export const formatOfferDateInterval = (start: string, end: string): string => {
   const pattern = /^(.+?) de ([a-zç]+)(?: de (\d{4}))?$/i
   const first = start.match(pattern)

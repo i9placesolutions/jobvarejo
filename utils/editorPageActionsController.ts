@@ -1,3 +1,5 @@
+import { appendPageCopySuffix } from '~/utils/pageCopyNaming'
+
 export type EditorPageActionsContext = {
     project: { pages?: any[]; activePageIndex: number }
     showDeletePageModal: { value: boolean }
@@ -41,7 +43,7 @@ export const duplicatePage = (
     const dup = {
         ...JSON.parse(JSON.stringify(src)),
         id: ctx.makeId(),
-        name: `${src.name || 'Página'} (cópia)`,
+        name: appendPageCopySuffix(src.name, 'Página', 'Cópia'),
         dirty: true
     }
     ctx.project.pages!.splice(idx + 1, 0, dup)

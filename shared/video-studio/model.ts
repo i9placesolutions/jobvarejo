@@ -139,7 +139,7 @@ export function validateVideoForGeneration(doc: VideoDocument): string[] {
   const errors: string[]=[]
   if(doc.validityMode==='single_day'&&!doc.validityRange?.start)errors.push('Informe o dia da oferta.')
   if(doc.validityMode==='date_range'&&(!doc.validityRange?.start||!doc.validityRange?.end))errors.push('Informe a data inicial e a data final das ofertas.')
-  if((doc.validityMode==='single_day'||doc.validityMode==='date_range')&&!doc.validityDateFormat)errors.push('Escolha se a validade aparece em números ou por extenso.')
+  if((doc.validityMode==='single_day'||doc.validityMode==='date_range')&&!doc.validityDateFormat)errors.push('Escolha se a data aparece em números ou com o mês por extenso.')
   if(!doc.validityMode&&doc.validityRange&&(!doc.validityRange.start||!doc.validityRange.end))errors.push('Informe a data inicial e a data final das ofertas.')
   if((doc.validityMode==='date_range'||!doc.validityMode)&&doc.validityRange?.start&&doc.validityRange?.end&&doc.validityRange.end<doc.validityRange.start)errors.push('A data final deve ser igual ou posterior à inicial.')
   if(!doc.brand.name.trim())errors.push('Informe o nome da empresa.')

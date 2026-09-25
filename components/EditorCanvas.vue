@@ -16,6 +16,7 @@ import { findFlyerAccent, resolveFlyerProductStyles, resolveProductCardColor, fl
 import { confirmInSystem } from '~/utils/systemMessages'
 import { harmonizeProductCardTypography } from '~/utils/productCardResponsiveTypography'
 import { reconcileQuickPageFormatGeometry } from '~/utils/quickPageFormatGeometry'
+import { appendPageCopySuffix, normalizePageCopyName } from '~/utils/pageCopyNaming'
 import { resolveProductCardDropSwapTarget } from '~/utils/productCardDropSwap'
 import { repairDynamicTextLayoutBounds } from '~/utils/dynamicTextLayoutBounds'
 import { compactBusinessFooter } from '~/utils/compactBusinessFooter'
@@ -621,6 +622,9 @@ const QuickModeControls = defineAsyncComponent(() => import('./QuickModeControls
 const OfferValidityPrompt = defineAsyncComponent(() => import('./OfferValidityPrompt.vue'))
 const QuickModePageToolbar = defineAsyncComponent(() => import('./QuickModePageToolbar.vue'))
 const QuickModeCanvasControls = defineAsyncComponent(() => import('./QuickModeCanvasControls.vue'))
+const PageEnhancementDialog = defineAsyncComponent(() => import('./PageEnhancementDialog.vue'))
+const showPageEnhancement = ref(false)
+const preparingPageEnhancement = ref(false)
 const QuickModeElementColorMenu = defineAsyncComponent(() => import('./QuickModeElementColorMenu.vue'))
 import {
   Undo,
@@ -4637,10 +4641,11 @@ const flushBeforePageStructureChange = async (reason: string) => {
 
 const getQuickPageModelName = (page: any): string => {
     const explicit = String(page?.templateModelName || '').trim()
-    if (explicit) return explicit
+    if (explicit) return normalizePageCopyName(explicit, 'Modelo 1')
     const rawName = String(page?.name || '').trim()
     const separatorIndex = rawName.indexOf(' · ')
-    return separatorIndex > 0 ? rawName.slice(0, separatorIndex) : 'Modelo 1'
+    const modelName = separatorIndex > 0 ? rawName.slice(0, separatorIndex) : rawName
+    return normalizePageCopyName(modelName, 'Modelo 1')
 }
 
 const getQuickPageFormat = (page: any) => {
@@ -5216,7 +5221,7 @@ const duplicateQuickModePage = (pageId: string) => {
         if (duplicatedPage) {
             const sourcePage = project.pages?.[idx]
             const sourceModelName = getQuickPageModelName(sourcePage)
-            const copyModelName = `${sourceModelName} (cópia)`
+            const copyModelName = appendPageCopySuffix(sourceModelName, 'Modelo 1')
             applyQuickPageTemplateMetadata(
                 duplicatedPage,
                 getQuickPageFormat(sourcePage),
@@ -7523,6 +7528,7 @@ const quickModeSelectedColorTargets = computed((): QuickEditableColorTarget[] =>
     return matches
 })
 const quickModeElementColorDismissed = ref(false)
+const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
 watch(() => selectedObjectRef.value?._customId, () => { quickModeElementColorDismissed.value = false })
 
 const quickModeAllColorTargets = computed(() => [
@@ -7678,7 +7684,6 @@ const applyQuickModeOpacityChange = async (payload: QuickModeOpacityChange) => {
 
 const selectedObjectId = ref<string | null>(null)
 const selectedObjectIds = ref<string[]>([])
-const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
 // watch reads its computed source immediately, so the selection ref must exist first.
 watch(quickSelectedProductName, () => { quickProductNameColorScope.value = 'selected' })
 const selectedProductImageSubTarget = shallowRef<any>(null)
@@ -8147,7 +8152,7 @@ const isQuickBusinessProfileSaving = ref(false)
 const quickBusinessProfileSetupError = ref('')
 const quickValidityStartDate = ref('')
 const quickValidityEndDate = ref('')
-const quickValidityDateFormat = ref<OfferDateFormat>('numeric')
+const quickValidityDateFormat = ref<OfferDateFormat>('long')
 const quickValidityMode = ref<OfferValidityMode>('while_stocks')
 const quickValidityWhileStocks = ref(true)
 const quickShowValidity = ref(true)
@@ -15859,6 +15864,56 @@ const exportQuickDesign = () => {
     exportSettings.value.selectedPageIds = [String(activePage.value?.id || '')]
 }
 
+const openPageEnhancement = async () => {
+    if (preparingPageEnhancement.value) return
+    preparingPageEnhancement.value = true
+    try {
+        await Promise.resolve(saveCurrentState({ reason: 'page-enhancement-snapshot', source: 'system', skipCoalesce: true }))
+        await saveProjectDB({ forceEmptyOverwrite: false })
+        showPageEnhancement.value = true
+    } catch { notifyEditorError('Salve o projeto antes de preparar as melhorias.') }
+    finally { preparingPageEnhancement.value = false }
+}
+
+const preparePageEnhancement = async (pageId: string, mode: 'finish' | 'redesign' = 'redesign') => {
+    const page = project.pages.find((p: any) => p.id === pageId)
+    if (!page || !canvas.value || !fabric) throw new Error('Página indisponível.')
+    await flushLogoPreference()
+    let data: any
+    if (pageId === activePage.value?.id) data = canvas.value.toObject([...CANVAS_CUSTOM_PROPS])
+    else {
+        await ensurePageCanvasDataLoaded(pageId, { triggerSync: false })
+        data = page.canvasData
+    }
+    if (!data) throw new Error('Não foi possível carregar a página.')
+    const offscreen = new fabric.StaticCanvas(document.createElement('canvas'), { width: page.width, height: page.height, renderOnAddRemove: false })
+    try {
+        await offscreen.loadFromJSON(prepareCanvasDataForLoad(data, { silent: true }))
+        await document.fonts.ready
+        const outline = createStickerOutlineRuntime({ getCanvas: () => offscreen, renderNow: () => offscreen.renderAll() })
+        const restore = (objects: any[]) => {
+            for (const object of objects) {
+                if (isQuickLogoImage(object)) {
+                    applyLogoPreferenceToFabric(object, quickBusinessProfile.value.logoPreference)
+                    syncQuickLogoBackdrop(object, offscreen)
+                }
+                if (object.__stickerOutlineEnabled) outline.applyStickerOutlinePatch(object)
+                if (object.getObjects) restore(object.getObjects())
+            }
+        }
+        restore(offscreen.getObjects())
+        const frames = offscreen.getObjects().filter(isFrameLikeObject)
+        if (frames.length > 1) throw new Error('Esta página tem vários quadros. Separe os quadros em páginas antes de melhorar.')
+        const bounds = frames[0] ? getFrameBounds(frames[0]) : null
+        const { prepareEnhancedPageInput, prepareRedesignPageInput } = await import('~/utils/pageEnhancementRender')
+        const prepareInput = mode === 'redesign' ? prepareRedesignPageInput : prepareEnhancedPageInput
+        const { withProductZonesHiddenForOutput } = await loadExportShareController()
+        const context = { ...getExportShareContext(), canvas: { value: offscreen }, safeRequestRenderAll: () => offscreen.renderAll() }
+        return await withProductZonesHiddenForOutput(context, () => prepareInput({ canvas: offscreen, fabric, width: page.width, height: page.height,
+            ...(bounds ? { crop: { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height } } : {}) }))
+    } finally { await offscreen.dispose() }
+}
+
 // isExportableSelectionObject extraido para utils/exportSelectionHelpers.ts.
 
 const resolveExportableSelectedObject = (preferred?: any): any | null => {
@@ -18000,8 +18055,17 @@ const ensureTemplateProductZone = async () => {
         const existingZone = canvas.value.getObjects().find((object: any) =>
             isLikelyProductZone(object) && String(object.parentFrameId || '') === frameId);
         if (existingZone) {
-            // Uma imagem de fundo inserida depois pode esconder a zona vazia.
-            if ((existingZone.getObjects?.().length || 0) <= 1) {
+            // Cards são irmãos da zona no canvas. Contar somente seus filhos
+            // confundia zonas preenchidas com vazias e bloqueava os produtos.
+            const zoneId = String((existingZone as any)._customId || '');
+            const ownedCards = canvas.value.getObjects().filter((object: any) =>
+                object.isProductCard && String(object.parentZoneId || '') === zoneId);
+            if (ownedCards.length) {
+                const firstCardIndex = Math.min(...ownedCards.map((card: any) => canvas.value!.getObjects().indexOf(card)));
+                if (canvas.value.getObjects().indexOf(existingZone) > firstCardIndex) {
+                    canvas.value.moveObjectTo(existingZone, firstCardIndex);
+                }
+            } else if ((existingZone.getObjects?.().length || 0) <= 1) {
                 const outline = getZoneRect(existingZone);
                 outline?.set({ stroke: '#6d28d9', strokeWidth: 2, strokeDashArray: [10, 10], visible: true, opacity: 1 });
                 existingZone.dirty = true;
@@ -19269,7 +19333,7 @@ const hydrateQuickModeDataFromCanvas = () => {
         quickValidityMode.value = 'while_stocks'
         quickValidityWhileStocks.value = true
         quickShowValidity.value = true
-        quickValidityDateFormat.value = 'numeric'
+        quickValidityDateFormat.value = 'long'
         quickOfferScope.value = normalizeOfferValidityScope(null)
         quickModeDataVersion.value += 1
         return
@@ -30199,6 +30263,7 @@ const handleAutoOfferLayout = async () => {
             :key="String(project.id || '')"
             @mobile-section="quickMobileSection = $event"
             @export="exportQuickDesign"
+                @enhance="openPageEnhancement"
             :pages="project.pages"
             :current-page-id="currentPageId"
             :template-models="quickModeTemplateModels"
@@ -30280,7 +30345,9 @@ const handleAutoOfferLayout = async () => {
                 :selected-text="!!selectedObjectRef && quickModeNativeTextObjects.length === 1"
                 :apply-all-label="quickFontApplyAllLabel"
                 :busy="isParsingProducts || isProcessing"
+                :enhancement-busy="preparingPageEnhancement"
                 @export="exportQuickDesign"
+                @enhance="openPageEnhancement"
                 @zoom-in="quickModeZoomIn"
                 @zoom-out="quickModeZoomOut"
                 @zoom-fit="quickModeZoomFit"
@@ -30588,6 +30655,7 @@ const handleAutoOfferLayout = async () => {
                 v-if="isMobile && !isQuickMode"
                 class="absolute top-2 right-2 z-200 flex items-center gap-1"
               >
+                <button type="button" class="px-3 py-2 rounded-lg bg-amber-400 text-zinc-950 text-xs font-semibold" :disabled="preparingPageEnhancement" @click="openPageEnhancement">Melhorar páginas com IA</button>
                 <!-- Botao Exportar destacado (atalho rapido para ExportDialog) -->
                 <button
                   class="touch-target flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-500 hover:bg-violet-600 active:bg-violet-700 text-white shadow-lg border border-violet-400/40"
@@ -30978,7 +31046,8 @@ const handleAutoOfferLayout = async () => {
         {{ aiToast.message }}
       </div>
 
-      <div
+      <PageEnhancementDialog v-if="showPageEnhancement" :project-id="String(project.id)" :pages="project.pages" :prepare-page="preparePageEnhancement" @close="showPageEnhancement = false" />
+    <div
         v-if="isExportDownloadInProgress"
         class="fixed inset-0 z-(--z-toast) pointer-events-none flex items-center justify-center"
       >

@@ -1,7 +1,7 @@
 import { CopyObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
-import { isValidStoragePath } from '../../utils/storage-scope'
+import { assertClientStorageWriteAllowed, isValidStoragePath } from '../../utils/storage-scope'
 import { getOwnedProjectStorageRow } from '../../utils/project-repository'
 import { getS3Client } from '../../utils/s3'
 
@@ -165,6 +165,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const historyKey = `${historyPrefix}v${chosenSlot}.json`
+  assertClientStorageWriteAllowed(historyKey)
 
   await s3.send(
     new CopyObjectCommand({

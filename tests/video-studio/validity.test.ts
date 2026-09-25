@@ -9,15 +9,15 @@ describe('validade no rodapé do vídeo',()=>{
   const doc=newVideoDocument()
   doc.validityMode='single_day';doc.validityRange={start:'2026-09-24',end:'2026-09-24'}
   expect(videoValidityText(doc)).toBe('')
-  expect(validateVideoForGeneration(doc)).toContain('Escolha se a validade aparece em números ou por extenso.')
+  expect(validateVideoForGeneration(doc)).toContain('Escolha se a data aparece em números ou com o mês por extenso.')
   doc.validityDateFormat='long'
-  expect(videoValidityText(doc)).toBe('Ofertas válidas em vinte e quatro de setembro')
+  expect(videoValidityText(doc)).toBe('Ofertas válidas em 24 de setembro')
   doc.validityDateFormat='numeric'
   expect(videoValidityText(doc)).toBe('Ofertas válidas em 24/09/2026')
   doc.validityMode='date_range';doc.validityRange.end='2026-09-25'
   expect(videoValidityText(doc)).toBe('Ofertas válidas de 24/09/2026 a 25/09/2026')
   doc.validityDateFormat='long'
-  expect(videoValidityText(doc)).toBe('Ofertas válidas de vinte e quatro a vinte e cinco de setembro')
+  expect(videoValidityText(doc)).toBe('Ofertas válidas de 24 a 25 de setembro')
   doc.validityMode='none';doc.validity='DE 24/09/2026 A 24/09/2026'
   expect(videoValidityText(doc)).toBe('')
   expect(suggestVideoScripts(doc).at(-1)?.text).not.toContain('24/09/2026')
@@ -29,7 +29,7 @@ describe('validade no rodapé do vídeo',()=>{
   const saved=videoDocumentSchema.parse(JSON.parse(JSON.stringify(doc)))
   expect(saved.validityMode).toBe('date_range')
   expect(saved.validityDateFormat).toBe('long')
-  expect(videoValidityText(saved)).toBe('Ofertas válidas de vinte e quatro a vinte e cinco de setembro')
+  expect(videoValidityText(saved)).toBe('Ofertas válidas de 24 a 25 de setembro')
  })
  it('mostra o intervalo por extenso sem depender do fuso',()=>expect(videoValidityText({validity:'',validityRange:{start:'2026-09-22',end:'2026-09-23'}})).toBe('Ofertas válidas 22 a 23 de setembro de 2026'))
  it('mantém meses distintos e um único dia',()=>{

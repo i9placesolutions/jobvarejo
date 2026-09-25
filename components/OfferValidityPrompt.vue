@@ -20,8 +20,10 @@ const emit = defineEmits<{
   (event: 'confirm', payload: { startDate: string; endDate: string; mode: OfferValidityMode; whileStocks: boolean; dateFormat: OfferDateFormat; show: boolean }): void
 }>()
 
-const dateFormat = ref<OfferDateFormat>(normalizeOfferDateFormat(props.dateFormat))
-const dateFormatSelected = ref(false)
+const dateFormat = ref<OfferDateFormat>(
+  props.dateFormat === undefined ? 'long' : normalizeOfferDateFormat(props.dateFormat)
+)
+const dateFormatSelected = ref(dateFormat.value !== 'hidden')
 const startDate = ref(String(props.startDate || ''))
 const endDate = ref(String(props.endDate || ''))
 const mode = ref<OfferValidityMode>(normalizeOfferValidityMode(
@@ -32,7 +34,7 @@ const errorMessage = ref('')
 
 const validityPreview = computed(() => {
   if (dateFormat.value === 'hidden') return 'Nenhuma validade será exibida no encarte.'
-  if (mode.value !== 'while_stocks' && !dateFormatSelected.value) return 'Escolha numérico ou por extenso para ver o texto final.'
+  if (mode.value !== 'while_stocks' && !dateFormatSelected.value) return 'Escolha entre o formato numérico e o mês por extenso para ver o texto final.'
   const start = String(startDate.value || '').trim()
   const end = String(endDate.value || '').trim()
   if (mode.value === 'single_day' && !start && !end) {
@@ -49,7 +51,10 @@ const validityPreview = computed(() => {
   )
 })
 
-watch(() => props.dateFormat, value => { dateFormat.value = normalizeOfferDateFormat(value) })
+watch(() => props.dateFormat, value => {
+  dateFormat.value = value === undefined ? 'long' : normalizeOfferDateFormat(value)
+  dateFormatSelected.value = dateFormat.value !== 'hidden'
+})
 watch(() => props.startDate, value => { startDate.value = String(value || '') })
 watch(() => props.endDate, value => { endDate.value = String(value || '') })
 watch(() => props.mode, value => {
@@ -63,7 +68,7 @@ watch(() => props.whileStocks, value => {
 
 const selectMode = (value: unknown) => {
   mode.value = normalizeOfferValidityMode(value)
-  if (dateFormat.value === 'hidden') { dateFormat.value = 'numeric'; dateFormatSelected.value = false }
+  if (dateFormat.value === 'hidden') { dateFormat.value = 'long'; dateFormatSelected.value = true }
   // As três opções comerciais deste fluxo sempre limitam a oferta pelo estoque.
   whileStocks.value = true
   errorMessage.value = ''
@@ -87,7 +92,7 @@ const confirm = () => {
     return
   }
   if (mode.value !== 'while_stocks' && !dateFormatSelected.value) {
-    errorMessage.value = 'Escolha como a data deve aparecer: numérica ou por extenso.'
+    errorMessage.value = 'Escolha como a data deve aparecer: em formato numérico ou com o mês por extenso.'
     return
   }
   if (mode.value === 'single_day') {
@@ -196,8 +201,8 @@ const confirm = () => {
       <fieldset v-if="mode !== 'while_stocks'" class="offer-validity-prompt__format">
         <legend>Como exibir a data? <span>Obrigatório</span></legend>
         <div class="offer-validity-prompt__format-options">
-          <button type="button" :class="{'is-selected':dateFormatSelected && dateFormat === 'numeric'}" :aria-pressed="dateFormatSelected && dateFormat === 'numeric'" @click="dateFormat = 'numeric'; dateFormatSelected = true; errorMessage = ''"><strong>07/09/2026</strong><small>Numérico</small></button>
-          <button type="button" :class="{'is-selected':dateFormatSelected && dateFormat === 'long'}" :aria-pressed="dateFormatSelected && dateFormat === 'long'" @click="dateFormat = 'long'; dateFormatSelected = true; errorMessage = ''"><strong>sete de setembro</strong><small>Por extenso</small></button>
+          <button type="button" :class="{'is-selected':dateFormatSelected && dateFormat === 'numeric'}" :aria-pressed="dateFormatSelected && dateFormat === 'numeric'" @click="dateFormat = 'numeric'; dateFormatSelected = true; errorMessage = ''"><strong>{{ mode === 'date_range' ? '25/09/2026 a 26/09/2026' : '25/09/2026' }}</strong><small>Numérico</small></button>
+          <button type="button" :class="{'is-selected':dateFormatSelected && dateFormat === 'long'}" :aria-pressed="dateFormatSelected && dateFormat === 'long'" @click="dateFormat = 'long'; dateFormatSelected = true; errorMessage = ''"><strong>{{ mode === 'date_range' ? '25 a 26 de setembro' : '25 de setembro' }}</strong><small>Mês por extenso</small></button>
         </div>
       </fieldset>
         <div v-if="mode === 'single_day'" class="offer-validity-prompt__dates">

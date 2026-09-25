@@ -3967,7 +3967,7 @@ const getAssetDisplayName = (asset: any): string => {
                                     </div>
 
                                     <!-- Motivo -->
-                                    <p v-if="activeReviewRowMeta.product.imageReviewReason || activeReviewRowMeta.product.imageDecisionReason || activeReviewRowMeta.product.error" class="text-[10px] text-zinc-400 leading-relaxed">
+                                    <p v-if="activeReviewDecisionState === 'blocked'" class="text-[10px] text-zinc-400 leading-relaxed">
                                         Não foi possível encontrar uma imagem adequada. Busque novamente ou envie uma imagem do produto.
                                     </p>
                                 </div>
@@ -4289,7 +4289,7 @@ const getAssetDisplayName = (asset: any): string => {
                             <input v-model="removeBackgroundOnUpload" type="checkbox" :disabled="isReviewUploadSubmitting" class="accent-emerald-500" />
                             Remover fundo ao enviar
                         </label>
-                        <p v-if="activeReviewRowMeta.product.error || activeReviewRowMeta.product.imageReviewReason || activeReviewRowMeta.product.imageDecisionReason" role="alert" class="text-xs text-rose-300">Não foi possível encontrar uma imagem adequada. Busque novamente ou envie uma imagem do produto.</p>
+                        <p v-if="activeReviewDecisionState === 'blocked'" role="alert" class="text-xs text-rose-300">Não foi possível encontrar uma imagem adequada. Busque novamente ou envie uma imagem do produto.</p>
                         <div class="flex flex-wrap gap-1.5">
                             <button
                                 type="button"
