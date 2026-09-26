@@ -115,10 +115,14 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const id = String(query.id || '').trim()
   const templatesOnly = String(query.templates || '').trim() === '1'
+  const libraryRequest = String(query.library || '').trim() === '1'
   const rawSummary = Array.isArray(query.summary) ? query.summary[0] : query.summary
   const summaryMode = String(rawSummary || '').trim()
   const summaryOnly = summaryMode === '1'
   const dashboardSummary = summaryMode === 'dashboard'
+  if (libraryRequest && !id && (!templatesOnly || !summaryOnly)) {
+    throw createError({ statusCode: 400, statusMessage: 'Consulta da biblioteca inválida.' })
+  }
   const rawTemplateCategory = Array.isArray(query.category) ? query.category[0] : query.category
   const rawTemplateSubcategory = Array.isArray(query.subcategory) ? query.subcategory[0] : query.subcategory
   const templateCategory = templatesOnly
@@ -142,23 +146,38 @@ export default defineEventHandler(async (event) => {
     try {
       await ensureProjectTemplateColumn()
       const row = await pgOneOrNull<any>(
-        `select *
-         from public.projects
-         where id = $1
-           and user_id = $2
+        `select project.*
+         from public.projects project
+         where project.id = $1
+           and ${libraryRequest
+             ? `project.is_template = true
+                and (project.user_id = $2 or exists
+                     (select 1 from public.profiles owner
+                       where owner.id = project.user_id and owner.role in ('super_admin', 'admin')))`
+             : 'project.user_id = $2'}
          limit 1`,
         [id, user.id]
       )
       if (!row) throw createError({ statusCode: 404, statusMessage: 'Project not found' })
+      const projectResponse = libraryRequest
+        ? {
+            id: row.id,
+            name: row.name,
+            is_template: row.is_template,
+            template_config: row.template_config,
+            created_at: row.created_at,
+            updated_at: row.updated_at
+          }
+        : row
       return {
-        ...row,
+        ...projectResponse,
         template_category: getFlyerTemplateCategory(row?.template_config),
         template_subcategory: getFlyerTemplateSubcategory(row?.template_config),
         template_category_label: getFlyerTemplateCategoryLabel(row?.template_config),
-        preview_url: await resolveProjectPreviewUrl(row, user.id),
+        preview_url: await resolveProjectPreviewUrl(row, row.user_id),
         ...getProjectPreviewSize(row?.canvas_data),
         ...getProjectTemplateCounts(row?.canvas_data, row?.template_config),
-        canvas_data: await resolveProjectCanvasDataReadUrls(row?.canvas_data, user.id)
+        canvas_data: await resolveProjectCanvasDataReadUrls(row?.canvas_data, row.user_id)
       }
     } catch (error: any) {
       if (error?.statusCode) throw error
@@ -169,6 +188,7 @@ export default defineEventHandler(async (event) => {
   try {
     await ensureProjectTemplateColumn()
     const params: any[] = [user.id, templatesOnly]
+    if (libraryRequest) params.push(true)
     const categoryClauses: string[] = []
     if (templateCategory) {
       categoryClauses.push(`and lower(btrim(template_config ->> 'category')) = lower($${params.push(templateCategory)})`)
@@ -211,6 +231,7 @@ export default defineEventHandler(async (event) => {
     const summaryListSql = `
       select
         project.id,
+        project.user_id,
         project.name,
         project.created_at,
         project.updated_at,
@@ -294,7 +315,10 @@ export default defineEventHandler(async (event) => {
           ))::int as format_count
           from jsonb_array_elements(page_list.items) as page(value)
       ) as page_counts
-      where project.user_id = $1
+      where ${libraryRequest
+        ? `(project.user_id = $1 and not $3::boolean or $3::boolean and exists
+             (select 1 from public.profiles owner where owner.id = project.user_id and owner.role in ('super_admin', 'admin')))`
+        : 'project.user_id = $1'}
         and coalesce(project.is_template, false) = $2
         ${categoryClause}
       order by project.updated_at desc
@@ -458,6 +482,7 @@ export default defineEventHandler(async (event) => {
             }
           : getProjectTemplateCounts(p?.canvas_data, p?.template_config)
         const {
+          user_id: _ownerId,
           canvas_data: _canvasData,
           primary_thumbnail_url: _primaryThumbnailUrl,
           fallback_thumbnail_url: _fallbackThumbnailUrl,
@@ -485,8 +510,8 @@ export default defineEventHandler(async (event) => {
           template_category: getFlyerTemplateCategory(p?.template_config),
           template_subcategory: getFlyerTemplateSubcategory(p?.template_config),
           template_category_label: getFlyerTemplateCategoryLabel(p?.template_config),
-          preview_url: await resolveProjectPreviewUrl(previewProject, user.id, {
-            direct: !summaryOnly
+          preview_url: await resolveProjectPreviewUrl(previewProject, p.user_id || user.id, {
+            direct: !summaryOnly || libraryRequest
           }),
           ...previewSize,
           ...templateCounts

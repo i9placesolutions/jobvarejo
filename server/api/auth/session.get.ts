@@ -12,7 +12,8 @@ export default defineEventHandler(async (event) => {
       email: user.email,
       name: user.user_metadata?.name ?? null,
       avatar_url: user.user_metadata?.avatar_url ?? null,
-      role: user.role
+      role: user.role,
+      editorPermissions: user.editorPermissions
     }
   }
 })

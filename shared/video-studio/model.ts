@@ -60,14 +60,21 @@ export function parseOfferPrice(value: string): number | null {
   return Number.isFinite(n) && n > 0 && n <= 999999 ? n : null
 }
 export function displayPrice(value: string): string { const n = parseOfferPrice(value); return n === null ? value : n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) }
+function spokenPrice(value: string): string {
+  const amount = parseOfferPrice(value)
+  if (amount === null) return value
+  const wholeReais = Math.floor(amount)
+  // A arte conserva o preço exato; a locução fala apenas os reais inteiros.
+  return wholeReais > 0 ? `R$ ${wholeReais.toLocaleString('pt-BR')}` : 'menos de um real'
+}
 function spokenOfferName(offer: VideoOffer): string {
   const unit=offer.unit.trim().toLowerCase()
   if(!['kg','g','ml','l','un','pct'].includes(unit))return offer.name
   return offer.name.replace(new RegExp(`\\s+${unit}\\.?$`,'i'),'').trim()
 }
 export function suggestVideoScripts(doc: VideoDocument): VideoScript[] {
-  return [ {id:'intro', text:`${doc.campaign} no ${doc.brand.name}!`}, ...doc.offers.map(o=>({id:o.id, text:`${spokenOfferName(o)}, por R$ ${displayPrice(o.price)}${o.unit ? ` ${o.unit}` : ''}.${o.condition ? ` ${o.condition}.` : ''}`})),
-    {id:'outro', text:`Aproveite no ${doc.brand.name}!${doc.validityMode!=='none'&&doc.validity ? ` ${doc.validity}.` : ''}`} ]
+  return [ {id:'intro', text:doc.brand.name.trim()?`${doc.campaign} no ${doc.brand.name}!`:`${doc.campaign}!`}, ...doc.offers.map(o=>({id:o.id, text:`${spokenOfferName(o)}, por ${spokenPrice(o.price)}${o.unit ? ` ${o.unit}` : ''}.${o.condition ? ` ${o.condition}.` : ''}`})),
+    {id:'outro', text:`${doc.brand.name.trim()?`Aproveite no ${doc.brand.name}!`:'Aproveite as ofertas!'}${doc.validityMode!=='none'&&doc.validity ? ` ${doc.validity}.` : ''}`} ]
 }
 export function narrationScripts(doc: VideoDocument, text: string): VideoScript[] | null {
   const ids=['intro',...doc.offers.map(o=>o.id),'outro']
@@ -142,7 +149,6 @@ export function validateVideoForGeneration(doc: VideoDocument): string[] {
   if((doc.validityMode==='single_day'||doc.validityMode==='date_range')&&!doc.validityDateFormat)errors.push('Escolha se a data aparece em números ou com o mês por extenso.')
   if(!doc.validityMode&&doc.validityRange&&(!doc.validityRange.start||!doc.validityRange.end))errors.push('Informe a data inicial e a data final das ofertas.')
   if((doc.validityMode==='date_range'||!doc.validityMode)&&doc.validityRange?.start&&doc.validityRange?.end&&doc.validityRange.end<doc.validityRange.start)errors.push('A data final deve ser igual ou posterior à inicial.')
-  if(!doc.brand.name.trim())errors.push('Informe o nome da empresa.')
   if(!doc.offers.length)errors.push('Adicione pelo menos um produto.')
   for(const o of doc.offers){if(!o.name.trim()||parseOfferPrice(o.price)===null)errors.push('Confira o nome e o preço de todos os produtos.');if(!o.image)errors.push(`Adicione a imagem de ${o.name||'cada produto'}.`)}
   if(doc.voice.enabled){const ids=['intro',...doc.offers.map(o=>o.id),'outro'];if(ids.some(id=>!doc.scripts.find(s=>s.id===id)?.text.trim()))errors.push('Revise o texto da abertura, das ofertas e do encerramento.');if(doc.narrationText!==undefined&&JSON.stringify(narrationScripts(doc,doc.narrationText))!==JSON.stringify(doc.scripts))errors.push(`Mantenha ${ids.length} linhas no roteiro: abertura, uma por produto e encerramento.`)}

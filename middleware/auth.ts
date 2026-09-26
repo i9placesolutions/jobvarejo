@@ -46,4 +46,25 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
     return navigateTo('/auth/login', { replace: true })
   }
+
+  const path = to.path
+  const role = auth.user.value?.role
+  if (role === 'user') {
+    const permitted = path === '/' || path === '/quick-editor' || path === '/business-profile' ||
+      path === '/profile' || path.startsWith('/videos') || path.startsWith('/cartazista') ||
+      (path.startsWith('/editor/') && String(to.query.quick || '') === '1')
+    if (!permitted) return navigateTo('/', { replace: true })
+  }
+  if (role === 'editor') {
+    if (path.startsWith('/admin/')) return navigateTo('/', { replace: true })
+    const area = path.startsWith('/videos') ? 'videos'
+      : path.startsWith('/cartazista') ? 'cartazes'
+        : path.startsWith('/art-studio') ? 'artes'
+          : path.startsWith('/radio-indoor') ? 'radio'
+            : path.startsWith('/builder') ? 'builder'
+              : path === '/business-profile' ? 'loja'
+                : ['/quick-editor', '/flyer-templates', '/label-templates', '/card-configurations', '/zone-structures'].includes(path) || path.startsWith('/editor/') ? 'encartes' : null
+    if (area && !auth.can(area)) return navigateTo('/', { replace: true })
+    if (!area && path !== '/' && path !== '/profile') return navigateTo('/', { replace: true })
+  }
 })

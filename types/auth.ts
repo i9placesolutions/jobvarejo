@@ -1,5 +1,7 @@
+import type { EditorPermissions } from '~/shared/access-control'
+
 // User roles
-export type UserRole = 'super_admin' | 'admin' | 'user'
+export type UserRole = 'super_admin' | 'admin' | 'editor' | 'user'
 
 // Profile interface
 export interface Profile {
@@ -8,6 +10,7 @@ export interface Profile {
   name: string | null
   avatar_url: string | null
   role: UserRole
+  editorPermissions?: EditorPermissions
   created_at: string
   updated_at: string
 }
@@ -23,6 +26,7 @@ export interface UserWithProfile {
     avatar_url: string | null
   }
   role: UserRole
+  editorPermissions?: EditorPermissions
 }
 
 // Session state

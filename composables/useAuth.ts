@@ -1,5 +1,6 @@
 import type { UserWithProfile, AuthState } from '~/types/auth'
 import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
+import { hasEditorPermission, normalizeEditorPermissions, type AccessAction, type AccessArea } from '~/shared/access-control'
 
 const AUTH_COOKIE = 'authenticated'
 
@@ -28,7 +29,8 @@ const toUser = (user: any): UserWithProfile | null => {
       name: metadataName == null ? null : String(metadataName),
       avatar_url: metadataAvatarUrl == null ? null : String(metadataAvatarUrl)
     },
-    role: (String(user.role || 'user') as UserWithProfile['role'])
+    role: (String(user.role || 'user') as UserWithProfile['role']),
+    editorPermissions: normalizeEditorPermissions(user.editorPermissions)
   }
 }
 
@@ -155,6 +157,13 @@ export const useAuth = () => {
     state.value.user?.role === 'super_admin' ||
     state.value.user?.role === 'admin'
   )
+  const isStaff = computed(() => isAdmin.value || state.value.user?.role === 'editor')
+  const can = (area: AccessArea, action: AccessAction = 'view'): boolean => {
+    const role = state.value.user?.role
+    if (role === 'super_admin' || role === 'admin') return true
+    if (role === 'editor') return hasEditorPermission(state.value.user?.editorPermissions || {}, area, action)
+    return role === 'user' && ['encartes', 'videos', 'cartazes', 'loja'].includes(area)
+  }
 
   return {
     user: computed(() => state.value.user),
@@ -166,6 +175,8 @@ export const useAuth = () => {
     signOut,
     hasRole,
     isSuperAdmin,
-    isAdmin
+    isAdmin,
+    isStaff,
+    can
   }
 }

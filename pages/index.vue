@@ -304,7 +304,7 @@ onMounted(async () => {
   await auth.getSession()
   
   // Global click handlers
-  if (process.client && auth.isSuperAdmin.value) {
+  if (process.client && auth.isAdmin.value) {
     document.addEventListener('click', handleContextMenusOutsideClick)
     document.addEventListener('click', handleNotificationsOutsideClick)
   }
@@ -317,13 +317,13 @@ onUnmounted(() => {
   }
 })
 
-// O painel de biblioteca continua reservado ao super admin. Clientes entram
+// O painel de biblioteca é reservado à administração. Clientes entram
 // diretamente no hub das soluções, sem carregar projetos/pastas desnecessários.
 watch(() => ({
   userId: auth.user.value?.id || null,
-  isSuperAdmin: auth.isSuperAdmin.value
-}), async ({ userId, isSuperAdmin }) => {
-  if (userId && isSuperAdmin) {
+  isAdmin: auth.isAdmin.value
+}), async ({ userId, isAdmin }) => {
+  if (userId && isAdmin) {
     if (isDashboardBootstrapping.value) return
     // Guard against duplicate bootstrap runs for the same user id.
     if (lastBootstrappedUserId.value === userId && projects.value.length > 0) return
@@ -1412,9 +1412,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 
 <template>
-  <ClientWorkspace v-if="auth.isAuthenticated.value && !auth.isSuperAdmin.value" />
+  <ClientWorkspace v-if="auth.isAuthenticated.value && !auth.isAdmin.value" />
 
-  <template v-else-if="auth.isSuperAdmin.value">
+  <template v-else-if="auth.isAdmin.value">
   <div :class="['dash-root dash-admin h-screen w-screen overflow-hidden flex flex-col', dashMobile ? 'dash-root-mobile' : '']">
     <div class="flex-1 w-full h-full max-w-480 mx-auto overflow-hidden flex flex-col relative">
 
@@ -1451,6 +1451,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
         </div>
         <div class="flex items-center gap-1.5">
+          <AccountSwitcher v-if="!dashMobile" />
           <button
             ref="notificationButtonRef"
             @click.stop="toggleNotifications"
@@ -1460,13 +1461,13 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <Bell class="w-[18px] h-[18px]" />
             <span v-if="unreadCount > 0" class="dash-notification-dot absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-white"></span>
           </button>
-          <div v-if="user" class="dash-user-menu flex items-center gap-2 px-1.5 sm:px-2.5 py-1.5 rounded-2xl sm:rounded-xl cursor-pointer transition-all group">
+          <div v-if="auth.user.value" class="dash-user-menu flex items-center gap-2 px-1.5 sm:px-2.5 py-1.5 rounded-2xl sm:rounded-xl cursor-pointer transition-all group">
             <div class="dash-user-avatar w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden">
-              <img v-if="user.avatar_url" :src="user.avatar_url" :alt="user.name" class="w-full h-full object-cover" />
-              <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
+              <img v-if="auth.user.value.avatar_url" :src="auth.user.value.avatar_url" :alt="auth.user.value.name || 'Administrador'" class="w-full h-full object-cover" />
+              <span v-else>{{ auth.user.value.name?.charAt(0) || 'U' }}</span>
             </div>
-            <span v-if="!dashMobile" class="dash-user-role">Super admin</span>
-            <span v-if="!dashMobile" class="dash-user-name text-[13px] font-medium max-w-35 truncate transition-colors">{{ formatUserName(user?.name) }}</span>
+            <span v-if="!dashMobile" class="dash-user-role">{{ auth.isSuperAdmin.value ? 'Super admin' : 'Administrador' }}</span>
+            <span v-if="!dashMobile" class="dash-user-name text-[13px] font-medium max-w-35 truncate transition-colors">{{ formatUserName(auth.user.value.name) }}</span>
             <ChevronDown v-if="!dashMobile" class="w-3.5 h-3.5 transition-colors" />
           </div>
         </div>
@@ -1523,6 +1524,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <div class="px-2 pb-3 mt-auto shrink-0">
               <div class="sidebar-divider mx-1 mb-2"></div>
               <p class="sidebar-section-label px-2 mb-1">Configuração</p>
+              <AccountSwitcher v-if="dashMobile" />
+              <NuxtLink to="/admin/users" class="dash-nav-item w-full" @click="showMobileDrawer = false"><User class="w-3.5 h-3.5 shrink-0"/><span class="flex-1 text-left">Usuários e acessos</span></NuxtLink>
               <NuxtLink to="/admin/musicgpt" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Mic2 class="w-3.5 h-3.5 shrink-0 text-violet-400"/><span class="flex-1 text-left">MusicGPT</span></NuxtLink>
               <NuxtLink to="/admin/storage" class="dash-nav-item w-full" @click="showMobileDrawer = false"><HardDrive class="w-3.5 h-3.5 shrink-0 text-slate-400"/><span class="flex-1 text-left">Storage</span></NuxtLink>
               <div class="sidebar-divider mx-1 my-2"></div>
@@ -1590,6 +1593,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <div class="mt-auto px-3 pb-3 shrink-0">
             <div class="sidebar-divider mx-1 mb-2"></div>
             <p class="sidebar-section-label px-1 mb-2">Configuração</p>
+            <NuxtLink to="/admin/users" class="dash-nav-item w-full" aria-label="Administrar usuários e acessos"><User class="w-4 h-4 shrink-0"/><span class="flex-1 text-left">Usuários e acessos</span></NuxtLink>
             <NuxtLink to="/admin/musicgpt" class="dash-nav-item w-full" aria-label="Abrir MusicGPT">
               <Mic2 class="w-4 h-4 shrink-0 text-violet-400" />
               <span class="flex-1 text-left">MusicGPT</span>

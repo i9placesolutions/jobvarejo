@@ -1,36 +1,23 @@
 import type { H3Event } from 'h3'
 import type { UserRole } from '~/types/auth'
+import { assertSuperAdminRole } from './role-guard'
 import { getProfileById } from './auth-db'
 import { verifySessionToken } from './session-token'
 import { verifyBuilderSessionToken } from './builder-session-token'
+import { assertRoleApiAccess } from './access-policy'
+import { normalizeEditorPermissions, type EditorPermissions } from '../../shared/access-control'
+import { getRequestURL } from 'h3'
 
-const _profileCache = new Map<string, { id: string; email: string; role: string; name: string | null; avatar_url: string | null; expiresAt: number }>()
-const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
-
-const getCachedProfile = async (id: string) => {
-  const now = Date.now()
-  const cached = _profileCache.get(id)
-  if (cached && cached.expiresAt > now) return cached
-  _profileCache.delete(id)
-  const profile = await getProfileById(id)
-  if (profile?.id) {
-    _profileCache.set(profile.id, {
-      id: profile.id,
-      email: String(profile.email),
-      role: String(profile.role || 'user'),
-      name: profile.name ?? null,
-      avatar_url: profile.avatar_url ?? null,
-      expiresAt: now + PROFILE_CACHE_TTL_MS
-    })
-    return _profileCache.get(profile.id)!
-  }
-  return null
-}
+const ACTIVE_ACCOUNT_COOKIE = 'active-account-id'
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export interface AuthenticatedUser {
   id: string
+  actorId: string
+  accountId: string
   email: string
   role: UserRole
+  editorPermissions: EditorPermissions
   user_metadata: {
     name: string | null
     avatar_url: string | null
@@ -63,6 +50,8 @@ const getBearerToken = (event: H3Event): string | null => {
 }
 
 export const requireAuthenticatedUser = async (event: H3Event): Promise<AuthenticatedUser> => {
+  const existing = event.context.authenticatedUser as AuthenticatedUser | undefined
+  if (existing) return existing
   const token = getBearerToken(event)
   if (!token) {
     throw createError({
@@ -79,23 +68,50 @@ export const requireAuthenticatedUser = async (event: H3Event): Promise<Authenti
     })
   }
 
-  const profile = await getCachedProfile(payload.sub)
-  if (!profile?.id || !profile?.email) {
+  // Role, active status and editor permissions are read on every request so
+  // disabling or demoting a user takes effect even with an unexpired JWT.
+  const profile = await getProfileById(payload.sub)
+  if (!profile?.id || !profile?.email || profile.is_active === false) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Invalid or expired auth token'
     })
   }
 
-  return {
-    id: profile.id,
+  const path = getRequestURL(event).pathname
+  const permissions = normalizeEditorPermissions(profile.editor_permissions)
+  await assertRoleApiAccess(event, profile.role, permissions)
+
+  let accountId = profile.id
+  const ownIdentityRoute = path.startsWith('/api/auth/') || path.startsWith('/api/admin/') ||
+    path.startsWith('/api/access/') || path === '/api/notifications' || path === '/api/profiles' ||
+    (path === '/api/profile' && String(getQuery(event).self || '') === '1')
+  if (!ownIdentityRoute && (profile.role === 'super_admin' || profile.role === 'admin' || profile.role === 'editor')) {
+    const selected = String(getCookie(event, ACTIVE_ACCOUNT_COOKIE) || '').trim()
+    if (selected) {
+      if (!UUID_PATTERN.test(selected)) throw createError({ statusCode: 403, statusMessage: 'Conta selecionada inválida.' })
+      const target = await getProfileById(selected)
+      if (!target?.id || target.role !== 'user' || target.is_active === false) {
+        throw createError({ statusCode: 403, statusMessage: 'Conta selecionada indisponível.' })
+      }
+      accountId = target.id
+    }
+  }
+
+  const user: AuthenticatedUser = {
+    id: accountId,
+    actorId: profile.id,
+    accountId,
     email: String(profile.email),
-    role: (String(profile.role || 'user') as UserRole),
+    role: profile.role,
+    editorPermissions: permissions,
     user_metadata: {
       name: profile.name ?? null,
       avatar_url: profile.avatar_url ?? null
     }
   }
+  event.context.authenticatedUser = user
+  return user
 }
 
 export const requireAdminUser = async (
@@ -120,15 +136,18 @@ export const requireAdminUser = async (
     try { decoded = decodeURIComponent(String(builderTokenRaw)).trim() } catch { decoded = String(builderTokenRaw).trim() }
     const payload = verifyBuilderSessionToken(decoded)
     if (payload?.isAdmin && payload?.sub) {
-      const profile = await getCachedProfile(payload.sub)
-      if (profile?.id) {
+      const profile = await getProfileById(payload.sub)
+      if (profile?.id && profile.is_active !== false) {
         const role = String(profile.role || 'user') as UserRole
         if (role === 'admin' || role === 'super_admin') {
           return {
             user: {
               id: profile.id,
+              actorId: profile.id,
+              accountId: profile.id,
               email: String(profile.email),
               role,
+              editorPermissions: normalizeEditorPermissions(profile.editor_permissions),
               user_metadata: { name: profile.name ?? null, avatar_url: profile.avatar_url ?? null }
             },
             role
@@ -139,4 +158,10 @@ export const requireAdminUser = async (
   }
 
   throw createError({ statusCode: 401, statusMessage: 'Admin access required' })
+}
+
+export const requireSuperAdminUser = async (event: H3Event): Promise<AuthenticatedUser> => {
+  const user = await requireAuthenticatedUser(event)
+  assertSuperAdminRole(user.role)
+  return user
 }

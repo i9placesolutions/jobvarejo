@@ -35,6 +35,8 @@ definePageMeta({
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuth()
+const exitPath = computed(() => auth.user.value?.role === 'user' ? '/' : '/flyer-templates')
 const { getApiAuthHeaders } = useApiAuth()
 
 const isProjectsLoading = ref(false)
@@ -217,7 +219,8 @@ const openFromTemplate = async (templateId: string, name?: string) => {
   const projectId = await instantiateFlyerTemplate({
     headers,
     templateId,
-    name
+    name,
+    library: true
   })
   await router.replace(`/editor/${projectId}?quick=1`)
 }
@@ -253,7 +256,7 @@ const loadPicker = async () => {
     const headers = await getApiAuthHeaders()
     // A aba inicial é a de modelos. Carregar todos os trabalhos em paralelo
     // bloqueava a primeira prévia quando a conta tinha muitos encartes.
-    const models = await listFlyerTemplates(headers)
+    const models = await listFlyerTemplates(headers, { library: true })
     templates.value = models
   } catch (error: any) {
     errorMessage.value = String(
@@ -325,14 +328,14 @@ onMounted(() => {
           <button
             type="button"
             class="inline-flex items-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
-            @click="navigateTo('/flyer-templates')"
+            @click="navigateTo(exitPath)"
           >
             <ArrowLeft class="h-4 w-4" />
-            <span class="hidden sm:inline">Voltar para Encartes</span>
+            <span class="hidden sm:inline">{{ auth.user.value?.role === 'user' ? 'Voltar ao início' : 'Voltar para Encartes' }}</span>
             <span class="sm:hidden">Voltar</span>
           </button>
           <span class="hidden h-6 w-px bg-slate-200 sm:block" aria-hidden="true" />
-          <NuxtLink to="/flyer-templates" class="hidden items-center gap-2 text-sm font-bold tracking-tight text-slate-800 sm:inline-flex">
+          <NuxtLink :to="exitPath" class="hidden items-center gap-2 text-sm font-bold tracking-tight text-slate-800 sm:inline-flex">
             <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-600/20">
               <Zap class="h-4 w-4" />
             </span>
@@ -534,7 +537,7 @@ onMounted(() => {
             <RefreshCw class="h-4 w-4" />
             Tentar novamente
           </button>
-          <button type="button" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm text-slate-600 transition hover:bg-slate-50" @click="navigateTo('/flyer-templates')">Sair</button>
+          <button type="button" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm text-slate-600 transition hover:bg-slate-50" @click="navigateTo(exitPath)">Sair</button>
         </div>
       </div>
 

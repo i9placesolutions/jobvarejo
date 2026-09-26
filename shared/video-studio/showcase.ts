@@ -25,7 +25,7 @@ const rand=(i:number)=>{const x=Math.sin(i*91.17+37.4)*41789.43;return x-Math.fl
 const type:React.CSSProperties={fontFamily:'ShowcaseCondensed',fontWeight:800,lineHeight:1.02,color:'var(--video-text-color, #fff)',textAlign:'center'}
 const fit=(s:string,max:number,limit:number)=>Math.max(max*.55,Math.min(max,max*Math.sqrt(limit/Math.max(limit,s.length))))
 const line=(text:string,x:number,y:number,w:number,size:number,style:React.CSSProperties={})=>div({...box(x,y,w),...type,fontSize:size,...style},text)
-const phone=(v:string)=>{const n=v.replace(/\D/g,'');return n.length===11?`${n.slice(0,2)} ${n.slice(2,7)} ${n.slice(7)}`:n.length===10?`${n.slice(0,2)} ${n.slice(2,6)} ${n.slice(6)}`:v}
+const phone=(v:string)=>{const n=v.replace(/\D/g,'');return n.length===11?`(${n.slice(0,2)}) ${n.slice(2,7)}-${n.slice(7)}`:n.length===10?`(${n.slice(0,2)}) ${n.slice(2,6)}-${n.slice(6)}`:v}
 
 export function SocialIcon({kind,size=70}:{kind:'instagram'|'whatsapp'|'pin'|'phone'|'web'|'calendar';size?:number}){
  const paths:Record<string,string>={calendar:'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2 M7 2v4 M17 2v4 M3 10h18 M7 14h2 M12 14h2 M7 18h2',instagram:'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M18 6h.01',whatsapp:'M20 11.5a8.5 8.5 0 0 1-12.7 7.4L2 21l2.1-5.3A8.5 8.5 0 1 1 20 11.5 M8 7.8c.6 3.2 3 5.6 6.2 6.3l1.2-1.6 2 1.1c-.2 1.7-1.1 2.5-2.5 2.3C10.1 15.2 6.3 11.7 6 8c-.1-1.3.8-2 2-2l1 2-1 1',pin:'M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0z M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0',phone:'M5 3h4l2 5-3 2a16 16 0 0 0 6 6l2-3 5 2v4c0 2-2 3-4 2C10 19 5 14 3 7c-1-2 0-4 2-4z',web:'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0 M2 12h20 M12 2c5 6 5 14 0 20 M12 2c-5 6-5 14 0 20'}
@@ -36,7 +36,7 @@ export function Logo({props,width,height}:{props:VideoRenderProps;width:number;h
  const src=props.media[props.document.brand.logo],sticker=props.document.brand.logoStyle!=='clean'
  const style:React.CSSProperties={width:'100%',height:'100%',objectFit:'contain',filter:sticker?'drop-shadow(0 8px 6px #001b1b60)':'none'}
  return src?div({width,height,display:'flex',justifyContent:'center',alignItems:'center'},sticker?h(StickerLogo,{src,style}):h(Img,{src,style})):
- div({...type,fontSize:fit(props.document.brand.name,92,22),height,display:'grid',placeItems:'center',textShadow:'0 4px 8px #001d14'},props.document.brand.name)
+ props.document.brand.name.trim()?div({...type,fontSize:fit(props.document.brand.name,92,22),height,display:'grid',placeItems:'center',textShadow:'0 4px 8px #001d14'},props.document.brand.name):null
 }
 function Badge({props,width,height}:{props:VideoRenderProps;width:number;height:number}){
  return props.document.campaign.trim().toLocaleUpperCase('pt-BR')==='FECHA MÊS'?h(Img,{src:(props.templateBase||'/video-studio/templates')+'/fecha-mes-emerald-v2.png',style:{width,height,objectFit:'contain',filter:'drop-shadow(0 16px 12px #001e1ca0)'}}):div({width,height,display:'grid',placeItems:'center',...type,fontSize:fit(props.document.campaign,180,18),color:'#ffda35',textShadow:'0 6px #8c5810, 0 12px #503008, 0 18px 18px #0008'},props.document.campaign)

@@ -47,6 +47,8 @@ function resetScene(){if(doc.value.layoutEdits?.[previewFormat.value])delete doc
 watch(editScene,()=>editElement.value=editScene.value==='outro'?'logo':editScene.value==='intro'?'seal':'product-0')
 
 const projects=ref<any[]>([]),jobs=ref<any[]>([]),assets=ref<any[]>([]),voices=ref<any[]>([]),sources=ref<any[]>([])
+const establishments=ref<{id:string;label:string}[]>([]),selectedEstablishmentId=ref(''),establishmentsLoaded=ref(false),establishmentsLoading=ref(false)
+let establishmentsPromise:Promise<void>|undefined
 const workerReady=ref(false),musicgpt=ref(false),elevenlabs=ref(false),loading=ref(true),busy=ref(''),saving=ref(false),notice=ref(''),error=ref(''),savedAt=ref('')
 const previewFormat=ref<VideoFormat>('vertical'),advanced=ref(false),pronunciationOpen=ref(false),normalized=ref<any[]>([]),previewError=ref('')
 const showListImport=ref(false)
@@ -170,7 +172,7 @@ async function prepareModel(themeId:string,source?:VideoDocument){
  if(autosave)clearTimeout(autosave)
  switchingProject=true
  try{
-  projectId.value='';revision.value=0;jobs.value=[];scriptSource.value='';legacyNarrationText.value=null;editingLayout.value=false
+  projectId.value='';revision.value=0;jobs.value=[];scriptSource.value='';legacyNarrationText.value=null;editingLayout.value=false;selectedEstablishmentId.value=''
   const draft=newVideoFromTemplate(themeId)
   if(!accountBrand){const r=await $fetch<any>('/api/videos/brand',{method:'POST'});accountBrand={...r.brand,logoStyle:'sticker'};if(r.warning)notice.value=r.warning}
   draft.brand=JSON.parse(JSON.stringify(accountBrand))
@@ -200,6 +202,7 @@ async function useSelectedTemplate(){await action('Preparando seu vídeo',async(
 })}
 async function openVideo(id:string){await action('Abrindo vídeo',async()=>{
  if(autosave)clearTimeout(autosave)
+ selectedEstablishmentId.value=''
  const p=await $fetch<any>(`/api/videos/projects/${id}`)
  if(isVideoModel(p)){view.value='library';libraryTab.value='models';await prepareModel(p.document.theme,p.document);await navigateTo('/videos',{replace:true});return}
  switchingProject=true
@@ -212,8 +215,8 @@ function addOffer(){if(doc.value.offers.length<6)doc.value.offers.push({id:crypt
 function moveOffer(index:number,delta:number){const next=index+delta;if(next<0||next>=doc.value.offers.length)return;const item=doc.value.offers.splice(index,1)[0]!;doc.value.offers.splice(next,0,item);const map=new Map(doc.value.scripts.map(s=>[s.id,s]));doc.value.scripts=['intro',...doc.value.offers.map(o=>o.id),'outro'].flatMap(id=>map.has(id)?[map.get(id)!]:[]);if(doc.value.narrationText!==undefined)doc.value.narrationText=doc.value.scripts.map(s=>s.text).join('\n')}
 function removeOffer(index:number){const removed=doc.value.offers.splice(index,1)[0];if(!removed)return;doc.value.scripts=doc.value.scripts.filter(s=>s.id!==removed.id);if(doc.value.narrationText!==undefined)doc.value.narrationText=doc.value.scripts.map(s=>s.text).join('\n')}
 async function upload(event:Event,target:string){const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file)return;await action('Enviando arquivo',async()=>{const body=new FormData();body.append('file',file);body.append('kind',target==='music'?'music':'image');const asset=await $fetch<any>('/api/videos/assets',{method:'POST',body});if(target==='logo')doc.value.brand.logo=asset.id;else if(target==='music')doc.value.audio.music=asset.id;else{const offer=doc.value.offers.find(o=>o.id===target);if(offer){offer.image=asset.id;offer.imageAspectRatio=asset.aspectRatio}}await refreshAssets();await save();if(target==='music')notice.value='Música aplicada e salva em Minha biblioteca para seus próximos vídeos.'});input.value=''}
-async function suggestWithAI(){await action('Sugerindo roteiro com IA',async()=>{const source=videoSpeechSource(doc.value);const r=await $fetch<any>('/api/videos/script',{method:'POST',body:doc.value});if(source!==videoSpeechSource(doc.value))throw Error('As ofertas mudaram durante a sugestão. Solicite novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');legacyNarrationText.value=null;scriptSource.value='';notice.value='Roteiro sugerido por IA com números e unidades por extenso. Confira antes de gerar o áudio.'})}
-async function suggest(){await action('Preparando roteiro',async()=>{const source=videoSpeechSource(doc.value),scripts=suggestVideoScripts(doc.value);const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts,pronunciations:doc.value.voice.pronunciations}});if(source!==videoSpeechSource(doc.value))throw Error('As ofertas mudaram durante a sugestão. Solicite novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');legacyNarrationText.value=null;scriptSource.value='';normalized.value=[];notice.value='Texto preparado por extenso. Revise nomes, preços e condições antes de confirmar.'})}
+async function suggestWithAI(){await action('Sugerindo roteiro com IA',async()=>{const source=videoSpeechSource(doc.value);const r=await $fetch<any>('/api/videos/script',{method:'POST',body:doc.value});if(source!==videoSpeechSource(doc.value))throw Error('As ofertas mudaram durante a sugestão. Solicite novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');legacyNarrationText.value=null;scriptSource.value='';notice.value='Roteiro sugerido por IA, com preços em reais inteiros e sem centavos. Confira antes de gerar o áudio.'})}
+async function suggest(){await action('Preparando roteiro',async()=>{const source=videoSpeechSource(doc.value),scripts=suggestVideoScripts(doc.value);const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts,pronunciations:doc.value.voice.pronunciations}});if(source!==videoSpeechSource(doc.value))throw Error('As ofertas mudaram durante a sugestão. Solicite novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');legacyNarrationText.value=null;scriptSource.value='';normalized.value=[];notice.value='Texto preparado por extenso, com preços em reais inteiros e sem centavos. Revise nomes e condições antes de confirmar.'})}
 async function previewLegacyNarration(){if(doc.value.narrationText!==undefined||!doc.value.scripts.length)return;try{const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts:doc.value.scripts,pronunciations:doc.value.voice.pronunciations}});legacyNarrationText.value=r.scripts.map((s:{text:string})=>s.text).join('\n')}catch{legacyNarrationText.value=null}}
 async function normalize(){await action('Preparando a pronúncia',async()=>{const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts:doc.value.scripts,pronunciations:doc.value.voice.pronunciations}});normalized.value=r.scripts})}
 async function confirmScript(){if(narrationInvalid.value){error.value=`Mantenha ${doc.value.offers.length+2} linhas no campo: abertura, uma por produto e encerramento.`;return}if(doc.value.narrationText===undefined){scriptSource.value=videoSpeechSource(doc.value);notice.value='Roteiro conferido.';return}await action('Preparando texto da locução',async()=>{const source=videoSpeechSource(doc.value),draft=doc.value.narrationText;const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts:doc.value.scripts,pronunciations:doc.value.voice.pronunciations}});if(source!==videoSpeechSource(doc.value)||draft!==doc.value.narrationText)throw Error('As ofertas ou o texto mudaram durante a preparação. Confira o roteiro novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');scriptSource.value=source;notice.value='Roteiro por extenso conferido.'})}
@@ -221,7 +224,35 @@ async function generate(kind:'voice'|'render'|'music'){if(kind==='render'){step.
 async function chooseSource(){await action('Lendo ofertas',async()=>{const r=await $fetch<any>('/api/videos/import',{method:'POST',body:{projectId:sourceId.value}});sourceOffers.value=r.items;selectedOffers.value=[];notice.value=r.warning||''})}
 async function importOffers(){await action('Importando produtos',async()=>{const r=await $fetch<any>('/api/videos/import',{method:'POST',body:{projectId:sourceId.value,indices:selectedOffers.value.slice(0,6-doc.value.offers.length)}});doc.value.offers.push(...r.offers);showImport.value=false;notice.value=r.warning||'Produtos importados. Confira preços e unidades.';await refreshAssets();await save()})}
 async function receiveList(offers:VideoDocument['offers']){doc.value.offers.push(...offers.slice(0,6-doc.value.offers.length));showListImport.value=false;notice.value=offers.some(o=>!o.image)?'Lista importada. Confira preços e complete as fotos pendentes.':'Lista e fotos importadas. Confira preços, unidades e condições.';await refreshAssets();await action('Salvando lista',save)}
-async function refreshBrand(){await action('Atualizando dados da loja',async()=>{const r=await $fetch<any>('/api/videos/brand',{method:'POST'});doc.value.brand={...r.brand,logoStyle:doc.value.brand.logoStyle||'sticker'};notice.value=r.warning||'Dados atualizados a partir do seu cadastro.';await refreshAssets();await save()})}
+async function refreshBrand(){selectedEstablishmentId.value='';await action('Atualizando dados da loja',async()=>{const r=await $fetch<any>('/api/videos/brand',{method:'POST'});doc.value.brand={...r.brand,logoStyle:doc.value.brand.logoStyle||'sticker'};notice.value=r.warning||'Dados atualizados a partir do seu cadastro.';await refreshAssets();if(projectId.value)await save()})}
+async function loadSuperAdminEstablishments(){
+ if(!auth.isSuperAdmin.value||establishmentsLoaded.value)return
+ if(!establishmentsPromise){
+  establishmentsLoading.value=true
+  const request=$fetch<any>('/api/admin/establishments').then(result=>{
+   establishments.value=Array.isArray(result.establishments)?result.establishments:[]
+   establishmentsLoaded.value=true
+  }).finally(()=>{
+   establishmentsLoading.value=false
+   if(establishmentsPromise===request)establishmentsPromise=undefined
+  })
+  establishmentsPromise=request
+ }
+ await establishmentsPromise
+}
+async function applySelectedEstablishment(){
+ const establishmentId=selectedEstablishmentId.value
+ if(!auth.isSuperAdmin.value||!establishmentId)return
+ await action('Aplicando estabelecimento',async()=>{
+  const result=await $fetch<any>(`/api/admin/establishments/${encodeURIComponent(establishmentId)}/brand`,{method:'POST'})
+  doc.value.brand={...result.brand,logoStyle:doc.value.brand.logoStyle||'sticker'}
+  await refreshAssets()
+  if(projectId.value)await save()
+  const label=establishments.value.find(item=>item.id===establishmentId)?.label||'estabelecimento'
+  notice.value=result.warning||`Dados de ${label} aplicados somente a este vídeo.`
+ })
+}
+watch(()=>view.value==='editor'&&auth.isSuperAdmin.value,active=>{if(active)void loadSuperAdminEstablishments().catch(sayError)})
 const validityMode=computed(()=>doc.value.validityMode|| (doc.value.validityRange ? doc.value.validityRange.start===doc.value.validityRange.end?'single_day':'date_range' : doc.value.validity?'custom':'none'))
 const validityPreview=computed(()=>videoValidityText(doc.value))
 const validityChoices=[
@@ -237,7 +268,6 @@ function changeDate(key:'start'|'end',event:Event){doc.value.validityRange ||= {
 function changeValidityDateFormat(format:'numeric'|'long'){doc.value.validityDateFormat=format;updateValidity();invalidateValidityNarration()}
 async function goStep(target:number){
  if(target>step.value){
-  if(!doc.value.brand.name.trim()){step.value=0;error.value='Informe o nome da empresa para continuar.';return}
   if(target>1){const productIssues=validateVideoForGeneration({...doc.value,voice:{...doc.value.voice,enabled:false}});if(productIssues.length){step.value=1;error.value=productIssues[0]!;return}}
   if(target===3){const ids=['intro',...doc.value.offers.map(o=>o.id),'outro'];const stale=()=>!!scriptSource.value&&!videoSpeechSourceMatches(doc.value,scriptSource.value);const needsSuggestion=ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale();if(needsSuggestion){await suggestWithAI();if(ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale())await suggest();if(ids.some((id,i)=>doc.value.scripts[i]?.id!==id)||stale())return}await previewLegacyNarration()}
  }
@@ -298,7 +328,7 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
      <button v-for="(p,index) in personalProjects" :key="p.id" type="button" class="vs-project-card" :aria-label="`Abrir vídeo ${p.title}`" @click="openVideo(p.id)">
       <div class="vs-project-cover" :class="{'has-video-cover':!!p.coverAssetId,'is-vertical-cover':p.coverFormat==='vertical','is-cover-ready':readyProjectCoverIds.has(p.id)}" :style="{'--accent':VIDEO_THEMES.find(t=>t.id===p.summary.theme)?.accent,'--base':VIDEO_THEMES.find(t=>t.id===p.summary.theme)?.base}">
        <img v-if="p.coverAssetId" class="vs-project-cover-media" :src="mediaUrl(String(p.coverAssetId))" alt="" :loading="index<3?'eager':'lazy'" :fetchpriority="index<3?'high':'low'" decoding="async" @load="markProjectCoverReady(p.id)"/>
-       <div class="vs-project-cover-fallback"><span>{{ p.summary.brand?.name||'Sua empresa' }}</span><img v-if="p.summary.theme==='impact'&&p.summary.campaign==='FECHA MÊS'" src="/video-studio/templates/fecha-mes-badge-v1.png" alt="" style="height:130px;max-width:85%;object-fit:contain"/><strong v-else>{{ p.summary.campaign }}</strong></div>
+       <div class="vs-project-cover-fallback"><span v-if="p.summary.brand?.name">{{ p.summary.brand.name }}</span><img v-if="p.summary.theme==='impact'&&p.summary.campaign==='FECHA MÊS'" src="/video-studio/templates/fecha-mes-badge-v1.png" alt="" style="height:130px;max-width:85%;object-fit:contain"/><strong v-else>{{ p.summary.campaign }}</strong></div>
        <div v-if="p.coverAssetId" class="vs-project-cover-overlay" aria-hidden="true"></div>
        <span class="vs-cover-play"><Play :size="18" fill="currentColor"/><span>{{ p.coverAssetId?'Assistir':'Em edição' }}</span></span>
       </div>
@@ -317,7 +347,27 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
      <button v-if="visibleModels.length<filteredModels.length" class="vs-button secondary" @click="modelLimit+=12">Ver mais modelos ({{ filteredModels.length }})</button></details><label class="vs-field">Título da campanha<input v-model="doc.campaign" maxlength="65" placeholder="Ex.: Ofertas da semana"/></label>
      <div class="vs-divider"/><label v-if="!flyerRecipe(doc.theme)" class="vs-field">Montagem do vídeo<select :value="doc.layoutVersion===2?'showcase':'broadcast'" @change="doc.layoutVersion=($event.target as HTMLSelectElement).value==='showcase'?2:undefined"><option value="showcase">Vitrine • selo grande e produtos livres</option><option value="broadcast">Moldura • modelo anterior</option></select></label><label class="vs-toggle"><span><strong>Duplicar a imagem do produto</strong><small>Até duas embalagens no Reels e três na TV, quando houver espaço. O preço e a unidade não mudam.</small></span><input v-model="doc.duplicateProducts" type="checkbox"/></label><label class="vs-field">Etiqueta de preço<select v-model="doc.priceLabel" @focus="loadLabelOptions" @change="selectPriceLabel"><option value="">Automática · combina com o modelo</option><option v-for="label in labelOptions" :key="label.id" :value="label.id">{{ label.name }}</option></select><small>Escolha uma etiqueta da sua biblioteca.</small></label><h3>Onde você vai usar?</h3><div class="vs-choice-row"><button v-for="(format,key) in VIDEO_FORMATS" :key="key" class="vs-choice" :class="{selected:doc.formats.includes(key)}" :aria-pressed="doc.formats.includes(key)" @click="toggleFormat(key)"><Smartphone v-if="key==='vertical'"/><Monitor v-else/><strong>{{ format.label }}</strong><small>{{ key==='vertical'?'Em pé · 9:16':'Deitado · 16:9' }}</small></button></div>
      <label class="vs-field">Duração máxima<select v-model.number="doc.duration"><option :value="15">Até 15 segundos</option><option :value="20">Até 20 segundos</option><option :value="30">Até 30 segundos</option></select></label>
-     <div class="vs-divider"/><h3>A identidade da sua loja</h3><button class="vs-button quiet" :disabled="!!busy" @click="refreshBrand">Atualizar com meu cadastro</button><p class="vs-hint">Preenchida a partir do seu cadastro. As mudanças aqui valem apenas para este vídeo.</p><div class="vs-brand-fields"><label class="vs-logo-upload"><img v-if="doc.brand.logo" :src="mediaUrl(doc.brand.logo)" alt="Logo da empresa"/><ImagePlus v-else :size="28"/><span>{{ doc.brand.logo?'Trocar logo':'Enviar logo' }}</span><input type="file" accept="image/png,image/jpeg,image/webp" @change="upload($event,'logo')"/></label><label class="vs-field">Nome da empresa<input v-model="doc.brand.name" maxlength="100" placeholder="Como sua loja se chama?"/></label></div><label class="vs-field">Aparência da logo<select v-model="doc.brand.logoStyle"><option value="sticker">Contorno branco • sticker</option><option value="clean">Sem contorno</option></select></label><details class="vs-details"><summary>Endereço e contatos <ChevronDown :size="16"/></summary><label class="vs-field">Endereço<input v-model="doc.brand.address" maxlength="160"/></label><div class="vs-two"><label class="vs-field">WhatsApp<input v-model="doc.brand.whatsapp" maxlength="45"/></label><label class="vs-field">Instagram<input v-model="doc.brand.instagram" maxlength="70"/></label></div><label class="vs-field">Slogan<input v-model="doc.brand.slogan" maxlength="160"/></label><label class="vs-field">Telefone<input v-model="doc.brand.phone" maxlength="60"/></label><label class="vs-field">Facebook<input v-model="doc.brand.facebook" maxlength="100"/></label><label class="vs-field">Site<input v-model="doc.brand.website" maxlength="120"/></label><label class="vs-field">Horário de funcionamento<input v-model="doc.brand.hours" maxlength="160"/></label><label class="vs-field">Informações de pagamento<input v-model="doc.brand.paymentNotes" maxlength="180"/></label><button v-if="doc.brand.logo" class="vs-button quiet" @click="doc.brand.logo=''">Usar apenas o nome da empresa</button></details>
+     <div class="vs-divider"/>
+     <h3>{{ auth.isSuperAdmin.value?'Identidade do estabelecimento':'A identidade da sua loja' }}</h3>
+     <div v-if="auth.isSuperAdmin.value" class="vs-admin-establishment">
+      <label class="vs-field">Usar cadastro de estabelecimento
+       <select v-model="selectedEstablishmentId" :disabled="!!busy||establishmentsLoading" @change="applySelectedEstablishment">
+        <option value="">{{ establishmentsLoading?'Carregando estabelecimentos…':'Selecione um estabelecimento' }}</option>
+        <option v-for="establishment in establishments" :key="establishment.id" :value="establishment.id">{{ establishment.label }}</option>
+       </select>
+       <small>Os dados e a logo são copiados para este vídeo. O cadastro original permanece igual.</small>
+      </label>
+     </div>
+     <button class="vs-button quiet" :disabled="!!busy" @click="refreshBrand">Atualizar com meu cadastro</button>
+     <p class="vs-hint">{{ auth.isSuperAdmin.value?'As mudanças nesta seção valem apenas para este vídeo.':'Preenchida a partir do seu cadastro. As mudanças aqui valem apenas para este vídeo.' }}</p>
+     <div class="vs-brand-fields">
+      <label class="vs-logo-upload"><img v-if="doc.brand.logo" :src="mediaUrl(doc.brand.logo)" alt="Logo da empresa"/><ImagePlus v-else :size="28"/><span>{{ doc.brand.logo?'Trocar logo':'Enviar logo' }}</span><input type="file" accept="image/png,image/jpeg,image/webp" @change="upload($event,'logo')"/></label>
+     </div>
+     <details class="vs-details">
+      <summary>Endereço e contatos <ChevronDown :size="16"/></summary>
+      <label class="vs-field">Endereço<input v-model="doc.brand.address" maxlength="160"/></label>
+      <div class="vs-two"><label class="vs-field">WhatsApp<input v-model="doc.brand.whatsapp" maxlength="45"/></label><label class="vs-field">Instagram<input v-model="doc.brand.instagram" maxlength="70"/></label></div>
+     </details>
     </div>
     <div v-if="step===1&&!showListImport" class="vs-step-content"><span class="vs-eyebrow">02 · ESCOLHA AS OFERTAS</span><h2>O que vamos anunciar?</h2><p class="vs-lead">Para 30 segundos, comece com 3 ou 4 produtos. Nomes curtos deixam a locução mais natural.</p><div class="vs-inline-actions"><button class="vs-button primary" :disabled="doc.offers.length>=6" @click="showListImport=true"><Upload :size="16"/> Enviar lista de produtos</button><button class="vs-button secondary" :disabled="doc.offers.length>=6" @click="addOffer"><Plus :size="16"/> Adicionar produto</button><button class="vs-button quiet" :disabled="!sources.length||doc.offers.length>=6" @click="showImport=true"><Copy :size="16"/> Trazer de um encarte</button></div>
      <div v-if="!doc.offers.length" class="vs-mini-empty">Adicione a primeira oferta para ver seu vídeo ganhar forma.</div>
@@ -343,7 +393,7 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
     </div>
     <div v-if="step===3" class="vs-step-content"><span class="vs-eyebrow">04 · DÊ VOZ ÀS OFERTAS</span><h2>Do seu jeito. Com a sua voz.</h2><p class="vs-lead">Revise o texto, escolha o locutor e ouça antes de finalizar.</p><label class="vs-toggle"><span><strong>Usar locução</strong><small>O locutor anuncia sua loja e os produtos.</small></span><input v-model="doc.voice.enabled" type="checkbox"/></label>
      <template v-if="doc.voice.enabled"><label class="vs-field">Locutor<select v-model="doc.voice.id"><option v-if="!voices.length" value="default">Nenhum locutor disponível nesta conta</option><option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }}</option></select></label><div v-if="!voices.length" class="vs-inline-note">Ainda não há uma voz disponível para sua conta. Você pode preparar o roteiro ou criar o vídeo sem locução.</div><button class="vs-button primary" :disabled="!!busy||!doc.offers.length" @click="suggestWithAI"><Sparkles :size="16"/> Gerar novo roteiro com IA</button><button class="vs-button quiet" :disabled="!!busy" @click="suggest"><Sparkles :size="16"/> Usar texto básico das ofertas</button><p v-if="doc.scripts.length" class="vs-hint">O roteiro é gerado automaticamente ao chegar nesta etapa. Uma nova sugestão substitui o texto abaixo.</p>
-     <label v-if="doc.scripts.length||doc.narrationText" class="vs-field vs-narration-field">Texto completo da locução<textarea v-model="narrationText" :rows="Math.max(8,doc.offers.length+3)" maxlength="5600" placeholder="Abertura, ofertas e encerramento em um só roteiro"/><small>Uma linha para a abertura, uma para cada produto na ordem do vídeo e uma para o encerramento. Preços, medidas, unidades e datas são preparados por extenso.</small></label>
+     <label v-if="doc.scripts.length||doc.narrationText" class="vs-field vs-narration-field">Texto completo da locução<textarea v-model="narrationText" :rows="Math.max(8,doc.offers.length+3)" maxlength="5600" placeholder="Abertura, ofertas e encerramento em um só roteiro"/><small>Uma linha para a abertura, uma para cada produto na ordem do vídeo e uma para o encerramento. Os preços são falados em reais inteiros, sem centavos.</small></label>
       <details class="vs-details"><summary>Ajustar a pronúncia de um nome <ChevronDown :size="16"/></summary><p class="vs-hint">Exemplo: nome “I9” → falar “i nove”. O nome escrito no vídeo não muda.</p><div v-for="(p,i) in doc.voice.pronunciations" :key="i" class="vs-pronunciation"><input v-model="p.from" aria-label="Nome escrito" placeholder="Como se escreve" maxlength="80"/><input v-model="p.to" aria-label="Pronúncia desejada" placeholder="Como se fala" maxlength="120"/><button aria-label="Remover pronúncia" @click="doc.voice.pronunciations.splice(i,1)"><X :size="16"/></button></div><button class="vs-button quiet" :disabled="doc.voice.pronunciations.length>=30" @click="doc.voice.pronunciations.push({from:'',to:''})"><Plus :size="15"/> Adicionar pronúncia</button></details>
       <button class="vs-button quiet" :disabled="!!busy||!doc.scripts.length" @click="normalize">Ver como o locutor vai ler</button><div v-if="normalized.length" class="vs-normalized"><p v-for="s in normalized" :key="s.id">{{ s.text }}</p></div>
       <div v-if="scriptChanged" class="vs-inline-note">Confira se o texto corresponde aos produtos, preços e validade atuais.</div><label class="vs-toggle"><span><strong>Ajustar a locução para caber em {{ doc.duration }} segundos</strong><small>Acelera somente quando necessário, até 2×, sem cortar o texto.</small></span><input type="checkbox" :checked="doc.autoFitVoice!==false" @change="doc.autoFitVoice=($event.target as HTMLInputElement).checked"/></label><p v-if="voicePlaybackRate>1" class="vs-hint">{{ voiceJob?'Velocidade aplicada':'Velocidade estimada' }}: {{ voicePlaybackRate.toFixed(2).replace('.',',') }}× · vídeo com até {{ doc.duration }} segundos.</p><button class="vs-button secondary" :disabled="!doc.scripts.length" @click="confirmScript"><Check :size="16"/> Conferi o texto e os preços</button><div class="vs-voice-generation"><button class="vs-button primary" :disabled="!!busy||!!voiceGenerationBlocker" @click="generate('voice')"><Headphones :size="18"/> {{ voiceJob?'Gerar / recuperar locução':'Gerar locução' }}</button><small>Locução ElevenLabs com a voz autorizada e interpretação animada para varejo.</small><div v-if="voiceGenerationBlocker" class="vs-inline-note" role="status">{{ voiceGenerationBlocker }} <button v-if="!workerReady" class="vs-button quiet" :disabled="!!busy" @click="refreshHealth">Atualizar estado</button></div></div>
@@ -1214,6 +1264,7 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
 .vs-editing .vs-job-list{flex:none;margin-top:4px;padding-top:8px;font-size:12px}.vs-editing .vs-job-list[open]{max-height:160px;overflow:auto}.vs-job-list summary{cursor:pointer;color:#60758f}
 .vs-editing .vs-preview-panel.is-layout-editing{overflow-y:auto}
 @media(max-width:760px){.vs-live-status{position:sticky;top:0;z-index:2}.vs-editing .vs-preview-stage.vertical{width:200px}}
+.vs-admin-establishment{margin:18px 0;padding:1px 14px 0;border:1px solid var(--line);border-radius:12px;background:#f8faf7}.vs-admin-establishment .vs-field{margin:14px 0}
 </style>
 
 <style scoped>

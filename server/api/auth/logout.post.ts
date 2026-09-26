@@ -9,6 +9,7 @@ export default defineEventHandler(async (event) => {
   setCookie(event, 'access-token', '', { ...cookieBase, httpOnly: true })
   setCookie(event, 'sb-access-token', '', { ...cookieBase, httpOnly: true })
   setCookie(event, 'authenticated', '', { ...cookieBase, httpOnly: false })
+  setCookie(event, 'active-account-id', '', { ...cookieBase, httpOnly: true })
 
   return { success: true }
 })

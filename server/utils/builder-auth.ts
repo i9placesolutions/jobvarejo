@@ -5,6 +5,8 @@ import { getProfileById } from './auth-db'
 import { requireAuthenticatedUser } from './auth'
 import { verifyBuilderSessionToken } from './builder-session-token'
 import { pgOneOrNull } from './postgres'
+import { assertRoleApiAccess } from './access-policy'
+import { normalizeEditorPermissions } from '../../shared/access-control'
 
 const _tenantCache = new Map<string, { tenant: BuilderTenant; expiresAt: number }>()
 const TENANT_CACHE_TTL_MS = 5 * 60 * 1000
@@ -76,6 +78,9 @@ const getBuilderToken = (event: H3Event): string | null => {
 }
 
 export const isBuilderAdmin = (event: H3Event): boolean => {
+  // A main session takes precedence over an old Builder cookie. Permission
+  // checks for that session are already enforced by requireAuthenticatedUser.
+  if (getCookie(event, 'access-token') || getCookie(event, 'sb-access-token')) return false
   const token = getBuilderToken(event)
   if (!token) return false
   const payload = verifyBuilderSessionToken(token)
@@ -85,16 +90,20 @@ export const isBuilderAdmin = (event: H3Event): boolean => {
 export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenant> => {
   const token = getBuilderToken(event)
   const payload = token ? verifyBuilderSessionToken(token) : null
+  // Main JobVarejo identities keep their app-wide permissions and selected
+  // customer even when a legacy Builder cookie is also present.
+  const hasMainCookie = Boolean(getCookie(event, 'access-token') || getCookie(event, 'sb-access-token'))
+  const mainUser = hasMainCookie ? await requireAuthenticatedUser(event) : null
 
   // O Builder e um dos modos do mesmo SaaS. Quando a sessao principal ja
   // existe, criamos/recuperamos o tenant pelo mesmo UUID do usuario para que
   // o cadastro empresarial seja compartilhado entre o editor avancado e o
   // editor rapido. Sessoes antigas do Builder continuam funcionando pelo
   // token proprio acima.
-  if (!payload?.sub) {
+  if (!payload?.sub || mainUser) {
     let user: Awaited<ReturnType<typeof requireAuthenticatedUser>>
     try {
-      user = await requireAuthenticatedUser(event)
+      user = mainUser || await requireAuthenticatedUser(event)
     } catch {
       throw createError({
         statusCode: 401,
@@ -109,7 +118,9 @@ export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenan
       throw createError({ statusCode: 500, statusMessage: 'Unable to load business profile' })
     }
 
-    const fallbackName = String(user.user_metadata?.name || user.email.split('@')[0] || 'Minha empresa').trim()
+    const accountProfile = user.id === user.actorId ? null : await getProfileById(user.id)
+    const accountEmail = String(accountProfile?.email || user.email)
+    const fallbackName = String(accountProfile?.name || user.user_metadata?.name || accountEmail.split('@')[0] || 'Minha empresa').trim()
     const created = await pgOneOrNull<any>(
       `insert into public.builder_tenants
          (id, email, password_hash, name, plan, is_active)
@@ -117,7 +128,7 @@ export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenan
          ($1::uuid, $2, 'main-auth-managed', $3, 'free', true)
        on conflict (id) do nothing
        returning *`,
-      [user.id, user.email, fallbackName]
+      [user.id, accountEmail, fallbackName]
     )
 
     if (created?.id) {
@@ -135,7 +146,7 @@ export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenan
   if (payload.isAdmin) {
     const profile = await getProfileById(payload.sub)
     const role = String(profile?.role || '').trim()
-    if (!profile?.id || (role !== 'super_admin' && role !== 'admin')) {
+    if (!profile?.id || profile.is_active === false || (role !== 'super_admin' && role !== 'admin')) {
       throw createError({
         statusCode: 401,
         statusMessage: 'Invalid or expired builder token'
@@ -185,6 +196,11 @@ export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenan
     } as BuilderTenant
   }
 
+  const linkedProfile = await getProfileById(payload.sub)
+  if (linkedProfile?.id) {
+    if (linkedProfile.is_active === false) throw createError({ statusCode: 403, statusMessage: 'Conta desativada.' })
+    await assertRoleApiAccess(event, linkedProfile.role, normalizeEditorPermissions(linkedProfile.editor_permissions))
+  }
   const tenant = await getCachedTenant(payload.sub)
   if (!tenant?.id || !tenant?.email) {
     throw createError({

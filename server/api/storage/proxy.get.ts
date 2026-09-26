@@ -4,6 +4,7 @@ import { Readable } from 'stream'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { getS3Client, resetS3Client } from '../../utils/s3'
+import { isTemplateLibraryStorageKey } from '../../utils/template-library-storage'
 import {
   getProjectOwnerIdFromKey,
   assertClientStorageReadAllowed,
@@ -160,7 +161,10 @@ export default defineEventHandler(async (event) => {
       const ownerId = keyCandidates
         .map((candidate) => getProjectOwnerIdFromKey(String(candidate)))
         .find(Boolean)
-      if (hasProjectsKeyTarget && (!ownerId || ownerId !== user.id)) {
+      const templateLibraryRead = hasProjectsKeyTarget && ownerId !== user.id && keyCandidates.some((candidate) => isProjectsKey(candidate))
+        ? await isTemplateLibraryStorageKey(keyCandidates.find(candidate => isProjectsKey(candidate)) || '')
+        : false
+      if (hasProjectsKeyTarget && (!ownerId || ownerId !== user.id) && !templateLibraryRead) {
         throw createError({
           statusCode: 403,
           statusMessage: 'Forbidden key scope'

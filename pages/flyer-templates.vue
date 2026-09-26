@@ -679,8 +679,8 @@ onUnmounted(() => {
                 <button type="button" class="text-[10px] font-semibold text-blue-600 transition hover:text-blue-800" @click="startCategoryEdit(template)">Editar classificação</button>
               </div>
               <p class="mt-1 text-[11px] text-slate-400">{{ formatTemplateStructure(template) }} · {{ formatSize(template) }} · {{ formatDate(template.updated_at || template.created_at) }}</p>
-              <div class="mt-4 flex items-center gap-2">
-                <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60" :disabled="!!usingTemplateId" @click="useTemplate(template)">
+              <div class="mt-4 flex flex-wrap items-center gap-2">
+                <button type="button" class="inline-flex min-w-max flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60" :disabled="!!usingTemplateId" @click="useTemplate(template)">
                   <LoaderCircle v-if="usingTemplateId === template.id" class="h-3.5 w-3.5 animate-spin" />
                   <Zap v-else class="h-3.5 w-3.5" />
                   Usar rápido

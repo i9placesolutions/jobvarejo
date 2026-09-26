@@ -60,7 +60,7 @@ const loadProfile = async () => {
   try {
     await auth.getSession()
     const headers = await getApiAuthHeaders()
-    profile.value = await $fetch('/api/profile', { headers })
+    profile.value = await $fetch('/api/profile', { headers, query: { self: '1' } })
     profileLoadedAt.value = new Date().toISOString()
   } catch (error: any) {
     loadError.value = String(error?.data?.statusMessage || error?.message || 'Nao foi possivel carregar seu perfil.')

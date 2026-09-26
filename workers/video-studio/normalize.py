@@ -93,7 +93,9 @@ def normalize(text, pronunciations=None):
         reais, rest = divmod(cents, 100)
         parts = []
         if reais: parts.append(num2words(reais, lang='pt_BR') + (' real' if reais == 1 else ' reais'))
-        if rest: parts.append(num2words(rest, lang='pt_BR') + (' centavo' if rest == 1 else ' centavos'))
+        # Em ofertas com reais inteiros, a locução omite a fração de centavos.
+        # Valores abaixo de um real viram uma frase curta, sem anunciar centavos.
+        if not reais and rest: parts.append('menos de um real')
         return ' e '.join(parts) or 'zero reais'
     text = sub(r'R\$\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?)', money, text, flags=IGNORECASE)
     text = sub(r'/\s*kg\b', ' o quilo', text, flags=IGNORECASE)

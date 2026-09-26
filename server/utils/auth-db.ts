@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { UserRole } from '~/types/auth'
+import type { EditorPermissions } from '../../shared/access-control'
 import { pgOneOrNull, pgQuery } from './postgres'
 
 type ProfileRow = {
@@ -10,6 +11,8 @@ type ProfileRow = {
   name: string | null
   avatar_url: string | null
   role: UserRole
+  is_active?: boolean
+  editor_permissions?: EditorPermissions
   password_hash?: string | null
   reset_token_hash?: string | null
   reset_token_expires_at?: string | null
@@ -92,9 +95,12 @@ export const getProfileById = async (id: string): Promise<ProfileRow | null> => 
   const normalized = String(id || '').trim()
   if (!normalized) return null
   return pgOneOrNull<ProfileRow>(
-    `select id, email, login_whatsapp, login_whatsapp_verified_at, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at
-     from public.profiles
-     where id = $1
+    `select p.id, p.email, p.login_whatsapp, p.login_whatsapp_verified_at, p.name, p.avatar_url,
+            p.role::text as role, p.password_hash, p.reset_token_hash, p.reset_token_expires_at,
+            coalesce((to_jsonb(p)->>'is_active')::boolean, true) as is_active,
+            coalesce(to_jsonb(p)->'editor_permissions', '{}'::jsonb) as editor_permissions
+     from public.profiles p
+     where p.id = $1
      limit 1`,
     [normalized]
   )

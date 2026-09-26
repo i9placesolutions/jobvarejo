@@ -31203,6 +31203,6 @@ main {
 
 <style scoped>
 @media(max-width:767px) {
- .quick-mode-stage {padding-bottom:calc(70px + env(safe-area-inset-bottom,0px)) !important;}
+ .quick-mode-stage {padding-bottom:calc(140px + env(safe-area-inset-bottom,0px)) !important;}
 }
 </style>

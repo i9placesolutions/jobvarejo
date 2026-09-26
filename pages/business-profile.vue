@@ -29,6 +29,7 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const logoInput = ref<HTMLInputElement | null>(null)
 const paymentCardSearch = ref('')
+const onboardingAddress = ref('')
 let entrySequence = 0
 
 const returnTarget = computed<string>(() => {
@@ -113,6 +114,7 @@ const loadProfile = async () => {
     profile.value = await $fetch<any>('/api/profile', { headers })
     const normalized = normalizeBusinessProfile(profile.value?.business_profile)
     Object.assign(form, normalized)
+    onboardingAddress.value = normalized.address
     if (!form.companyName) form.companyName = String(profile.value?.name || '')
     if (!Array.isArray(form.paymentMethods)) form.paymentMethods = [...DEFAULT_BUSINESS_PAYMENT_METHODS]
     // The empty draft makes it obvious that another number/endereço can be
@@ -164,28 +166,41 @@ const clearPaymentCards = () => {
 }
 
 const saveProfile = async () => {
+  if (isUploading.value) return
+  if (isOnboarding.value && (!form.logo.trim() || !form.instagram.trim() || !onboardingAddress.value.trim())) {
+    errorMessage.value = 'Informe a logo, o Instagram e o endereço da loja.'
+    return
+  }
   isSaving.value = true
   errorMessage.value = ''
   successMessage.value = ''
-  syncLegacyContactFields()
+  if (!isOnboarding.value) syncLegacyContactFields()
   try {
     const headers = await getApiAuthHeaders()
+    const addresses = cleanEntries(form.addresses)
+    if (isOnboarding.value) {
+      if (addresses.length) addresses[0] = { ...addresses[0]!, value: onboardingAddress.value.trim() }
+      else addresses.push({ ...createEntry('address'), value: onboardingAddress.value.trim() })
+    }
     const response = await $fetch<any>('/api/profile', {
       method: 'PUT',
       headers,
       body: {
-        business_profile: {
-          ...form,
-          whatsappNumbers: cleanEntries(form.whatsappNumbers),
-          addresses: cleanEntries(form.addresses),
-        },
+        business_profile: isOnboarding.value
+          ? { logo: form.logo, instagram: form.instagram.trim(), addresses }
+          : {
+              ...form,
+              whatsappNumbers: cleanEntries(form.whatsappNumbers),
+              addresses,
+            },
       },
     })
     profile.value = response
     const saved = normalizeBusinessProfile(response?.business_profile)
     Object.assign(form, saved)
+    onboardingAddress.value = saved.address
     ensureEntryDrafts()
-    successMessage.value = 'Cadastro comercial atualizado.'
+    successMessage.value = isOnboarding.value ? 'Dados do estabelecimento salvos.' : 'Cadastro comercial atualizado.'
     if (isOnboarding.value && typeof window !== 'undefined') {
       window.localStorage.removeItem('jobvarejo:business-profile-onboarding-pending')
     }
@@ -245,7 +260,7 @@ onMounted(loadProfile)
       <div class="page-intro">
         <p>{{ isOnboarding ? 'PRIMEIRO PASSO' : 'IDENTIDADE COMERCIAL' }}</p>
         <h1>{{ isOnboarding ? 'Configure sua loja antes do primeiro encarte' : 'Dados que aparecem nos seus encartes' }}</h1>
-        <span>{{ isOnboarding ? 'Preencha o que deve aparecer no encarte. Depois você poderá alterar tudo por um botão discreto na edição rápida.' : 'Salve uma vez e reutilize o cadastro nos próximos encartes da edição rápida.' }}</span>
+        <span>{{ isOnboarding ? 'Adicione sua logo, Instagram e endereço para usar nos encartes. Você poderá completar o cadastro depois.' : 'Salve uma vez e reutilize o cadastro nos próximos encartes da edição rápida.' }}</span>
       </div>
 
       <div v-if="errorMessage" class="feedback feedback--error"><X class="h-4 w-4" />{{ errorMessage }}</div>
@@ -259,10 +274,18 @@ onMounted(loadProfile)
             <div class="logo-preview"><img v-if="logoUrl" :src="preferredLogoSource(logoUrl)" :alt="form.companyName || 'Logo da loja'" /><Store v-else class="h-7 w-7" /></div>
             <div><strong>Logo padrão da loja</strong><p>Ela será usada nos encartes quando o campo Logo da loja estiver ativo.</p><button class="secondary-button" type="button" :disabled="isUploading" @click="chooseLogo"><Loader2 v-if="isUploading" class="h-4 w-4 animate-spin" /><FileUp v-else class="h-4 w-4" />Escolher arquivo</button><input ref="logoInput" type="file" accept="image/*" hidden @change="handleLogo" /></div>
           </div>
-          <div class="form-grid"><label><span>Nome da loja</span><input v-model="form.companyName" type="text" maxlength="160" /></label><label><span>Slogan</span><input v-model="form.slogan" type="text" maxlength="180" placeholder="A melhor oferta perto de você" /></label></div>
+          <div v-if="!isOnboarding" class="form-grid"><label><span>Nome da loja</span><input v-model="form.companyName" type="text" maxlength="160" /></label><label><span>Slogan</span><input v-model="form.slogan" type="text" maxlength="180" placeholder="A melhor oferta perto de você" /></label></div>
         </section>
 
-        <section class="profile-form surface">
+        <section v-if="isOnboarding" class="profile-form surface">
+          <div class="surface-title"><div><p>DADOS DO ESTABELECIMENTO</p><h2>Onde encontrar sua loja</h2></div></div>
+          <div class="onboarding-fields">
+            <label><span>Instagram</span><input v-model="form.instagram" type="text" maxlength="120" placeholder="@sualoja" required /></label>
+            <label><span>Endereço</span><textarea v-model="onboardingAddress" rows="2" maxlength="300" placeholder="Rua, número, bairro e cidade" required></textarea></label>
+          </div>
+        </section>
+
+        <section v-if="!isOnboarding" class="profile-form surface">
           <div class="surface-title"><div><p>CONTATO</p><h2>Onde o cliente encontra você</h2></div></div>
           <div class="repeatable-grid">
             <div class="repeatable-field">
@@ -290,12 +313,12 @@ onMounted(loadProfile)
           <div class="form-grid contact-extra"><label><span>CEP</span><input v-model="form.cep" type="text" placeholder="00000-000" /></label><label><span>Site</span><input v-model="form.website" type="text" placeholder="www.sualoja.com.br" /></label><label class="full"><span>Horário de funcionamento</span><input v-model="form.hours" type="text" placeholder="Seg a sáb: 7h às 21h · Dom: 8h às 18h" /></label></div>
         </section>
 
-        <section class="profile-form surface">
+        <section v-if="!isOnboarding" class="profile-form surface">
           <div class="surface-title"><div><p>REDES SOCIAIS</p><h2>Atalhos do encarte</h2></div></div>
           <div class="form-grid"><label><span>Instagram</span><input v-model="form.instagram" type="text" placeholder="@sualoja" /></label><label><span>Facebook</span><input v-model="form.facebook" type="text" placeholder="sualoja" /></label></div>
         </section>
 
-        <section class="profile-form surface">
+        <section v-if="!isOnboarding" class="profile-form surface">
           <div class="surface-title"><div><p>FORMAS DE PAGAMENTO</p><h2>O que a loja aceita</h2></div><CreditCard class="section-icon" /></div>
           <p class="surface-help">Essas opções ficam disponíveis para reutilizar em qualquer encarte. Selecione também os cartões próprios da sua loja.</p>
           <div class="payment-actions"><button type="button" @click="selectAllPayments">Selecionar opções comuns</button><button type="button" @click="clearAllPayments">Limpar tudo</button><span>{{ form.paymentMethods.length }} selecionada(s)</span></div>
@@ -319,7 +342,7 @@ onMounted(loadProfile)
           <label class="textarea-field"><span>Observação de pagamento</span><textarea v-model="form.paymentNotes" maxlength="240" placeholder="Ex.: Aceitamos até 2 cartões por compra."></textarea></label>
         </section>
 
-        <button class="save-button" type="submit" :disabled="isSaving"><Loader2 v-if="isSaving" class="h-4 w-4 animate-spin" /><Save v-else class="h-4 w-4" />Salvar cadastro comercial</button>
+        <button class="save-button" type="submit" :disabled="isSaving || isUploading"><Loader2 v-if="isSaving" class="h-4 w-4 animate-spin" /><Save v-else class="h-4 w-4" />{{ isOnboarding ? 'Salvar dados do estabelecimento' : 'Salvar cadastro comercial' }}</button>
       </form>
     </main>
   </div>
@@ -337,6 +360,7 @@ onMounted(loadProfile)
 .profile-layout { display: grid; gap: 14px; margin-top: 24px; }.surface { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; }.surface-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }.surface-title h2 { font-size: 17px; margin: 0; }.status-dot { color: #047857; background: #ecfdf5; border-radius: 999px; padding: 5px 8px; font-size: 10px; }.section-icon { width: 20px; height: 20px; color: #2160b4; }
 .logo-row { display: flex; align-items: center; gap: 14px; margin: 18px 0 20px; }.logo-preview { width: 76px; height: 76px; display: grid; place-items: center; overflow: hidden; border: 1px dashed #b7d3ef; border-radius: 10px; color: #2160b4; background: #eaf3ff; }.logo-preview img { width: 100%; height: 100%; object-fit: contain; }.logo-row strong { font-size: 13px; }.logo-row p { color: #64748b; font-size: 11px; margin: 4px 0 9px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }.form-grid label, .single-field { display: grid; gap: 6px; }.form-grid label.full { grid-column: 1 / -1; }.form-grid span, .single-field > span, .field-heading > span { color: #475569; font-size: 11px; font-weight: 700; }.form-grid input, .single-field input { height: 40px; padding: 0 11px; border: 1px solid #dbe3ed; border-radius: 8px; color: #172b45; font-size: 13px; outline: none; }.form-grid input:focus, .single-field input:focus, .repeatable-row input:focus, .repeatable-row textarea:focus, .textarea-field textarea:focus, .search-field input:focus { border-color: #8fb8e6; box-shadow: 0 0 0 3px rgba(33,96,180,.12); outline: none; }
+.onboarding-fields { display: grid; gap: 14px; margin-top: 18px; }.onboarding-fields label { display: grid; gap: 6px; }.onboarding-fields span { color: #475569; font-size: 11px; font-weight: 700; }.onboarding-fields input, .onboarding-fields textarea { width: 100%; border: 1px solid #dbe3ed; border-radius: 8px; color: #172b45; font-size: 13px; outline: none; padding: 10px 11px; }.onboarding-fields textarea { resize: vertical; }.onboarding-fields input:focus, .onboarding-fields textarea:focus { border-color: #8fb8e6; box-shadow: 0 0 0 3px rgba(33,96,180,.12); }
 .secondary-button, .save-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; cursor: pointer; font-weight: 800; }.secondary-button { min-height: 34px; padding: 0 11px; background: #f8fafc; color: #475569; border: 1px solid #dbe3ed; font-size: 11px; }.save-button { min-height: 46px; border: 0; background: #2160b4; color: #fff; font-size: 13px; }.save-button:disabled, .secondary-button:disabled, .add-entry:disabled { opacity: .5; cursor: wait; }
 .repeatable-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, .62fr); gap: 20px 14px; margin-top: 18px; }.repeatable-field--wide { grid-column: 1 / -1; }.field-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 7px; }.field-heading > span { display: inline-flex; align-items: center; gap: 6px; }.field-heading small { color: #94a3b8; font-size: 10px; font-weight: 500; }.field-icon { width: 14px; height: 14px; color: #2160b4; }.repeatable-row { display: grid; grid-template-columns: minmax(110px, .42fr) minmax(0, 1fr) 34px; gap: 7px; margin-bottom: 7px; }.repeatable-row input, .repeatable-row textarea { width: 100%; border: 1px solid #dbe3ed; border-radius: 8px; color: #172b45; background: #fff; font-size: 12px; outline: none; }.repeatable-row input { height: 40px; padding: 0 10px; }.repeatable-row textarea { min-height: 56px; padding: 9px 10px; resize: vertical; }.repeatable-row--address { grid-template-columns: minmax(110px, .35fr) minmax(0, 1fr) 34px; }.remove-entry { display: grid; place-items: center; height: 40px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; cursor: pointer; }.repeatable-row--address .remove-entry { height: 56px; }.add-entry { display: inline-flex; align-items: center; gap: 5px; min-height: 31px; margin-top: 2px; padding: 0 9px; color: #173d70; background: #eaf3ff; border: 1px solid #c8dcf4; border-radius: 999px; font-size: 10px; font-weight: 800; cursor: pointer; }.contact-extra { margin-top: 20px; }
 .surface-help { color: #64748b; font-size: 11px; line-height: 1.5; margin: 12px 0 14px; }.payment-actions, .card-library__toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }.payment-actions button, .card-library__toolbar > button { color: #173d70; background: #eaf3ff; border: 1px solid #c8dcf4; border-radius: 999px; padding: 5px 9px; font-size: 10px; font-weight: 800; cursor: pointer; }.payment-actions button:nth-child(2), .card-library__toolbar > button:last-child { color: #64748b; background: #f8fafc; border-color: #dbe3ed; }.payment-actions span { color: #94a3b8; font-size: 10px; margin-left: auto; }.payment-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }.payment-option { min-height: 52px; display: flex; align-items: center; gap: 7px; position: relative; padding: 7px 8px; border: 1px solid #e2e8f0; border-radius: 8px; color: #475569; background: #f8fafc; font-size: 10px; text-align: left; cursor: pointer; transition: border-color .16s ease, background-color .16s ease, transform .16s ease; }.payment-option:hover, .card-option:hover { border-color: #b7d3ef; background: #eaf3ff; transform: translateY(-1px); }.payment-option--active, .card-option--active { border-color: #8fb8e6; background: #eaf3ff; color: #173d70; box-shadow: 0 0 0 2px rgba(33,96,180,.1); }.payment-option__logo { width: 38px; height: 26px; display: block; overflow: hidden; flex: 0 0 38px; border-radius: 4px; }.payment-option__logo :deep(svg) { width: 100%; height: 100%; display: block; }.payment-option__mark { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }.payment-option__check, .card-option__check { margin-left: auto; color: #2160b4; font-size: 12px; font-weight: 900; }

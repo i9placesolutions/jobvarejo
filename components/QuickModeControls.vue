@@ -35,6 +35,7 @@ import {
 import { FLYER_TEMPLATE_FORMATS } from '~/utils/flyerTemplateApi'
 import type { ProductZoneStructure, ProductZoneStructureVariant } from '~/types/product-zone'
 import { getProductZoneStructureFormatLabel } from '~/utils/product-zone-structure'
+import { QUICK_MODE_COLOR_SWATCHES, normalizeQuickModePaletteColor } from '~/utils/quickModeColorPalette'
 
 // O onboarding só é necessário quando o tema realmente pede um dado ausente.
 // Carregá-lo sob demanda deixa a primeira abertura do editor mais leve no 4G.
@@ -171,6 +172,13 @@ const emit = defineEmits<{
   (event: 'request-delete-page', pageId: string): void
   (event: 'use-template-model', modelId: string): void
 }>()
+
+const isProductAreaSwatchSelected = (currentColor: string | null, swatch: string) => (
+  normalizeQuickModePaletteColor(currentColor) === swatch
+)
+const productAreaPickerValue = (currentColor: string | null) => (
+  normalizeQuickModePaletteColor(currentColor) || '#ffffff'
+)
 
 const { height: mobileViewportHeight, bottomInset: mobileKeyboardInset } = useEditorVisualViewport()
 const mobileStructureExpanded = ref(false)
@@ -596,6 +604,14 @@ const startMobileProductList = () => {
   void nextTick(() => productListInput.value?.focus({ preventScroll: true }))
 }
 
+const handleMobilePrimaryAction = () => {
+  if (productCount.value > 0) {
+    openMobileProductList()
+    return
+  }
+  startMobileProductList()
+}
+
 const openMobileTools = () => {
   mobileSection.value = 'tools'
   dataPanelOpen.value = true
@@ -614,7 +630,7 @@ const mobilePrimaryAction = computed(() => {
   if (productCount.value > 0) {
     return {
       eyebrow: 'PRÓXIMO PASSO',
-      title: 'Confira os produtos do encarte',
+      title: `${productCount.value} ${productCount.value === 1 ? 'produto no encarte' : 'produtos no encarte'}`,
       description: `${productCount.value} ${productCount.value === 1 ? 'produto adicionado' : 'produtos adicionados'} para você revisar.`,
       action: 'Ver produtos',
     }
@@ -840,7 +856,7 @@ const useTemplateModel = (modelId: string) => {
       <strong>{{ mobilePrimaryAction.title }}</strong>
       <small>{{ mobilePrimaryAction.description }}</small>
     </div>
-    <button type="button" :disabled="props.busy" @click="handlePrimaryProductAction">
+    <button type="button" :disabled="props.busy" @click="handleMobilePrimaryAction">
       <ClipboardPaste :size="18" />
       <span>{{ mobilePrimaryAction.action }}</span>
       <ArrowRight :size="17" aria-hidden="true" />
@@ -850,7 +866,7 @@ const useTemplateModel = (modelId: string) => {
   <div class="quick-mode-controls-layout" :data-mobile-section="mobileSection" :style="{ '--mobile-keyboard-inset': `${mobileKeyboardInset}px`, '--mobile-visible-height': mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh' }">
     <nav class="quick-mobile-sections" aria-label="Edição rápida">
       <button type="button" :aria-pressed="mobileSection === 'preview'" @click="mobileSection = 'preview'"><CanvasIcon :size="20" /><span>Encarte</span></button>
-      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection === 'products' ? mobileSection = 'preview' : startMobileProductList()"><ShoppingBasket :size="20" /><span>Lista</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection === 'products' ? mobileSection = 'preview' : openMobileProductList()"><ShoppingBasket :size="20" /><span>Lista</span></button>
       <button type="button" :aria-pressed="mobileSection === 'pages'" @click="mobileSection = mobileSection === 'pages' ? 'preview' : 'pages'"><Layers :size="20" /><span>Páginas</span></button>
       <button type="button" :aria-pressed="mobileSection === 'tools'" @click="mobileSection === 'tools' ? mobileSection = 'preview' : openMobileTools()"><SlidersHorizontal :size="20" /><span>Ajustes</span></button>
       <button type="button" :disabled="props.busy" @click="emit('export')"><Download :size="20" /><span>Exportar</span></button>
@@ -1098,16 +1114,29 @@ const useTemplateModel = (modelId: string) => {
         </button>
       </section>
 
-      <section v-if="props.productAreaColors?.length" class="quick-mode-data-panel">
-        <strong>Fundo da área de produtos</strong>
-        <p>Deixe a arte aparecer entre os cards ou escolha uma cor da paleta do encarte.</p>
-        <label v-for="target in props.productAreaColors" :key="target.id" class="flex items-center justify-between gap-3 py-2">
-          <span>{{ target.color ? target.label : 'Sem fundo' }}</span>
-          <button type="button" :disabled="props.busy" class="text-sm underline"
-            @click="emit('product-area-color', { targetId: target.id, value: 'transparent' })">Sem fundo</button>
-          <input type="color" :aria-label="target.label" :value="target.color || '#ffffff'" :disabled="props.busy"
-            @change="emit('product-area-color', { targetId: target.id, value: ($event.target as HTMLInputElement).value })" />
-        </label>
+      <section v-if="props.productAreaColors?.length" class="quick-mode-data-panel quick-mode-product-area-panel">
+        <div class="quick-mode-product-area-panel__intro">
+          <strong>Fundo da área de produtos</strong>
+          <p>Escolha uma cor ou deixe a arte aparecer entre os cards.</p>
+        </div>
+        <div v-for="target in props.productAreaColors" :key="target.id" class="quick-mode-product-area-panel__target">
+          <div class="quick-mode-product-area-panel__current">
+            <span class="quick-mode-product-area-panel__preview" :class="{ 'is-transparent': !target.color }" :style="target.color ? { backgroundColor: target.color } : undefined" aria-hidden="true"></span>
+            <span class="quick-mode-product-area-panel__current-copy">
+              <strong>{{ target.color ? 'Cor atual' : 'Sem fundo' }}</strong>
+              <small>{{ target.color || 'A arte aparece entre os cards' }}</small>
+            </span>
+            <button type="button" class="quick-mode-product-area-panel__clear" :disabled="props.busy || !target.color" :aria-pressed="!target.color" @click="emit('product-area-color', { targetId: target.id, value: 'transparent' })">Sem fundo</button>
+          </div>
+          <div class="quick-mode-product-area-panel__swatches" role="group" :aria-label="`Cores rápidas para ${target.label}`">
+            <button v-for="color in QUICK_MODE_COLOR_SWATCHES" :key="color" type="button" class="quick-mode-product-area-panel__swatch" :class="{ 'is-current': isProductAreaSwatchSelected(target.color, color) }" :style="{ backgroundColor: color }" :aria-label="`Aplicar cor ${color} em ${target.label}`" :aria-pressed="isProductAreaSwatchSelected(target.color, color)" :title="color" :disabled="props.busy" @click="emit('product-area-color', { targetId: target.id, value: color })"></button>
+          </div>
+          <label class="quick-mode-product-area-panel__custom">
+            <span>Escolher outra cor</span>
+            <input type="color" :aria-label="`Escolher outra cor para ${target.label}`" :value="productAreaPickerValue(target.color)" :disabled="props.busy" @change="emit('product-area-color', { targetId: target.id, value: ($event.target as HTMLInputElement).value })" />
+          </label>
+        </div>
+        <p class="quick-mode-product-area-panel__sync-hint">As mesmas cores estão em <strong>Cores globais</strong>. Os dois controles ficam sincronizados.</p>
       </section>
 
       <section v-if="productsReviewed && (activeTab === 'mine' || mobileSection === 'tools')" class="quick-mode-data-panel">
@@ -4020,13 +4049,12 @@ const useTemplateModel = (modelId: string) => {
 
 <style scoped>
 @media (max-width:767px) {
- .quick-mobile-action-dock {position:fixed;right:12px;bottom:calc(76px + env(safe-area-inset-bottom,0px));left:12px;z-index:650;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;border:1px solid rgba(147,197,253,.38);border-radius:20px;background:linear-gradient(135deg,rgba(19,39,79,.98),rgba(67,38,102,.98));box-shadow:0 14px 38px rgba(0,0,0,.42);padding:12px;transition:opacity .16s ease,transform .16s ease;}
+ .quick-mobile-action-dock {position:fixed;right:12px;bottom:calc(70px + env(safe-area-inset-bottom,0px));left:12px;z-index:650;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;border:1px solid rgba(147,197,253,.32);border-radius:15px;background:linear-gradient(135deg,rgba(19,39,79,.97),rgba(57,38,91,.97));box-shadow:0 10px 28px rgba(0,0,0,.32);padding:8px 10px;transition:opacity .16s ease,transform .16s ease;}
  .quick-mobile-action-dock.is-hidden {pointer-events:none;opacity:0;transform:translateY(16px);}
- .quick-mobile-action-dock__copy {display:grid;gap:3px;min-width:0;}
- .quick-mobile-action-dock__copy > span {color:#bfdbfe;font-size:9px;font-weight:800;letter-spacing:.12em;line-height:1.1;text-transform:uppercase;}
- .quick-mobile-action-dock__copy strong {overflow:hidden;color:#fff;font-size:14px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap;}
- .quick-mobile-action-dock__copy small {display:-webkit-box;overflow:hidden;color:#cbd5e1;font-size:10px;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2;}
- .quick-mobile-action-dock button {display:flex;align-items:center;justify-content:center;gap:6px;min-height:48px;border:1px solid rgba(255,255,255,.18);border-radius:14px;background:#fff;color:#172554;padding:0 12px;font-size:12px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.18);touch-action:manipulation;}
+ .quick-mobile-action-dock__copy {display:grid;min-width:0;}
+ .quick-mobile-action-dock__copy > span,.quick-mobile-action-dock__copy small {display:none;}
+ .quick-mobile-action-dock__copy strong {overflow:hidden;color:#fff;font-size:13px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap;}
+ .quick-mobile-action-dock button {display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;border:1px solid rgba(255,255,255,.18);border-radius:11px;background:#fff;color:#172554;padding:0 12px;font-size:12px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.14);touch-action:manipulation;}
  .quick-mobile-action-dock button:active:not(:disabled) {transform:translateY(1px);}
  .quick-mobile-action-dock button:disabled {opacity:.58;}
 
@@ -4118,4 +4146,32 @@ const useTemplateModel = (modelId: string) => {
 .quick-mode-date-format button small{color:#b5bdcc;font-size:9px}
 .quick-mode-date-format button.active{border-color:#8cb6ff;background:#233f70;box-shadow:0 0 0 1px #8cb6ff}
 .quick-mode-date-format button:focus-visible{outline:2px solid #9fc5ff;outline-offset:2px}
+</style>
+
+<style scoped>
+.quick-mode-product-area-panel{padding:12px}
+.quick-mode-product-area-panel__intro strong{display:block;color:#f8fafc;font-size:13px;line-height:1.3}
+.quick-mode-product-area-panel__intro p{margin:4px 0 0;color:#a1a1aa;font-size:11px;line-height:1.45}
+.quick-mode-product-area-panel__target{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.09)}
+.quick-mode-product-area-panel__current{display:flex;align-items:center;gap:9px;min-width:0}
+.quick-mode-product-area-panel__preview{display:block;width:32px;height:32px;flex:0 0 32px;border:1px solid rgba(255,255,255,.7);border-radius:9px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
+.quick-mode-product-area-panel__preview.is-transparent{position:relative;background-color:#26272b;background-image:linear-gradient(45deg,rgba(255,255,255,.13) 25%,transparent 25%,transparent 75%,rgba(255,255,255,.13) 75%),linear-gradient(45deg,rgba(255,255,255,.13) 25%,transparent 25%,transparent 75%,rgba(255,255,255,.13) 75%);background-position:0 0,5px 5px;background-size:10px 10px}
+.quick-mode-product-area-panel__preview.is-transparent::after{position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,transparent 46%,#f87171 47%,#f87171 53%,transparent 54%);content:''}
+.quick-mode-product-area-panel__current-copy{display:grid;min-width:0;flex:1;gap:2px}
+.quick-mode-product-area-panel__current-copy strong{color:#f4f4f5;font-size:12px;line-height:1.2}
+.quick-mode-product-area-panel__current-copy small{overflow:hidden;color:#a1a1aa;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.quick-mode-product-area-panel__clear{min-height:32px;padding:0 10px;border:1px solid rgba(159,192,255,.27);border-radius:8px;background:rgba(76,139,245,.1);color:#c7dcff;font-size:11px;font-weight:600;transition:background .16s ease,border-color .16s ease}
+.quick-mode-product-area-panel__clear:hover:not(:disabled){border-color:rgba(159,192,255,.62);background:rgba(76,139,245,.2)}
+.quick-mode-product-area-panel__clear:disabled{cursor:not-allowed;opacity:.42}
+.quick-mode-product-area-panel__swatches{display:grid;grid-template-columns:repeat(4,34px);gap:8px;margin:12px 0}
+.quick-mode-product-area-panel__swatch{width:34px;height:34px;border:2px solid rgba(255,255,255,.25);border-radius:9px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.16);cursor:pointer;transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+.quick-mode-product-area-panel__swatch:hover:not(:disabled){border-color:#fff;transform:translateY(-1px)}
+.quick-mode-product-area-panel__swatch.is-current{border-color:#fff;box-shadow:0 0 0 2px rgba(121,168,255,.72),inset 0 0 0 1px rgba(0,0,0,.16)}
+.quick-mode-product-area-panel__swatch:focus-visible,.quick-mode-product-area-panel__clear:focus-visible,.quick-mode-product-area-panel__custom input:focus-visible{outline:2px solid #a9c7ff;outline-offset:3px}
+.quick-mode-product-area-panel__swatch:disabled{cursor:not-allowed;opacity:.4}
+.quick-mode-product-area-panel__custom{display:flex;align-items:center;justify-content:space-between;min-height:38px;padding-top:9px;border-top:1px solid rgba(255,255,255,.09);color:#d4d4d8;font-size:11px;font-weight:600}
+.quick-mode-product-area-panel__custom input{width:36px;height:28px;padding:2px;border:1px solid rgba(255,255,255,.24);border-radius:7px;background:#303136;cursor:pointer}
+.quick-mode-product-area-panel__custom input:disabled{cursor:not-allowed;opacity:.4}
+.quick-mode-product-area-panel__sync-hint{margin:11px 0 0;color:#a1a1aa;font-size:10px;line-height:1.45}
+.quick-mode-product-area-panel__sync-hint strong{color:#c7dcff;font-weight:600}
 </style>

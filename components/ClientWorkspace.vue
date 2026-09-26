@@ -6,6 +6,7 @@ import {
   Clapperboard,
   LayoutTemplate,
   LogOut,
+  Palette,
   Radio,
   Sparkles,
   Store,
@@ -25,14 +26,14 @@ const customerFirstName = computed(() => {
 
 const customerInitial = computed(() => customerFirstName.value.charAt(0).toLocaleUpperCase('pt-BR') || 'J')
 
-const workspaces = [
+const workspaces = computed(() => [
   {
     id: 'encartes',
     icon: LayoutTemplate,
     eyebrow: 'Ofertas da loja',
     title: 'Encartes',
     description: 'Escolha um modelo, monte a campanha com sua lista e deixe a sua marca pronta para divulgar.',
-    href: '/flyer-templates',
+    href: auth.user.value?.role === 'editor' ? '/flyer-templates' : '/quick-editor',
     action: 'Criar encarte',
     steps: ['Escolha o modelo', 'Inclua suas ofertas', 'Exporte e publique']
   },
@@ -65,8 +66,28 @@ const workspaces = [
     href: '/radio-indoor',
     action: 'Abrir rádio indoor',
     steps: ['Organize a programação', 'Escolha a trilha', 'Leve ao ambiente da loja']
+  },
+  {
+    id: 'artes',
+    icon: Palette,
+    eyebrow: 'Criação visual',
+    title: 'Estúdio de Artes',
+    description: 'Crie peças para a comunicação da loja.',
+    href: '/art-studio',
+    action: 'Abrir estúdio',
+    steps: ['Escolha o formato', 'Monte a arte', 'Exporte']
+  },
+  {
+    id: 'builder',
+    icon: LayoutTemplate,
+    eyebrow: 'Encarte estruturado',
+    title: 'Builder',
+    description: 'Monte e organize encartes no construtor.',
+    href: '/builder',
+    action: 'Abrir builder',
+    steps: ['Escolha o layout', 'Adicione produtos', 'Publique']
   }
-]
+].filter(workspace => auth.can(workspace.id as 'encartes' | 'cartazes' | 'videos' | 'radio' | 'artes' | 'builder')))
 
 const handleSignOut = async () => {
   await auth.signOut()
@@ -84,7 +105,8 @@ const handleSignOut = async () => {
         </NuxtLink>
 
         <div class="client-workspace__account">
-          <NuxtLink to="/business-profile" class="client-workspace__store-link">
+          <AccountSwitcher v-if="auth.isStaff.value" />
+          <NuxtLink v-if="auth.can('loja')" to="/business-profile" class="client-workspace__store-link">
             <Store :size="16" />
             <span>Minha loja</span>
           </NuxtLink>
@@ -111,7 +133,7 @@ const handleSignOut = async () => {
                 <UserRound :size="16" />
                 Meu perfil
               </NuxtLink>
-              <NuxtLink to="/business-profile" class="client-workspace__account-action">
+              <NuxtLink v-if="auth.can('loja')" to="/business-profile" class="client-workspace__account-action">
                 <Store :size="16" />
                 Dados da loja
               </NuxtLink>
@@ -152,7 +174,7 @@ const handleSignOut = async () => {
             <span>Escolha por onde começar</span>
             <h2 id="tools-title">Sua comunicação, em um só lugar.</h2>
           </div>
-          <p>Quatro caminhos claros para criar, divulgar e movimentar as ofertas da sua loja.</p>
+          <p>Escolha uma área disponível para criar e gerenciar materiais.</p>
         </div>
 
         <div class="client-workspace__grid">
@@ -187,7 +209,7 @@ const handleSignOut = async () => {
         </div>
       </section>
 
-      <section class="client-workspace__help" aria-label="Ajuda para começar">
+      <section v-if="auth.can('loja')" class="client-workspace__help" aria-label="Ajuda para começar">
         <div class="client-workspace__help-icon"><Store :size="19" /></div>
         <div>
           <strong>Quer que tudo saia com a cara da sua loja?</strong>

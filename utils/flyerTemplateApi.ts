@@ -372,13 +372,13 @@ export const resolveFlyerTemplateModelIdForPage = (
   return explicitModelId
 }
 
-export const listFlyerTemplates = async (headers: Record<string, string>): Promise<FlyerTemplateSummary[]> => {
+export const listFlyerTemplates = async (headers: Record<string, string>, options: { library?: boolean } = {}): Promise<FlyerTemplateSummary[]> => {
   const rows = await $fetch<any>('/api/projects', {
     headers,
     // A grade só precisa dos metadados de cada modelo. As composições completas
     // ficam grandes quando um tema tem vários formatos e são carregadas pelo
     // editor apenas ao abrir o modelo escolhido.
-    query: { templates: '1', summary: '1' }
+    query: { templates: '1', summary: '1', ...(options.library ? { library: '1' } : {}) }
   })
   return Array.isArray(rows) ? rows : []
 }
@@ -529,13 +529,14 @@ export const instantiateFlyerTemplate = async (opts: {
   headers: Record<string, string>
   templateId: string
   name?: string
+  library?: boolean
 }): Promise<string> => {
   const templateId = String(opts.templateId || '').trim()
   if (!templateId) throw new Error('Modelo inválido.')
 
   const fullProject = await $fetch<any>('/api/projects', {
     headers: opts.headers,
-    query: { id: templateId }
+    query: { id: templateId, ...(opts.library ? { library: '1' } : {}) }
   })
   const sourcePages = getStoredProjectPages(fullProject?.canvas_data)
   if (!sourcePages.length) {

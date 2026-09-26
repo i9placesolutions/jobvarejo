@@ -16,18 +16,8 @@ import {
   ZoomOut
 } from 'lucide-vue-next'
 import { AVAILABLE_FONT_FAMILIES } from '~/utils/font-catalog'
+import { QUICK_MODE_COLOR_SWATCHES, normalizeQuickModePaletteColor } from '~/utils/quickModeColorPalette'
 import type { QuickEditableColorTarget } from '~/utils/quickModeNativeTools'
-
-const QUICK_COLOR_SWATCHES = [
-  '#172033',
-  '#ffffff',
-  '#ef4444',
-  '#f97316',
-  '#facc15',
-  '#22c55e',
-  '#3b82f6',
-  '#8b5cf6'
-]
 
 const props = defineProps<{
   mobileOpen?: boolean
@@ -107,14 +97,9 @@ const hasNativeColor = computed(() => colorTargetCount.value > 0)
 const selectedColorTarget = computed(() => (
   colorTargets.value.find(target => target.id === selectedColorTargetId.value) || colorTargets.value[0] || null
 ))
-const selectedColorInput = computed(() => {
-  const color = String(selectedColorTarget.value?.color || '').trim().toLowerCase()
-  if (/^#[0-9a-f]{6}$/i.test(color)) return color
-  if (/^#[0-9a-f]{3}$/i.test(color)) {
-    return `#${color.slice(1).split('').map(char => `${char}${char}`).join('')}`
-  }
-  return customColor.value
-})
+const isSelectedColorSwatch = (color: string) => (
+  normalizeQuickModePaletteColor(selectedColorTarget.value?.color) === color
+)
 const selectedOpacity = computed(() => Math.round(Math.max(0, Math.min(1, Number(selectedColorTarget.value?.opacity ?? 1))) * 100))
 
 watch(colorTargets, (targets, previousTargets) => {
@@ -127,13 +112,9 @@ watch(colorTargets, (targets, previousTargets) => {
 }, { immediate: true })
 
 watch(selectedColorTarget, target => {
-  const color = String(target?.color || '').trim().toLowerCase()
-  if (/^#[0-9a-f]{3,6}$/i.test(color)) {
-    customColor.value = color.length === 4
-      ? `#${color.slice(1).split('').map(char => `${char}${char}`).join('')}`
-      : color
-  }
-})
+  const color = normalizeQuickModePaletteColor(target?.color)
+  customColor.value = color || (target?.mixedColor ? customColor.value : '#ffffff')
+}, { immediate: true })
 
 const togglePanel = (panel: 'pan' | 'font' | 'color') => {
   openPanel.value = openPanel.value === panel ? null : panel
@@ -334,18 +315,18 @@ const onZoomInput = (event: Event) => {
             <div v-if="selectedColorTarget" class="quick-mode-canvas-controls__color-editor">
               <div class="quick-mode-canvas-controls__color-editor-heading">
                 <div>
-                  <strong>{{ selectedColorTarget.label }}</strong>
-                  <small>{{ selectedColorTarget.description }}</small>
+                  <strong>Paleta rápida</strong>
+                  <small>Toque em uma cor para aplicar ao grupo selecionado.</small>
                 </div>
                 <span v-if="selectedColorTarget.mixedColor" class="quick-mode-canvas-controls__mixed-label">Várias</span>
               </div>
-            <div class="quick-mode-canvas-controls__swatches" role="list" aria-label="Paleta rápida">
-                <button v-for="color in QUICK_COLOR_SWATCHES" :key="color" type="button" class="quick-mode-canvas-controls__swatch" :class="{ 'is-current': selectedColorInput === color }" :style="{ backgroundColor: color }" :aria-label="`Aplicar cor ${color} em ${selectedColorTarget.label}`" :title="color" @click="chooseColor(color)"></button>
-            </div>
-            <label class="quick-mode-canvas-controls__custom-color">
-              <span>Escolher outra cor</span>
+              <div class="quick-mode-canvas-controls__swatches" role="list" aria-label="Paleta rápida">
+                <button v-for="color in QUICK_MODE_COLOR_SWATCHES" :key="color" type="button" class="quick-mode-canvas-controls__swatch" :class="{ 'is-current': isSelectedColorSwatch(color) }" :style="{ backgroundColor: color }" :aria-label="`Aplicar cor ${color} em ${selectedColorTarget.label}`" :aria-pressed="isSelectedColorSwatch(color)" :title="color" :disabled="props.busy" @click="chooseColor(color)"></button>
+              </div>
+              <label class="quick-mode-canvas-controls__custom-color">
+                <span>Escolher outra cor</span>
                 <input v-model="customColor" type="color" aria-label="Escolher outra cor" @change="applyCustomColor" />
-            </label>
+              </label>
               <div class="quick-mode-canvas-controls__opacity-control">
                 <div class="quick-mode-canvas-controls__opacity-heading">
                   <span>Transparência</span>
@@ -353,7 +334,7 @@ const onZoomInput = (event: Event) => {
                 </div>
                 <input :value="selectedOpacity" type="range" min="0" max="100" step="1" aria-label="Transparência do alvo selecionado" @input="applySelectedOpacity" />
               </div>
-              <button v-if="selectedColorTarget.canClear" type="button" class="quick-mode-canvas-controls__clear-color" @click="clearSelectedColor">Deixar sem cor</button>
+              <button v-if="selectedColorTarget.canClear" type="button" class="quick-mode-canvas-controls__clear-color" :class="{ 'is-product-area': selectedColorTarget.kind === 'product-area' }" :disabled="props.busy" :aria-label="selectedColorTarget.kind === 'product-area' ? 'Deixar área de produtos sem fundo' : 'Deixar elemento sem cor'" @click="clearSelectedColor">{{ selectedColorTarget.kind === 'product-area' ? 'Sem fundo' : 'Deixar sem cor' }}</button>
             </div>
           </template>
           <p v-else class="quick-mode-canvas-controls__empty">Não há formas editáveis nesta página. Imagens, fundo da arte e dados automáticos ficam protegidos.</p>
@@ -765,6 +746,22 @@ const onZoomInput = (event: Event) => {
 .quick-mode-canvas-controls__clear-color:hover {
   border-color: rgba(248, 113, 113, 0.7);
   background: rgba(248, 113, 113, 0.16);
+}
+
+.quick-mode-canvas-controls__clear-color.is-product-area {
+  border-color: rgba(159, 192, 255, 0.38);
+  background: rgba(76, 139, 245, 0.1);
+  color: #c7dcff;
+}
+
+.quick-mode-canvas-controls__clear-color.is-product-area:hover:not(:disabled) {
+  border-color: rgba(159, 192, 255, 0.72);
+  background: rgba(76, 139, 245, 0.2);
+}
+
+.quick-mode-canvas-controls__clear-color:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .quick-mode-canvas-controls__swatch {

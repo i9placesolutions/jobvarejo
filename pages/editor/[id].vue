@@ -17,9 +17,10 @@ const editorCanvasRef = ref<EditorCanvasInstance | null>(null)
 
 // Get project ID from route
 const route = useRoute()
+const auth = useAuth()
 const projectId = route.params.id as string
 const runtimeConfig = useRuntimeConfig()
-const isQuickMode = computed(() => String(route.query.quick || '').trim() === '1')
+const isQuickMode = computed(() => auth.user.value?.role === 'user' || String(route.query.quick || '').trim() === '1')
 const isTemplateProject = computed(() => project.isTemplate === true)
 const editorExitPath = computed(() => isTemplateProject.value ? '/flyer-templates' : '/')
 
@@ -568,14 +569,14 @@ const openPageHistory = () => {
         </button>
         <span class="text-xs font-medium text-white truncate">{{ activePage?.name || 'Sem título' }}</span>
         <span
-          v-if="activePageFormatSummary"
+          v-if="activePageFormatSummary && (!isQuickMode || !isMobile)"
           class="hidden max-w-[220px] shrink-0 truncate rounded border border-sky-300/25 bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-sky-200 sm:inline-flex"
           :title="`Formato em edição: ${activePageFormatSummary}`"
         >
           {{ activePageFormatSummary }}
         </span>
         <span
-          v-if="activePageFormatLabel"
+          v-if="activePageFormatLabel && !isQuickMode"
           class="inline-flex max-w-[110px] shrink-0 truncate rounded border border-sky-300/25 bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-sky-200 sm:hidden"
           :title="`Formato em edição: ${activePageFormatSummary}`"
         >
@@ -583,7 +584,7 @@ const openPageHistory = () => {
         </span>
         <span v-if="isTemplateProject" class="shrink-0 rounded border border-indigo-400/25 bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-indigo-300">Modelo de encarte</span>
         <span v-if="isTemplateProject && !isQuickMode" class="hidden truncate text-[10px] text-zinc-500 lg:inline">Elementos → Dados da loja para posicionar logo, nome e contato. O usuário da rápida só envia produtos.</span>
-        <span v-if="isQuickMode" class="shrink-0 rounded border border-violet-400/25 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-violet-300">Edição rápida</span>
+        <span v-if="isQuickMode && !isMobile" class="shrink-0 rounded border border-violet-400/25 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-violet-300">Edição rápida</span>
       </div>
 
       <!-- Save Status Indicator -->

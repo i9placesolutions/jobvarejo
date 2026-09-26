@@ -1,6 +1,7 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { requireAuthenticatedUser } from '../../utils/auth'
+import { isTemplateLibraryStorageKey } from '../../utils/template-library-storage'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import {
   assertClientStorageWriteAllowed,
@@ -55,13 +56,15 @@ export default defineEventHandler(async (event) => {
         statusMessage: 'Invalid key format'
       })
     }
-    if (isProjectsKey(key) && !isUserProjectKey(key, user.id)) {
+    const templateLibraryRead = operation === 'get' && isProjectsKey(key) && !isUserProjectKey(key, user.id)
+      && await isTemplateLibraryStorageKey(key)
+    if (isProjectsKey(key) && !isUserProjectKey(key, user.id) && !templateLibraryRead) {
       throw createError({
         statusCode: 403,
         statusMessage: 'Forbidden key scope'
       })
     }
-    if (!isStorageKeyAllowedForUser(key, user.id)) {
+    if (!isStorageKeyAllowedForUser(key, user.id) && !templateLibraryRead) {
       throw createError({
         statusCode: 400,
         statusMessage: 'Invalid key prefix'

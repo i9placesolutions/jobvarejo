@@ -1,9 +1,10 @@
-import { ensureAuthColumns, getProfileByWhatsApp, updateLastLoginAt } from '../../utils/auth-db'
+import { ensureAuthColumns, getProfileById, getProfileByWhatsApp, updateLastLoginAt } from '../../utils/auth-db'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { verifyPassword } from '../../utils/password'
 import { createSessionToken } from '../../utils/session-token'
 import { getAuthCookieOptions } from '../../utils/auth-cookie'
 import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
+import { normalizeEditorPermissions } from '../../../shared/access-control'
 
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
@@ -26,11 +27,15 @@ export default defineEventHandler(async (event) => {
   if (!profile?.id || !validPassword) {
     throw createError({ statusCode: 401, statusMessage: 'WhatsApp ou senha inválidos.' })
   }
+  const current = await getProfileById(profile.id)
+  if (!current?.id || current.is_active === false) {
+    throw createError({ statusCode: 401, statusMessage: 'WhatsApp ou senha inválidos.' })
+  }
 
   const { token, expiresIn } = createSessionToken({
     userId: profile.id,
     email: String(profile.email),
-    role: profile.role || 'user'
+    role: current.role || 'user'
   })
 
   const cookieBase = getAuthCookieOptions(event, expiresIn)
@@ -48,6 +53,10 @@ export default defineEventHandler(async (event) => {
     ...cookieBase,
     httpOnly: false
   })
+  setCookie(event, 'active-account-id', '', {
+    ...getAuthCookieOptions(event, 0),
+    httpOnly: true
+  })
 
   await updateLastLoginAt(profile.id)
 
@@ -58,7 +67,8 @@ export default defineEventHandler(async (event) => {
       email: profile.email,
       name: profile.name ?? null,
       avatar_url: profile.avatar_url ?? null,
-      role: profile.role || 'user'
+      role: current.role || 'user',
+      editorPermissions: normalizeEditorPermissions(current.editor_permissions)
     },
     session: {
       access_token: token,

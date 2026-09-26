@@ -203,6 +203,13 @@ Para desenvolvimento minimo funcional:
 
 - **Code splitting**: Chunks manuais em `nuxt.config.ts` (vendor-fabric, vendor-aws, editor-canvas, etc.)
 
+## Jev no Codex
+
+- Neste ambiente, o Jev está disponível pelo servidor MCP global `jev_openrouter`, ferramenta `jev_decide`. A credencial fica fora deste repositório.
+- Use `jev_decide` nas tarefas deste projeto somente para decisões curtas e fechadas, como classificar solicitações, escolher entre opções definidas, pontuar prioridade ou responder sim/não. Agrupe perguntas relacionadas e envie apenas o contexto necessário.
+- Para escolhas, passe `criteria` como objeto de opções nomeadas. Se a confiança for baixa ou a decisão tiver alto impacto, confira o caso diretamente antes de agir.
+- Não use Jev para escrever código ou texto, raciocínio aberto ou regras determinísticas. Não envie segredos, dados pessoais ou arquivos `.env` à ferramenta.
+
 ## Contexto compartilhado do Vault Obsidian
 
 A documentação complementar deste projeto está em `/Users/rafaelmendes/Documents/Obsidian/01 - Projetos/jobvarejo`.
