@@ -832,6 +832,11 @@ const saveCanvasData = async (
             console.log('✅ JSON carregado via proxy, objetos:', canvasJson?.objects?.length || 0)
             return canvasJson
           }
+          // Para JSON de projeto, o proxy verifica as variantes permitidas de
+          // bucket/chave antes de retornar 404. Assinar e pedir o mesmo objeto
+          // ausente não recupera os dados; deixe useProject seguir com o
+          // fallback do banco ou do rascunho local.
+          if (canvasJson === null) return null
         } catch (error: any) {
           console.warn('⚠️ Falha ao ler JSON pelo proxy; tentando URL presignada:', error?.message || error)
         }

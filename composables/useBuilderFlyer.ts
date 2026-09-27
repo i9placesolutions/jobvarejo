@@ -149,7 +149,7 @@ export const useBuilderFlyer = () => {
 
   // ── Data loading ────────────────────────────────────────────────────────
 
-  const loadFlyer = async (id: string) => {
+  const loadFlyer = async (id: string, catalogReady?: Promise<void>) => {
     state.value.isLoading = true
     try {
       const flyerRes = await $fetch<any>(`/api/builder/flyers/${id}`)
@@ -170,6 +170,9 @@ export const useBuilderFlyer = () => {
       state.value.products = productsData.sort((a, b) => a.position - b.position)
       state.value.isDirty = false
       state.value.currentPage = 1
+
+      // Os catálogos carregam junto com o encarte, mas precisam estar prontos antes de resolver suas referências.
+      await catalogReady
 
       // Resolve FKs
       if (flyerData.theme_id) {

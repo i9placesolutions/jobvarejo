@@ -222,7 +222,7 @@ export default defineNuxtConfig({
               id.includes('/composables/useFigmaCrop.ts') ||
               id.includes('/composables/useResponsive.ts') ||
               id.includes('/composables/useAiImageStudio.ts') ||
-              id.includes('/utils/price') ||
+              (id.includes('/utils/price') && !id.endsWith('/utils/priceTagText.ts')) ||
               id.includes('/utils/labelTemplate') ||
               id.includes('/utils/templateSnapshot') ||
               id.includes('/utils/redBurst') ||

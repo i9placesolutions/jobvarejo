@@ -6,6 +6,7 @@
 import type { Product, ProductImage, Splash, ProductZone, ProductZonePreviewFormat, GlobalStyles } from '~/types/product-zone';
 import { DEFAULT_PRODUCT_ZONE, DEFAULT_GLOBAL_STYLES, DEFAULT_SPLASH } from '~/types/product-zone';
 import { DEFAULT_EDITOR_FONT_FAMILY } from '~/utils/font-catalog';
+import { parsePriceValue } from '~/utils/parsePrice';
 import { resolveProductImageRef } from '~/utils/productImageRef';
 import {
   DEFAULT_PRODUCT_ZONE_PREVIEW_FORMAT,
@@ -75,54 +76,7 @@ export const calculateOptimalImageSize = (
 // PRICE PARSING & FORMATTING
 // =============================================================================
 
-/**
- * Parse preço de string para número
- * Aceita formatos: "19,90", "R$ 19.90", "19.9", etc.
- */
-export const parsePrice = (value: string | number | undefined | null): number => {
-  if (value === undefined || value === null) return 0;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-  
-  // Remove símbolos, espaços e mantém apenas dígitos/separadores relevantes
-  const cleaned = value.toString()
-    .replace(/R\$\s*/gi, '')
-    .replace(/[^\d.,-]/g, '')
-    .replace(/\s/g, '')
-    .trim();
-
-  if (!cleaned) return 0;
-  
-  // Detecta o separador decimal pelo último separador presente.
-  const lastComma = cleaned.lastIndexOf(',');
-  const lastDot = cleaned.lastIndexOf('.');
-
-  let decimalSeparator: ',' | '.' | null = null;
-  if (lastComma !== -1 && lastDot !== -1) {
-    decimalSeparator = lastComma > lastDot ? ',' : '.';
-  } else if (lastComma !== -1 || lastDot !== -1) {
-    const sep = lastComma !== -1 ? ',' : '.';
-    const parts = cleaned.split(sep);
-    const occurrences = parts.length - 1;
-    const fraction = parts[1] ?? '';
-    if (occurrences === 1 && fraction.length > 0 && fraction.length <= 2) {
-      decimalSeparator = sep;
-    }
-  }
-
-  let normalized: string;
-  if (!decimalSeparator) {
-    // Apenas separadores de milhar (ou formato inválido): remove todos.
-    normalized = cleaned.replace(/[.,]/g, '');
-  } else {
-    const decimalIndex = cleaned.lastIndexOf(decimalSeparator);
-    const integerPart = cleaned.slice(0, decimalIndex).replace(/[.,]/g, '');
-    const fractionPart = cleaned.slice(decimalIndex + 1).replace(/[.,]/g, '');
-    normalized = `${integerPart}.${fractionPart}`;
-  }
-  
-  const parsed = parseFloat(normalized);
-  return isNaN(parsed) ? 0 : parsed;
-};
+export const parsePrice = parsePriceValue;
 
 /**
  * Formata preço para exibição em formato brasileiro

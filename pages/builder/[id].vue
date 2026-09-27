@@ -81,13 +81,16 @@ let resizeObserver: ResizeObserver | null = null
 // Load data on mount
 onMounted(async () => {
   await auth.getSession()
-  await loadCatalog()
+  const catalogLoad = loadCatalog()
   if (flyerId.value) {
     try {
-      await loadFlyer(flyerId.value)
+      await loadFlyer(flyerId.value, catalogLoad)
     } catch {
+      await catalogLoad
       await navigateTo('/builder')
     }
+  } else {
+    await catalogLoad
   }
   // Auto-fit after data loads
   nextTick(() => {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { BuilderFlyerProduct, BuilderPriceTagStyle } from '~/types/builder'
 import { parsePriceBR, formatCentsToPrice, parsePriceToCents } from '~/utils/priceTagText'
-import { parsePrice } from '~/utils/product-zone-helpers'
+import { parsePriceValue } from '~/utils/parsePrice'
 
 const props = defineProps<{
   product: BuilderFlyerProduct
@@ -317,7 +317,7 @@ const barcodeValue = computed(() => (props.product as BuilderFlyerProduct & { ba
 const symbolicItems = computed(() => {
   // FIX: usar parsePrice para garantir que strings BR sejam interpretadas corretamente
   const priceRaw = props.product.offer_price
-  const price = typeof priceRaw === 'string' ? parsePrice(priceRaw) : (typeof priceRaw === 'number' ? priceRaw : 0)
+  const price = typeof priceRaw === 'string' ? parsePriceValue(priceRaw) : (typeof priceRaw === 'number' ? priceRaw : 0)
   if (price == null || price <= 0) return null
 
   const items: { type: 'coin' | 'note'; image?: string; label: string; bgColor: string; textColor: string; borderColor: string }[] = []
