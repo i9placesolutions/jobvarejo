@@ -134,6 +134,18 @@ it('recognizes the actual Torra background by name AND explicit asset metadata',
   expect(classify({ type: 'Image', name: 'Fundo Teste', layerName: 'header' })).toBe('image')
   expect(classify({ ...torraBackground, businessProfileField: 'logo' })).toBe('identity')
 })
+it('recognizes the confirmed Fundo original asset only with its exact name and path', () => {
+  const source = '/api/storage/p?key=projects%2Feb847e8e-7c19-4bee-8042-376528ce6192%2Fd6e5df76-0d63-41fa-8cbd-edd5bf29a259%2Fassets%2Ffundo-original.png'
+  expect(classify({ type: 'Image', name: 'Fundo original Ofertas do Açougue', __originalSrc: source })).toBeNull()
+  expect(classify({ type: 'Image', name: 'Fundo original Ofertas do Açougue', src: source })).toBeNull()
+  expect(classify({ type: 'Image', name: 'Fundo original Ofertas do Açougue' })).toBe('image')
+  expect(classify({ type: 'Image', name: 'Fundo original Ofertas do Açougue', __originalSrc: source.replace('fundo-original.png', 'product.png') })).toBe('image')
+  expect(classify({ type: 'Image', name: 'Fundo original Ofertas do Açougue', __originalSrc: source.replace('fundo-original.png', 'background.png') })).toBeNull()
+  expect(classify({ type: 'Image', name: 'Fundo original Ofertas do Açougue', __originalSrc: source, binding: 'campaign-background' })).toBe('image')
+  expect(classify({ type: 'Image', name: 'Fundo original Ofertas do Açougue', __originalSrc: source, data: { field: 'background' } })).toBe('image')
+  expect(classify({ type: 'Image', name: 'Fundo original Ofertas do Açougue', __originalSrc: source, isLogo: true })).toBe('identity')
+  expect(classify({ type: 'Image', name: 'Fundo original Ofertas do Açougue', __originalSrc: source, isProductCard: true })).toBe('card')
+})
 it('keeps all Selo 3D sprites and header logos protected regardless of background metadata', () => {
   expect(classify({ ...torraBackground, ...torraSeal, isBackground: true, layerName: 'background' })).toBe('image')
   expect(classify(torraLogo)).toBe('identity')

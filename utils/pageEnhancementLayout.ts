@@ -67,6 +67,119 @@ export function readRedesignCard(card: ObjectNode) {
   return { title: String(title.text), price, photos, notes: notes.map(o => String(o.text)), badges }
 }
 
+type RgbColor = { r: number; g: number; b: number; a: number }
+type PaletteCandidate = { color: RgbColor; weight: number }
+export interface RedesignPalette {
+  cardBase: string
+  cardLight: string
+  cardDark: string
+  cardStroke: string
+  accent: string
+  accentDark: string
+  titleText: string
+  priceBackground: string
+  priceStroke: string
+  priceDepth: string
+  priceCurrencyBackground: string
+  priceText: string
+  priceCurrencyText: string
+  priceUnitText: string
+}
+
+const clamp = (value: number, min = 0, max = 255) => Math.max(min, Math.min(max, value))
+const namedColors: Record<string, RgbColor> = {
+  black: { r: 0, g: 0, b: 0, a: 1 }, white: { r: 255, g: 255, b: 255, a: 1 },
+  red: { r: 255, g: 0, b: 0, a: 1 }, yellow: { r: 255, g: 255, b: 0, a: 1 },
+  blue: { r: 0, g: 0, b: 255, a: 1 }, transparent: { r: 0, g: 0, b: 0, a: 0 }
+}
+function parseColor(value: unknown): RgbColor | null {
+  if (typeof value !== 'string') return null
+  const source = value.trim().toLowerCase()
+  if (namedColors[source]) return namedColors[source]
+  if (source.startsWith('#')) {
+    const hex = source.slice(1)
+    const full = hex.length === 3 || hex.length === 4 ? hex.split('').map(part => part + part).join('') : hex
+    if (![6, 8].includes(full.length) || !/^[0-9a-f]+$/.test(full)) return null
+    return { r: parseInt(full.slice(0, 2), 16), g: parseInt(full.slice(2, 4), 16), b: parseInt(full.slice(4, 6), 16), a: full.length === 8 ? parseInt(full.slice(6, 8), 16) / 255 : 1 }
+  }
+  const match = /^rgba?\((.+)\)$/.exec(source)
+  if (!match) return null
+  const parts = match[1]!.split(/[,/\s]+/).filter(Boolean)
+  if (parts.length < 3) return null
+  const channel = (part: string) => part.endsWith('%') ? clamp(Number.parseFloat(part) * 2.55) : clamp(Number.parseFloat(part))
+  const alpha = parts[3] ? (parts[3].endsWith('%') ? clamp(Number.parseFloat(parts[3]) / 100, 0, 1) : clamp(Number.parseFloat(parts[3]), 0, 1)) : 1
+  const r = channel(parts[0]!), g = channel(parts[1]!), b = channel(parts[2]!)
+  return [r, g, b, alpha].every(Number.isFinite) ? { r, g, b, a: alpha } : null
+}
+function paintColors(value: unknown): RgbColor[] {
+  if (typeof value === 'string') return parseColor(value) ? [parseColor(value)!] : []
+  if (!value || typeof value !== 'object') return []
+  const paint = value as { colorStops?: unknown; stops?: unknown; color?: unknown }
+  const stops = Array.isArray(paint.colorStops) ? paint.colorStops : Array.isArray(paint.stops) ? paint.stops : []
+  if (stops.length) return stops.flatMap(stop => paintColors((stop as { color?: unknown })?.color ?? stop))
+  return paintColors(paint.color)
+}
+function hex(color: RgbColor): string {
+  return '#' + [color.r, color.g, color.b].map(value => Math.round(clamp(value)).toString(16).padStart(2, '0')).join('')
+}
+function rgb(value: string): RgbColor {
+  return parseColor(value) || { r: 0, g: 0, b: 0, a: 1 }
+}
+function mix(first: string, second: string, amount: number): string {
+  const a = rgb(first), b = rgb(second), t = Math.max(0, Math.min(1, amount))
+  return hex({ r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t, a: 1 })
+}
+const tint = (color: string, amount: number) => mix(color, '#ffffff', amount)
+const shade = (color: string, amount: number) => mix(color, '#000000', amount)
+const luminance = (color: string) => { const c = rgb(color); return (c.r * .2126 + c.g * .7152 + c.b * .0722) / 255 }
+const saturation = (color: RgbColor) => { const max = Math.max(color.r, color.g, color.b), min = Math.min(color.r, color.g, color.b); return max ? (max - min) / max : 0 }
+const rgba = (color: string, alpha: number) => { const c = rgb(color); return `rgba(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)},${alpha})` }
+const descendants = (object: ObjectNode): ObjectNode[] => [object, ...children(object).flatMap(descendants)]
+const objectArea = (object: ObjectNode) => {
+  try { const bounds = object.getBoundingRect?.(); return bounds?.width > 0 && bounds?.height > 0 ? bounds.width * bounds.height : 1 } catch { return 1 }
+}
+function namedPaint(object: ObjectNode, names: string[], property: 'fill' | 'stroke'): string | undefined {
+  for (const node of descendants(object)) {
+    if (!names.includes(String(node.name || ''))) continue
+    const value = paintColors(node[property])[0]
+    if (value && value.a > 0) return hex(value)
+  }
+  return undefined
+}
+function directPaint(object: ObjectNode, property: 'fill' | 'stroke'): string | undefined {
+  const value = paintColors(object[property])[0]
+  return value && value.a > 0 ? hex(value) : undefined
+}
+function weightedPaint(objects: ObjectNode[], names: string[], property: 'fill' | 'stroke', fallback: string, chromatic = false): string {
+  const candidates: PaletteCandidate[] = []
+  objects.flatMap(descendants).forEach(node => {
+    if (!names.includes(String(node.name || ''))) return
+    const weight = objectArea(node)
+    paintColors(node[property]).forEach(color => { if (color.a > 0) candidates.push({ color, weight }) })
+  })
+  const selected = candidates.filter(candidate => !chromatic || saturation(candidate.color) >= .16)
+    .sort((a, b) => (b.weight * (chromatic ? saturation(b.color) : 1)) - (a.weight * (chromatic ? saturation(a.color) : 1)))[0]
+  return selected ? hex(selected.color) : fallback
+}
+export function extractRedesignPalette(cards: ObjectNode[]): RedesignPalette {
+  const cardBase = weightedPaint(cards, ['offerBackground'], 'fill', '#f5f5f5', true)
+  const cardStroke = weightedPaint(cards, ['offerBackground'], 'stroke', '#d1d5db', true)
+  const accent = weightedPaint(cards, ['offerBackground'], 'stroke', cardStroke, true)
+  const priceBackground = weightedPaint(cards, ['price_bg'], 'fill', '#111111')
+  const priceStroke = weightedPaint(cards, ['price-rim', 'price_bg'], 'stroke', cardStroke)
+  const priceDepth = weightedPaint(cards, ['price-depth'], 'fill', shade(priceBackground, .35))
+  const priceCurrencyBackground = weightedPaint(cards, ['price_currency_bg', 'price-rim', 'price_currency_bg'], 'fill', accent)
+  const titleText = weightedPaint(cards, ['smart_title'], 'fill', '#ffffff')
+  const priceText = weightedPaint(cards, ['price_value_text'], 'fill', '#ffffff')
+  const priceCurrencyText = weightedPaint(cards, ['price_currency_text'], 'fill', '#111111')
+  const priceUnitText = weightedPaint(cards, ['price_unit_text'], 'fill', priceText)
+  return {
+    cardBase, cardLight: tint(cardBase, .14), cardDark: shade(cardBase, .42), cardStroke, accent,
+    accentDark: shade(accent, .28), titleText, priceBackground, priceStroke, priceDepth,
+    priceCurrencyBackground, priceText, priceCurrencyText, priceUnitText
+  }
+}
+
 function round(ctx: CanvasRenderingContext2D, box: EnhancementRect, fill: string | CanvasGradient, radius: number, stroke?: string) {
   ctx.beginPath(); ctx.roundRect(box.left, box.top, box.width, box.height, radius)
   ctx.fillStyle = fill; ctx.fill()
@@ -89,7 +202,7 @@ function contain(ctx: CanvasRenderingContext2D, image: HTMLCanvasElement, box: E
 }
 
 /** Produz uma guia nova e uma camada comercial, sem copiar os cards antigos. */
-export function drawRedesignCards(cards: ObjectNode[], overlay: CanvasRenderingContext2D, guide: CanvasRenderingContext2D, crop: EnhancementRect, multiplier: number) {
+export function drawRedesignCards(cards: ObjectNode[], overlay: CanvasRenderingContext2D, guide: CanvasRenderingContext2D, crop: EnhancementRect, multiplier: number, palette: RedesignPalette = extractRedesignPalette(cards)) {
   const bounds = cards.map(card => (children(card).find(o => o.name === 'offerBackground') || card).getBoundingRect() as EnhancementRect)
   const left = Math.max(crop.left, Math.min(...bounds.map(b => b.left)))
   const top = Math.max(crop.top, Math.min(...bounds.map(b => b.top)))
@@ -99,17 +212,10 @@ export function drawRedesignCards(cards: ObjectNode[], overlay: CanvasRenderingC
   // Cada produto permanece na própria célula do encarte original. O layout
   // gerado nunca cria uma célula nova, elimina um item ou troca a ordem.
   const slots = originalRedesignCardSlots(bounds, crop, multiplier)
-  const nodes = cards.flatMap(leaves)
-  const color = (name: string, fallback: string) => {
-    const value = nodes.find(o => o.name === name && typeof o.fill === 'string' && /^#[0-9a-f]{6}$/i.test(o.fill))?.fill
-    return typeof value === 'string' ? value : fallback
-  }
-  const primary = color('price_bg', '#d5091d'), accent = color('price-rim', '#ffcc32')
-  const dark = '#' + primary.slice(1).match(/../g)!.map(part => Math.max(8, Math.round(parseInt(part, 16) * .3)).toString(16).padStart(2, '0')).join('')
   const ordered = cards.map((card, index) => ({ card, bounds: bounds[index]! })).sort((a,b) => Math.abs(a.bounds.top - b.bounds.top) > 8 ? a.bounds.top - b.bounds.top : a.bounds.left - b.bounds.left)
   // Guia e camada final compartilham caixas exatas. A IA cria atmosfera nos
   // corredores entre elas, sem poder deslocar molduras sob texto/foto/preço.
-  guide.fillStyle = dark; guide.fillRect(area.left, area.top, area.width, area.height)
+  guide.fillStyle = palette.cardDark; guide.fillRect(area.left, area.top, area.width, area.height)
   ordered.forEach(({ card }, i) => {
     const data = readRedesignCard(card), box = slots[cards.indexOf(card)]!
     const hero = i === 0 && box.width > box.height * 1.5
@@ -127,23 +233,28 @@ export function drawRedesignCards(cards: ObjectNode[], overlay: CanvasRenderingC
       width: Math.max(...photos.map(p => p.box.left + p.box.width)) - Math.min(...photos.map(p => p.box.left)),
       height: Math.max(...photos.map(p => p.box.top + p.box.height)) - Math.min(...photos.map(p => p.box.top))
     }
+    const cardSurface = namedPaint(card, ['offerBackground'], 'fill') || palette.cardBase
+    const cardOutline = namedPaint(card, ['offerBackground'], 'stroke') || palette.cardStroke
+    const titleColor = namedPaint(card, ['smart_title'], 'fill') || palette.titleText
+    const lightSurface = tint(cardSurface, .14)
+    const darkSurface = shade(cardSurface, .42)
     const cardGradient = (ctx: CanvasRenderingContext2D) => {
       const gradient = ctx.createLinearGradient(box.left, box.top, box.left + box.width, box.top + box.height)
-      gradient.addColorStop(0, '#38150d'); gradient.addColorStop(.48, '#170d0b'); gradient.addColorStop(1, '#4f160b')
-      round(ctx, box, gradient, Math.max(9, pad), accent)
+      gradient.addColorStop(0, lightSurface); gradient.addColorStop(.48, cardSurface); gradient.addColorStop(1, darkSurface)
+      round(ctx, box, gradient, Math.max(9, pad), cardOutline)
       ctx.save()
       ctx.beginPath(); ctx.roundRect(box.left, box.top, box.width, box.height, Math.max(9, pad)); ctx.clip()
       const glow = ctx.createRadialGradient(photoBox.left + photoBox.width * .5, photoBox.top + photoBox.height * .58, 0, photoBox.left + photoBox.width * .5, photoBox.top + photoBox.height * .58, Math.max(photoBox.width, photoBox.height) * .75)
-      glow.addColorStop(0, 'rgba(255,194,57,.38)'); glow.addColorStop(.42, 'rgba(213,61,16,.16)'); glow.addColorStop(1, 'rgba(0,0,0,0)')
+      glow.addColorStop(0, rgba(cardOutline, .38)); glow.addColorStop(.42, rgba(cardSurface, .18)); glow.addColorStop(1, 'rgba(0,0,0,0)')
       ctx.fillStyle = glow; ctx.fillRect(box.left, box.top, box.width, box.height)
       ctx.restore()
-      ctx.strokeStyle = '#ffad32'; ctx.lineWidth = Math.max(2, pad * .12)
+      ctx.strokeStyle = cardOutline; ctx.lineWidth = Math.max(2, pad * .12)
       ctx.beginPath(); ctx.moveTo(box.left + pad, box.top + 2); ctx.lineTo(box.left + box.width - pad, box.top + 2); ctx.stroke()
     }
     cardGradient(guide)
     // A base visual gerada permanece visível. Apenas a borda geométrica é
     // reforçada aqui; cobrir o card inteiro apagaria o trabalho da IA.
-    round(overlay, box, 'rgba(0,0,0,0)', Math.max(9, pad), accent)
+    round(overlay, box, 'rgba(0,0,0,0)', Math.max(9, pad), cardOutline)
     // O modelo pode escolher um fundo claro. A faixa fixa garante contraste
     // do nome comercial sem restringir o restante do redesign gerado.
     const titlePlate = {
@@ -153,16 +264,23 @@ export function drawRedesignCards(cards: ObjectNode[], overlay: CanvasRenderingC
       height: titleBox.height + pad * .28
     }
     const titleGradient = overlay.createLinearGradient(titlePlate.left, titlePlate.top, titlePlate.left, titlePlate.top + titlePlate.height)
-    titleGradient.addColorStop(0, 'rgba(71,10,8,.95)')
-    titleGradient.addColorStop(1, 'rgba(27,8,8,.96)')
-    round(overlay, titlePlate, titleGradient, Math.max(6, pad * .35), accent)
-    text(overlay, data.title, titleBox, Math.min(hero ? box.width * .07 : box.width * .075, box.height * .14), '#ffffff')
+    if (luminance(titleColor) > .55) {
+      titleGradient.addColorStop(0, rgba(shade(cardSurface, .26), .96))
+      titleGradient.addColorStop(1, rgba(shade(cardSurface, .52), .98))
+    } else {
+      titleGradient.addColorStop(0, rgba(tint(cardSurface, .04), .98))
+      titleGradient.addColorStop(1, rgba(lightSurface, .98))
+    }
+    round(overlay, titlePlate, titleGradient, Math.max(6, pad * .35), cardOutline)
+    text(overlay, data.title, titleBox, Math.min(hero ? box.width * .07 : box.width * .075, box.height * .14), titleColor)
     const priceLeaves = new Set(leaves(data.price))
     const noteNodes = leaves(card).filter(o => isText(o) && o !== titleNode && !priceLeaves.has(o) && String(o.text || '').trim())
     noteNodes.forEach(noteNode => {
       const noteBox = place(noteNode)
-      round(overlay, noteBox, primary, pad * .3)
-      text(overlay, String(noteNode.text), { ...noteBox, left: noteBox.left + pad / 2, width: noteBox.width - pad }, noteBox.height * .72, '#fff')
+      const noteColor = directPaint(noteNode, 'fill') || titleColor
+      const noteSurface = luminance(noteColor) > .55 ? darkSurface : lightSurface
+      round(overlay, noteBox, noteSurface, pad * .3, cardOutline)
+      text(overlay, String(noteNode.text), { ...noteBox, left: noteBox.left + pad / 2, width: noteBox.width - pad }, noteBox.height * .72, noteColor)
     })
     // Cada sprite permanece em suas coordenadas e dimensões originais.
     photos.forEach(p => {
@@ -177,14 +295,14 @@ export function drawRedesignCards(cards: ObjectNode[], overlay: CanvasRenderingC
     // Etiquetas com condições extras continuam inteiras; nunca descartar preço
     // de clube, atacado, unidade ou texto customizado.
     if (priceTexts.every(o => ['price_value_text','price_currency_text','price_unit_text'].includes(o.name)) && main) {
-      round(overlay, { ...priceBox, top: priceBox.top + pad * .35 }, '#180905', pad)
-      round(overlay, priceBox, primary, pad, accent)
+      round(overlay, { ...priceBox, top: priceBox.top + pad * .35 }, palette.priceDepth, pad)
+      round(overlay, priceBox, palette.priceBackground, pad, palette.priceStroke)
       const currency = priceTexts.find(o => o.name === 'price_currency_text')
       const unit = priceTexts.find(o => o.name === 'price_unit_text')
       if (currency) {
         const badge = { left: priceBox.left + priceBox.width * .045, top: priceBox.top + priceBox.height * .31, width: priceBox.width * .18, height: priceBox.height * .4 }
-        round(overlay, badge, '#ffda38', Math.min(badge.width, badge.height) / 2)
-        text(overlay, String(currency.text), badge, badge.height * .58, '#160c05')
+        round(overlay, badge, palette.priceCurrencyBackground, Math.min(badge.width, badge.height) / 2)
+        text(overlay, String(currency.text), badge, badge.height * .58, palette.priceCurrencyText)
       }
       const valueBox = { left: priceBox.left + priceBox.width * .24, top: priceBox.top, width: priceBox.width * .7, height: priceBox.height * .78 }
       const parts = /^(\d+(?:\.\d{3})*),(\d{2})$/.exec(String(main.text))
@@ -194,13 +312,13 @@ export function drawRedesignCards(cards: ObjectNode[], overlay: CanvasRenderingC
         while (measure(parts[1]!, size) + measure(',' + parts[2]!, size * .5) > valueBox.width && size > 4) size -= .5
         const largeWidth = measure(parts[1]!, size), smallWidth = measure(',' + parts[2]!, size * .5)
         const x = valueBox.left + (valueBox.width - largeWidth - smallWidth) / 2
-        overlay.fillStyle = '#fff'; overlay.textAlign = 'left'; overlay.textBaseline = 'middle'
+        overlay.fillStyle = palette.priceText; overlay.textAlign = 'left'; overlay.textBaseline = 'middle'
         overlay.font = `800 ${size}px "Barlow Condensed", Arial, sans-serif`
         overlay.fillText(parts[1]!, x, valueBox.top + valueBox.height * .58)
         overlay.font = `800 ${size * .5}px "Barlow Condensed", Arial, sans-serif`
         overlay.fillText(',' + parts[2]!, x + largeWidth, valueBox.top + valueBox.height * .4)
-      } else text(overlay, String(main.text), valueBox, priceBox.height * .78, '#fff')
-      if (unit) text(overlay, String(unit.text), { left: priceBox.left + priceBox.width * .55, top: priceBox.top + priceBox.height * .76, width: priceBox.width * .37, height: priceBox.height * .18 }, priceBox.height * .18, '#fff')
+      } else text(overlay, String(main.text), valueBox, priceBox.height * .78, palette.priceText)
+      if (unit) text(overlay, String(unit.text), { left: priceBox.left + priceBox.width * .55, top: priceBox.top + priceBox.height * .76, width: priceBox.width * .37, height: priceBox.height * .18 }, priceBox.height * .18, palette.priceUnitText)
     } else contain(overlay, sprite(data.price), priceBox)
   })
   return { slots, area, productCount: cards.length }

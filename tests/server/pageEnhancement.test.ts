@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../server/utils/s3', () => ({ getS3Client: vi.fn() }))
 vi.mock('../../server/utils/postgres', () => ({ pgOneOrNull: vi.fn(), pgTx: vi.fn() }))
 
-import { compositeCommercialOverlay, compositeProtectedPixels, finalizeEnhancementImage, decodePagePng, assertEnhancementProject, startEnhancement, ENHANCEMENT_MODELS, enhancementAspectRatio } from '../../server/utils/page-enhancement'
+import { buildEnhancementReference, compositeCommercialOverlay, compositeProtectedPixels, finalizeEnhancementImage, decodePagePng, assertEnhancementProject, startEnhancement, ENHANCEMENT_MODELS, enhancementAspectRatio } from '../../server/utils/page-enhancement'
+import { REDESIGN_VERSION } from '../../shared/pageEnhancementVersion'
 import { pgOneOrNull, pgTx } from '../../server/utils/postgres'
 import { getS3Client } from '../../server/utils/s3'
 
@@ -26,6 +27,24 @@ it('keeps the complete edited image in redesign without duplicating commercial o
   const generated = await png(2, 1, [0, 200, 0, 255, 0, 0, 200, 255])
   const mask = await maskPng(2, 1, [255, 255])
   expect(await raw(await finalizeEnhancementImage('redesign', original, generated, mask, 2, 1))).toEqual(await raw(generated))
+})
+
+it('builds the redesign input from the original shell plus guide and commercial crops', async () => {
+  const originalPixels = Array.from({ length: 12 }, () => [10, 20, 30, 255]).flat()
+  const guidePixels = Array.from({ length: 12 }, () => [40, 50, 60, 255]).flat()
+  const overlayPixels = Array.from({ length: 12 }, () => [0, 0, 0, 0]).flat()
+  overlayPixels.splice(0, 4, 200, 210, 220, 255) // Outside redesignArea: must not leak into the reference.
+  overlayPixels.splice((1 * 4 + 2) * 4, 4, 230, 240, 250, 255) // Inside redesignArea: commercial layer wins.
+  const result = await buildEnhancementReference(
+    await png(4, 3, originalPixels), await png(4, 3, guidePixels), await png(4, 3, overlayPixels),
+    { left: 1, top: 1, width: 2, height: 1 }, 4, 3
+  )
+  const pixels = await raw(result)
+  const pixel = (x: number, y: number) => [...pixels.subarray((y * 4 + x) * 4, (y * 4 + x + 1) * 4)]
+  expect(pixel(0, 0)).toEqual([10, 20, 30, 255])
+  expect(pixel(1, 1)).toEqual([40, 50, 60, 255])
+  expect(pixel(2, 1)).toEqual([230, 240, 250, 255])
+  expect(pixel(3, 2)).toEqual([10, 20, 30, 255])
 })
 
 beforeEach(() => {
@@ -150,21 +169,26 @@ describe('startEnhancement admission (mock storage/database, no paid calls)', ()
     await expect(startEnhancement(userId, {...await bodyFor(), mode: 'redesign'})).rejects.toMatchObject({statusCode:409})
     expect(objects.size).toBe(0)
   })
+  it('rejects the previous redesign version before storage or a paid job', async () => {
+    await expect(startEnhancement(userId, {...await bodyFor(), mode: 'redesign', pipelineVersion: 'retail-layout-v13'})).rejects.toMatchObject({statusCode:409})
+    expect(objects.size).toBe(0)
+  })
   it('rejects a mismatched layout guide before any storage write', async () => {
     const guide = dataUrl(await png(1, 1, [10,20,30,255]))
     const overlay = dataUrl(await png(2, 1, [10,20,30,255,0,0,0,0]))
-    await expect(startEnhancement(userId, {...await bodyFor(), mode:'redesign',pipelineVersion:'retail-layout-v11',guide,overlay,redesignArea:{left:0,top:0,width:2,height:1}})).rejects.toMatchObject({statusCode:400})
+    await expect(startEnhancement(userId, {...await bodyFor(), mode:'redesign',pipelineVersion:REDESIGN_VERSION,guide,overlay,redesignArea:{left:0,top:0,width:2,height:1}})).rejects.toMatchObject({statusCode:400})
     expect(objects.size).toBe(0)
   })
 
   it('requires a transparent commercial layer before admitting redesign', async () => {
-    const body = {...await bodyFor(), mode: 'redesign', pipelineVersion: 'retail-layout-v11', guide: (await bodyFor()).original, redesignArea: {left:0,top:0,width:2,height:1}}
+    const body = {...await bodyFor(), mode: 'redesign', pipelineVersion: REDESIGN_VERSION, guide: (await bodyFor()).original, redesignArea: {left:0,top:0,width:2,height:1}}
     await expect(startEnhancement(userId, body)).rejects.toMatchObject({statusCode:400})
     expect(objects.size).toBe(0)
     const overlay = dataUrl(await png(2, 1, [10,20,30,255,0,0,0,0]))
     const first = await startEnhancement(userId, {...body, overlay})
     expect(first.receipt.mode).toBe('redesign')
     expect([...objects.keys()].some(key => key.endsWith('/overlay.png'))).toBe(true)
+    expect([...objects.keys()].some(key => key.endsWith('/reference.png'))).toBe(true)
     const duplicate = await startEnhancement(userId, {...body, overlay})
     expect(duplicate.run).toBeNull()
     expect(duplicate.receipt.id).toBe(first.receipt.id)
@@ -174,7 +198,7 @@ describe('startEnhancement admission (mock storage/database, no paid calls)', ()
     const body = await bodyFor([255, 255])
     const overlay = dataUrl(await png(2, 1, [10, 20, 30, 255, 0, 0, 0, 0]))
     const result = await startEnhancement(userId, {
-      ...body, mode: 'redesign', pipelineVersion: 'retail-layout-v11',
+      ...body, mode: 'redesign', pipelineVersion: REDESIGN_VERSION,
       guide: body.original, overlay, redesignArea: { left: 0, top: 0, width: 2, height: 1 }
     })
     expect(result.receipt.mode).toBe('redesign')

@@ -1,5 +1,6 @@
 import type { ArtComposition } from '~/types/art-studio'
 import type { BusinessProfile } from '~/utils/businessProfile'
+import { formatBrazilWhatsApp } from '~/utils/whatsapp-auth'
 
 /** Perfil da conta atual, inclusive remoção dos valores da conta anterior. */
 export function hydrateCartazistaBusiness(source: ArtComposition, profile: Pick<BusinessProfile, 'companyName'|'whatsapp'|'address'|'instagram'>, logoSrc: string, showLogo = true): ArtComposition {
@@ -10,7 +11,7 @@ export function hydrateCartazistaBusiness(source: ArtComposition, profile: Pick<
       layer.src = showLogo ? logoSrc : ''
       layer.visible = !!layer.src
     } else {
-      const value = layer.binding === 'phone' ? profile.whatsapp : layer.binding === 'address' ? profile.address : layer.binding === 'instagram' ? profile.instagram : layer.binding === 'companyName' || layer.id === 'cartaz-company' ? profile.companyName : undefined
+      const value = layer.binding === 'phone' ? formatBrazilWhatsApp(profile.whatsapp) : layer.binding === 'address' ? profile.address : layer.binding === 'instagram' ? profile.instagram : layer.binding === 'companyName' || layer.id === 'cartaz-company' ? profile.companyName : undefined
       if (value !== undefined) { layer.text = value; layer.visible = !!value }
     }
   }

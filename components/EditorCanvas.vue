@@ -53,6 +53,7 @@ import { useEditorPeriodicSave } from '~/composables/useEditorPeriodicSave'
 import { useEditorLifecyclePersistence } from '~/composables/useEditorLifecyclePersistence'
 import { useEditorFullscreen } from '~/composables/useEditorFullscreen'
 import { useEditorPageRecovery } from '~/composables/useEditorPageRecovery'
+import { useRecentColors } from '~/composables/useRecentColors'
 import { toWasabiDirectUrl, toWasabiProxyUrl } from '~/utils/storageProxy'
 import { finalizeSerializedCanvasJson } from '~/utils/editorCanvasSerialize'
 import { prepareCanvasForSerialization } from '~/utils/editorCanvasPreSerialize'
@@ -4325,6 +4326,7 @@ watch(localDraftQuotaWarning, (warn) => {
 })
 const auth = useAuth()
 const { getApiAuthHeaders } = useApiAuth()
+const { recentColors, addRecentColor } = useRecentColors()
 
 // Users state
 const currentUser = computed(() => auth.user.value)
@@ -7241,9 +7243,9 @@ const quickSelectedProductName = computed(() => {
     return isQuickMode.value && isProductNameText(active) ? active : null
 })
 const quickSelectedNameCard = computed(() => findProductCardParentGroup(quickSelectedProductName.value))
-const applyQuickProductNameColor = async (value: string | null) => {
+const applyQuickProductNameColor = async (value: string | null, afterApply?: () => void): Promise<boolean> => {
     const selected = quickSelectedNameCard.value
-    if (!selected || (value !== null && !/^#[\da-f]{6}$/i.test(value))) return
+    if (!selected || (value !== null && !/^#[\da-f]{6}$/i.test(value))) return false
     const zone = findProductZoneById(selected.parentZoneId)
     const cards = flattenCardColorObjects(canvas.value?.getObjects?.() || [])
         .filter(object => object._productData && object.parentZoneId === selected.parentZoneId)
@@ -7261,7 +7263,9 @@ const applyQuickProductNameColor = async (value: string | null) => {
     refreshCanvasObjects({ immediate: true })
     refreshSelectedRef()
     safeRequestRenderAll()
+    afterApply?.()
     await persistQuickModeDataChange('quick-product-name-color')
+    return true
 }
 const quickFontApplyAllLabel = computed(() => {
     const targets = quickModeNativeTextObjects.value
@@ -7618,29 +7622,32 @@ const persistQuickModeColorChange = async (reason: string) => {
 
 const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
     if (!isQuickMode.value || !canvas.value) return
+    const color = normalizeQuickModeColor(payload?.value)
     if (payload?.targetId === 'selected-product-name') {
+        if (!color) return
         quickProductNameColorScope.value = 'selected'
-        await applyQuickProductNameColor(payload.value)
+        await applyQuickProductNameColor(color, () => addRecentColor(color))
         return
     }
     const target = getQuickModeColorTarget(payload?.targetId)
-    const color = target?.kind === 'product-area' && payload?.value === 'transparent'
+    const appliedColor = target?.kind === 'product-area' && payload?.value === 'transparent'
         ? 'transparent' : normalizeQuickModeColor(payload?.value)
-    if (!target || !color) return
+    if (!target || !appliedColor) return
 
     target.objects.forEach(({ object, property }) => {
-        object.set?.({ [property]: color })
+        object.set?.({ [property]: appliedColor })
         if (target.kind === 'product-area') {
-            object.set?.({ productAreaBackgroundMode: color === 'transparent' ? 'transparent' : 'custom', stroke: 'transparent', shadow: null })
+            object.set?.({ productAreaBackgroundMode: appliedColor === 'transparent' ? 'transparent' : 'custom', stroke: 'transparent', shadow: null })
         }
-        if (property === 'fill') applyDynamicBusinessTextColor(object, color)
+        if (property === 'fill') applyDynamicBusinessTextColor(object, appliedColor)
         if (target.kind === 'product-card' && object.group) {
-            object.group._cardStyleOverrides = { ...object.group._cardStyleOverrides, cardColor: color, isProdBgTransparent: false }
+            object.group._cardStyleOverrides = { ...object.group._cardStyleOverrides, cardColor: appliedColor, isProdBgTransparent: false }
             syncProductNameColor(object.group, getZoneGlobalStyles(findProductZoneById(object.group.parentZoneId)))
         }
         object.setCoords?.()
         touchQuickModeObjectAncestors(object)
     })
+    if (appliedColor !== 'transparent') addRecentColor(appliedColor)
     await persistQuickModeColorChange(`quick-color-${target.kind}`)
 }
 
@@ -30372,6 +30379,7 @@ const handleAutoOfferLayout = async () => {
                     v-if="isQuickMode && quickModeSelectedColorTargets.length && selectedObjectPos.visible && !quickModeElementColorDismissed && !isDesignLoading && !figmaCrop.isCropActive.value"
                     :key="selectedObjectRef?._customId || quickModeSelectedColorTargets[0]?.id"
                     :targets="quickModeSelectedColorTargets"
+                    :recent-colors="recentColors"
                     :busy="isParsingProducts || isProcessing"
                     :style="quickModeElementColorPosition"
                     @apply-color="applyQuickModeColorChange"

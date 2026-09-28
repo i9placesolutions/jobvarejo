@@ -5,6 +5,8 @@ description: Criar e refinar modelos reutilizáveis de vídeos de varejo no JobV
 
 # Vídeos de varejo JobVarejo
 
+Para campanhas completas ou pedidos de seguir os últimos vídeos, ler `docs/campanhas-varejo-padrao.md` antes de escolher a receita. Comparar o MP4 final, a receita e os overrides do documento; o nome do modelo e a geometria iguais não comprovam a mesma dinâmica. Na correção Limpeza, recuperar `shutter`/`slam`/`stomp`/`metal-hit` foi necessário para seguir Torra; não impor esses valores a outros estilos.
+
 ## Contrato visual e de produto
 
 - Trabalhar em `shared/video-studio`, `components/video-studio`, `pages/videos`, APIs/worker de vídeo. Preservar os editores de imagem e rádio.
@@ -33,6 +35,8 @@ description: Criar e refinar modelos reutilizáveis de vídeos de varejo no JobV
 
 - `shared/video-studio/custom-flyer-recipes.json`: direções específicas de campanhas, preservadas por `build-all-recipes.mjs`. Definir geometria, paleta, etiqueta cadastrada, trilha e efeitos intencionalmente; não sobrescrever essas escolhas com sorteio por índice.
 - Para pedidos de família completa, coordenar encarte, cartaz e vídeo pelo UUID do modelo. Conferir a foto real de qualquer oferta ilustrativa; o nome no cache não prova que a imagem corresponde ao produto. Identificar preços de demonstração e manter dados comerciais fora do modelo compartilhado.
+
+- Em revisões, atualizar os mesmos registros e usar caminhos novos de assets/renders; conferir proporção real da foto e todas as referências do documento/manifesto. Três frascos diferentes não representam uma oferta de um único multiuso. Catálogo, documento, render local e MP4 persistido precisam concordar; revisar transições e áudio, além de stills.
 
 - `scripts/video-studio/render-all-model-stills.mjs`: quadros por modelo/formato; usar diretório próprio por revisão. Não executar duas instâncias no mesmo diretório de assets.
 - `scripts/video-studio/publish-all-flyer-demos.mjs`: demonstrações na conta explicitamente selecionada; sem locução fixa; enfileiramento final condicionado à revisão.

@@ -4,7 +4,6 @@ import {
   Check,
   ChevronDown,
   Clapperboard,
-  Image as ImageIcon,
   LayoutTemplate,
   Menu,
   Play,
@@ -19,12 +18,13 @@ definePageMeta({
 });
 
 useSeoMeta({
-  title: "JobVarejo — Encartes, vídeos e rádio da sua loja",
+  title: "JobVarejo — Marketing de ofertas para supermercados, farmácias e varejo",
   description:
-    "Monte as ofertas do seu supermercado, farmácia ou comércio em minutos. Teste grátis por 15 dias.",
-  ogTitle: "JobVarejo — As ofertas da sua loja, prontas pra vender",
-  ogDescription: "Feito pro seu negócio. 15 dias grátis.",
-  ogImage: "/img/jobvarejo-logo.png",
+    "Crie encartes, cartazes, vídeos de ofertas e rádio indoor para sua loja em minutos. Teste grátis por 15 dias.",
+  ogTitle: "JobVarejo — Marketing de ofertas pronto para vender",
+  ogDescription:
+    "Encartes, cartazes, vídeos e rádio indoor para supermercados, farmácias e varejo. 15 dias grátis.",
+  ogImage: "/img/jobvarejo-logo-transparent.png",
   twitterCard: "summary_large_image",
 });
 
@@ -39,79 +39,75 @@ const loginHref = "/auth/login";
 const modules = [
   {
     icon: LayoutTemplate,
-    title: "Encartes que chamam atenção",
-    text: "Cola a lista, escolhe o modelo e sai o material da sua loja — WhatsApp, impressão ou TV.",
-  },
-  {
-    icon: ImageIcon,
-    title: "Sua marca em cada campanha",
-    text: "Posts e campanhas com a sua logo, no formato certo pra rede e PDV.",
+    title: "Encartes e cartazes",
+    text: "Transforme a lista da semana em encartes e cartazes para WhatsApp, impressão e divulgação da loja.",
   },
   {
     icon: Clapperboard,
-    title: "Ofertas que ganham movimento",
-    text: "Reels, Stories e TV em até 30s — do mesmo jeito que você vê no sistema.",
+    title: "Vídeos de ofertas",
+    text: "Gere conteúdos para Reels, Stories e TV da loja com produtos, preços e chamadas de venda.",
   },
   {
     icon: Radio,
-    title: "Sua loja também tem voz",
-    text: "Jingles e offs no corredor, com agenda automática.",
+    title: "Rádio indoor",
+    text: "Organize músicas, jingles e anúncios para reforçar as promoções dentro da loja.",
   },
 ];
 
 const featureBenefits = [
   [
-    "Organize produtos e preços a partir da sua lista",
-    "Personalize modelos com logo e contatos",
-    "Exporte em PNG, PDF e ZIP",
-  ],
-  [
-    "Crie posts e campanhas para o seu negócio",
-    "Edite textos, imagens e elementos da arte",
-    "Prepare materiais para redes sociais e ponto de venda",
+    "Cole a lista de produtos e preços da semana",
+    "Use modelos prontos para supermercado, farmácia e varejo",
+    "Exporte encartes e cartazes em PNG, PDF e ZIP",
   ],
   [
     "Transforme ofertas em conteúdo com movimento",
     "Crie em formatos para Reels, Stories e TV",
-    "Mantenha a identidade da sua loja nos vídeos",
+    "Reaproveite a campanha sem redigitar produtos e preços",
   ],
   [
     "Reúna músicas, jingles e anúncios da loja",
     "Organize a programação do ambiente",
-    "Leve sua comunicação também aos corredores",
+    "Leve suas ofertas para os corredores e caixas",
   ],
+];
+
+const commercialBenefits = [
+  "Mais rapidez para lançar campanhas",
+  "Uma identidade só em todos os canais",
+  "Materiais prontos para vender no varejo",
 ];
 
 const steps = [
   {
     n: "01",
-    title: "Coloca a cara da sua loja",
-    text: "Logo e contatos. Tudo já sai com a sua marca.",
+    title: "Cadastre a loja",
+    text: "Logo, WhatsApp e endereço ficam prontos para entrar nas campanhas.",
   },
   {
     n: "02",
-    title: "Manda a lista de ofertas",
-    text: "Do Excel ou do WhatsApp. A IA organiza produto e preço.",
+    title: "Envie as ofertas",
+    text: "Use lista, Excel, PDF ou texto do WhatsApp para montar os produtos e preços.",
   },
   {
     n: "03",
-    title: "Publica e vende",
-    text: "Encarte, arte, vídeo e rádio nos canais da sua loja.",
+    title: "Publique em vários canais",
+    text: "Encarte, cartaz, vídeo e rádio saem com a mesma campanha e a mesma identidade.",
   },
 ];
 
 const faqs = [
   {
     q: "Os 15 dias grátis incluem o quê?",
-    a: "Você usa de verdade: encartes, artes, vídeos e rádio indoor. Sem cartão pra começar.",
+    a: "Você pode testar os principais recursos: encartes, cartazes, vídeos de ofertas e rádio indoor. Sem cartão para começar.",
   },
   {
-    q: "Preciso saber fazer arte?",
-    a: "Não. Escolhe o modelo, coloca preço e logo. Se quiser mexer mais, tem editor completo.",
+    q: "Preciso saber usar editor?",
+    a: "Não. Escolhe o modelo, coloca os produtos, preços e dados da loja. A campanha já sai pronta para publicar.",
   },
   {
     q: "Serve pra minha loja?",
-    a: "Supermercado, farmácia, hortifruti, açougue, padaria, pet, atacarejo — se tem oferta pra divulgar, serve.",
+    a: "Serve para supermercado, farmácia, hortifruti, açougue, padaria, pet, atacarejo e outros varejos com ofertas para divulgar.",
   },
   {
     q: "Consigo mandar no WhatsApp e imprimir?",
@@ -156,7 +152,7 @@ const closeMobile = () => {
           aria-label="JobVarejo, início"
           @click="closeMobile"
           ><img
-            src="/img/jobvarejo-logo-trim.png"
+            src="/img/jobvarejo-logo-transparent.png"
             alt="JobVarejo"
             width="176"
             height="56"
@@ -206,13 +202,15 @@ const closeMobile = () => {
         <div class="jv-wrap hero-grid">
           <div class="hero-copy">
             <div class="hero-label">
-              <span /> O estúdio de criação do seu varejo
+              <span /> Marketing de ofertas para varejo
             </div>
-            <h1>Toda a comunicação<br />da sua loja.<br />Em um só lugar.</h1>
+            <h1>
+              Suas ofertas<br />prontas para vender<br />em minutos.
+            </h1>
             <p class="hero-lead">
-              Crie encartes, prepare campanhas, transforme ofertas em vídeos e
-              organize a rádio da sua loja. Experimente todas essas
-              possibilidades no JobVarejo.
+              Crie encartes, vídeos de ofertas e rádio indoor com a identidade
+              da sua loja, além de cartazes para impressão. Feito para
+              supermercados, farmácias e varejos que precisam divulgar rápido.
             </p>
             <div class="hero-actions">
               <NuxtLink :to="trialHref" class="btn btn-primary"
@@ -224,7 +222,19 @@ const closeMobile = () => {
             </div>
             <div class="hero-assurance">
               <span><Check :size="15" /> Sem cartão de crédito</span
-              ><span><Check :size="15" /> Sem precisar ser designer</span>
+              ><span><Check :size="15" /> 15 dias de teste grátis</span
+              ><span><Check :size="15" /> Sem complicar a rotina</span>
+            </div>
+            <div class="hero-proof">
+              <div>
+                <strong>3</strong><span>formatos de campanha</span>
+              </div>
+              <div>
+                <strong>15</strong><span>dias grátis para testar</span>
+              </div>
+              <div>
+                <strong>1</strong><span>campanha em vários canais</span>
+              </div>
             </div>
           </div>
           <div
@@ -235,14 +245,14 @@ const closeMobile = () => {
               <div class="workspace-top">
                 <span class="workspace-symbol"
                   ><LayoutTemplate :size="18" /></span
-                ><strong>Seu espaço de criação</strong
-                ><span class="preview-label">Visão ilustrativa</span>
+                ><strong>Campanha da semana</strong
+                ><span class="preview-label">Pronta para publicar</span>
               </div>
               <div class="workspace-body">
                 <div class="workspace-welcome">
-                  <span>Da ideia à divulgação</span>
-                  <h2>O que vamos criar hoje?</h2>
-                  <p>Uma plataforma. Toda a sua comunicação.</p>
+                  <span>Oferta cadastrada uma vez</span>
+                  <h2>Escolha onde vender hoje</h2>
+                  <p>WhatsApp, Instagram, impressão, TV e som da loja.</p>
                 </div>
                 <div class="workspace-tools">
                   <a
@@ -255,16 +265,14 @@ const closeMobile = () => {
                       ><component :is="mod.icon" :size="23" /></span
                     ><strong>{{
                       [
-                        "Encartes",
-                        "Estúdio de artes",
+                        "Encartes e cartazes",
                         "Vídeos",
                         "Rádio indoor",
                       ][i]
                     }}</strong
                     ><span>{{
                       [
-                        "Produtos e preços em destaque",
-                        "Campanhas com a sua identidade",
+                        "Produtos e preços prontos para divulgar",
                         "Ofertas em movimento",
                         "Música e anúncios na loja",
                       ][i]
@@ -274,7 +282,7 @@ const closeMobile = () => {
                 </div>
                 <div class="workspace-bottom">
                   <Sparkles :size="17" /><span
-                    >Sua marca acompanha cada criação.</span
+                    >Sua marca acompanha cada peça da campanha.</span
                   ><Check :size="16" />
                 </div>
               </div>
@@ -293,7 +301,8 @@ const closeMobile = () => {
           <p>Feito para quem movimenta o varejo</p>
           <div>
             <span>Supermercados</span><span>Hortifrutis</span
-            ><span>Farmácias</span><span>Açougues</span><span>Atacarejos</span>
+            ><span>Farmácias</span><span>Açougues</span><span>Padarias</span
+            ><span>Atacarejos</span>
           </div>
         </div>
       </section>
@@ -302,12 +311,17 @@ const closeMobile = () => {
         <div class="jv-wrap">
           <div class="section-heading">
             <h2>
-              Uma loja inteira de possibilidades.<br />Um só lugar para criar.
+              Tudo que sua loja precisa<br />para divulgar ofertas.
             </h2>
             <p>
-              Da primeira oferta ao som do corredor, sua comunicação fica com a
-              mesma identidade.
+              Do encarte e cartaz ao vídeo e ao som ambiente, a campanha
+              mantém a mesma identidade.
             </p>
+          </div>
+          <div class="benefit-strip">
+            <span v-for="benefit in commercialBenefits" :key="benefit"
+              ><Check :size="16" />{{ benefit }}</span
+            >
           </div>
           <div class="module-grid">
             <article
@@ -340,8 +354,8 @@ const closeMobile = () => {
               <h2>Da oferta da semana<br />à experiência dentro da loja.</h2>
             </div>
             <p>
-              Explore o que você pode fazer. Depois, teste com os produtos e a
-              identidade do seu negócio.
+              Veja as funções que entram na sua rotina comercial e teste com os
+              produtos da sua loja.
             </p>
           </div>
           <div class="feature-explorer">
@@ -360,8 +374,7 @@ const closeMobile = () => {
               >
                 <component :is="mod.icon" :size="22" /><span>{{
                   [
-                    "Encartes",
-                    "Estúdio de artes",
+                    "Encartes e cartazes",
                     "Vídeos de ofertas",
                     "Rádio indoor",
                   ][i]
@@ -422,8 +435,8 @@ const closeMobile = () => {
               >
               <h2>Sua loja tem muito<br />para mostrar.<br />Comece hoje.</h2>
               <p>
-                Experimente o JobVarejo por 15 dias e dê uma nova cara às suas
-                ofertas.
+                Experimente por 15 dias e veja como fica criar campanhas de
+                oferta com encarte, cartazes, vídeos e rádio no mesmo lugar.
               </p>
               <NuxtLink :to="trialHref" class="btn btn-white"
                 >Começar meu teste grátis <ArrowRight :size="18" /></NuxtLink
@@ -433,7 +446,7 @@ const closeMobile = () => {
             </div>
             <div
               class="trial-art"
-              aria-label="Encartes, artes, vídeos e rádio incluídos na plataforma"
+              aria-label="Encartes, cartazes, vídeos e rádio incluídos na plataforma"
             >
               <div class="trial-suite">
                 <span>Seu próximo passo</span
@@ -441,9 +454,8 @@ const closeMobile = () => {
                 <div v-for="(mod, i) in modules" :key="mod.title">
                   <component :is="mod.icon" :size="21" /><span>{{
                     [
-                      "Encartes de ofertas",
-                      "Estúdio de artes",
-                      "Vídeos para redes e TV",
+                      "Encartes e cartazes",
+                      "Vídeos para Reels, Stories e TV",
                       "Rádio indoor",
                     ][i]
                   }}</span
@@ -500,7 +512,7 @@ const closeMobile = () => {
         <div class="footer-main">
           <div>
             <img
-              src="/img/jobvarejo-logo-trim.png"
+              src="/img/jobvarejo-logo-transparent.png"
               alt="JobVarejo"
               width="160"
               height="51"
@@ -752,6 +764,35 @@ const closeMobile = () => {
 .hero-assurance svg {
   color: #37806b;
 }
+.hero-proof {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 520px;
+  margin-top: 28px;
+}
+.hero-proof div {
+  border: 1px solid #dfe7f1;
+  border-radius: 12px;
+  background: #ffffffb8;
+  padding: 16px 14px;
+  box-shadow: 0 12px 26px #173d700d;
+}
+.hero-proof strong {
+  display: block;
+  font:
+    700 30px Barlow,
+    sans-serif;
+  color: var(--blue);
+  line-height: 1;
+}
+.hero-proof span {
+  display: block;
+  margin-top: 7px;
+  font-size: 10px;
+  line-height: 1.55;
+  color: #66788f;
+}
 .hero-stage {
   height: 584px;
   position: relative;
@@ -809,6 +850,30 @@ const closeMobile = () => {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 30px;
+}
+.benefit-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin: -20px 0 42px;
+}
+.benefit-strip span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  border: 1px solid #dde7f2;
+  border-radius: 12px;
+  background: #f9fbff;
+  padding: 14px 16px;
+  color: #354b66;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+.benefit-strip svg {
+  flex-shrink: 0;
+  color: #37806b;
 }
 .module {
   padding: 0 24px 0 0;
@@ -1155,6 +1220,10 @@ const closeMobile = () => {
     flex-direction: column;
     gap: 9px;
   }
+  .hero-proof {
+    grid-template-columns: 1fr;
+    max-width: 310px;
+  }
   .hero-stage {
     height: 475px;
   }
@@ -1187,6 +1256,9 @@ const closeMobile = () => {
   .module-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 36px;
+  }
+  .benefit-strip {
+    grid-template-columns: repeat(2, 1fr);
   }
   .module:nth-child(2) {
     border: 0;
@@ -1281,6 +1353,20 @@ const closeMobile = () => {
     font-size: 9px;
     margin-top: 17px;
   }
+  .hero-proof {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .hero-proof div {
+    padding: 12px 9px;
+  }
+  .hero-proof strong {
+    font-size: 23px;
+  }
+  .hero-proof span {
+    font-size: 8px;
+  }
   .hero-stage {
     height: 475px;
     width: min(390px, 100%);
@@ -1317,6 +1403,13 @@ const closeMobile = () => {
   }
   .module-grid {
     gap: 31px 22px;
+  }
+  .benefit-strip {
+    grid-template-columns: 1fr;
+    margin: -10px 0 34px;
+  }
+  .benefit-strip span {
+    min-height: 0;
   }
   .module {
     padding-right: 14px;

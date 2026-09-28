@@ -16,10 +16,30 @@ export const enhancementAspectRatio = (width: number, height: number) => {
   return Math.abs(closest[1] - ratio) / ratio < 0.025 ? closest[0] : 'auto'
 }
 export const ENHANCEMENT_PROMPT = `Refine o acabamento visual deste encarte de supermercado sem mudar sua composição. Melhore exclusivamente fundos, texturas, efeitos decorativos, profundidade e harmonia visual. Preserve rigorosamente posições, proporções e paleta. NÃO adicione, reescreva, mova ou remova textos, preços, datas, contatos, marcas, logotipos, embalagens ou produtos. Não invente produtos nem ofertas. Não adicione letras ou números. A segunda imagem é a máscara: áreas brancas são protegidas e devem permanecer intocadas; trabalhe somente nas áreas pretas. Produza uma única página completa no mesmo enquadramento da referência. As áreas protegidas serão recompostas a partir da imagem original pelo sistema.`
-export const REDESIGN_PROMPT = `Edite a imagem enviada: ela é o encarte original e deve continuar sendo o mesmo encarte depois da melhoria. Faça uma melhoria visual profissional da página inteira, com fundo mais rico, iluminação, textura, profundidade, contraste e acabamento dos elementos gráficos. Melhore a apresentação dos cards, faixas, molduras e etiquetas sem reconstruir a montagem.
+export const REDESIGN_PROMPT = `Use a imagem enviada como uma prancha de redesign do encarte. A área de produtos mostra a guia técnica das células junto com a camada comercial original; o restante da página é a moldura original que deve continuar completa. Crie uma nova direção de design profissional, ousada e imediatamente perceptível, inclusive quando a página for reduzida a uma miniatura.
 
-RESTRIÇÃO ABSOLUTA: mantenha exatamente a mesma quantidade de produtos, os mesmos produtos e fotografias, na mesma ordem, no mesmo grid, nas mesmas células e posições. Preserve logotipo, selo, nomes, marcas, embalagens, preços, unidades, datas, validade, contatos e todas as palavras e números. Não apague, acrescente, substitua, duplique, recorte nem desloque qualquer item comercial. Não crie um segundo grid ou produtos de fundo. Mantenha o enquadramento e a proporção da imagem original. A melhoria deve ser imediatamente perceptível no DESIGN, sem alterar o conteúdo nem a montagem. Produza uma única imagem final completa.`
+Mantenha o conteúdo comercial absolutamente idêntico e legível: mesma quantidade de produtos, mesmos produtos e fotografias, mesma ordem, mesmas células, nomes, marcas, embalagens, preços, unidades, datas, validade, contatos, logotipo, selos e todas as palavras e números. Preserve também as posições e proporções desses conteúdos. Não apague, acrescente, reescreva, traduza, substitua, duplique, recorte, redesenhe, escale ou desloque qualquer produto, fotografia, embalagem, marca, texto ou número. Não invente produtos, ofertas ou informações. Não crie um segundo grid, cards adicionais ou produtos no fundo.
+
+Preserve rigorosamente a paleta cromática original da página: mantenha os matizes e as funções de cor dos fundos dos cards, bordas, títulos, molduras, etiquetas, preços, logotipo e selos. Não troque a família de cor da campanha e não introduza uma cor dominante nova; uma página azul deve continuar azul, uma página verde deve continuar verde, e assim por diante. As cores neutras podem receber tons claros e escuros derivados da própria paleta. Você tem liberdade real para mudar formas, volume, profundidade, silhueta decorativa, tratamento de superfícies, gradientes e linguagem de molduras, desde que use as cores já presentes e preserve as células e o conteúdo. A guia técnica comunica a geometria do layout; não a trate como autorização para trocar a paleta. Dentro da área de produtos, crie contraste forte entre fundo e cards, superfícies distintas, preenchimentos, bordas, separadores, sombras, realces e profundidade visível. Use uma composição decorativa nova e coerente, com mudanças de forma e volume suficientemente fortes para serem percebidas em miniatura, em vez de aplicar somente textura ou iluminação global discreta.
+
+Harmonize a página inteira sem alterar o conteúdo ou a posição do cabeçalho, rodapé, logotipo, selos, textos, preços, fotos e produtos. O acabamento pode envolver as áreas vazias e as molduras existentes, mas não cubra dados comerciais nem transforme efeitos decorativos em letras, números ou objetos comerciais. Produza uma única imagem final completa no mesmo enquadramento e proporção da referência, com a nova direção visual claramente perceptível.`
 type RedesignArea = { left: number; top: number; width: number; height: number }
+export const buildEnhancementReference = async (original: Buffer, guide: Buffer, overlay: Buffer, redesignArea: RedesignArea, width: number, height: number) => {
+  if (![width, height, redesignArea.left, redesignArea.top, redesignArea.width, redesignArea.height].every(Number.isInteger)
+    || width < 1 || height < 1 || redesignArea.left < 0 || redesignArea.top < 0 || redesignArea.width < 1 || redesignArea.height < 1
+    || redesignArea.left + redesignArea.width > width || redesignArea.top + redesignArea.height > height)
+    throw new Error('reference_area_invalid')
+  const [originalMeta, guideMeta, overlayMeta] = await Promise.all([original, guide, overlay].map(value => sharp(value, { limitInputPixels: 24_000_000 }).metadata()))
+  if (![originalMeta, guideMeta, overlayMeta].every(meta => meta?.width === width && meta?.height === height)) throw new Error('reference_dimension_mismatch')
+  if (!overlayMeta?.hasAlpha) throw new Error('reference_overlay_requires_alpha')
+  const base = await sharp(original, { limitInputPixels: 24_000_000 }).ensureAlpha().png().toBuffer()
+  const guideCrop = await sharp(guide, { limitInputPixels: 24_000_000 }).extract(redesignArea).ensureAlpha().png().toBuffer()
+  const overlayCrop = await sharp(overlay, { limitInputPixels: 24_000_000 }).extract(redesignArea).ensureAlpha().png().toBuffer()
+  return sharp(base).composite([
+    { input: guideCrop, left: redesignArea.left, top: redesignArea.top, blend: 'over' },
+    { input: overlayCrop, left: redesignArea.left, top: redesignArea.top, blend: 'over' }
+  ]).png().toBuffer()
+}
 export const compositeCommercialOverlay = async (generated: Buffer, overlay: Buffer, width: number, height: number, original?: Buffer, redesignArea?: RedesignArea) => {
   const metadata = await sharp(overlay, { limitInputPixels: 16_000_000 }).metadata()
   if (metadata.width !== width || metadata.height !== height || !metadata.hasAlpha) throw createError({ statusCode: 400, statusMessage: 'Camada comercial inválida.' })
@@ -31,7 +51,7 @@ export const compositeCommercialOverlay = async (generated: Buffer, overlay: Buf
   // partir dos objetos Fabric originais, fixa cada foto, nome, preço e marca.
   return sharp(candidate).composite([{ input: overlay, left: 0, top: 0, blend: 'over' }]).png().toBuffer()
 }
-export type EnhancementReceipt = { pipelineVersion?: string; redesignArea?: RedesignArea; mode?: 'finish'|'redesign'; id: string; sourceHash: string; projectId: string; pageId: string; model: string; quality: string; width: number; height: number; status: 'processing'|'completed'|'failed'|'uncertain'; costUsd: number|null; createdAt: string; updatedAt: string; originalKey: string; resultKey?: string; error?: string; usage?: Record<string, unknown> }
+export type EnhancementReceipt = { pipelineVersion?: string; redesignArea?: RedesignArea; mode?: 'finish'|'redesign'; id: string; sourceHash: string; projectId: string; pageId: string; model: string; quality: string; width: number; height: number; status: 'processing'|'completed'|'failed'|'uncertain'; costUsd: number|null; createdAt: string; updatedAt: string; originalKey: string; referenceKey?: string; resultKey?: string; error?: string; usage?: Record<string, unknown> }
 const bucket = () => String(useRuntimeConfig().wasabiBucket || process.env.WASABI_BUCKET || '')
 const prefix = (userId: string, projectId: string) => `projects/${userId}/${projectId}/enhancements/`
 const path = (userId: string, projectId: string, id: string) => `${prefix(userId, projectId)}${id}/receipt.json`
@@ -155,6 +175,9 @@ export const startEnhancement = async (userId: string, body: any) => {
     const alpha = await sharp(overlay).extractChannel('alpha').raw().toBuffer()
   if (!alpha.some(v => v > 0) || !alpha.some(v => v < 255)) throw createError({statusCode:422,statusMessage:'Não foi possível separar o conteúdo e o design desta página. Revise a arte e tente novamente.'})
   }
+  const reference = mode === 'redesign'
+    ? await buildEnhancementReference(original, guide!, overlay!, redesignArea!, meta.width!, meta.height!)
+    : undefined
   // Só o acabamento leve usa a máscara para limitar os pixels editáveis.
   // No redesign, a imagem gerada é usada por inteiro; a máscara participa
   // apenas da identidade do pedido e pode cobrir quase toda a página.
@@ -174,14 +197,15 @@ export const startEnhancement = async (userId: string, body: any) => {
     if(ledger.attempts.length>=20)throw createError({statusCode:429,statusMessage:'Limite de 20 páginas por dia atingido para esta conta.'})
     for(const previous of ledger.attempts.slice(-2)){const prior=await readEnhancement(userId,previous.projectId,previous.id);if(prior?.status==='processing'&&Date.now()-Date.parse(prior.updatedAt)<7*60_000)throw createError({statusCode:409,statusMessage:'Aguarde a página em processamento antes de iniciar outra.'})}
     const root=`${prefix(userId,projectId)}${id}`;const now=new Date().toISOString()
-    const r:EnhancementReceipt={id,mode,pipelineVersion:mode === 'redesign' ? REDESIGN_VERSION : undefined,redesignArea,sourceHash:createHash('sha256').update(original).digest('hex'),projectId,pageId,model,quality,width:meta.width!,height:meta.height!,status:'processing',costUsd:null,createdAt:now,updatedAt:now,originalKey:root+'/original.png'}
-    await put(r.originalKey,original,'image/png');await put(root+'/mask.png',mask,'image/png');if(overlay)await put(root+'/overlay.png',overlay,'image/png');if(guide)await put(root+'/guide.png',guide,'image/png');await writeReceipt(userId,r);ledger.attempts.push({projectId,id});await put(ledgerKey,JSON.stringify(ledger),'application/json');created=true;return r
+    const r:EnhancementReceipt={id,mode,pipelineVersion:mode === 'redesign' ? REDESIGN_VERSION : undefined,redesignArea,sourceHash:createHash('sha256').update(original).digest('hex'),projectId,pageId,model,quality,width:meta.width!,height:meta.height!,status:'processing',costUsd:null,createdAt:now,updatedAt:now,originalKey:root+'/original.png',referenceKey:mode === 'redesign' ? root+'/reference.png' : undefined}
+    await put(r.originalKey,original,'image/png');await put(root+'/mask.png',mask,'image/png');if(overlay)await put(root+'/overlay.png',overlay,'image/png');if(guide)await put(root+'/guide.png',guide,'image/png');if(reference&&r.referenceKey)await put(r.referenceKey,reference,'image/png');await writeReceipt(userId,r);ledger.attempts.push({projectId,id});await put(ledgerKey,JSON.stringify(ledger),'application/json');created=true;return r
   })
-  return {receipt,run:created?()=>runEnhancement(userId,receipt,original,mask,overlay,guide):null}
+  return {receipt,run:created?()=>runEnhancement(userId,receipt,original,mask,reference):null}
 }
-const runEnhancement = async (userId: string, receipt: EnhancementReceipt, original: Buffer, mask: Buffer, overlay?: Buffer, guide?: Buffer) => {
+const runEnhancement = async (userId: string, receipt: EnhancementReceipt, original: Buffer, mask: Buffer, reference?: Buffer) => {
   try {
-    const references = receipt.mode === 'redesign' ? [original] : [original, mask]
+    if (receipt.mode === 'redesign' && !reference) throw new Error('missing_redesign_reference')
+    const references = receipt.mode === 'redesign' ? [reference!] : [original, mask]
     const response=await fetch('https://openrouter.ai/api/v1/images',{method:'POST',headers:{Authorization:`Bearer ${enhancementApiKey()}`,'Content-Type':'application/json','X-Title':'JobVarejo'},body:JSON.stringify({model:receipt.model,prompt:receipt.mode === 'redesign' ? REDESIGN_PROMPT : ENHANCEMENT_PROMPT,quality:receipt.quality,n:1,output_format:'png',aspect_ratio:enhancementAspectRatio(receipt.width,receipt.height),input_references:references.map(b=>({type:'image_url',image_url:{url:'data:image/png;base64,'+b.toString('base64')}}))}),signal:AbortSignal.timeout(300_000)})
     if(!response.ok){receipt.status=[400,401,402,403,404,422,429].includes(response.status)?'failed':'uncertain';receipt.costUsd=receipt.status==='failed'?0:null;receipt.error=receipt.status==='failed'?'Não foi possível concluir esta melhoria.':'A geração não foi confirmada. Consulte o histórico antes de tentar novamente.';await writeReceipt(userId,receipt);return}
     const data=await response.json() as any

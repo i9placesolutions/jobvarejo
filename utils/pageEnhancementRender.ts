@@ -1,5 +1,5 @@
 import type { StaticCanvas } from 'fabric'
-import { collectRedesignCards, readRedesignCard, drawRedesignCards, REDESIGN_VERSION } from './pageEnhancementLayout'
+import { collectRedesignCards, readRedesignCard, drawRedesignCards, extractRedesignPalette, REDESIGN_VERSION } from './pageEnhancementLayout'
 
 export interface EnhancementRect { left: number; top: number; width: number; height: number }
 export interface EnhancementObject {
@@ -19,17 +19,23 @@ const textTypes = new Set(['text', 'itext', 'i-text', 'textbox'])
 const isImage = (object: EnhancementObject) => String(object.type).toLowerCase() === 'image'
 const isExported = (object: EnhancementObject) => object.visible !== false && object.excludeFromExport !== true
 
-/** Fundo legado verificado no canvas Torra: nome + chave do asset, nunca só o nome. */
+/** Fundos conhecidos exigem o nome esperado e a chave exata do asset, nunca só o nome. */
 function isNamedBackground(object: EnhancementObject): boolean {
-  if (!/^Fundo /.test(String(object.name || ''))) return false
+  const name = String(object.name || '')
+  if (!/^Fundo /i.test(name)) return false
   if (object.isBackground === true || backgrounds.has(String(object.layerName || ''))) return true
-  try {
-    const source = new URL(String(object.__originalSrc || ''), 'https://canvas.invalid')
-    return source.pathname === '/api/storage/p'
-      && /^projects\/[^/]+\/[^/]+\/assets\/background\.png$/.test(source.searchParams.get('key') || '')
-  } catch {
-    return false
+  for (const rawSource of [object.__originalSrc, object.src]) {
+    try {
+      const source = new URL(String(rawSource || ''), 'https://canvas.invalid')
+      if (source.pathname !== '/api/storage/p') continue
+      const key = source.searchParams.get('key') || ''
+      if (/^Fundo original(?:\s|$)/i.test(name) && /^projects\/[^/]+\/[^/]+\/assets\/fundo-original\.png$/i.test(key)) return true
+      if (/^projects\/[^/]+\/[^/]+\/assets\/background\.png$/.test(key)) return true
+    } catch {
+      // Outra fonte pode conter a chave válida após a restauração do Fabric.
+    }
   }
+  return false
 }
 
 const isText = (object: EnhancementObject) => textTypes.has(String(object.type).toLowerCase())
@@ -169,6 +175,9 @@ export async function prepareRedesignPageInput(options: EnhancedPageInputOptions
   const cards = collectRedesignCards(canvas.getObjects())
   if (!cards.length) throw new Error('O redesign requer um encarte com produtos editáveis separados. Use Acabamento leve para uma imagem achatada.')
   cards.forEach(readRedesignCard)
+  // Extrai a paleta antes de qualquer ajuste temporário no canvas para manter
+  // a identidade cromática original nas guias e etiquetas reconstruídas.
+  const palette = extractRedesignPalette(cards)
   const cardSet = new Set(cards)
   const visit = (object: any): boolean => {
     if (object.visible === false || (object.excludeFromExport === true && !object.isProductZone && !object.isGridZone)) return false
@@ -182,21 +191,8 @@ export async function prepareRedesignPageInput(options: EnhancedPageInputOptions
     const kind = classifyEnhancementProtection(object)
     const priceParts = object.getObjects?.() || []
     if (priceParts.some((child: any) => child.name === 'price_value_text')) {
-      // A placa precisa continuar na frente da foto. Redesenho vetorial local
-      // conserva preço/unidade e evita que a IA tente reconstruí-los.
-      for (const part of priceParts) {
-        if (String(part.type).toLowerCase() !== 'rect') continue
-        const state = { fill: part.fill, rx: part.rx, ry: part.ry, opacity: part.opacity, dirty: part.dirty }
-        restored.push(() => Object.assign(part, state))
-        if (['price-bevel', 'bottom-highlight'].includes(part.name)) part.opacity = 0
-        else if (part.name === 'price_bg') { part.fill = '#cf1020'; part.rx = part.ry = 12 }
-        else if (['price-rim', 'price_currency_bg'].includes(part.name)) { part.fill = '#ffcc45'; part.rx = part.ry = 14 }
-        else if (part.name === 'price-depth') { part.fill = '#571014'; part.rx = part.ry = 16 }
-        part.dirty = true
-      }
-      const cacheState = { objectCaching: object.objectCaching, dirty: object.dirty }
-      restored.push(() => Object.assign(object, cacheState))
-      object.objectCaching = false; object.dirty = true
+      // O redesenho vetorial preserva as cores e textos originais da etiqueta;
+      // não recolorir o grupo para uma paleta fixa de campanha.
       protectedCount++
       return true
     }
@@ -256,9 +252,7 @@ export async function prepareRedesignPageInput(options: EnhancedPageInputOptions
     layerContext.drawImage(shellImage, 0, 0)
     // A referência enviada ao modelo mostra somente a geometria do grid.
     // Produtos/textos da montagem ficam exclusivamente na camada comercial.
-    guideContext.fillStyle = '#170d0b'
-    guideContext.fillRect(0, 0, original.width, original.height)
-    const layout = drawRedesignCards(cards, layerContext, guideContext, crop, multiplier)
+    const layout = drawRedesignCards(cards, layerContext, guideContext, crop, multiplier, palette)
     const overlay = layer.toDataURL('image/png')
     const guide = guideCanvas.toDataURL('image/png')
     // A máscara usa o alpha real, liberando espaços vazios entre fotos e letras.

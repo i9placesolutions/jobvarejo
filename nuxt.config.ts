@@ -2,6 +2,17 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  // O srcDir é a raiz: não monitorar builds locais, renders e dependências
+  // aninhadas dos workers, que podem esgotar os arquivos abertos no macOS.
+  ignore: [
+    '**/node_modules',
+    '/.nuxt-*',
+    '/.output-*',
+    '/output',
+    '/artifacts',
+    '/tmp',
+    '/node-compile-cache',
+  ],
   devServer: {
     port: 80,
   },

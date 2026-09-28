@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { redesignCardSlots, originalRedesignCardSlots, fitTextLines, readRedesignCard } from '../../utils/pageEnhancementLayout'
+import { redesignCardSlots, originalRedesignCardSlots, fitTextLines, readRedesignCard, extractRedesignPalette } from '../../utils/pageEnhancementLayout'
 
 describe('commercial redesign invariants', () => {
   it('keeps every original product in its exact grid cell and order', () => {
@@ -48,5 +48,26 @@ describe('commercial redesign invariants', () => {
   })
   it('rejects unstructured cards instead of losing content', () => {
     expect(()=>readRedesignCard({getObjects:()=>[]})).toThrow('foto, nome e preço')
+  })
+  it('derives the campaign palette from card, title and price paints including rgb and gradient stops', () => {
+    const price = { getObjects: () => [
+      { name: 'price_bg', fill: '#000000', stroke: 'rgb(255, 0, 0)' },
+      { name: 'price_currency_bg', fill: '#FFFF00' },
+      { name: 'price_value_text', fill: '#ffffff' },
+      { name: 'price_currency_text', fill: '#000000' },
+      { name: 'price_unit_text', fill: '#ffffff' }
+    ] }
+    const card = { getObjects: () => [
+      { name: 'offerBackground', fill: { type: 'linear', colorStops: [{ color: 'rgb(5, 41, 166)' }] }, stroke: 'rgba(255,205,25,.9)', getBoundingRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) },
+      { name: 'smart_title', type: 'textbox', fill: '#ffffff' }, price
+    ] }
+    expect(extractRedesignPalette([card])).toMatchObject({
+      cardBase: '#0529a6', cardStroke: '#ffcd19', accent: '#ffcd19', titleText: '#ffffff',
+      priceBackground: '#000000', priceStroke: '#ff0000', priceCurrencyBackground: '#ffff00',
+      priceText: '#ffffff', priceCurrencyText: '#000000', priceUnitText: '#ffffff'
+    })
+  })
+  it('uses neutral fallbacks when a page has no campaign paints', () => {
+    expect(extractRedesignPalette([])).toMatchObject({ cardBase: '#f5f5f5', cardStroke: '#d1d5db', accent: '#d1d5db' })
   })
 })
