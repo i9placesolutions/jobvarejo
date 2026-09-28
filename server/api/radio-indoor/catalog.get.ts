@@ -16,6 +16,7 @@ export default defineEventHandler(async (event) => {
   const genre = String(query.genre || '').trim().slice(0, 80)
   const artist = String(query.artist || '').trim().slice(0, 120)
   const album = String(query.album || '').trim().slice(0, 160)
+  const playlistId = String(query.playlistId || '').trim()
   const viewMode = String(query.view || 'tracks').trim().toLowerCase() // 'tracks' | 'albums'
   const year = Number.parseInt(String(query.year || ''), 10)
   const limit = positiveInt(query.limit, 60, 500)
@@ -32,6 +33,10 @@ export default defineEventHandler(async (event) => {
       `t.user_id = $1`,
       `t.status = 'ready'`
     ]
+    if (playlistId && isUuid(playlistId)) {
+      params.push(playlistId)
+      conditions.push(`exists (select 1 from public.radio_playlist_items pi where pi.track_id = t.id and pi.playlist_id = $${params.length})`)
+    }
     if (q) {
       params.push(`%${q}%`)
       conditions.push(`(t.title ilike $${params.length} or t.artist ilike $${params.length} or coalesce(t.album, '') ilike $${params.length})`)

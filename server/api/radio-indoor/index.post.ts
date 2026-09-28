@@ -139,6 +139,65 @@ export default defineEventHandler(async (event) => {
       return { success: true, item: result.rows[0] }
     }
 
+    if (action === 'add_multiple_tracks') {
+      const playlistId = String(body.playlistId || '').trim()
+      const playlist = await getOwnedPlaylist(ownerUserId, playlistId, station.id)
+      if (!playlist) throw createError({ statusCode: 404, statusMessage: 'Playlist não encontrada' })
+      const rawTrackIds = Array.isArray(body.trackIds) ? body.trackIds : []
+      const trackIds = Array.from(new Set(rawTrackIds.map((id: any) => String(id || '').trim()).filter(isUuid)))
+      if (!trackIds.length) throw createError({ statusCode: 400, statusMessage: 'Nenhuma música válida selecionada' })
+      let addedCount = 0
+      await pgTx(async (client) => {
+        for (const tId of trackIds) {
+          const res = await client.query(
+            `insert into public.radio_playlist_items (playlist_id, track_id, position)
+             values ($1, $2, 99999)
+             on conflict (playlist_id, track_id) do nothing`,
+            [playlist.id, tId]
+          )
+          if ((res.rowCount || 0) > 0) addedCount++
+        }
+      })
+      return { success: true, addedCount }
+    }
+
+    if (action === 'add_genre_to_playlist') {
+      const playlistId = String(body.playlistId || '').trim()
+      const genre = String(body.genre || '').trim()
+      if (!genre) throw createError({ statusCode: 400, statusMessage: 'Gênero é obrigatório' })
+      const playlist = await getOwnedPlaylist(ownerUserId, playlistId, station.id)
+      if (!playlist) throw createError({ statusCode: 404, statusMessage: 'Playlist não encontrada' })
+      const insertResult = await pgQuery(
+        `insert into public.radio_playlist_items (playlist_id, track_id, position)
+         select $1, t.id, 99999
+           from public.radio_catalog_tracks t
+          where t.user_id = $2 and t.status = 'ready' and lower(t.genre) = lower($3)
+         on conflict (playlist_id, track_id) do nothing`,
+        [playlist.id, ownerUserId, genre]
+      )
+      return { success: true, addedCount: insertResult.rowCount || 0 }
+    }
+
+    if (action === 'add_playlist_to_playlist') {
+      const sourcePlaylistId = String(body.sourcePlaylistId || '').trim()
+      const targetPlaylistId = String(body.targetPlaylistId || '').trim()
+      if (sourcePlaylistId === targetPlaylistId) throw createError({ statusCode: 400, statusMessage: 'A playlist de origem e destino devem ser diferentes' })
+      const [source, target] = await Promise.all([
+        getOwnedPlaylist(ownerUserId, sourcePlaylistId, station.id),
+        getOwnedPlaylist(ownerUserId, targetPlaylistId, station.id)
+      ])
+      if (!source || !target) throw createError({ statusCode: 404, statusMessage: 'Playlist de origem ou destino não encontrada' })
+      const insertResult = await pgQuery(
+        `insert into public.radio_playlist_items (playlist_id, track_id, position)
+         select $1, pi.track_id, 99999
+           from public.radio_playlist_items pi
+          where pi.playlist_id = $2
+         on conflict (playlist_id, track_id) do nothing`,
+        [target.id, source.id]
+      )
+      return { success: true, addedCount: insertResult.rowCount || 0 }
+    }
+
     if (action === 'remove_track') {
       const playlist = await getOwnedPlaylist(ownerUserId, String(body.playlistId || ''), station.id)
       if (!playlist) throw createError({ statusCode: 404, statusMessage: 'Playlist não encontrada' })
@@ -158,6 +217,36 @@ export default defineEventHandler(async (event) => {
       return { success: true, program: result.rows[0] }
     }
 
+    if (action === 'update_program') {
+      const programId = String(body.programId || '').trim()
+      const program = await getOwnedProgram(ownerUserId, programId, station.id)
+      if (!program) throw createError({ statusCode: 404, statusMessage: 'Programa não encontrado' })
+      const name = cleanText(body.name, 160) || program.name
+      const description = body.description !== undefined ? (cleanText(body.description, 500) || null) : program.description
+      const timezone = body.timezone ? validTimezone(body.timezone) : program.timezone
+      const status = ['draft', 'active', 'paused'].includes(String(body.status)) ? String(body.status) : program.status
+      const result = await pgQuery<any>(
+        `update public.radio_programs
+         set name = $1, description = $2, timezone = $3, status = $4, updated_at = now()
+         where id = $5 and user_id = $6 and station_id = $7
+         returning id, name, description, timezone, status, created_at, updated_at`,
+        [name, description, timezone, status, program.id, ownerUserId, station.id]
+      )
+      return { success: true, program: result.rows[0] }
+    }
+
+    if (action === 'delete_program') {
+      const programId = String(body.programId || '').trim()
+      const program = await getOwnedProgram(ownerUserId, programId, station.id)
+      if (!program) throw createError({ statusCode: 404, statusMessage: 'Programa não encontrado' })
+      await pgTx(async (client) => {
+        await client.query(`delete from public.radio_schedules where program_id = $1 and station_id = $2`, [program.id, station.id])
+        await client.query(`delete from public.radio_program_blocks where program_id = $1`, [program.id])
+        await client.query(`delete from public.radio_programs where id = $1 and user_id = $2 and station_id = $3`, [program.id, ownerUserId, station.id])
+      })
+      return { success: true }
+    }
+
     if (action === 'create_block') {
       const program = await getOwnedProgram(ownerUserId, String(body.programId || ''), station.id)
       if (!program) throw createError({ statusCode: 404, statusMessage: 'Programa não encontrado' })
@@ -175,6 +264,7 @@ export default defineEventHandler(async (event) => {
       if (!playlistId && !['music', 'playlist'].includes(blockType)) {
         throw createError({ statusCode: 400, statusMessage: 'Escolha uma playlist para este bloco de áudio.' })
       }
+      const settings = typeof body.settings === 'object' && body.settings !== null ? body.settings : {}
       const result = await pgQuery<any>(
         `insert into public.radio_program_blocks
           (program_id, block_type, label, playlist_id, duration_seconds, target_count, position, settings)
@@ -184,10 +274,63 @@ export default defineEventHandler(async (event) => {
           program.id, blockType, cleanText(body.label, 160) || 'Bloco de música', playlistId,
           positiveInt(body.durationSeconds, 0, 24 * 60 * 60) || null,
           positiveInt(body.targetCount, 20, 500) || null,
-          positiveInt(body.position, 0, 100_000), jsonParam({})
+          positiveInt(body.position, 0, 100_000), jsonParam(settings)
         ]
       )
       return { success: true, block: result.rows[0] }
+    }
+
+    if (action === 'update_block') {
+      const blockId = String(body.blockId || '').trim()
+      if (!isUuid(blockId)) throw createError({ statusCode: 400, statusMessage: 'Identificador do bloco inválido' })
+      const blockRow = await pgQuery<any>(
+        `select b.*, p.user_id, p.station_id from public.radio_program_blocks b
+         join public.radio_programs p on p.id = b.program_id
+         where b.id = $1 and p.user_id = $2 and p.station_id = $3`,
+        [blockId, ownerUserId, station.id]
+      )
+      if (!blockRow.rows[0]) throw createError({ statusCode: 404, statusMessage: 'Bloco não encontrado' })
+      const blockType = String(body.blockType || blockRow.rows[0].block_type)
+      if (!['music', 'playlist', 'audio_pack', 'jingle', 'commercial'].includes(blockType)) {
+        throw createError({ statusCode: 400, statusMessage: 'Esse tipo de bloco ainda não pode ser reproduzido na programação.' })
+      }
+      let playlistId: string | null = null
+      if (body.playlistId) {
+        const playlist = await getOwnedPlaylist(ownerUserId, String(body.playlistId), station.id)
+        if (!playlist) throw createError({ statusCode: 404, statusMessage: 'Playlist não encontrada' })
+        playlistId = playlist.id
+      }
+      if (!playlistId && !['music', 'playlist'].includes(blockType)) {
+        throw createError({ statusCode: 400, statusMessage: 'Escolha uma playlist para este bloco de áudio.' })
+      }
+      const label = cleanText(body.label, 160) || blockRow.rows[0].label || 'Bloco de música'
+      const targetCount = positiveInt(body.targetCount, blockRow.rows[0].target_count || 20, 500) || null
+      const durationSeconds = positiveInt(body.durationSeconds, blockRow.rows[0].duration_seconds || 0, 24 * 60 * 60) || null
+      const existingSettings = typeof blockRow.rows[0].settings === 'object' && blockRow.rows[0].settings !== null ? blockRow.rows[0].settings : {}
+      const newSettings = typeof body.settings === 'object' && body.settings !== null ? { ...existingSettings, ...body.settings } : existingSettings
+
+      const updated = await pgQuery<any>(
+        `update public.radio_program_blocks
+         set block_type = $1, label = $2, playlist_id = $3, duration_seconds = $4, target_count = $5, settings = $6::jsonb
+         where id = $7
+         returning id, program_id, block_type, label, playlist_id, duration_seconds, target_count, position, settings`,
+        [blockType, label, playlistId, durationSeconds, targetCount, jsonParam(newSettings), blockId]
+      )
+      return { success: true, block: updated.rows[0] }
+    }
+
+    if (action === 'delete_block') {
+      const blockId = String(body.blockId || '').trim()
+      if (!isUuid(blockId)) throw createError({ statusCode: 400, statusMessage: 'Identificador do bloco inválido' })
+      const blockRow = await pgQuery<any>(
+        `select b.id from public.radio_program_blocks b
+         join public.radio_programs p on p.id = b.program_id
+         where b.id = $1 and p.user_id = $2 and p.station_id = $3`,
+        [blockId, ownerUserId, station.id]
+      )
+      if (!blockRow.rows[0]) throw createError({ statusCode: 404, statusMessage: 'Bloco não encontrado' })
+      await pgQuery(`delete from public.radio_program_blocks where id = $1`, [blockId])
+      return { success: true }
     }
 
     if (action === 'create_schedule') {

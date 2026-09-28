@@ -53,7 +53,22 @@ export default defineEventHandler(async (event) => {
     const seen = new Set<string>()
     for (const block of blocks) {
       if (!['music', 'playlist', 'jingle', 'commercial', 'audio_pack'].includes(String(block.block_type))) continue
-      const limit = Math.max(1, Math.min(50, Number(block.target_count || 20)))
+      const settings = typeof block.settings === 'object' && block.settings !== null ? block.settings : {}
+      const mode = settings.transitionMode || (block.duration_seconds ? 'time' : 'count')
+
+      // Define quantas faixas buscar do banco dependendo do critério de troca automática
+      let limit = 20
+      if (mode === 'time' && block.duration_seconds) {
+        // Média de ~3 min por faixa (180s) para cobrir o tempo configurado do bloco
+        limit = Math.max(1, Math.min(100, Math.ceil(Number(block.duration_seconds) / 180)))
+      } else if (mode === 'full_playlist') {
+        limit = 100 // Toca toda a playlist cadastrada
+      } else if (mode === 'continuous') {
+        limit = 80 // Roda em fluxo contínuo até a agenda virar
+      } else {
+        limit = Math.max(1, Math.min(50, Number(block.target_count || 20)))
+      }
+
       const items = block.playlist_id ? await pgQuery<any>(
         `select t.* from public.radio_playlist_items i
            join public.radio_catalog_tracks t on t.id = i.track_id
@@ -95,6 +110,59 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // Continuidade da transmissão: calcula o ponto exato da programação no horário
+    // para que reabrir o player não volte sempre ao início da primeira música.
+    let initialOffsetSec = 0
+    let currentTrackIndex = 0
+    if (schedule && queue.length > 0) {
+      try {
+        const timezone = String(schedule.timezone || station.timezone || 'America/Sao_Paulo')
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: timezone,
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+        }).formatToParts(new Date())
+        const vals = Object.fromEntries(parts.map((p) => [p.type, p.value]))
+        const currentSecOfDay = (Number(vals.hour || 0) * 3600) + (Number(vals.minute || 0) * 60) + Number(vals.second || 0)
+
+        const startParts = String(schedule.start_time || '00:00').slice(0, 5).split(':').map(Number)
+        const startSecOfDay = (startParts[0] || 0) * 3600 + (startParts[1] || 0) * 60
+
+        let elapsedSeconds = currentSecOfDay >= startSecOfDay
+          ? currentSecOfDay - startSecOfDay
+          : (86400 - startSecOfDay) + currentSecOfDay
+
+        // Duração total do ciclo da fila (fallback para 180s por faixa se duração não informada)
+        const trackDurationsMs = queue.map((t) => {
+          const ms = Number(t.durationMs || t.duration_ms)
+          return Number.isFinite(ms) && ms > 10000 ? ms : 180_000
+        })
+        const totalCycleMs = trackDurationsMs.reduce((acc, d) => acc + d, 0)
+
+        if (totalCycleMs > 0) {
+          const elapsedMs = (elapsedSeconds * 1000) % totalCycleMs
+          let accumulatedMs = 0
+          for (let i = 0; i < queue.length; i++) {
+            const trackDur = trackDurationsMs[i] || 180_000
+            if (accumulatedMs + trackDur > elapsedMs) {
+              currentTrackIndex = i
+              initialOffsetSec = Math.max(0, Math.floor((elapsedMs - accumulatedMs) / 1000))
+              break
+            }
+            accumulatedMs += trackDur
+          }
+
+          // Rotaciona a fila para que a faixa em andamento fique no topo (índice 0)
+          if (currentTrackIndex > 0) {
+            const rotated = [...queue.slice(currentTrackIndex), ...queue.slice(0, currentTrackIndex)]
+            queue.length = 0
+            queue.push(...rotated)
+          }
+        }
+      } catch (err) {
+        console.warn('[radio-player] erro ao calcular continuidade da grade:', err)
+      }
+    }
+
     return {
       success: true,
       station,
@@ -119,6 +187,8 @@ export default defineEventHandler(async (event) => {
         }))
       } : null,
       queue,
+      initialOffsetSec,
+      currentTrackIndex,
       cache: { enabled: true, maxTracks: 20, offlineMinutes: 45, strategy: 'cache-first-next-tracks' },
       player: playerIdentity ? { id: playerIdentity.playerId, name: playerIdentity.name } : null,
       serverTime: new Date().toISOString()

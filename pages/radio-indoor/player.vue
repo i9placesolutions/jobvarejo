@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {
   ChevronLeft, ChevronRight, Disc3, Headphones, LoaderCircle, LockKeyhole,
-  Pause, Play, Radio, RefreshCw, Volume2
+  Pause, Play, Radio, RefreshCw, Shuffle, Volume2
 } from 'lucide-vue-next'
 import type { RadioTrack } from '~/composables/useRadioIndoor'
 
@@ -16,11 +16,13 @@ const playerToken = ref('')
 const currentTrack = ref<RadioTrack | null>(null)
 const isPlaying = ref(false)
 const isLoadingTrack = ref(false)
+const isShuffle = ref(false)
 const isBootstrapping = ref(false)
 const progress = ref(0)
 const duration = ref(0)
 const volume = ref(0.9)
 const notice = ref<string | null>(null)
+const autoplayBlocked = ref(false)
 const audioRef = ref<HTMLAudioElement | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 let lastSignature = ''
@@ -41,23 +43,30 @@ const formatDuration = (seconds: number) => {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
-const playTrack = async (track: RadioTrack) => {
+const playTrack = async (track: RadioTrack, offsetSec = 0) => {
   if (!track?.audioUrl) return
   isLoadingTrack.value = true
   currentTrack.value = track
   await nextTick()
   try {
     audioRef.value?.load()
+    if (offsetSec > 0 && audioRef.value) {
+      audioRef.value.currentTime = offsetSec
+      progress.value = offsetSec
+    }
     await audioRef.value?.play()
     isPlaying.value = true
+    autoplayBlocked.value = false
     void radio.recordPlayed(track, {
       playerToken: playerToken.value,
       source: 'kiosk-player',
       playlistId: track.playlistId || undefined,
+      programId: schedule.value?.programId || undefined,
       completed: false
     })
     void radio.prefetchQueue(queue.value.slice(Math.max(0, currentIndex.value + 1), currentIndex.value + 4))
   } catch {
+    autoplayBlocked.value = true
     showNotice('Toque em play para iniciar o áudio neste navegador.')
   } finally {
     isLoadingTrack.value = false
@@ -78,7 +87,13 @@ const togglePlay = async () => {
 }
 
 const playNext = async () => {
-  const next = queue.value[currentIndex.value + 1] || queue.value[0]
+  let next: RadioTrack | undefined
+  if (isShuffle.value && queue.value.length > 1) {
+    const candidates = queue.value.filter((t) => t.id !== currentTrack.value?.id)
+    next = candidates[Math.floor(Math.random() * candidates.length)]
+  } else {
+    next = queue.value[currentIndex.value + 1] || queue.value[0]
+  }
   if (currentTrack.value) {
     void radio.recordPlayed(currentTrack.value, {
       playerToken: playerToken.value,
@@ -162,7 +177,10 @@ const connect = async (rawToken?: string) => {
     const loaded = await refreshQueue(true)
     if (!loaded) throw new Error('Não foi possível conectar este player.')
     window.localStorage.setItem(TOKEN_STORAGE_KEY, token)
-    if (queue.value[0]) await playTrack(queue.value[0])
+    if (queue.value[0]) {
+      const offsetSec = Number(radio.playerData.value?.initialOffsetSec || 0)
+      await playTrack(queue.value[0], offsetSec)
+    }
     showNotice(`Conectado: ${station.value?.name || playerMeta.value?.name || 'loja'}`)
   } catch (error: any) {
     playerToken.value = ''
@@ -229,13 +247,20 @@ onBeforeUnmount(() => {
           <p>{{ currentTrack?.artist || 'A programação entra automaticamente pela agenda' }}</p>
           <div class="controls">
             <button @click="playPrevious"><ChevronLeft :size="22" /></button>
-            <button class="play" :disabled="isLoadingTrack" @click="togglePlay">
+            <button class="play" :class="{ 'pulse-play': autoplayBlocked && !isPlaying }" :disabled="isLoadingTrack" @click="togglePlay">
               <LoaderCircle v-if="isLoadingTrack" class="spin" :size="22" />
               <Pause v-else-if="isPlaying" :size="22" fill="currentColor" />
               <Play v-else :size="22" fill="currentColor" />
             </button>
             <button @click="playNext"><ChevronRight :size="22" /></button>
+            <button class="ghost shuffle-btn" :class="{ active: isShuffle }" :title="isShuffle ? 'Modo Aleatório Ativado' : 'Ativar Modo Aleatório'" @click="isShuffle = !isShuffle">
+              <Shuffle :size="18" />
+            </button>
             <button class="ghost refresh" title="Atualizar fila" @click="refreshQueue(true)"><RefreshCw :size="16" /></button>
+          </div>
+          <div v-if="autoplayBlocked && !isPlaying" class="kiosk-autoplay-banner" @click="togglePlay">
+            <Play :size="16" fill="currentColor" />
+            <span>Clique aqui para dar play neste terminal</span>
           </div>
           <div class="progress">
             <span>{{ formatDuration(progress) }}</span>
@@ -304,7 +329,17 @@ button.primary { border:0; background:linear-gradient(135deg,#8b5cf6,#6d3fd6); c
 .controls { display:flex; align-items:center; gap:10px; }
 .controls button { width:44px; height:44px; border-radius:999px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.04); color:#fff; display:grid; place-items:center; cursor:pointer; }
 .controls .play { width:58px; height:58px; background:#8b5cf6; border:0; }
+.controls .play.pulse-play { animation:pulse-play-btn 1.5s infinite; box-shadow:0 0 25px rgba(139,92,246,.7); }
+@keyframes pulse-play-btn {
+  0% { transform:scale(1); box-shadow:0 0 0 0 rgba(139,92,246,.7); }
+  70% { transform:scale(1.08); box-shadow:0 0 0 16px rgba(139,92,246,0); }
+  100% { transform:scale(1); box-shadow:0 0 0 0 rgba(139,92,246,0); }
+}
+.kiosk-autoplay-banner { display:inline-flex; align-items:center; gap:8px; margin-top:14px; padding:9px 15px; border-radius:10px; background:rgba(139,92,246,.2); border:1px solid rgba(139,92,246,.5); color:#efeaf8; font-size:12px; cursor:pointer; font-weight:500; transition:.2s; }
+.kiosk-autoplay-banner:hover { background:rgba(139,92,246,.35); transform:translateY(-1px); }
 .controls .refresh { width:auto; padding:0 12px; border-radius:10px; }
+.controls .shuffle-btn { width:44px; height:44px; border-radius:999px; }
+.controls .shuffle-btn.active { color:#8b5cf6; border-color:#8b5cf6; background:rgba(139,92,246,.2); }
 .progress,.volume { display:flex; align-items:center; gap:10px; margin-top:14px; color:#9b94ab; font-size:11px; }
 .progress input,.volume input { flex:1; }
 .queue h2 { margin:0 0 12px; font-size:14px; color:#cfc7e0; }

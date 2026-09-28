@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import {
-  Album, CalendarClock, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3,
-  Copy, Disc3, Download, Headphones, ListMusic, LoaderCircle,
-  Mic2, MonitorPlay, Moon, Pause, Play, Plus, Radio, RefreshCw, Search, Send, Settings2, ShieldCheck, Store,
-  Sparkles, Sun, UserPlus, Users, Volume2, X, Zap
+  Album, CalendarClock, Check, CheckSquare, ChevronLeft, ChevronRight, CircleHelp, Clock3,
+  Copy, Disc3, Download, Filter, Headphones, ListMusic, LoaderCircle,
+  Mic2, MonitorPlay, Moon, Pause, Pencil, Play, Plus, Radio, RefreshCw, Search, Send, Settings2, ShieldCheck, Shuffle, Square, Store,
+  Sparkles, Sun, Trash2, UserPlus, Users, Volume2, X, Zap
 } from 'lucide-vue-next'
 import type { RadioTrack } from '~/composables/useRadioIndoor'
 
@@ -17,9 +17,12 @@ const activeArtist = ref('Todos')
 const activeAlbum = ref('Todos')
 const catalogViewMode = ref<'tracks' | 'albums'>('tracks')
 const selectedPlaylistId = ref('')
+const filterPlaylistId = ref('all')
+const selectedTrackIds = ref<string[]>([])
 const currentTrack = ref<RadioTrack | null>(null)
 const isPlaying = ref(false)
 const isLoadingTrack = ref(false)
+const isShuffle = ref(false)
 const audioRef = ref<HTMLAudioElement | null>(null)
 const previewAudioRef = ref<HTMLAudioElement | null>(null)
 const previewRequest = ref<any | null>(null)
@@ -37,9 +40,30 @@ const isCreatingSchedule = ref(false)
 const isSubmittingRequest = ref(false)
 const requestForm = reactive({ kind: 'jingle', title: '', brief: '', style: '', lyrics: '', voiceProfileId: '', gender: 'female' })
 const playlistForm = reactive({ name: '', description: '' })
+const showPlaylistForm = ref(false)
 const programForm = reactive({ name: '', description: '', timezone: 'America/Sao_Paulo' })
+const editingProgramId = ref<string | null>(null)
 const scheduleForm = reactive({ programId: '', startTime: '08:00', endTime: '18:00', daysOfWeek: [1, 2, 3, 4, 5] as number[] })
-const blockForm = reactive({ programId: '', playlistId: '', label: '', blockType: 'playlist', targetCount: 20 })
+const blockForm = reactive({
+  programId: '',
+  playlistId: '',
+  label: '',
+  blockType: 'playlist',
+  transitionMode: 'count' as 'count' | 'time' | 'full_playlist' | 'continuous',
+  targetCount: 20,
+  durationMinutes: 30
+})
+const editingBlockId = ref<string | null>(null)
+const showInterleaveWizard = ref(false)
+const isGeneratingInterleave = ref(false)
+const interleaveForm = reactive({
+  programId: '',
+  musicPlaylistId: '',
+  musicCount: 3,
+  jinglePlaylistId: '',
+  jingleCount: 1,
+  repetitions: 4
+})
 const stationForm = reactive({ name: '', timezone: 'America/Sao_Paulo' })
 const stationEditForm = reactive({ name: '', timezone: 'America/Sao_Paulo' })
 const memberForm = reactive({ name: '', email: '', password: '', accessLevel: 'operator', stationIds: [] as string[] })
@@ -50,6 +74,7 @@ const createdPlayerToken = ref('')
 const downloadingRequestId = ref<string | null>(null)
 const requestPlaylistId = ref('')
 const addingRequestId = ref<string | null>(null)
+const autoplayBlocked = ref(false)
 let requestPollTimer: ReturnType<typeof setInterval> | null = null
 let playerRefreshTimer: ReturnType<typeof setInterval> | null = null
 let lastScheduleSignature = ''
@@ -61,18 +86,20 @@ const genres = computed(() => {
 })
 
 const artists = computed(() => {
-  const fromFacets = Array.isArray(radio.facets.value?.artists) ? radio.facets.value.artists : []
-  const fromTracks = radio.catalog.value.map((track) => track.artist).filter(Boolean)
-  const combined = Array.from(new Set([...fromFacets, ...fromTracks])).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  const fromFacets = Array.isArray(radio.facets.value?.artists)
+    ? radio.facets.value.artists.map((item: any) => typeof item === 'object' && item !== null ? String(item.artist || '') : String(item || '')).filter(Boolean)
+    : []
+  const fromTracks = radio.catalog.value.map((track) => String(track.artist || '')).filter(Boolean)
+  const combined = Array.from(new Set([...fromFacets, ...fromTracks])).sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'))
   return ['Todos', ...combined]
 })
 
 const albums = computed(() => {
   let list = Array.isArray(radio.facets.value?.albums) ? [...radio.facets.value.albums] : []
   if (activeArtist.value !== 'Todos') {
-    list = list.filter((item) => item.artist?.toLowerCase() === activeArtist.value.toLowerCase())
+    list = list.filter((item) => String(item.artist || '').toLowerCase() === activeArtist.value.toLowerCase())
   }
-  const names = Array.from(new Set(list.map((item) => item.album).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  const names = Array.from(new Set(list.map((item) => String(item.album || '')).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'))
   return ['Todos', ...names]
 })
 
@@ -202,12 +229,18 @@ const refreshCatalog = async () => {
       q: query.value || undefined,
       genre: activeGenre.value === 'Todos' ? undefined : activeGenre.value,
       artist: activeArtist.value === 'Todos' ? undefined : activeArtist.value,
-      album: activeAlbum.value === 'Todos' ? undefined : activeAlbum.value
+      album: activeAlbum.value === 'Todos' ? undefined : activeAlbum.value,
+      playlistId: filterPlaylistId.value !== 'all' ? filterPlaylistId.value : undefined
     })
     await radio.loadPlayer()
   } catch (error: any) {
     showNotice(error?.data?.statusMessage || 'Falha ao atualizar catálogo', 'error')
   }
+}
+
+const onPlaylistFilterChange = async () => {
+  selectedTrackIds.value = []
+  await refreshCatalog()
 }
 
 const onArtistChange = async () => {
@@ -225,7 +258,7 @@ const selectGenre = async (genre: string) => {
   await refreshCatalog()
 }
 
-const playTrack = async (track: RadioTrack) => {
+const playTrack = async (track: RadioTrack, offsetSec = 0) => {
   if (!track.audioUrl) {
     showNotice('Esta faixa ainda não possui áudio pronto no Wasabi.', 'info')
     return
@@ -235,8 +268,19 @@ const playTrack = async (track: RadioTrack) => {
   await nextTick()
   try {
     audioRef.value?.load()
+    if (offsetSec > 0 && audioRef.value) {
+      audioRef.value.currentTime = offsetSec
+      progress.value = offsetSec
+    }
     await audioRef.value?.play()
     isPlaying.value = true
+    autoplayBlocked.value = false
+    void radio.recordPlayed(track, {
+      playlistId: track.playlistId || undefined,
+      programId: activeSchedule.value?.programId || undefined,
+      completed: false,
+      source: 'web-dashboard'
+    })
     void radio.prefetchQueue(queue.value.slice(Math.max(0, currentIndex.value + 1), currentIndex.value + 4))
   } catch {
     showNotice('O navegador bloqueou a reprodução automática. Clique em play novamente.', 'info')
@@ -262,7 +306,23 @@ const togglePlay = async () => {
 }
 
 const playNext = async () => {
-  const next = queue.value[currentIndex.value + 1] || queue.value[0] || filteredCatalog.value[0]
+  let next: RadioTrack | undefined
+  const pool = queue.value.length ? queue.value : filteredCatalog.value
+  if (isShuffle.value && pool.length > 1) {
+    const candidates = pool.filter((t) => t.id !== currentTrack.value?.id)
+    next = candidates[Math.floor(Math.random() * candidates.length)]
+  } else {
+    next = queue.value[currentIndex.value + 1] || queue.value[0] || filteredCatalog.value[0]
+  }
+  if (currentTrack.value) {
+    void radio.recordPlayed(currentTrack.value, {
+      playlistId: currentTrack.value.playlistId || undefined,
+      programId: activeSchedule.value?.programId || undefined,
+      completed: true,
+      durationMs: Math.round((audioRef.value?.currentTime || 0) * 1000),
+      source: 'web-dashboard'
+    })
+  }
   if (next) await playTrack(next)
 }
 
@@ -273,13 +333,110 @@ const playPrevious = async () => {
 
 const addToPlaylist = async (track: RadioTrack) => {
   if (!selectedPlaylistId.value) {
-    showNotice('Escolha uma playlist no filtro “Adicionar a” para guardar esta faixa.', 'info')
+    showNotice('Escolha uma playlist no seletor “Adicionar a” para guardar esta faixa.', 'info')
     return
   }
   try {
     await radio.create({ action: 'add_track', playlistId: selectedPlaylistId.value, trackId: track.id, position: 99999 })
     showNotice(`“${track.title}” adicionada à playlist.`, 'success')
+    await radio.loadBootstrap()
   } catch (error: any) { showNotice(error?.data?.statusMessage || 'Não foi possível adicionar a faixa', 'error') }
+}
+
+const removeFromPlaylist = async (track: RadioTrack) => {
+  if (!filterPlaylistId.value || filterPlaylistId.value === 'all') return
+  try {
+    await radio.create({ action: 'remove_track', playlistId: filterPlaylistId.value, trackId: track.id })
+    showNotice(`“${track.title}” removida da playlist.`, 'success')
+    await Promise.all([refreshCatalog(), radio.loadBootstrap()])
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Não foi possível remover da playlist', 'error')
+  }
+}
+
+const toggleSelectTrack = (trackId: string) => {
+  if (selectedTrackIds.value.includes(trackId)) {
+    selectedTrackIds.value = selectedTrackIds.value.filter((id) => id !== trackId)
+  } else {
+    selectedTrackIds.value = [...selectedTrackIds.value, trackId]
+  }
+}
+
+const toggleSelectAll = () => {
+  const currentIds = filteredCatalog.value.map((t) => t.id)
+  const allSelected = currentIds.length > 0 && currentIds.every((id) => selectedTrackIds.value.includes(id))
+  if (allSelected) {
+    selectedTrackIds.value = selectedTrackIds.value.filter((id) => !currentIds.includes(id))
+  } else {
+    selectedTrackIds.value = Array.from(new Set([...selectedTrackIds.value, ...currentIds]))
+  }
+}
+
+const addSelectedToPlaylist = async () => {
+  if (!selectedPlaylistId.value) {
+    showNotice('Selecione uma playlist destino no seletor “Adicionar a”.', 'info')
+    return
+  }
+  if (!selectedTrackIds.value.length) {
+    showNotice('Marque uma ou mais músicas pelas caixas de seleção.', 'info')
+    return
+  }
+  try {
+    const result = await radio.create({
+      action: 'add_multiple_tracks',
+      playlistId: selectedPlaylistId.value,
+      trackIds: selectedTrackIds.value
+    })
+    showNotice(`${result.addedCount || selectedTrackIds.value.length} faixa(s) adicionada(s) à playlist.`, 'success')
+    selectedTrackIds.value = []
+    await Promise.all([radio.loadBootstrap(), refreshCatalog()])
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Falha ao adicionar músicas selecionadas', 'error')
+  }
+}
+
+const addCurrentGenreToPlaylist = async () => {
+  if (!selectedPlaylistId.value) {
+    showNotice('Selecione uma playlist destino no seletor “Adicionar a”.', 'info')
+    return
+  }
+  if (activeGenre.value === 'Todos') {
+    showNotice('Selecione um gênero nos filtros acima para adicionar em lote.', 'info')
+    return
+  }
+  try {
+    const result = await radio.create({
+      action: 'add_genre_to_playlist',
+      playlistId: selectedPlaylistId.value,
+      genre: activeGenre.value
+    })
+    showNotice(`${result.addedCount || 0} música(s) do gênero “${activeGenre.value}” adicionada(s) à playlist.`, 'success')
+    await Promise.all([radio.loadBootstrap(), refreshCatalog()])
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Falha ao adicionar gênero à playlist', 'error')
+  }
+}
+
+const copyPlaylistToPlaylist = async () => {
+  if (filterPlaylistId.value === 'all') {
+    showNotice('Selecione primeiro uma playlist na aba de visualização.', 'info')
+    return
+  }
+  if (!selectedPlaylistId.value) {
+    showNotice('Selecione a playlist destino em “Adicionar a”.', 'info')
+    return
+  }
+  try {
+    const result = await radio.create({
+      action: 'add_playlist_to_playlist',
+      sourcePlaylistId: filterPlaylistId.value,
+      targetPlaylistId: selectedPlaylistId.value
+    })
+    showNotice(`${result.addedCount || 0} música(s) mesclada(s) para a playlist destino.`, 'success')
+    await Promise.all([radio.loadBootstrap(), refreshCatalog()])
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Falha ao copiar playlist', 'error')
+  }
 }
 
 const onTimeUpdate = () => {
@@ -313,30 +470,177 @@ const importCatalog = async () => {
 const createPlaylist = async () => {
   if (!playlistForm.name.trim()) return
   try {
-    await radio.create({ action: 'create_playlist', ...playlistForm })
+    const result = await radio.create({ action: 'create_playlist', ...playlistForm })
+    if (result?.playlist?.id) selectedPlaylistId.value = result.playlist.id
     playlistForm.name = ''; playlistForm.description = ''
-    showNotice('Playlist criada.', 'success')
+    showPlaylistForm.value = false
+    showNotice('Playlist criada com sucesso.', 'success')
   } catch (error: any) { showNotice(error?.data?.statusMessage || 'Falha ao criar playlist', 'error') }
 }
 
-const createProgram = async () => {
-  if (!programForm.name.trim()) return
-  try {
-    const result = await radio.create({ action: 'create_program', ...programForm })
-    programForm.name = ''; programForm.description = ''
-    if (!scheduleForm.programId) scheduleForm.programId = result?.program?.id || ''
-    if (!blockForm.programId) blockForm.programId = result?.program?.id || ''
-    showNotice('Programa criado. Adicione os blocos abaixo.', 'success')
-  } catch (error: any) { showNotice(error?.data?.statusMessage || 'Falha ao criar programa', 'error') }
+const editProgram = (program: any) => {
+  editingProgramId.value = program.id
+  programForm.name = program.name || ''
+  programForm.description = program.description || ''
+  programForm.timezone = program.timezone || 'America/Sao_Paulo'
 }
 
-const createBlock = async () => {
+const cancelProgramEdit = () => {
+  editingProgramId.value = null
+  programForm.name = ''
+  programForm.description = ''
+  programForm.timezone = 'America/Sao_Paulo'
+}
+
+const saveProgram = async () => {
+  if (!programForm.name.trim()) return
+  try {
+    if (editingProgramId.value) {
+      await radio.create({
+        action: 'update_program',
+        programId: editingProgramId.value,
+        ...programForm
+      })
+      showNotice('Programa atualizado com sucesso.', 'success')
+      cancelProgramEdit()
+    } else {
+      const result = await radio.create({ action: 'create_program', ...programForm })
+      programForm.name = ''; programForm.description = ''
+      if (!scheduleForm.programId) scheduleForm.programId = result?.program?.id || ''
+      if (!blockForm.programId) blockForm.programId = result?.program?.id || ''
+      showNotice('Programa criado. Adicione os blocos abaixo.', 'success')
+    }
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || (editingProgramId.value ? 'Falha ao atualizar programa' : 'Falha ao criar programa'), 'error')
+  }
+}
+
+const deleteProgram = async (program: any) => {
+  if (!confirm(`Deseja remover o programa "${program.name}" e todos os seus blocos e agendamentos?`)) return
+  try {
+    await radio.create({ action: 'delete_program', programId: program.id })
+    if (editingProgramId.value === program.id) cancelProgramEdit()
+    if (blockForm.programId === program.id) blockForm.programId = ''
+    if (scheduleForm.programId === program.id) scheduleForm.programId = ''
+    showNotice('Programa removido com sucesso.', 'success')
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Falha ao remover programa', 'error')
+  }
+}
+
+const editBlock = (programId: string, block: any) => {
+  editingBlockId.value = block.id
+  blockForm.programId = programId
+  blockForm.blockType = block.blockType || 'playlist'
+  blockForm.label = block.label || ''
+  blockForm.playlistId = block.playlistId || ''
+  const settings = block.settings || {}
+  blockForm.transitionMode = settings.transitionMode || (block.durationSeconds ? 'time' : 'count')
+  blockForm.targetCount = Number(block.targetCount || 20)
+  blockForm.durationMinutes = block.durationSeconds ? Math.round(block.durationSeconds / 60) : 30
+}
+
+const cancelBlockEdit = () => {
+  editingBlockId.value = null
+  blockForm.label = ''
+  blockForm.transitionMode = 'count'
+  blockForm.targetCount = 20
+  blockForm.durationMinutes = 30
+}
+
+const saveBlock = async () => {
   if (!blockForm.programId || !blockForm.label.trim()) return
   try {
-    await radio.create({ action: 'create_block', ...blockForm, targetCount: Number(blockForm.targetCount) })
-    blockForm.label = ''
-    showNotice('Bloco adicionado ao programa.', 'success')
-  } catch (error: any) { showNotice(error?.data?.statusMessage || 'Falha ao adicionar bloco', 'error') }
+    const durationSeconds = blockForm.transitionMode === 'time'
+      ? Math.max(60, Number(blockForm.durationMinutes || 30) * 60)
+      : null
+
+    const payload = {
+      ...blockForm,
+      durationSeconds,
+      targetCount: blockForm.transitionMode === 'count' ? Number(blockForm.targetCount || 20) : null,
+      settings: {
+        transitionMode: blockForm.transitionMode
+      }
+    }
+
+    if (editingBlockId.value) {
+      await radio.create({
+        action: 'update_block',
+        blockId: editingBlockId.value,
+        ...payload
+      })
+      showNotice('Bloco atualizado com sucesso.', 'success')
+      cancelBlockEdit()
+    } else {
+      await radio.create({
+        action: 'create_block',
+        ...payload
+      })
+      blockForm.label = ''
+      showNotice('Bloco adicionado ao programa.', 'success')
+    }
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || (editingBlockId.value ? 'Falha ao atualizar bloco' : 'Falha ao adicionar bloco'), 'error')
+  }
+}
+
+const deleteBlock = async (block: any) => {
+  if (!confirm(`Deseja remover o bloco "${block.label || 'Bloco'}"?`)) return
+  try {
+    await radio.create({ action: 'delete_block', blockId: block.id })
+    if (editingBlockId.value === block.id) cancelBlockEdit()
+    showNotice('Bloco removido do programa.', 'success')
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Falha ao remover bloco', 'error')
+  }
+}
+
+const generateInterleavedBlocks = async () => {
+  if (!interleaveForm.programId) {
+    showNotice('Selecione o programa destino para a intercalação.', 'info')
+    return
+  }
+  const prog = programs.value.find((p: any) => p.id === interleaveForm.programId)
+  const musicPl = playlists.value.find((p: any) => p.id === interleaveForm.musicPlaylistId)
+  const jinglePl = playlists.value.find((p: any) => p.id === interleaveForm.jinglePlaylistId)
+
+  isGeneratingInterleave.value = true
+  try {
+    const rounds = Math.max(1, Math.min(20, Number(interleaveForm.repetitions || 4)))
+    const musicCount = Math.max(1, Math.min(50, Number(interleaveForm.musicCount || 3)))
+    const jingleCount = Math.max(1, Math.min(10, Number(interleaveForm.jingleCount || 1)))
+
+    for (let r = 1; r <= rounds; r++) {
+      // 1. Bloco de músicas
+      await radio.create({
+        action: 'create_block',
+        programId: interleaveForm.programId,
+        blockType: 'playlist',
+        label: `${musicPl?.name || 'Músicas'} (Bloco ${r})`,
+        playlistId: interleaveForm.musicPlaylistId || null,
+        targetCount: musicCount
+      })
+
+      // 2. Bloco de vinheta / comercial / locução
+      await radio.create({
+        action: 'create_block',
+        programId: interleaveForm.programId,
+        blockType: 'jingle',
+        label: `${jinglePl?.name || 'Vinhetas / Locuções'} (Intercalação ${r})`,
+        playlistId: interleaveForm.jinglePlaylistId || null,
+        targetCount: jingleCount
+      })
+    }
+
+    showNotice(`Sucesso! Criada sequência com ${rounds * 2} blocos intercalados (${musicCount} músicas para ${jingleCount} vinheta/locução).`, 'success')
+    showInterleaveWizard.value = false
+    await radio.loadBootstrap()
+  } catch (error: any) {
+    showNotice(error?.data?.statusMessage || 'Falha ao gerar blocos intercalados', 'error')
+  } finally {
+    isGeneratingInterleave.value = false
+  }
 }
 
 const toggleDay = (day: number) => {
@@ -599,13 +903,22 @@ if (import.meta.client) {
 onMounted(() => {
   const storedTheme = window.localStorage.getItem(RADIO_THEME_STORAGE_KEY)
   if (storedTheme === 'light' || storedTheme === 'dark') radioTheme.value = storedTheme
-  void loadAll().then(() => {
+  void loadAll().then(async () => {
     lastScheduleSignature = [
       radio.playerData.value?.schedule?.id || '',
       radio.playerData.value?.schedule?.startTime || '',
       radio.playerData.value?.schedule?.endTime || '',
       queue.value.map((track) => track.id).join(',')
     ].join('|')
+
+    // Se houver programação ativa no horário com faixas na fila e não estiver tocando
+    if (activeSchedule.value && queue.value.length > 0 && !isPlaying.value) {
+      const first = queue.value[0]
+      const offsetSec = Number(radio.playerData.value?.initialOffsetSec || 0)
+      if (first) {
+        await playTrack(first, offsetSec)
+      }
+    }
   })
   // Sem webhook configurado, consulta tarefas pendentes periodicamente para
   // que o usuário não precise recarregar a página ou clicar em cada item.
@@ -627,7 +940,13 @@ onBeforeUnmount(() => {
     <main class="radio-main">
       <header class="topbar">
         <div class="crumb"><span>Rádio Indoor</span><ChevronRight :size="14" /><b>{{ activeView === 'home' ? 'Visão geral' : activeView === 'catalog' ? 'Músicas' : activeView === 'programs' ? 'Programas' : activeView === 'agenda' ? 'Agenda' : activeView === 'voices' ? 'Banco de vozes' : activeView === 'requests' ? 'Gerar áudio' : 'Equipe e players' }}</b></div>
-        <div class="topbar-actions"><div class="station-switcher"><Store :size="15" /><label class="sr-only" for="radio-station-select">Loja ativa</label><select id="radio-station-select" v-model="selectedStationId" @change="changeStation"><option v-for="item in stations" :key="item.id" :value="item.id">{{ item.name }}</option></select><button v-if="canManageUsers" class="station-add" title="Editar nome da loja" aria-label="Editar nome da loja" @click="openStationEdit"><Settings2 :size="15" /></button><button class="station-add" title="Adicionar loja" aria-label="Adicionar loja" @click="showStationForm = !showStationForm"><Plus :size="15" /></button></div><button v-if="canManageUsers" class="station-status clickable" :class="{ live: station?.status === 'active' }" :title="station?.status === 'active' ? 'Pausar loja' : 'Colocar no ar'" @click="toggleStationStatus"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</button><span v-else class="station-status" :class="{ live: station?.status === 'active' }"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</span><button class="icon-button theme-toggle" :aria-label="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" :aria-pressed="radioTheme === 'light'" :title="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" @click="toggleRadioTheme"><Sun v-if="radioTheme === 'dark'" :size="17" /><Moon v-else :size="17" /></button><button class="icon-button" title="Ajuda"><CircleHelp :size="18" /></button></div>
+        <div class="topbar-actions">
+          <div v-if="activeSchedule?.programName" class="topbar-live-badge" title="Programa em execução no horário">
+            <span class="live-dot"></span>
+            <strong>{{ activeSchedule.programName }}</strong>
+            <small>{{ activeSchedule.startTime }} - {{ activeSchedule.endTime }}</small>
+          </div>
+          <div class="station-switcher"><Store :size="15" /><label class="sr-only" for="radio-station-select">Loja ativa</label><select id="radio-station-select" v-model="selectedStationId" @change="changeStation"><option v-for="item in stations" :key="item.id" :value="item.id">{{ item.name }}</option></select><button v-if="canManageUsers" class="station-add" title="Editar nome da loja" aria-label="Editar nome da loja" @click="openStationEdit"><Settings2 :size="15" /></button><button class="station-add" title="Adicionar loja" aria-label="Adicionar loja" @click="showStationForm = !showStationForm"><Plus :size="15" /></button></div><button v-if="canManageUsers" class="station-status clickable" :class="{ live: station?.status === 'active' }" :title="station?.status === 'active' ? 'Pausar loja' : 'Colocar no ar'" @click="toggleStationStatus"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</button><span v-else class="station-status" :class="{ live: station?.status === 'active' }"><i></i>{{ station?.status === 'active' ? 'No ar' : 'Modo de teste' }}</span><button class="icon-button theme-toggle" :aria-label="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" :aria-pressed="radioTheme === 'light'" :title="radioTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'" @click="toggleRadioTheme"><Sun v-if="radioTheme === 'dark'" :size="17" /><Moon v-else :size="17" /></button><button class="icon-button" title="Ajuda"><CircleHelp :size="18" /></button></div>
       </header>
       <nav class="main-nav" aria-label="Seções da Rádio Indoor">
         <button v-for="item in [
@@ -648,6 +967,19 @@ onBeforeUnmount(() => {
 
       <div v-if="notice" class="notice" :class="notice.type"><Check v-if="notice.type === 'success'" :size="16" /><CircleHelp v-else :size="16" /><span>{{ notice.text }}</span><button @click="notice = null"><X :size="14" /></button></div>
 
+      <div v-if="autoplayBlocked && !isPlaying && activeSchedule" class="autoplay-alert-banner">
+        <div class="autoplay-copy">
+          <Headphones :size="20" />
+          <div>
+            <strong>Programação no ar: {{ activeSchedule.programName || 'Transmissão da loja' }}</strong>
+            <span>O navegador requer sua autorização para iniciar o som automaticamente.</span>
+          </div>
+        </div>
+        <button class="button primary" @click="togglePlay">
+          <Play :size="16" fill="currentColor" /> Iniciar áudio agora
+        </button>
+      </div>
+
       <section v-if="radio.setupRequired.value" class="setup-card">
         <div class="setup-icon"><Settings2 :size="22" /></div><div><strong>Banco da Rádio Indoor precisa da migração</strong><p>Execute <code>database/radio_indoor_migration.sql</code> no PostgreSQL e recarregue esta tela.</p></div><button class="button secondary" @click="loadAll"><RefreshCw :size="16" /> Verificar novamente</button>
       </section>
@@ -663,7 +995,65 @@ onBeforeUnmount(() => {
       </template>
 
       <template v-else-if="activeView === 'catalog'">
-        <section class="page-heading"><div><span class="eyebrow muted">BIBLIOTECA PRIVADA</span><h1>Escolha o que toca</h1><p>Filtre por gênero, artista ou procure uma faixa. O áudio fica protegido no Wasabi.</p></div><button class="button secondary" :disabled="isImporting" @click="importCatalog"><LoaderCircle v-if="isImporting" class="spin" :size="16" /><Download v-else :size="16" /> Importar catálogo</button></section>
+        <section class="page-heading">
+          <div>
+            <span class="eyebrow muted">BIBLIOTECA PRIVADA</span>
+            <h1>Escolha o que toca</h1>
+            <p>Filtre por gênero, artista ou procure uma faixa. O áudio fica protegido no Wasabi.</p>
+          </div>
+          <div class="page-heading-actions">
+            <button class="button primary" @click="showPlaylistForm = !showPlaylistForm">
+              <Plus :size="16" />
+              {{ showPlaylistForm ? 'Fechar' : 'Nova playlist' }}
+            </button>
+            <button class="button secondary" :disabled="isImporting" @click="importCatalog">
+              <LoaderCircle v-if="isImporting" class="spin" :size="16" />
+              <Download v-else :size="16" />
+              Importar catálogo
+            </button>
+          </div>
+        </section>
+
+        <div v-if="showPlaylistForm" class="station-create-panel playlist-create-panel">
+          <div class="station-create-copy">
+            <ListMusic :size="18" />
+            <div>
+              <strong>Criar nova playlist</strong>
+              <span>Dê um nome para agrupar faixas por clima, estilo ou ofertas da loja.</span>
+            </div>
+          </div>
+          <div class="station-create-fields">
+            <input v-model="playlistForm.name" placeholder="Nome da playlist (ex.: Pop Rock, Black Friday)" @keyup.enter="createPlaylist" />
+            <input v-model="playlistForm.description" placeholder="Descrição (opcional)" @keyup.enter="createPlaylist" />
+            <button class="button primary" @click="createPlaylist">
+              <Check :size="15" /> Salvar playlist
+            </button>
+            <button class="button ghost" @click="showPlaylistForm = false">Cancelar</button>
+          </div>
+        </div>
+
+        <!-- Barra de alternância: Catálogo Geral vs Playlist Específica -->
+        <div class="playlist-tabs-bar">
+          <button
+            class="playlist-tab-chip"
+            :class="{ active: filterPlaylistId === 'all' }"
+            @click="filterPlaylistId = 'all'; onPlaylistFilterChange()"
+          >
+            <ListMusic :size="15" />
+            <span>Catálogo geral</span>
+          </button>
+          <button
+            v-for="p in playlists"
+            :key="p.id"
+            class="playlist-tab-chip"
+            :class="{ active: filterPlaylistId === p.id }"
+            @click="filterPlaylistId = p.id; onPlaylistFilterChange()"
+          >
+            <span>{{ p.name }}</span>
+            <small class="tab-count">({{ p.trackCount || 0 }})</small>
+          </button>
+        </div>
+
         <div class="filter-bar">
           <div class="search-box">
             <Search :size="17" />
@@ -678,21 +1068,81 @@ onBeforeUnmount(() => {
             <option value="Todos">Todos os álbuns ({{ albums.length - 1 }})</option>
             <option v-for="album in albums.filter(a => a !== 'Todos')" :key="album" :value="album">{{ album }}</option>
           </select>
-          <select v-model="selectedPlaylistId" class="playlist-select">
+          <select v-model="selectedPlaylistId" class="playlist-select" title="Playlist destino para adicionar">
             <option value="">Adicionar a…</option>
             <option v-for="playlist in playlists" :key="playlist.id" :value="playlist.id">{{ playlist.name }}</option>
           </select>
         </div>
+
+        <!-- Ações em Lote: Seleção Múltipla, Adicionar Gênero ou Playlist Inteira -->
+        <div class="batch-actions-bar">
+          <button class="batch-btn select-all" title="Selecionar ou desmarcar todas da tela" @click="toggleSelectAll">
+            <CheckSquare v-if="filteredCatalog.length && filteredCatalog.every(t => selectedTrackIds.includes(t.id))" :size="15" />
+            <Square v-else :size="15" />
+            <span>{{ selectedTrackIds.length ? `${selectedTrackIds.length} selecionada(s)` : 'Selecionar todas' }}</span>
+          </button>
+
+          <button
+            v-if="selectedTrackIds.length"
+            class="batch-btn primary"
+            :disabled="!selectedPlaylistId"
+            :title="!selectedPlaylistId ? 'Escolha a playlist destino no seletor Adicionar a' : 'Adicionar selecionadas à playlist'"
+            @click="addSelectedToPlaylist"
+          >
+            <Plus :size="15" />
+            <span>Adicionar selecionadas ({{ selectedTrackIds.length }}) à playlist</span>
+          </button>
+
+          <button
+            v-if="activeGenre !== 'Todos'"
+            class="batch-btn secondary"
+            :disabled="!selectedPlaylistId"
+            :title="!selectedPlaylistId ? 'Escolha a playlist destino no seletor Adicionar a' : `Adicionar todas as músicas de ${activeGenre} à playlist`"
+            @click="addCurrentGenreToPlaylist"
+          >
+            <Filter :size="14" />
+            <span>Adicionar todo gênero "{{ activeGenre }}" à playlist</span>
+          </button>
+
+          <button
+            v-if="filterPlaylistId !== 'all'"
+            class="batch-btn secondary"
+            :disabled="!selectedPlaylistId || selectedPlaylistId === filterPlaylistId"
+            title="Copiar todas as músicas desta playlist para outra"
+            @click="copyPlaylistToPlaylist"
+          >
+            <Copy :size="14" />
+            <span>Copiar playlist toda para destino</span>
+          </button>
+
+          <button v-if="selectedTrackIds.length" class="batch-btn text" @click="selectedTrackIds = []">
+            Desmarcar
+          </button>
+        </div>
+
         <div class="chip-row">
           <button v-for="genre in genres" :key="genre" class="chip" :class="{ selected: activeGenre === genre }" @click="selectGenre(genre)">{{ genre }}</button>
         </div>
+
         <div class="catalog-grid">
-          <button v-for="track in filteredCatalog" :key="track.id" class="track-card" @click="playTrack(track)">
+          <button v-for="track in filteredCatalog" :key="track.id" class="track-card" :class="{ 'is-selected': selectedTrackIds.includes(track.id) }" @click="playTrack(track)">
             <div class="cover">
               <img v-if="track.thumbnailUrl" :src="track.thumbnailUrl" :alt="track.title" loading="lazy" @error="(e) => ((e.target as HTMLElement).style.display = 'none')" />
               <div class="cover-placeholder"><Disc3 :size="38" /></div>
               <span class="play-overlay"><Play :size="22" fill="currentColor" /></span>
+              
+              <!-- Checkbox de seleção múltipla -->
+              <span class="track-select-box" :class="{ checked: selectedTrackIds.includes(track.id) }" title="Marcar música" @click.stop="toggleSelectTrack(track.id)">
+                <Check v-if="selectedTrackIds.includes(track.id)" :size="13" />
+              </span>
+
+              <!-- Botão adicionar à playlist selecionada -->
               <span class="track-add" title="Adicionar à playlist" @click.stop="addToPlaylist(track)"><Plus :size="16" /></span>
+
+              <!-- Botão remover da playlist atual quando filtrado por playlist -->
+              <span v-if="filterPlaylistId !== 'all'" class="track-remove" title="Remover desta playlist" @click.stop="removeFromPlaylist(track)">
+                <Trash2 :size="14" />
+              </span>
             </div>
             <div class="track-info">
               <strong>{{ track.title }}</strong>
@@ -704,16 +1154,215 @@ onBeforeUnmount(() => {
           <div v-if="!filteredCatalog.length" class="empty-state">
             <Disc3 :size="30" />
             <strong>Nenhuma faixa encontrada</strong>
-            <p>Importe o catálogo enviado para o Wasabi ou ajuste os filtros.</p>
-            <button class="button primary" @click="importCatalog">Importar agora</button>
+            <p>{{ filterPlaylistId !== 'all' ? 'Esta playlist ainda não possui faixas. Use o seletor ou os botões de adicionar.' : 'Importe o catálogo enviado para o Wasabi ou ajuste os filtros.' }}</p>
+            <button v-if="filterPlaylistId === 'all'" class="button primary" @click="importCatalog">Importar agora</button>
           </div>
         </div>
       </template>
 
       <template v-else-if="activeView === 'programs'">
         <section class="page-heading"><div><span class="eyebrow muted">AUTOMAÇÃO</span><h1>Programas sem complicação</h1><p>Um programa é uma sequência de blocos. Escolha uma playlist, defina a quantidade e pronto.</p></div></section>
-        <div class="workspace-grid"><section class="editor-card"><div class="card-title"><div><h3>Novo programa</h3><p>Ex.: Manhã Sertaneja, Almoço da Loja</p></div><ListMusic :size="20" /></div><div class="form-grid"><label>Nome<input v-model="programForm.name" placeholder="Nome do programa" /></label><label>Fuso horário<input v-model="programForm.timezone" /></label><label class="full">Descrição<textarea v-model="programForm.description" rows="2" placeholder="Como este programa deve soar?"></textarea></label></div><button class="button primary" @click="createProgram"><Plus :size="16" /> Criar programa</button></section><section class="editor-card"><div class="card-title"><div><h3>Adicionar bloco</h3><p>Blocos determinam a ordem do conteúdo</p></div><Zap :size="20" /></div><div class="form-grid"><label>Programa<select v-model="blockForm.programId"><option value="">Selecione</option><option v-for="program in programs" :key="program.id" :value="program.id">{{ program.name }}</option></select></label><label>Tipo<select v-model="blockForm.blockType"><option value="playlist">Playlist</option><option value="music">Música</option><option value="jingle">Vinheta</option></select></label><label class="full">Rótulo<input v-model="blockForm.label" placeholder="Músicas principais" /></label><label>Playlist<select v-model="blockForm.playlistId"><option value="">Catálogo geral</option><option v-for="playlist in playlists" :key="playlist.id" :value="playlist.id">{{ playlist.name }}</option></select></label><label>Quantidade<input v-model.number="blockForm.targetCount" type="number" min="1" max="500" /></label></div><button class="button secondary" @click="createBlock"><Plus :size="16" /> Adicionar bloco</button></section></div>
-        <section class="list-card"><div class="card-title"><div><h3>Seus programas</h3><p>{{ programs.length }} programa(s) configurado(s)</p></div></div><div v-if="programs.length" class="program-list"><article v-for="program in programs" :key="program.id" class="program-row"><div class="program-icon"><ListMusic :size="19" /></div><div class="program-main"><strong>{{ program.name }}</strong><span>{{ program.description || 'Sem descrição' }}</span></div><div class="program-blocks"><span v-for="block in (program.blocks || []).slice(0, 4)" :key="block.id" class="block-pill">{{ block.label }}</span><span v-if="(program.blocks || []).length > 4" class="block-pill more">+{{ program.blocks.length - 4 }}</span></div><span class="status-pill" :class="program.status">{{ program.status === 'active' ? 'Ativo' : 'Rascunho' }}</span></article></div><div v-else class="empty-inline"><ListMusic :size="24" /> Crie seu primeiro programa acima.</div></section>
+        <div class="workspace-grid">
+          <section class="editor-card" :class="{ 'is-editing': Boolean(editingProgramId) }">
+            <div class="card-title">
+              <div>
+                <h3>{{ editingProgramId ? 'Editar programa' : 'Novo programa' }}</h3>
+                <p>{{ editingProgramId ? 'Altere nome, fuso e descrição do programa' : 'Ex.: Manhã Sertaneja, Almoço da Loja' }}</p>
+              </div>
+              <ListMusic :size="20" />
+            </div>
+            <div class="form-grid">
+              <label>Nome
+                <input v-model="programForm.name" placeholder="Nome do programa" />
+              </label>
+              <label>Fuso horário
+                <input v-model="programForm.timezone" />
+              </label>
+              <label class="full">Descrição
+                <textarea v-model="programForm.description" rows="2" placeholder="Como este programa deve soar?"></textarea>
+              </label>
+            </div>
+            <div class="block-form-actions">
+              <button class="button primary" @click="saveProgram">
+                <Check v-if="editingProgramId" :size="16" />
+                <Plus v-else :size="16" />
+                {{ editingProgramId ? 'Salvar alterações' : 'Criar programa' }}
+              </button>
+              <button v-if="editingProgramId" class="button ghost" @click="cancelProgramEdit">Cancelar</button>
+            </div>
+          </section>
+          <section class="editor-card" :class="{ 'is-editing': Boolean(editingBlockId) }">
+            <div class="card-title">
+              <div>
+                <h3>{{ editingBlockId ? 'Editar bloco' : 'Adicionar bloco' }}</h3>
+                <p>{{ editingBlockId ? 'Altere as configurações do bloco selecionado' : 'Blocos determinam a ordem do conteúdo' }}</p>
+              </div>
+              <Zap :size="20" />
+            </div>
+            <div class="form-grid">
+              <label>Programa
+                <select v-model="blockForm.programId">
+                  <option value="">Selecione</option>
+                  <option v-for="program in programs" :key="program.id" :value="program.id">{{ program.name }}</option>
+                </select>
+              </label>
+              <label>Tipo
+                <select v-model="blockForm.blockType">
+                  <option value="playlist">Playlist</option>
+                  <option value="music">Música</option>
+                  <option value="jingle">Vinheta</option>
+                </select>
+              </label>
+              <label class="full">Rótulo
+                <input v-model="blockForm.label" placeholder="Músicas principais" />
+              </label>
+              <label>Playlist
+                <select v-model="blockForm.playlistId">
+                  <option value="">Catálogo geral</option>
+                  <option v-for="playlist in playlists" :key="playlist.id" :value="playlist.id">{{ playlist.name }}</option>
+                </select>
+              </label>
+              <label>Troca automática do bloco
+                <select v-model="blockForm.transitionMode">
+                  <option value="count">Por quantidade de músicas</option>
+                  <option value="time">Por tempo de duração</option>
+                  <option value="full_playlist">Tocar a playlist inteira</option>
+                  <option value="continuous">Contínuo até o fim do horário</option>
+                </select>
+              </label>
+              <label v-if="blockForm.transitionMode === 'count'">Quantidade de músicas
+                <input v-model.number="blockForm.targetCount" type="number" min="1" max="500" placeholder="Ex: 20 músicas a tocar neste bloco" />
+              </label>
+              <label v-else-if="blockForm.transitionMode === 'time'">Tempo de duração (minutos)
+                <input v-model.number="blockForm.durationMinutes" type="number" min="1" max="720" placeholder="Ex: 30 minutos" />
+              </label>
+            </div>
+            <div class="block-form-actions">
+              <button class="button" :class="editingBlockId ? 'primary' : 'secondary'" @click="saveBlock">
+                <Check v-if="editingBlockId" :size="16" />
+                <Plus v-else :size="16" />
+                {{ editingBlockId ? 'Salvar alterações' : 'Adicionar bloco' }}
+              </button>
+              <button v-if="editingBlockId" class="button ghost" @click="cancelBlockEdit">Cancelar</button>
+              <button
+                v-if="!editingBlockId"
+                class="button ghost wizard-trigger-btn"
+                :class="{ active: showInterleaveWizard }"
+                title="Configurar regra para tocar vinhetas/locuções automaticamente a cada N músicas"
+                @click="showInterleaveWizard = !showInterleaveWizard; if (showInterleaveWizard && !interleaveForm.programId && blockForm.programId) interleaveForm.programId = blockForm.programId"
+              >
+                <Sparkles :size="15" />
+                <span>Intercalar vinhetas a cada X músicas</span>
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <!-- Assistente de Intercalação Rápida de Vinhetas/Locuções -->
+        <section v-if="showInterleaveWizard" class="editor-card interleave-wizard-card">
+          <div class="card-title">
+            <div>
+              <h3>Assistente de Intercalação Automática</h3>
+              <p>Gere sequências do tipo: a cada <strong>{{ interleaveForm.musicCount }} músicas</strong>, tocar <strong>{{ interleaveForm.jingleCount }} vinheta/locução</strong>.</p>
+            </div>
+            <Sparkles :size="22" />
+          </div>
+          <div class="form-grid interleave-grid">
+            <label>Programa destino
+              <select v-model="interleaveForm.programId">
+                <option value="">Selecione um programa</option>
+                <option v-for="program in programs" :key="program.id" :value="program.id">{{ program.name }}</option>
+              </select>
+            </label>
+            <label>Playlist de Músicas
+              <select v-model="interleaveForm.musicPlaylistId">
+                <option value="">Catálogo geral</option>
+                <option v-for="playlist in playlists" :key="playlist.id" :value="playlist.id">{{ playlist.name }}</option>
+              </select>
+            </label>
+            <label>Qtd de músicas por rodada
+              <input v-model.number="interleaveForm.musicCount" type="number" min="1" max="50" />
+            </label>
+            <label>Playlist de Vinhetas / Locuções
+              <select v-model="interleaveForm.jinglePlaylistId">
+                <option value="">Selecione uma playlist</option>
+                <option v-for="playlist in playlists" :key="playlist.id" :value="playlist.id">{{ playlist.name }}</option>
+              </select>
+            </label>
+            <label>Qtd de vinhetas por intervalo
+              <input v-model.number="interleaveForm.jingleCount" type="number" min="1" max="10" />
+            </label>
+            <label>Repetições do ciclo
+              <input v-model.number="interleaveForm.repetitions" type="number" min="1" max="20" />
+            </label>
+          </div>
+          <div class="block-form-actions">
+            <button class="button primary" :disabled="isGeneratingInterleave || !interleaveForm.programId" @click="generateInterleavedBlocks">
+              <LoaderCircle v-if="isGeneratingInterleave" class="spin" :size="16" />
+              <Check v-else :size="16" />
+              Gerar blocos intercalados ({{ (Number(interleaveForm.repetitions) || 1) * 2 }} blocos)
+            </button>
+            <button class="button ghost" @click="showInterleaveWizard = false">Fechar assistente</button>
+          </div>
+        </section>
+        <section class="list-card">
+          <div class="card-title"><div><h3>Seus programas</h3><p>{{ programs.length }} programa(s) configurado(s)</p></div></div>
+          <div v-if="programs.length" class="program-list">
+            <article v-for="program in programs" :key="program.id" class="program-row detailed">
+              <div class="program-header">
+                <div class="program-icon"><ListMusic :size="19" /></div>
+                <div class="program-main">
+                  <strong>{{ program.name }}</strong>
+                  <span>{{ program.description || 'Sem descrição' }}</span>
+                </div>
+                <div class="program-header-actions">
+                  <button class="block-chip-btn edit" title="Editar este programa" @click="editProgram(program)">
+                    <Pencil :size="14" />
+                  </button>
+                  <button class="block-chip-btn delete" title="Remover este programa" @click="deleteProgram(program)">
+                    <Trash2 :size="14" />
+                  </button>
+                  <span class="status-pill" :class="program.status">{{ program.status === 'active' ? 'Ativo' : 'Rascunho' }}</span>
+                </div>
+              </div>
+              <div class="program-blocks-manager">
+                <div class="blocks-title">Blocos de reprodução:</div>
+                <div v-if="program.blocks && program.blocks.length" class="blocks-chip-list">
+                  <div
+                    v-for="block in program.blocks"
+                    :key="block.id"
+                    class="block-chip"
+                    :class="{ 'active-edit': editingBlockId === block.id }"
+                  >
+                    <span class="block-chip-type">{{ block.blockType === 'jingle' ? 'Vinheta' : block.blockType === 'music' ? 'Música' : 'Playlist' }}</span>
+                    <strong class="block-chip-label">{{ block.label }}</strong>
+                    <span class="block-chip-count">
+                      {{
+                        block.settings?.transitionMode === 'time' || (!block.settings?.transitionMode && block.durationSeconds)
+                          ? `⏱️ ${Math.round((block.durationSeconds || 1800) / 60)} min`
+                          : block.settings?.transitionMode === 'full_playlist'
+                          ? '💿 Playlist toda'
+                          : block.settings?.transitionMode === 'continuous'
+                          ? '⏰ Até o fim do horário'
+                          : `🎵 ${block.targetCount || 20} faixas`
+                      }}
+                    </span>
+                    <button class="block-chip-btn edit" title="Editar este bloco" @click="editBlock(program.id, block)">
+                      <Pencil :size="12" />
+                    </button>
+                    <button class="block-chip-btn delete" title="Remover este bloco" @click="deleteBlock(block)">
+                      <Trash2 :size="12" />
+                    </button>
+                  </div>
+                </div>
+                <div v-else class="empty-blocks-hint">
+                  Nenhum bloco neste programa. Adicione um bloco pelo formulário acima.
+                </div>
+              </div>
+            </article>
+          </div>
+          <div v-else class="empty-inline"><ListMusic :size="24" /> Crie seu primeiro programa acima.</div>
+        </section>
       </template>
 
       <template v-else-if="activeView === 'agenda'">
@@ -750,7 +1399,54 @@ onBeforeUnmount(() => {
     </main>
 
     <div class="player-dock" :class="{ expanded: currentTrack }">
-      <div class="player-track"><div class="cover player-cover"><img v-if="currentTrack?.thumbnailUrl" :src="currentTrack.thumbnailUrl" :alt="currentTrack.title" /><Disc3 v-else :size="25" /></div><div class="now-playing"><strong>{{ currentTrack?.title || 'Escolha uma faixa para começar' }}</strong><span>{{ currentTrack?.artist || 'Seu player interno está pronto' }}</span></div></div><div class="player-controls"><div class="control-buttons"><button title="Anterior" @click="playPrevious"><ChevronLeft :size="18" /></button><button class="play-button" :disabled="isLoadingTrack" title="Reproduzir" @click="togglePlay"><LoaderCircle v-if="isLoadingTrack" class="spin" :size="19" /><Pause v-else-if="isPlaying" :size="19" fill="currentColor" /><Play v-else :size="19" fill="currentColor" /></button><button title="Próxima" @click="playNext"><ChevronRight :size="18" /></button></div><div class="progress-line"><span>{{ formatDuration(progress * 1000) }}</span><input type="range" min="0" :max="duration || 1" step="0.1" :value="progress" aria-label="Progresso da faixa" @input="seek" /><span>{{ formatDuration(duration * 1000) }}</span></div></div><div class="player-tools"><Volume2 :size="17" /><input v-model.number="volume" type="range" min="0" max="1" step="0.01" aria-label="Volume" @input="audioRef && (audioRef.volume = volume)" /><span class="cache-indicator"><i></i> cache</span></div><audio ref="audioRef" :src="currentTrack?.audioUrl || undefined" preload="auto" @timeupdate="onTimeUpdate" @loadedmetadata="onTimeUpdate" @play="isPlaying = true" @pause="isPlaying = false" @ended="playNext" @error="showNotice('Não foi possível ler esta faixa no navegador.', 'error')"></audio>
+      <div class="player-track">
+        <div class="cover player-cover">
+          <img v-if="currentTrack?.thumbnailUrl" :src="currentTrack.thumbnailUrl" :alt="currentTrack.title" />
+          <Disc3 v-else :size="25" />
+        </div>
+        <div class="now-playing">
+          <div class="track-header-meta">
+            <span v-if="activeSchedule?.programName" class="dock-program-badge" :title="`Programa: ${activeSchedule.programName} (${activeSchedule.startTime} às ${activeSchedule.endTime})`">
+              <i></i> {{ activeSchedule.programName }}
+            </span>
+            <span v-else class="dock-program-badge catalog">
+              Catálogo geral
+            </span>
+          </div>
+          <strong>{{ currentTrack?.title || 'Escolha uma faixa para começar' }}</strong>
+          <span>{{ currentTrack?.artist || 'Seu player interno está pronto' }}</span>
+        </div>
+      </div>
+      <div class="player-controls">
+        <div class="control-buttons">
+          <button
+            class="shuffle-button"
+            :class="{ active: isShuffle }"
+            :title="isShuffle ? 'Modo Aleatório Ativado' : 'Ativar Modo Aleatório (🔀)'"
+            @click="isShuffle = !isShuffle"
+          >
+            <Shuffle :size="16" />
+          </button>
+          <button title="Anterior" @click="playPrevious"><ChevronLeft :size="18" /></button>
+          <button class="play-button" :disabled="isLoadingTrack" title="Reproduzir" @click="togglePlay">
+            <LoaderCircle v-if="isLoadingTrack" class="spin" :size="19" />
+            <Pause v-else-if="isPlaying" :size="19" fill="currentColor" />
+            <Play v-else :size="19" fill="currentColor" />
+          </button>
+          <button title="Próxima" @click="playNext"><ChevronRight :size="18" /></button>
+        </div>
+        <div class="progress-line">
+          <span>{{ formatDuration(progress * 1000) }}</span>
+          <input type="range" min="0" :max="duration || 1" step="0.1" :value="progress" aria-label="Progresso da faixa" @input="seek" />
+          <span>{{ formatDuration(duration * 1000) }}</span>
+        </div>
+      </div>
+      <div class="player-tools">
+        <Volume2 :size="17" />
+        <input v-model.number="volume" type="range" min="0" max="1" step="0.01" aria-label="Volume" @input="audioRef && (audioRef.volume = volume)" />
+        <span class="cache-indicator"><i></i> cache</span>
+      </div>
+      <audio ref="audioRef" :src="currentTrack?.audioUrl || undefined" preload="auto" @timeupdate="onTimeUpdate" @loadedmetadata="onTimeUpdate" @play="isPlaying = true" @pause="isPlaying = false" @ended="playNext" @error="showNotice('Não foi possível ler esta faixa no navegador.', 'error')"></audio>
     </div>
   </div>
   </AdminWorkspaceShell>
@@ -766,12 +1462,84 @@ onBeforeUnmount(() => {
 .main-nav { display:grid; gap: 6px; }.nav-item { border:0; background:transparent; color:#9795a8; display:flex; align-items:center; gap:12px; padding:12px 13px; border-radius:10px; text-align:left; font:500 13px inherit; cursor:pointer; transition:.18s; }.nav-item:hover { background:rgba(255,255,255,.05); color:#fff; }.nav-item.active { color:#fff; background:linear-gradient(90deg,rgba(76,153,238,.3),rgba(76,153,238,.08)); box-shadow:inset 2px 0 #78b8ff; }.sidebar-bottom { margin-top:auto; display:grid; gap:8px; }.private-badge,.cache-badge { display:flex; align-items:center; gap:7px; color:#8c97a1; font-size:10px; padding:9px 10px; border:1px solid rgba(255,255,255,.06); border-radius:9px; }.cache-badge.ready { color:#73d8a1; border-color:rgba(82,203,139,.2); background:rgba(72,194,127,.05); }
 .radio-main { width:calc(100% - 244px); margin-left:244px; padding:0 42px 50px; max-width:1550px; }.topbar { height:76px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,.06); }.crumb { display:flex; align-items:center; gap:8px; color:#75808b; font-size:12px; }.crumb b { color:#c8c6d5; font-weight:600; }.topbar-actions { display:flex; align-items:center; gap:14px; }.station-status { color:#9c99ad; display:flex; gap:7px; align-items:center; font-size:11px; }.station-status i,.request-status i,.cache-indicator i { width:7px; height:7px; border-radius:50%; background:#878394; display:block; }.station-status.live i { background:#55d993; box-shadow:0 0 0 4px rgba(85,217,147,.12); }.icon-button { border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.025); color:#aaa7bb; width:34px; height:34px; border-radius:9px; display:grid; place-items:center; cursor:pointer; }.icon-button:hover { color:#fff; border-color:rgba(255,255,255,.16); }.mobile-only { display:none; }
 .notice { margin:16px 0 -2px; display:flex; align-items:center; gap:9px; padding:11px 14px; border-radius:10px; font-size:12px; border:1px solid rgba(255,255,255,.1); }.notice.success { color:#8ce4b4; background:rgba(71,194,126,.09); border-color:rgba(71,194,126,.2); }.notice.error { color:#ff9b9b; background:rgba(235,86,86,.09); border-color:rgba(235,86,86,.2); }.notice.info { color:#a8d1ff; background:rgba(84,160,245,.09); border-color:rgba(84,160,245,.2); }.notice span { flex:1; }.notice button { border:0; background:transparent; color:inherit; cursor:pointer; }
+.autoplay-alert-banner { margin:16px 0 0; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 18px; border-radius:12px; background:linear-gradient(90deg, rgba(82,148,226,.18), rgba(20,26,35,.85)); border:1px solid rgba(110,175,255,.35); box-shadow:0 8px 24px rgba(46,117,208,.16); animation:pulse-glow 2.5s infinite alternate; }
+.autoplay-copy { display:flex; align-items:center; gap:12px; color:#d9ecff; }
+.autoplay-copy strong { display:block; font-size:13px; color:#fff; }
+.autoplay-copy span { display:block; font-size:11px; color:#a2c4e6; margin-top:2px; }
+@keyframes pulse-glow { from { border-color:rgba(110,175,255,.25); } to { border-color:rgba(110,175,255,.55); } }
+.radio-app.theme-light .autoplay-alert-banner { background:linear-gradient(90deg, #ebf4ff, #fff); border-color:#97c4f4; box-shadow:0 8px 20px rgba(24,80,147,.08); }
+.radio-app.theme-light .autoplay-copy { color:var(--jv-blue); }
+.radio-app.theme-light .autoplay-copy strong { color:var(--jv-navy); }
+.radio-app.theme-light .autoplay-copy span { color:var(--jv-muted); }
 .setup-card { margin-top:22px; display:flex; align-items:center; gap:14px; padding:15px 18px; border:1px solid rgba(237,174,84,.3); background:rgba(237,174,84,.07); border-radius:12px; color:#ffd18c; }.setup-card p { color:#bfa77f; font-size:12px; margin:4px 0 0; }.setup-card code,.inline-note code { color:#f7ce8d; }.setup-icon { width:38px; height:38px; display:grid; place-items:center; border-radius:10px; background:rgba(237,174,84,.12); }.setup-card .button { margin-left:auto; }
 .hero-panel { min-height:320px; margin:30px 0 28px; border:1px solid rgba(255,255,255,.08); overflow:hidden; border-radius:20px; background:linear-gradient(108deg,rgba(35,82,135,.72),rgba(20,34,48,.78) 48%,rgba(16,23,29,.9)); display:flex; position:relative; }.hero-copy { padding:43px 0 38px 43px; max-width:58%; position:relative; z-index:2; }.eyebrow { color:#9ecbff; font-size:10px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; display:flex; align-items:center; gap:8px; }.eyebrow.muted { color:#737e8a; }.eyebrow-dot { width:7px; height:7px; border-radius:50%; background:#9bc9ff; box-shadow:0 0 0 5px rgba(155,201,255,.13); }.hero-copy h1 { font-size:42px; line-height:1.08; letter-spacing:-.05em; margin:15px 0 13px; font-weight:700; }.hero-copy h1 em { color:#8dc1ff; font-style:normal; }.hero-copy p { color:#bbb6ce; max-width:475px; font-size:13px; line-height:1.7; margin:0; }.hero-actions { display:flex; gap:10px; margin-top:24px; }.button { border:0; border-radius:9px; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 15px; color:white; font:600 12px inherit; cursor:pointer; transition:.18s; }.button:disabled { opacity:.5; cursor:wait; }.button.primary { background:#5ca3f2; box-shadow:0 8px 20px rgba(65,137,216,.26); }.button.primary:hover { background:#70b1fa; transform:translateY(-1px); }.button.secondary { border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.05); color:#e0ddeb; }.button.secondary:hover { background:rgba(255,255,255,.09); }.button.ghost { background:transparent; border:1px solid rgba(255,255,255,.15); color:#d4cfe2; }.hero-art { flex:1; position:relative; overflow:hidden; }.orb { position:absolute; border-radius:50%; filter:blur(1px); }.orb-one { width:260px; height:260px; right:-40px; top:-65px; background:radial-gradient(circle,rgba(91,166,255,.45),transparent 68%); }.orb-two { width:190px; height:190px; right:125px; bottom:-85px; background:radial-gradient(circle,rgba(47,218,199,.23),transparent 67%); }.equalizer { position:absolute; right:43px; bottom:54px; height:70px; display:flex; align-items:end; gap:5px; opacity:.6; }.equalizer span { width:4px; background:linear-gradient(#9dcaff,#68dcce); border-radius:3px; animation:eq 1.7s ease-in-out infinite alternate; }.hero-disc { position:absolute; right:74px; top:50px; width:142px; height:142px; border:1px solid rgba(255,255,255,.16); border-radius:50%; display:grid; place-items:center; color:rgba(193,222,255,.5); transform:rotate(-16deg); box-shadow:0 0 50px rgba(104,174,255,.2); }.disc-center { width:12px; height:12px; border-radius:50%; background:#6aaaf3; border:3px solid rgba(255,255,255,.4); }@keyframes eq { to { transform:scaleY(.38); } }
 .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }.stat-card { min-height:113px; padding:16px; border:1px solid rgba(255,255,255,.075); background:rgba(20,26,31,.75); border-radius:13px; position:relative; }.stat-card span { display:block; color:#9895a7; font-size:11px; margin:2px 0 7px; }.stat-card strong { font-size:25px; letter-spacing:-.05em; }.stat-card small { display:block; color:#6b757f; font-size:10px; margin-top:4px; }.stat-icon { width:30px; height:30px; display:grid; place-items:center; border-radius:8px; margin-bottom:10px; }.stat-icon.purple { color:#9dcbff; background:rgba(89,161,242,.14); }.stat-icon.orange { color:#ffc286; background:rgba(235,143,67,.13); }.stat-icon.teal { color:#7de4d6; background:rgba(74,200,182,.12); }.stat-icon.pink { color:#ffa1c8; background:rgba(238,88,147,.12); }
 .section-block { margin-top:38px; }.section-heading { display:flex; align-items:end; justify-content:space-between; margin-bottom:16px; }.section-heading h2,.page-heading h1 { margin:7px 0 0; letter-spacing:-.045em; font-size:24px; }.text-button { border:0; background:none; color:#83b8f3; font:600 11px inherit; display:flex; align-items:center; gap:4px; cursor:pointer; }.genre-grid { display:grid; grid-template-columns:repeat(8,1fr); gap:9px; }.genre-card { min-height:108px; position:relative; overflow:hidden; border:1px solid rgba(255,255,255,.08); border-radius:12px; background:linear-gradient(145deg,rgba(55,97,144,.38),rgba(23,29,35,.84)); color:#c9ddf3; display:flex; flex-direction:column; align-items:flex-start; justify-content:end; padding:13px; text-align:left; cursor:pointer; transition:.2s; }.genre-card:nth-child(3n) { background:linear-gradient(145deg,rgba(126,77,49,.35),rgba(23,29,35,.84)); color:#f0c598; }.genre-card:nth-child(4n) { background:linear-gradient(145deg,rgba(37,116,105,.32),rgba(23,29,35,.84)); color:#99e1d6; }.genre-card:hover { border-color:rgba(135,191,255,.55); transform:translateY(-3px); }.genre-card strong { color:#f4f1fb; font-size:12px; margin-top:20px; }.genre-card small { color:#8a949f; font-size:9px; margin-top:3px; }.genre-glow { position:absolute; width:90px; height:90px; background:currentColor; filter:blur(32px); opacity:.11; right:-20px; top:-20px; }.track-row { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }.track-mini { display:flex; align-items:center; gap:10px; padding:8px; min-width:0; border:1px solid rgba(255,255,255,.07); border-radius:11px; background:rgba(19,24,29,.75); color:#fff; text-align:left; cursor:pointer; }.track-mini:hover { border-color:rgba(121,184,255,.45); background:rgba(28,41,55,.75); }.cover { aspect-ratio:1; border-radius:11px; overflow:hidden; position:relative; background:linear-gradient(135deg,#274568,#161c22); display:grid; place-items:center; color:#84baf7; flex:0 0 auto; }.cover.small { width:48px; height:48px; border-radius:8px; }.cover img { width:100%; height:100%; object-fit:cover; display:block; }.track-mini > span:not(.mini-play) { min-width:0; }.track-mini strong,.track-mini small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.track-mini strong { font-size:11px; }.track-mini small { color:#89939e; font-size:10px; margin-top:4px; }.mini-play { margin-left:auto; color:#77aeec; opacity:.6; }
-.page-heading { display:flex; justify-content:space-between; align-items:end; gap:20px; padding:38px 0 24px; }.page-heading h1 { font-size:31px; }.page-heading p { color:#9692a5; max-width:590px; font-size:12px; line-height:1.65; margin:9px 0 0; }.filter-bar { display:flex; gap:10px; margin-bottom:13px; }.search-box { height:42px; border:1px solid rgba(255,255,255,.1); background:rgba(21,27,32,.85); border-radius:9px; display:flex; align-items:center; padding:0 12px; gap:9px; flex:1; color:#838d98; }.search-box input { background:none; border:0; outline:none; color:white; flex:1; font:12px inherit; }.search-box input::placeholder { color:#737d87; }.search-box button { background:none; border:0; color:#838e99; cursor:pointer; }.filter-bar select,.form-grid select,.form-grid input,.form-grid textarea,.editor-card > label select,.editor-card > label input { color:#e8e4f0; background:#161c22; border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:10px 11px; font:12px inherit; outline:none; width:100%; }.filter-bar select { min-width:200px; }.chip-row { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:20px; }.chip { border:1px solid rgba(255,255,255,.09); background:rgba(255,255,255,.025); color:#919ba5; padding:7px 12px; border-radius:99px; cursor:pointer; font:500 11px inherit; }.chip.selected,.chip:hover { color:#d9ebff; border-color:rgba(109,169,237,.55); background:rgba(76,148,228,.15); }.catalog-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }.track-card { border:0; background:none; color:white; text-align:left; cursor:pointer; min-width:0; }.track-card .cover { box-shadow:0 8px 20px rgba(0,0,0,.22); }.track-card:hover .cover { box-shadow:0 8px 26px rgba(72,137,210,.34); }.play-overlay { opacity:0; position:absolute; inset:0; display:grid; place-items:center; color:white; background:rgba(13,22,32,.42); transition:.2s; }.track-card:hover .play-overlay { opacity:1; }.track-add { position:absolute; right:8px; bottom:8px; width:28px; height:28px; display:grid; place-items:center; border-radius:8px; color:#fff; background:rgba(10,15,20,.72); border:1px solid rgba(255,255,255,.2); opacity:0; transition:.2s; }.track-card:hover .track-add { opacity:1; }.track-add:hover { background:#5ca3f2; }.cover-placeholder { width:100%; height:100%; display:grid; place-items:center; }.track-info { padding:9px 3px 0; }.track-info strong,.track-info span,.track-info small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }.track-info strong { font-size:12px; }.track-info span { color:#aaa5b7; font-size:10px; margin-top:5px; }.track-info small { color:#737d87; font-size:9px; margin-top:5px; }.track-album-badge { color:#84bafc !important; font-size:10px !important; margin-top:3px !important; font-weight:500; }.track-info b { color:#79b2f2; margin:0 2px; }.empty-state { grid-column:1/-1; min-height:250px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:#8a949e; border:1px dashed rgba(255,255,255,.1); border-radius:14px; }.empty-state strong { color:#d9d5e2; font-size:14px; }.empty-state p { margin:0 0 12px; font-size:11px; }
-.workspace-grid { display:grid; grid-template-columns:1.1fr .9fr; gap:14px; }.editor-card,.list-card { border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(20,26,31,.78); padding:20px; }.card-title { display:flex; align-items:start; justify-content:space-between; gap:14px; margin-bottom:17px; color:#81b4ed; }.card-title h3 { color:#eeeaf4; font-size:14px; margin:0; }.card-title p { color:#737c86; font-size:10px; margin:5px 0 0; }.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:17px; }.form-grid label,.editor-card > label { color:#9e99aa; font-size:10px; display:grid; gap:6px; }.form-grid .full { grid-column:1/-1; }.form-grid textarea { resize:vertical; min-height:70px; }.editor-card .button { margin-top:3px; }.list-card { margin-top:14px; }.program-list,.schedule-list,.request-list { display:grid; gap:8px; }.program-row,.schedule-row,.request-row { min-height:62px; display:flex; align-items:center; gap:12px; padding:10px 11px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.018); border-radius:10px; }.program-icon,.request-kind { width:34px; height:34px; display:grid; place-items:center; border-radius:9px; flex:0 0 auto; color:#8abdf7; background:rgba(75,144,223,.13); }.program-main,.request-main { min-width:150px; flex:1; }.program-main strong,.request-main strong { display:block; color:#ebe7f2; font-size:12px; }.program-main span,.request-main span { display:block; color:#7a848e; font-size:10px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }.program-blocks { display:flex; flex-wrap:wrap; gap:5px; max-width:42%; }.block-pill { color:#a6bed9; border:1px solid rgba(103,162,229,.22); background:rgba(74,139,213,.09); padding:4px 7px; border-radius:5px; font-size:9px; }.block-pill.more { color:#878190; border-color:rgba(255,255,255,.09); background:none; }.status-pill,.request-status { flex:0 0 auto; color:#78dba8; background:rgba(75,192,128,.1); border:1px solid rgba(75,192,128,.2); border-radius:99px; padding:5px 8px; font-size:9px; }.status-pill.draft { color:#a8c9ef; background:rgba(80,146,220,.1); border-color:rgba(80,146,220,.2); }.status-pill.paused { color:#e5b57e; background:rgba(221,158,83,.1); border-color:rgba(221,158,83,.2); }.empty-inline { min-height:90px; display:flex; align-items:center; justify-content:center; gap:8px; color:#717a83; font-size:11px; }.time-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:12px 0 17px; }.editor-card > label { margin-bottom:12px; }.days { display:flex; gap:6px; align-items:center; margin-bottom:20px; }.days > span { color:#8c8798; font-size:10px; margin-right:auto; }.days button { width:27px; height:27px; border-radius:50%; border:1px solid rgba(255,255,255,.11); background:rgba(255,255,255,.025); color:#89929c; font:600 10px inherit; cursor:pointer; }.days button.selected { background:#5ca3f2; border-color:#7ebbff; color:white; }.schedule-help { background:linear-gradient(145deg,rgba(32,52,73,.7),rgba(20,26,31,.8)); }.help-art { color:#91c1f9; width:52px; height:52px; display:grid; place-items:center; border-radius:14px; background:rgba(102,167,242,.13); margin-bottom:16px; }.schedule-help h3,.request-guide h3 { margin:0; font-size:15px; }.schedule-help p,.request-guide p { color:#939eaa; font-size:11px; line-height:1.7; }.help-line { display:flex; align-items:center; gap:7px; color:#bdb7c8; font-size:10px; margin-top:11px; }.help-line svg { color:#76d6a5; }.schedule-time { width:80px; }.schedule-time strong { display:block; font-size:13px; }.schedule-time span { display:block; color:#78818b; font-size:9px; margin-top:3px; }.schedule-days { display:flex; gap:4px; }.schedule-days span { width:20px; height:20px; display:grid; place-items:center; border-radius:50%; background:rgba(85,153,229,.17); color:#adcdf3; font-size:9px; }.schedule-program { display:flex; align-items:center; gap:7px; color:#aaa3b7; flex:1; font-size:11px; }.schedule-program svg { color:#7bade5; }.provider-state { align-self:center; display:flex; align-items:center; gap:7px; color:#e6b37a; font-size:10px; padding:8px 11px; border-radius:99px; border:1px solid rgba(226,164,91,.22); background:rgba(226,164,91,.07); }.provider-state span { width:7px; height:7px; border-radius:50%; background:#e4a15a; }.provider-state.connected { color:#7cdaa6; border-color:rgba(78,204,133,.2); background:rgba(78,204,133,.07); }.provider-state.connected span { background:#62d895; }.kind-tabs { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:17px; }.kind-tabs button { display:flex; align-items:center; justify-content:center; gap:5px; border:1px solid rgba(255,255,255,.08); color:#9690a3; background:rgba(255,255,255,.025); border-radius:8px; padding:8px 4px; font:600 10px inherit; cursor:pointer; }.kind-tabs button.selected { color:#d5e9ff; background:rgba(74,145,224,.16); border-color:rgba(112,170,236,.48); }.inline-note { display:flex; align-items:center; gap:6px; color:#838c95; font-size:10px; margin:13px 0 0; }.field-help { color:#737c86; font-size:9px; line-height:1.4; }.request-guide { background:linear-gradient(145deg,rgba(30,59,93,.55),rgba(20,27,34,.85)); }.guide-gradient { width:48px; height:48px; border-radius:13px; color:#add3ff; display:grid; place-items:center; background:linear-gradient(135deg,#488edc,#35b8a8); margin-bottom:18px; }.guide-step { display:flex; align-items:center; gap:10px; margin-top:15px; color:#c3bece; font-size:11px; }.guide-step b { width:22px; height:22px; display:grid; place-items:center; border-radius:50%; color:#9ccaff; background:rgba(92,158,234,.16); font-size:10px; }.request-kind.off { color:#f3b277; background:rgba(238,157,84,.12); }.request-kind.voice { color:#79ddd0; background:rgba(67,193,177,.12); }.request-kind.music { color:#dc91bd; background:rgba(214,80,147,.12); }.request-status { display:flex; align-items:center; gap:5px; color:#d8b17d; background:rgba(218,155,81,.09); border-color:rgba(218,155,81,.2); }.request-status i { background:#d8a261; }.request-status.ready { color:#7edba7; background:rgba(72,195,128,.1); border-color:rgba(72,195,128,.2); }.request-status.ready i { background:#64d595; }.request-status.failed { color:#ff9898; background:rgba(237,82,82,.1); border-color:rgba(237,82,82,.2); }.request-status.failed i { background:#ed6a6a; }
+.page-heading { display:flex; justify-content:space-between; align-items:end; gap:20px; padding:38px 0 24px; }
+.page-heading-actions { display:flex; align-items:center; gap:10px; }
+.playlist-create-panel { margin:0 0 16px; }
+.page-heading h1 { font-size:31px; }.page-heading p { color:#9692a5; max-width:590px; font-size:12px; line-height:1.65; margin:9px 0 0; }.filter-bar { display:flex; gap:10px; margin-bottom:13px; }.search-box { height:42px; border:1px solid rgba(255,255,255,.1); background:rgba(21,27,32,.85); border-radius:9px; display:flex; align-items:center; padding:0 12px; gap:9px; flex:1; color:#838d98; }.search-box input { background:none; border:0; outline:none; color:white; flex:1; font:12px inherit; }.search-box input::placeholder { color:#737d87; }.search-box button { background:none; border:0; color:#838e99; cursor:pointer; }.filter-bar select,.form-grid select,.form-grid input,.form-grid textarea,.editor-card > label select,.editor-card > label input { color:#e8e4f0; background:#161c22; border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:0 12px; font:12px/40px inherit; height:42px; box-sizing:border-box; outline:none; width:100%; display:block; }
+.form-grid textarea { height:auto; padding:10px 12px; font:12px/1.5 inherit; line-height:1.5; }.chip { border:1px solid rgba(255,255,255,.09); background:rgba(255,255,255,.025); color:#919ba5; padding:7px 12px; border-radius:99px; cursor:pointer; font:500 11px inherit; }.chip.selected,.chip:hover { color:#d9ebff; border-color:rgba(109,169,237,.55); background:rgba(76,148,228,.15); }.catalog-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }.track-card { border:0; background:none; color:white; text-align:left; cursor:pointer; min-width:0; }.track-card .cover { box-shadow:0 8px 20px rgba(0,0,0,.22); }.track-card:hover .cover { box-shadow:0 8px 26px rgba(72,137,210,.34); }.play-overlay { opacity:0; position:absolute; inset:0; display:grid; place-items:center; color:white; background:rgba(13,22,32,.42); transition:.2s; }.track-card:hover .play-overlay { opacity:1; }.track-add { position:absolute; right:8px; bottom:8px; width:28px; height:28px; display:grid; place-items:center; border-radius:8px; color:#fff; background:rgba(10,15,20,.72); border:1px solid rgba(255,255,255,.2); opacity:0; transition:.2s; }.track-card:hover .track-add { opacity:1; }.track-add:hover { background:#5ca3f2; }.cover-placeholder { width:100%; height:100%; display:grid; place-items:center; }.track-info { padding:9px 3px 0; }.track-info strong,.track-info span,.track-info small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }.track-info strong { font-size:12px; }.track-info span { color:#aaa5b7; font-size:10px; margin-top:5px; }.track-info small { color:#737d87; font-size:9px; margin-top:5px; }.track-album-badge { color:#84bafc !important; font-size:10px !important; margin-top:3px !important; font-weight:500; }.track-info b { color:#79b2f2; margin:0 2px; }.empty-state { grid-column:1/-1; min-height:250px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:#8a949e; border:1px dashed rgba(255,255,255,.1); border-radius:14px; }.empty-state strong { color:#d9d5e2; font-size:14px; }.empty-state p { margin:0 0 12px; font-size:11px; }
+.workspace-grid { display:grid; grid-template-columns:1.1fr .9fr; gap:14px; }.editor-card,.list-card { border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(20,26,31,.78); padding:20px; }.card-title { display:flex; align-items:start; justify-content:space-between; gap:14px; margin-bottom:17px; color:#81b4ed; }.card-title h3 { color:#eeeaf4; font-size:14px; margin:0; }.card-title p { color:#737c86; font-size:10px; margin:5px 0 0; }.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:17px; }.form-grid label,.editor-card > label { color:#9e99aa; font-size:10px; display:grid; gap:6px; }.form-grid .full { grid-column:1/-1; }.form-grid textarea { resize:vertical; min-height:70px; }.editor-card .button { margin-top:3px; }.list-card { margin-top:14px; }.program-list,.schedule-list,.request-list { display:grid; gap:8px; }.program-row,.schedule-row,.request-row { min-height:62px; display:flex; align-items:center; gap:12px; padding:10px 11px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.018); border-radius:10px; }.program-icon,.request-kind { width:34px; height:34px; display:grid; place-items:center; border-radius:9px; flex:0 0 auto; color:#8abdf7; background:rgba(75,144,223,.13); }.program-main,.request-main { min-width:150px; flex:1; }.program-main strong,.request-main strong { display:block; color:#ebe7f2; font-size:12px; }.program-main span,.request-main span { display:block; color:#7a848e; font-size:10px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }.program-blocks { display:flex; flex-wrap:wrap; gap:5px; max-width:42%; }.block-pill { color:#a6bed9; border:1px solid rgba(103,162,229,.22); background:rgba(74,139,213,.09); padding:4px 7px; border-radius:5px; font-size:9px; }.block-pill.more { color:#878190; border-color:rgba(255,255,255,.09); background:none; }.block-form-actions { display:flex; align-items:center; gap:8px; margin-top:4px; }
+.editor-card.is-editing { border-color:rgba(100,165,242,.45); box-shadow:0 0 20px rgba(92,163,242,.12); }
+.program-row.detailed { display:flex; flex-direction:column; align-items:stretch; gap:12px; padding:14px; }
+.program-header { display:flex; align-items:center; gap:12px; width:100%; }
+.program-header-actions { display:flex; align-items:center; gap:6px; margin-left:auto; }
+.program-blocks-manager { border-top:1px solid rgba(255,255,255,.07); padding-top:10px; display:grid; gap:8px; }
+.blocks-title { font-size:10px; color:#8e899b; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+.blocks-chip-list { display:flex; flex-wrap:wrap; gap:8px; }
+.block-chip { display:inline-flex; align-items:center; gap:7px; padding:5px 8px; border:1px solid rgba(255,255,255,.1); border-radius:8px; background:rgba(255,255,255,.03); font-size:11px; }
+.block-chip.active-edit { border-color:#65a5ee; background:rgba(101,165,238,.16); }
+.block-chip-type { font-size:9px; font-weight:700; text-transform:uppercase; padding:2px 5px; border-radius:4px; background:rgba(101,165,238,.18); color:#9eccfa; }
+.block-chip-label { font-weight:600; color:#eeeaf8; }
+.block-chip-count { font-size:10px; color:#9c97a8; }
+.block-chip-btn { border:0; background:none; color:#958f9f; cursor:pointer; padding:3px; display:grid; place-items:center; border-radius:4px; }
+.block-chip-btn.edit:hover { color:#7db6f8; background:rgba(125,182,248,.15); }
+.block-chip-btn.delete:hover { color:#ff8484; background:rgba(255,132,132,.15); }
+.empty-blocks-hint { font-size:11px; color:#787383; font-style:italic; }
+
+.status-pill,.request-status { flex:0 0 auto; color:#78dba8; background:rgba(75,192,128,.1); border:1px solid rgba(75,192,128,.2); border-radius:99px; padding:5px 8px; font-size:9px; }.status-pill.draft { color:#a8c9ef; background:rgba(80,146,220,.1); border-color:rgba(80,146,220,.2); }.status-pill.paused { color:#e5b57e; background:rgba(221,158,83,.1); border-color:rgba(221,158,83,.2); }.empty-inline { min-height:90px; display:flex; align-items:center; justify-content:center; gap:8px; color:#717a83; font-size:11px; }.time-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:12px 0 17px; }.editor-card > label { margin-bottom:12px; }.days { display:flex; gap:6px; align-items:center; margin-bottom:20px; }.days > span { color:#8c8798; font-size:10px; margin-right:auto; }.days button { width:27px; height:27px; border-radius:50%; border:1px solid rgba(255,255,255,.11); background:rgba(255,255,255,.025); color:#89929c; font:600 10px inherit; cursor:pointer; }.days button.selected { background:#5ca3f2; border-color:#7ebbff; color:white; }.schedule-help { background:linear-gradient(145deg,rgba(32,52,73,.7),rgba(20,26,31,.8)); }.help-art { color:#91c1f9; width:52px; height:52px; display:grid; place-items:center; border-radius:14px; background:rgba(102,167,242,.13); margin-bottom:16px; }.schedule-help h3,.request-guide h3 { margin:0; font-size:15px; }.schedule-help p,.request-guide p { color:#939eaa; font-size:11px; line-height:1.7; }.help-line { display:flex; align-items:center; gap:7px; color:#bdb7c8; font-size:10px; margin-top:11px; }.help-line svg { color:#76d6a5; }.schedule-time { width:80px; }.schedule-time strong { display:block; font-size:13px; }.schedule-time span { display:block; color:#78818b; font-size:9px; margin-top:3px; }.schedule-days { display:flex; gap:4px; }.schedule-days span { width:20px; height:20px; display:grid; place-items:center; border-radius:50%; background:rgba(85,153,229,.17); color:#adcdf3; font-size:9px; }.schedule-program { display:flex; align-items:center; gap:7px; color:#aaa3b7; flex:1; font-size:11px; }.schedule-program svg { color:#7bade5; }.provider-state { align-self:center; display:flex; align-items:center; gap:7px; color:#e6b37a; font-size:10px; padding:8px 11px; border-radius:99px; border:1px solid rgba(226,164,91,.22); background:rgba(226,164,91,.07); }.provider-state span { width:7px; height:7px; border-radius:50%; background:#e4a15a; }.provider-state.connected { color:#7cdaa6; border-color:rgba(78,204,133,.2); background:rgba(78,204,133,.07); }.provider-state.connected span { background:#62d895; }.kind-tabs { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:17px; }.kind-tabs button { display:flex; align-items:center; justify-content:center; gap:5px; border:1px solid rgba(255,255,255,.08); color:#9690a3; background:rgba(255,255,255,.025); border-radius:8px; padding:8px 4px; font:600 10px inherit; cursor:pointer; }.kind-tabs button.selected { color:#d5e9ff; background:rgba(74,145,224,.16); border-color:rgba(112,170,236,.48); }.inline-note { display:flex; align-items:center; gap:6px; color:#838c95; font-size:10px; margin:13px 0 0; }.field-help { color:#737c86; font-size:9px; line-height:1.4; }.request-guide { background:linear-gradient(145deg,rgba(30,59,93,.55),rgba(20,27,34,.85)); }.guide-gradient { width:48px; height:48px; border-radius:13px; color:#add3ff; display:grid; place-items:center; background:linear-gradient(135deg,#488edc,#35b8a8); margin-bottom:18px; }.guide-step { display:flex; align-items:center; gap:10px; margin-top:15px; color:#c3bece; font-size:11px; }.guide-step b { width:22px; height:22px; display:grid; place-items:center; border-radius:50%; color:#9ccaff; background:rgba(92,158,234,.16); font-size:10px; }.request-kind.off { color:#f3b277; background:rgba(238,157,84,.12); }.request-kind.voice { color:#79ddd0; background:rgba(67,193,177,.12); }.request-kind.music { color:#dc91bd; background:rgba(214,80,147,.12); }.request-status { display:flex; align-items:center; gap:5px; color:#d8b17d; background:rgba(218,155,81,.09); border-color:rgba(218,155,81,.2); }.request-status i { background:#d8a261; }.request-status.ready { color:#7edba7; background:rgba(72,195,128,.1); border-color:rgba(72,195,128,.2); }.request-status.ready i { background:#64d595; }.request-status.failed { color:#ff9898; background:rgba(237,82,82,.1); border-color:rgba(237,82,82,.2); }.request-status.failed i { background:#ed6a6a; }
+/* Barra de navegação por Playlists e Catálogo */
+.playlist-tabs-bar { display:flex; align-items:center; gap:8px; overflow-x:auto; padding:4px 0 16px; scrollbar-width:thin; }
+.playlist-tab-chip { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:99px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.03); color:#9da4af; font:600 11px inherit; cursor:pointer; white-space:nowrap; transition:.18s; }
+.playlist-tab-chip:hover { border-color:rgba(100,165,242,.4); color:#e1edfc; background:rgba(74,145,224,.08); }
+.playlist-tab-chip.active { border-color:#5ca3f2; color:#fff; background:linear-gradient(90deg,rgba(76,153,238,.35),rgba(76,153,238,.12)); box-shadow:0 2px 10px rgba(92,163,242,.2); }
+.tab-count { font-size:10px; opacity:.75; }
+
+/* Barra de Ações em Lote e Seleção */
+.batch-actions-bar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0 0 16px; padding:10px 14px; border-radius:11px; background:rgba(21,27,33,.8); border:1px solid rgba(255,255,255,.08); }
+.batch-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:8px; font:600 11px inherit; cursor:pointer; border:1px solid transparent; transition:.18s; white-space:nowrap; }
+.batch-btn.select-all { background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.12); color:#cfc8de; }
+.batch-btn.select-all:hover { background:rgba(255,255,255,.08); color:#fff; }
+.batch-btn.primary { background:#5ca3f2; color:#fff; box-shadow:0 4px 12px rgba(92,163,242,.25); }
+.batch-btn.primary:hover:not(:disabled) { background:#70b1fa; transform:translateY(-1px); }
+.batch-btn.secondary { background:rgba(74,145,224,.12); border-color:rgba(100,165,242,.35); color:#a8d1ff; }
+.batch-btn.secondary:hover:not(:disabled) { background:rgba(74,145,224,.22); color:#fff; }
+.batch-btn.text { background:none; border:none; color:#8d98a5; }
+.batch-btn.text:hover { color:#ff8d8d; }
+.batch-btn:disabled { opacity:.45; cursor:not-allowed; }
+
+/* Checkboxes e botões rápidos no Card de Música */
+.track-card { position:relative; }
+.track-select-box { position:absolute; left:8px; top:8px; width:22px; height:22px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(10,15,20,.65); color:#fff; display:grid; place-items:center; z-index:3; opacity:.6; transition:.2s; }
+.track-select-box:hover,.track-card:hover .track-select-box { opacity:1; border-color:#84bafc; }
+.track-select-box.checked { opacity:1; background:#5ca3f2; border-color:#5ca3f2; box-shadow:0 2px 8px rgba(92,163,242,.4); }
+.track-card.is-selected .cover { border:2px solid #5ca3f2; }
+.track-remove { position:absolute; right:8px; top:8px; width:26px; height:26px; border-radius:7px; border:1px solid rgba(255,100,100,.3); background:rgba(25,10,10,.7); color:#ff9494; display:grid; place-items:center; z-index:3; opacity:0; transition:.2s; }
+.track-card:hover .track-remove { opacity:1; }
+.track-remove:hover { background:#d94848; color:#fff; border-color:#d94848; }
+
+/* Botão Shuffle no Player Dock */
+.shuffle-button { border:0; background:none; color:#858095; cursor:pointer; display:grid; place-items:center; padding:7px; border-radius:8px; transition:.18s; }
+.shuffle-button:hover { color:#d5e5f7; }
+.shuffle-button.active { color:#5ca3f2; background:rgba(92,163,242,.14); }
+
+/* Assistente de Intercalação de Vinhetas/Locuções */
+.interleave-wizard-card { border-color:rgba(125,182,248,.35); background:linear-gradient(135deg,rgba(30,55,85,.5),rgba(18,24,30,.85)); margin-bottom:20px; }
+.interleave-grid { grid-template-columns:repeat(3,1fr); }
+.wizard-trigger-btn { color:#86c1f8; border-color:rgba(100,165,242,.3); background:rgba(74,145,224,.08); }
+.wizard-trigger-btn:hover,.wizard-trigger-btn.active { color:#fff; background:rgba(74,145,224,.2); border-color:#5ca3f2; }
+
 /* Keep request cards inside the viewport when a generated brief is long. */
 .radio-app { width:100%; max-width:100vw; overflow-x:hidden; }
 .radio-main { min-width:0; }
@@ -801,6 +1569,21 @@ onBeforeUnmount(() => {
 .request-action.playlist { color:#9fd7ff; background:rgba(70,150,210,.1); border-color:rgba(70,150,210,.22); }.member-list { display:grid; gap:8px; }.member-row { display:flex; align-items:center; gap:10px; min-height:58px; padding:9px 11px; border:1px solid rgba(255,255,255,.06); border-radius:10px; background:rgba(255,255,255,.018); }.member-avatar { width:32px; height:32px; display:grid; place-items:center; flex:0 0 auto; border-radius:9px; color:#9ac4f5; background:rgba(75,144,223,.14); }.member-avatar.player { color:#7cddd1; background:rgba(67,193,177,.12); }.member-main { min-width:0; flex:1; }.member-main strong,.member-main span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.member-main strong { color:#ebe7f2; font-size:11px; }.member-main span { color:#7a848e; font-size:9px; margin-top:4px; }.member-row select { width:auto; min-width:142px; color:#d9d4e4; background:#161c22; border:1px solid rgba(255,255,255,.1); border-radius:7px; padding:7px 8px; font:10px inherit; }.member-status { flex:0 0 auto; color:#7edba7; background:rgba(72,195,128,.09); border:1px solid rgba(72,195,128,.18); border-radius:99px; padding:5px 8px; font-size:9px; }.member-status.paused,.member-status.suspended { color:#e3b177; background:rgba(219,157,81,.09); border-color:rgba(219,157,81,.18); }.member-status.revoked { color:#ff9a9a; background:rgba(237,82,82,.09); border-color:rgba(237,82,82,.18); }
 
 .voice-admin-note { margin:0 0 14px; border-color:rgba(124,179,239,.25); background:linear-gradient(110deg,rgba(46,87,133,.24),rgba(20,26,31,.78)); }.voice-admin-note p { max-width:720px; color:#aaa3b6; font-size:11px; line-height:1.65; margin:5px 0 0; }.voice-list { display:grid; gap:8px; }.voice-row { display:flex; align-items:center; gap:10px; min-height:66px; padding:10px 11px; border:1px solid rgba(255,255,255,.06); border-radius:10px; background:rgba(255,255,255,.018); }.voice-avatar { width:35px; height:35px; display:grid; place-items:center; flex:0 0 auto; border-radius:10px; color:#a9d0ff; background:rgba(75,144,223,.15); }.voice-main { min-width:130px; flex:1; }.voice-main strong,.voice-main span,.voice-main small { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.voice-main strong { color:#ebe7f2; font-size:12px; }.voice-main span { color:#8b8597; font-size:9px; margin-top:4px; }.voice-main small { color:#aaa3b5; font-size:9px; margin-top:4px; }.voice-row audio { width:210px; height:32px; }.voice-use { margin:0; white-space:nowrap; }.voice-row .button.ghost { color:#b4d4f7; border-color:rgba(112,170,236,.28); background:rgba(74,145,224,.09); }.voice-row .button.ghost:hover { background:rgba(74,145,224,.2); }
+.topbar-live-badge { display:inline-flex; align-items:center; gap:7px; padding:5px 10px; border-radius:8px; background:rgba(85,217,147,.12); border:1px solid rgba(85,217,147,.3); color:#b7f2d3; font-size:11px; }
+.topbar-live-badge .live-dot { width:7px; height:7px; border-radius:50%; background:#55d993; box-shadow:0 0 8px #55d993; }
+.topbar-live-badge strong { font-weight:600; color:#fff; }
+.topbar-live-badge small { color:#8cd7b0; font-size:10px; }
+.radio-app.theme-light .topbar-live-badge { background:#eaf8f1; border-color:#82d6a7; color:#1a7c49; }
+.radio-app.theme-light .topbar-live-badge strong { color:#0f5832; }
+.radio-app.theme-light .topbar-live-badge small { color:#2f9661; }
+
+.track-header-meta { margin-bottom:4px; display:flex; align-items:center; }
+.dock-program-badge { display:inline-flex; align-items:center; gap:5px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:2px 7px; border-radius:5px; background:rgba(98,166,242,.2); color:#9ccbff; border:1px solid rgba(98,166,242,.35); }
+.dock-program-badge i { width:5px; height:5px; border-radius:50%; background:#55d993; box-shadow:0 0 6px #55d993; }
+.dock-program-badge.catalog { background:rgba(255,255,255,.06); color:#a59fb2; border-color:rgba(255,255,255,.1); }
+.radio-app.theme-light .dock-program-badge { background:#e8f2fc; color:#2764a8; border-color:#b4d5f5; }
+.radio-app.theme-light .dock-program-badge.catalog { background:#edf1f5; color:#5a6875; border-color:#d5dde5; }
+
 .player-dock { position:fixed; z-index:30; left:244px; right:0; bottom:0; min-height:83px; background:rgba(14,19,24,.96); backdrop-filter:blur(22px); border-top:1px solid rgba(255,255,255,.1); display:grid; grid-template-columns:1.05fr 1.3fr 1fr; align-items:center; gap:22px; padding:11px 38px; }.player-track { display:flex; align-items:center; gap:11px; min-width:0; }.player-cover { width:52px; height:52px; border-radius:9px; color:#8cbef7; }.now-playing { min-width:0; }.now-playing strong,.now-playing span { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }.now-playing strong { font-size:12px; }.now-playing span { color:#828b94; font-size:10px; margin-top:5px; }.player-controls { min-width:0; }.control-buttons { display:flex; justify-content:center; align-items:center; gap:13px; }.control-buttons button { border:0; background:none; color:#aaa5b8; cursor:pointer; display:grid; place-items:center; }.control-buttons button:hover { color:white; }.control-buttons .play-button { width:32px; height:32px; border-radius:50%; color:white; background:#59a0ee; box-shadow:0 5px 15px rgba(74,144,222,.38); }.progress-line { display:flex; align-items:center; gap:8px; margin-top:7px; color:#727b84; font-size:9px; }.progress-line input,.player-tools input { accent-color:#68a9f2; height:3px; flex:1; min-width:0; }.player-tools { display:flex; align-items:center; justify-content:flex-end; gap:9px; color:#888496; }.player-tools input { max-width:92px; }.cache-indicator { display:flex; align-items:center; gap:5px; color:#6dbd93; font-size:9px; margin-left:10px; }.cache-indicator i { width:6px; height:6px; background:#60ce91; }.player-dock audio { display:none; }.spin { animation:spin 1s linear infinite; }@keyframes spin { to { transform:rotate(360deg); } }
 @media (max-width:1100px) { .radio-main { padding:0 25px 50px; }.genre-grid { grid-template-columns:repeat(4,1fr); }.catalog-grid { grid-template-columns:repeat(4,1fr); }.player-dock { padding:11px 22px; }.player-tools { display:none; }.player-dock { grid-template-columns:1fr 1.3fr; }.hero-copy h1 { font-size:36px; } }
 @media (max-width:760px) { .mobile-only { display:grid; }.radio-sidebar { transform:translateX(-100%); transition:.22s; box-shadow:15px 0 40px rgba(0,0,0,.35); }.radio-sidebar.is-open { transform:none; }.close-nav { position:absolute; right:12px; top:18px; border:0; background:none; color:#aaa; }.radio-main { width:100%; margin-left:0; padding:0 15px 45px; }.topbar { height:62px; gap:12px; }.menu-button { border:0; background:none; color:#c8c3d1; place-items:center; }.crumb { flex:1; }.topbar-actions .icon-button { display:none; }.hero-panel { min-height:430px; margin-top:18px; }.hero-copy { max-width:100%; padding:30px 25px; }.hero-copy h1 { font-size:36px; }.hero-art { position:absolute; inset:auto 0 0; height:170px; opacity:.7; }.hero-disc { right:30px; top:5px; transform:scale(.75) rotate(-16deg); }.equalizer { right:24px; bottom:21px; }.stats-row { grid-template-columns:repeat(2,1fr); gap:8px; }.stat-card { min-height:105px; padding:13px; }.section-block { margin-top:29px; }.genre-grid { grid-template-columns:repeat(2,1fr); }.genre-card { min-height:95px; }.track-row { grid-template-columns:1fr; }.page-heading { display:block; padding:25px 0 19px; }.page-heading h1 { font-size:27px; }.page-heading .button,.provider-state { margin-top:17px; }.filter-bar { display:block; }.filter-bar select { width:100%; margin-top:8px; }.catalog-grid { grid-template-columns:repeat(2,1fr); gap:13px 10px; }.workspace-grid { grid-template-columns:1fr; }.form-grid { grid-template-columns:1fr; }.form-grid .full { grid-column:auto; }.program-blocks { display:none; }.program-row,.schedule-row,.request-row { gap:8px; }.request-actions { order:4; width:100%; }.request-action { flex:1; justify-content:center; }.request-preview { align-items:stretch; flex-wrap:wrap; }.request-preview-copy { flex-basis:calc(100% - 30px); }.request-preview audio { width:100%; }.schedule-days { display:none; }.schedule-program { min-width:0; }.schedule-program strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.player-dock { left:0; min-height:80px; padding:9px 12px; grid-template-columns:1fr auto; gap:10px; }.player-cover { width:44px; height:44px; }.now-playing strong { font-size:11px; }.player-controls { grid-column:1/-1; grid-row:2; }.player-dock { padding-bottom:8px; }.control-buttons { position:absolute; right:13px; top:15px; }.control-buttons button:not(.play-button) { display:none; }.progress-line { margin-top:4px; }.radio-app { padding-bottom:140px; }.setup-card { align-items:flex-start; flex-wrap:wrap; }.setup-card .button { margin-left:52px; }.section-heading h2 { font-size:20px; } }
@@ -905,6 +1688,17 @@ onBeforeUnmount(() => {
 .radio-app.theme-light .program-main span,.radio-app.theme-light .request-main span,.radio-app.theme-light .member-main span,.radio-app.theme-light .voice-main span { color:#79828c; }
 .radio-app.theme-light .block-pill { color:#4c729f; border-color:rgba(76,153,238,.22); background:rgba(76,153,238,.08); }
 .radio-app.theme-light .block-pill.more { color:#828a94; border-color:rgba(49,69,91,.12); }
+.radio-app.theme-light .program-blocks-manager { border-top-color:rgba(49,69,91,.1); }
+.radio-app.theme-light .blocks-title { color:#6b747e; }
+.radio-app.theme-light .block-chip { border-color:rgba(49,69,91,.14); background:rgba(255,255,255,.9); }
+.radio-app.theme-light .block-chip.active-edit { border-color:#4a8fe0; background:rgba(74,143,224,.1); }
+.radio-app.theme-light .block-chip-type { background:rgba(74,143,224,.14); color:#366ea9; }
+.radio-app.theme-light .block-chip-label { color:#2a3440; }
+.radio-app.theme-light .block-chip-count { color:#757f89; }
+.radio-app.theme-light .block-chip-btn { color:#7a848f; }
+.radio-app.theme-light .block-chip-btn.edit:hover { color:#2b75ca; background:rgba(74,143,224,.12); }
+.radio-app.theme-light .block-chip-btn.delete:hover { color:#c93b3b; background:rgba(217,60,60,.12); }
+.radio-app.theme-light .empty-blocks-hint { color:#868f9a; }
 .radio-app.theme-light .status-pill,.radio-app.theme-light .request-status { color:#2d8b5d; background:rgba(55,166,107,.1); border-color:rgba(55,166,107,.22); }
 .radio-app.theme-light .status-pill.draft { color:#4976aa; background:rgba(76,153,238,.1); border-color:rgba(76,153,238,.2); }
 .radio-app.theme-light .status-pill.paused,.radio-app.theme-light .member-status.paused,.radio-app.theme-light .member-status.suspended { color:#9a6121; background:rgba(219,157,81,.11); border-color:rgba(219,157,81,.22); }
@@ -947,8 +1741,33 @@ onBeforeUnmount(() => {
 .radio-app.theme-light .control-buttons button { color:#6d7680; }
 .radio-app.theme-light .control-buttons button:hover { color:#365477; }
 .radio-app.theme-light .control-buttons .play-button { color:#fff; background:#5391d7; }
+.radio-app.theme-light .shuffle-button { color:#6d7680; }
+.radio-app.theme-light .shuffle-button:hover { color:#2160b4; }
+.radio-app.theme-light .shuffle-button.active { color:#2160b4; background:rgba(33,96,180,.12); }
 .radio-app.theme-light .cache-indicator { color:#39855f; }
 .radio-app.theme-light .request-refresh { color:#65707d; }
+
+.radio-app.theme-light .playlist-tab-chip { border-color:var(--jv-line); background:#fff; color:#5c6e82; }
+.radio-app.theme-light .playlist-tab-chip:hover { border-color:#8bb6e2; color:var(--jv-navy); background:#edf5fc; }
+.radio-app.theme-light .playlist-tab-chip.active { border-color:var(--jv-blue); color:var(--jv-blue); background:#eaf3ff; box-shadow:0 2px 8px rgba(33,96,180,.12); }
+
+.radio-app.theme-light .batch-actions-bar { background:#fff; border-color:var(--jv-line); box-shadow:0 4px 14px rgba(23,61,112,.04); }
+.radio-app.theme-light .batch-btn.select-all { background:#f4f8fc; border-color:var(--jv-line); color:#475b72; }
+.radio-app.theme-light .batch-btn.select-all:hover { background:#e8f1fa; color:var(--jv-navy); }
+.radio-app.theme-light .batch-btn.secondary { background:#eaf3ff; border-color:#a8cefc; color:var(--jv-blue); }
+.radio-app.theme-light .batch-btn.secondary:hover:not(:disabled) { background:#d5e7fc; }
+.radio-app.theme-light .batch-btn.text { color:#8292a4; }
+.radio-app.theme-light .batch-btn.text:hover { color:#c93b3b; }
+
+.radio-app.theme-light .track-select-box { background:rgba(255,255,255,.9); border-color:#bbcddf; color:#2160b4; }
+.radio-app.theme-light .track-select-box.checked { background:var(--jv-blue); border-color:var(--jv-blue); color:#fff; }
+.radio-app.theme-light .track-card.is-selected .cover { border:2px solid var(--jv-blue); }
+.radio-app.theme-light .track-remove { background:rgba(255,240,240,.9); border-color:#f5b5b5; color:#d93838; }
+.radio-app.theme-light .track-remove:hover { background:#d93838; color:#fff; border-color:#d93838; }
+
+.radio-app.theme-light .interleave-wizard-card { border-color:#b5d4f5; background:linear-gradient(135deg,#f0f6ff,#ffffff); box-shadow:0 8px 24px rgba(33,96,180,.07); }
+.radio-app.theme-light .wizard-trigger-btn { color:var(--jv-blue); border-color:#9ec2eb; background:#edf5fc; }
+.radio-app.theme-light .wizard-trigger-btn:hover,.radio-app.theme-light .wizard-trigger-btn.active { color:#fff; background:var(--jv-blue); border-color:var(--jv-blue); }
 
 /* Identidade compartilhada com a Central JobVarejo. */
 .radio-app {
@@ -1002,8 +1821,8 @@ onBeforeUnmount(() => {
 .radio-app.theme-light .genre-card:nth-child(3n) { background:linear-gradient(145deg,#e8f2fd,#fff); color:var(--jv-navy); }
 .radio-app.theme-light .genre-card:nth-child(4n) { background:linear-gradient(145deg,#e7f5f2,#fff); color:#207f73; }
 .radio-app.theme-light .genre-card:hover,.radio-app.theme-light .track-mini:hover { border-color:#8bb6e2; }
-.radio-app.theme-light .track-mini,.radio-app.theme-light .program-row,.radio-app.theme-light .schedule-row,.radio-app.theme-light .request-row,.radio-app.theme-light .member-row,.radio-app.theme-light .voice-row { border-color:var(--jv-line); background:#f8fbff; }
-.radio-app.theme-light .search-box,.radio-app.theme-light .filter-bar select,.radio-app.theme-light .form-grid select,.radio-app.theme-light .form-grid input,.radio-app.theme-light .form-grid textarea,.radio-app.theme-light .editor-card > label select,.radio-app.theme-light .editor-card > label input,.radio-app.theme-light .station-create-fields input { color:var(--jv-ink); border-color:var(--jv-line); background:#fff; }
+.radio-app.theme-light .search-box,.radio-app.theme-light .filter-bar select,.radio-app.theme-light .form-grid select,.radio-app.theme-light .form-grid input,.radio-app.theme-light .editor-card > label select,.radio-app.theme-light .editor-card > label input,.radio-app.theme-light .station-create-fields input { color:var(--jv-ink); border-color:var(--jv-line); background:#fff; height:42px; padding:0 12px; font:12px/40px inherit; box-sizing:border-box; }
+.radio-app.theme-light .form-grid textarea { color:var(--jv-ink); border-color:var(--jv-line); background:#fff; height:auto; padding:10px 12px; font:12px/1.5 inherit; line-height:1.5; box-sizing:border-box; }
 .radio-app.theme-light .chip.selected,.radio-app.theme-light .chip:hover,.radio-app.theme-light .kind-tabs button.selected { color:var(--jv-blue); border-color:#a9c8ea; background:var(--jv-sky); }
 .radio-app.theme-light .schedule-help,.radio-app.theme-light .request-guide,.radio-app.theme-light .voice-admin-note { background:linear-gradient(145deg,#eaf3ff,#fff); }
 .radio-app.theme-light .help-art,.radio-app.theme-light .guide-step b { color:var(--jv-blue); background:#dbeeff; }
