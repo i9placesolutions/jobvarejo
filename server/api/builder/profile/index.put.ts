@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
   return {
     tenant: {
       id: updated.id,
-      email: updated.email,
+      email: /^internal-[0-9a-f-]+@jobvarejo\.invalid$/i.test(String(updated.email || '')) ? '' : updated.email,
       name: updated.name,
       logo: updated.logo ?? null,
       phone: updated.phone ?? null,

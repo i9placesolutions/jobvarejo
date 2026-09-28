@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { PoolClient } from 'pg'
 import type { UserRole } from '~/types/auth'
 import type { EditorPermissions } from '../../shared/access-control'
 import { pgOneOrNull, pgQuery } from './postgres'
@@ -13,6 +14,7 @@ type ProfileRow = {
   role: UserRole
   is_active?: boolean
   editor_permissions?: EditorPermissions
+  business_profile?: { companyName?: string; internalOnly?: boolean } | null
   password_hash?: string | null
   reset_token_hash?: string | null
   reset_token_expires_at?: string | null
@@ -98,7 +100,8 @@ export const getProfileById = async (id: string): Promise<ProfileRow | null> => 
     `select p.id, p.email, p.login_whatsapp, p.login_whatsapp_verified_at, p.name, p.avatar_url,
             p.role::text as role, p.password_hash, p.reset_token_hash, p.reset_token_expires_at,
             coalesce((to_jsonb(p)->>'is_active')::boolean, true) as is_active,
-            coalesce(to_jsonb(p)->'editor_permissions', '{}'::jsonb) as editor_permissions
+            coalesce(to_jsonb(p)->'editor_permissions', '{}'::jsonb) as editor_permissions,
+            p.business_profile
      from public.profiles p
      where p.id = $1
      limit 1`,
@@ -110,9 +113,11 @@ export const createProfileWithPassword = async (params: {
   name: string
   email: string
   whatsapp?: string | null
-  passwordHash: string
+  passwordHash: string | null
   role: UserRole
-}): Promise<ProfileRow> => {
+}, client?: PoolClient): Promise<ProfileRow> => {
+  const query = <T extends import('pg').QueryResultRow>(sql: string, values: unknown[]) =>
+    client ? client.query<T>(sql, values) : pgQuery<T>(sql, values)
   const id = randomUUID()
   const normalizedEmail = normalizeEmail(params.email)
   const trimmedName = String(params.name || '').trim()
@@ -122,8 +127,9 @@ export const createProfileWithPassword = async (params: {
   // mantém o fluxo de cadastro próprio do JobVarejo compatível com os dois
   // formatos de banco (com ou sem schema auth).
   let authUserCreated = false
+  if (client) await client.query('SAVEPOINT auth_user_insert')
   try {
-    await pgQuery(
+    await query(
       `insert into auth.users
         (id, aud, role, email, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
        values ($1::uuid, 'authenticated', 'authenticated', $2, now(), $3::jsonb, $4::jsonb, now(), now())
@@ -131,7 +137,12 @@ export const createProfileWithPassword = async (params: {
       [id, normalizedEmail, JSON.stringify({ provider: 'jobvarejo' }), JSON.stringify({ name: trimmedName, email: normalizedEmail })]
     )
     authUserCreated = true
+    if (client) await client.query('RELEASE SAVEPOINT auth_user_insert')
   } catch (error: any) {
+    if (client) {
+      await client.query('ROLLBACK TO SAVEPOINT auth_user_insert')
+      await client.query('RELEASE SAVEPOINT auth_user_insert')
+    }
     const code = String(error?.code || '')
     const message = String(error?.message || '').toLowerCase()
     const authUnavailable = code === '42P01' || code === '3F000' || message.includes('schema "auth"') || message.includes('relation "auth.users"')
@@ -139,7 +150,7 @@ export const createProfileWithPassword = async (params: {
   }
 
   if (authUserCreated) {
-    const synchronized = await pgOneOrNull<ProfileRow>(
+    const synchronized = (await query<ProfileRow>(
       `update public.profiles
           set email = $2, login_whatsapp = $3,
               login_whatsapp_verified_at = case when $3 is null then null else timezone('utc', now()) end,
@@ -147,13 +158,14 @@ export const createProfileWithPassword = async (params: {
         where id = $1
         returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at`,
       [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash]
-    )
+    )).rows[0] || null
     if (synchronized) return synchronized
   }
 
   let rows: ProfileRow[] = []
+  if (client) await client.query('SAVEPOINT profile_insert')
   try {
-    const first = await pgQuery<ProfileRow>(
+    const first = await query<ProfileRow>(
       `insert into public.profiles
          (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash)
        values
@@ -162,13 +174,18 @@ export const createProfileWithPassword = async (params: {
       [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash]
     )
     rows = first.rows || []
+    if (client) await client.query('RELEASE SAVEPOINT profile_insert')
   } catch (error: any) {
+    if (client) {
+      await client.query('ROLLBACK TO SAVEPOINT profile_insert')
+      await client.query('RELEASE SAVEPOINT profile_insert')
+    }
     const code = String(error?.code || '').trim()
     const message = String(error?.message || '').toLowerCase()
     const missingEnum = code === '42704' || (message.includes('type') && message.includes('user_role') && message.includes('does not exist'))
     if (!missingEnum) throw error
 
-    const fallback = await pgQuery<ProfileRow>(
+    const fallback = await query<ProfileRow>(
       `insert into public.profiles
          (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash)
        values

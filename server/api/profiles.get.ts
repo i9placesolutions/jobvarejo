@@ -20,7 +20,9 @@ export default defineEventHandler(async (event) => {
   try {
     if (isAdmin && excludeSelf) {
       const { rows } = await pgQuery<any>(
-        `select id, name, email, avatar_url
+        `select id, name,
+                CASE WHEN COALESCE((business_profile->>'internalOnly')::boolean, false) THEN '' ELSE email END AS email,
+                avatar_url
          from public.profiles
          where id <> $1
          order by created_at desc nulls last
@@ -32,7 +34,9 @@ export default defineEventHandler(async (event) => {
 
     if (isAdmin) {
       const { rows } = await pgQuery<any>(
-        `select id, name, email, avatar_url
+        `select id, name,
+                CASE WHEN COALESCE((business_profile->>'internalOnly')::boolean, false) THEN '' ELSE email END AS email,
+                avatar_url
          from public.profiles
          order by created_at desc nulls last
          limit $1`,
@@ -42,7 +46,9 @@ export default defineEventHandler(async (event) => {
     }
 
     const { rows } = await pgQuery<any>(
-      `select id, name, email, avatar_url
+      `select id, name,
+              CASE WHEN COALESCE((business_profile->>'internalOnly')::boolean, false) THEN '' ELSE email END AS email,
+              avatar_url
        from public.profiles
        where id = $1
        limit 1`,

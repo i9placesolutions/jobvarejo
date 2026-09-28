@@ -10,7 +10,9 @@ export default defineEventHandler(async (event) => {
 
   try {
     const row = await pgOneOrNull<any>(
-      `select id, email, name, avatar_url, role, created_at, updated_at, business_profile
+      `select id,
+              CASE WHEN COALESCE((business_profile->>'internalOnly')::boolean, false) THEN '' ELSE email END AS email,
+              name, avatar_url, role, created_at, updated_at, business_profile
        from public.profiles
        where id = $1
        limit 1`,

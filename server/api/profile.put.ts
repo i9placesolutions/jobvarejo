@@ -21,13 +21,18 @@ export default defineEventHandler(async (event) => {
 
   const row = await pgOneOrNull<any>(
     `update public.profiles
-        set business_profile = ($1::jsonb - 'logoPreference') ||
+        set business_profile = ($1::jsonb - 'logoPreference' - 'internalOnly') ||
             CASE WHEN business_profile ? 'logoPreference'
               THEN jsonb_build_object('logoPreference', business_profile->'logoPreference')
+              ELSE '{}'::jsonb END ||
+            CASE WHEN business_profile ? 'internalOnly'
+              THEN jsonb_build_object('internalOnly', business_profile->'internalOnly')
               ELSE '{}'::jsonb END,
             updated_at = timezone('utc', now())
       where id = $2
-      returning id, email, name, avatar_url, role, created_at, updated_at, business_profile`,
+      returning id,
+                CASE WHEN COALESCE((business_profile->>'internalOnly')::boolean, false) THEN '' ELSE email END AS email,
+                name, avatar_url, role, created_at, updated_at, business_profile`,
     [JSON.stringify(businessProfile), user.id]
   )
 

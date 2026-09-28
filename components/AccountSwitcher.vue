@@ -47,7 +47,7 @@ const selectAccount = async () => {
     <select id="account-switcher-select" v-model="selectedId" :disabled="loading" @change="selectAccount">
       <option value="">Minha conta</option>
       <option v-for="account in accounts" :key="account.id" :value="account.id">
-        {{ account.label }} · {{ account.email }}
+        {{ account.label }}<template v-if="account.email"> · {{ account.email }}</template>
       </option>
     </select>
     <small v-if="error" role="alert">{{ error }}</small>

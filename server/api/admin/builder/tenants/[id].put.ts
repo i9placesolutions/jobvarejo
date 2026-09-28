@@ -53,7 +53,8 @@ export default defineEventHandler(async (event) => {
     `UPDATE public.builder_tenants
      SET ${setClauses.join(', ')}
      WHERE id = $${paramIndex}::uuid
-     RETURNING *`,
+     RETURNING id, email, name, slug, logo, phone, whatsapp, plan, is_active,
+               show_on_portal, created_at, updated_at, last_login_at`,
     values
   )
 
@@ -61,5 +62,5 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Tenant not found' })
   }
 
-  return { tenant }
+  return { tenant: { ...tenant, email: /^internal-[0-9a-f-]+@jobvarejo\.invalid$/i.test(String((tenant as any).email || '')) ? '' : (tenant as any).email } }
 })

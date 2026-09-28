@@ -1,9 +1,9 @@
 import { requireAdminUser } from '../../../utils/auth'
 import { getProfileById } from '../../../utils/auth-db'
-import { MANAGED_ROLES, UUID_PATTERN } from '../../../utils/admin-users'
+import { MANAGED_ROLES, UUID_PATTERN, parseManagedUserInput } from '../../../utils/admin-users'
 import { hashPassword } from '../../../utils/password'
 import { enforceRateLimit } from '../../../utils/rate-limit'
-import { pgOneOrNull } from '../../../utils/postgres'
+import { pgOneOrNull, pgTx } from '../../../utils/postgres'
 import { normalizeEditorPermissions } from '../../../../shared/access-control'
 import type { UserRole } from '~/types/auth'
 
@@ -22,16 +22,69 @@ export default defineEventHandler(async (event) => {
   if (!MANAGED_ROLES.includes(role) || (role === 'admin' && actorRole !== 'super_admin')) {
     throw createError({ statusCode: 403, statusMessage: 'Nível de acesso não permitido.' })
   }
+  const internalOnly = current.business_profile?.internalOnly === true
+  if (internalOnly && role !== 'user') {
+    throw createError({ statusCode: 400, statusMessage: 'Empresa interna deve permanecer como conta de cliente.' })
+  }
+  if (!internalOnly && body.hasPlatformAccess === false) {
+    throw createError({ statusCode: 400, statusMessage: 'A revogação de acesso deve ser feita pela desativação da conta.' })
+  }
   if (id === user.actorId && (body.is_active === false || role !== current.role)) {
     throw createError({ statusCode: 409, statusMessage: 'Você não pode desativar ou alterar seu próprio nível.' })
   }
   const name = body.name === undefined ? current.name : String(body.name || '').trim().replace(/\s+/g, ' ')
-  if (!name || name.length < 2 || name.length > 120) throw createError({ statusCode: 400, statusMessage: 'Nome inválido.' })
+  if ((!internalOnly || body.hasPlatformAccess === true) && (!name || name.length < 2 || name.length > 120)) {
+    throw createError({ statusCode: 400, statusMessage: 'Nome inválido.' })
+  }
   const password = body.password === undefined ? null : String(body.password || '')
   if (password !== null && (password.length < 8 || password.length > 256)) {
     throw createError({ statusCode: 400, statusMessage: 'Nova senha inválida (8 a 256 caracteres).' })
   }
   const active = body.is_active === undefined ? current.is_active !== false : body.is_active === true
+  const companyName = role === 'user'
+    ? String(body.companyName ?? current.business_profile?.companyName ?? '').trim().replace(/\s+/g, ' ')
+    : ''
+  if (role === 'user' && (companyName.length < 2 || companyName.length > 160)) {
+    throw createError({ statusCode: 400, statusMessage: 'Nome da empresa inválido (2 a 160 caracteres).' })
+  }
+  if (internalOnly && body.hasPlatformAccess === true) {
+    const access = parseManagedUserInput({ ...body, role: 'user', companyName, hasPlatformAccess: true }, actorRole)
+    const passwordHash = await hashPassword(access.password)
+    try {
+      const promoted = await pgTx(async (client) => {
+        const relation = await client.query<{ relation: string | null }>("SELECT to_regclass('auth.users')::text AS relation")
+        if (relation.rows[0]?.relation) {
+          await client.query(`UPDATE auth.users SET email = $2, raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('name', $3::text, 'email', $2::text), updated_at = now() WHERE id = $1`, [id, access.email, access.name])
+        }
+        const result = await client.query<any>(`
+          UPDATE public.profiles
+             SET name = $2, email = $3, login_whatsapp = $4,
+                 login_whatsapp_verified_at = now(), password_hash = $5, is_active = $7,
+                 business_profile = COALESCE(business_profile, '{}'::jsonb) || jsonb_build_object('companyName', $6::text, 'internalOnly', false),
+                 updated_at = now()
+           WHERE id = $1
+           RETURNING id, name, email, login_whatsapp AS whatsapp, role::text AS role,
+                     is_active, editor_permissions AS permissions,
+                     business_profile->>'companyName' AS company_name,
+                     false AS internal_only, created_at, last_login_at
+        `, [id, access.name, access.email, access.whatsapp, passwordHash, companyName, active])
+        if (!result.rows[0]) throw createError({ statusCode: 404, statusMessage: 'Empresa não encontrada.' })
+        const builder = await client.query<{ relation: string | null }>("SELECT to_regclass('public.builder_tenants')::text AS relation")
+        if (builder.rows[0]?.relation) {
+          // O Builder usa a sessão principal; não duplicar o hash evita senha antiga após reset.
+          await client.query(`UPDATE public.builder_tenants SET email = $2, name = $3, is_active = $4, updated_at = now() WHERE id = $1`, [id, access.email, companyName, active])
+        }
+        return result.rows[0]
+      })
+      return { user: promoted }
+    } catch (error: any) {
+      if (String(error?.code || '') === '23505') throw createError({ statusCode: 409, statusMessage: 'E-mail ou WhatsApp já cadastrado.' })
+      throw error
+    }
+  }
+  if (internalOnly && body.password !== undefined) {
+    throw createError({ statusCode: 400, statusMessage: 'Empresa interna não possui senha de acesso.' })
+  }
   const permissions = role === 'editor'
     ? normalizeEditorPermissions(body.permissions === undefined ? current.editor_permissions : body.permissions)
     : {}
@@ -40,14 +93,20 @@ export default defineEventHandler(async (event) => {
     UPDATE public.profiles
        SET name = $2, role = $3::user_role, is_active = $4,
            editor_permissions = $5::jsonb,
+           business_profile = CASE WHEN $7 <> ''
+             THEN COALESCE(business_profile, '{}'::jsonb) || jsonb_build_object('companyName', $7::text)
+             ELSE business_profile END,
            password_hash = COALESCE($6, password_hash),
            reset_token_hash = CASE WHEN $6 IS NULL THEN reset_token_hash ELSE NULL END,
            reset_token_expires_at = CASE WHEN $6 IS NULL THEN reset_token_expires_at ELSE NULL END,
            updated_at = now()
      WHERE id = $1
      RETURNING id, name, email, login_whatsapp AS whatsapp, role::text AS role,
-               is_active, editor_permissions AS permissions, created_at, last_login_at
-  `, [id, name, role, active, JSON.stringify(permissions), passwordHash])
+               is_active, editor_permissions AS permissions,
+               business_profile->>'companyName' AS company_name,
+               COALESCE((business_profile->>'internalOnly')::boolean, false) AS internal_only,
+               created_at, last_login_at
+  `, [id, internalOnly ? companyName : name, role, active, JSON.stringify(permissions), passwordHash, companyName])
   if (!updated) throw createError({ statusCode: 404, statusMessage: 'Usuário não encontrado.' })
-  return { user: updated }
+  return { user: { ...updated, email: internalOnly ? '' : updated.email } }
 })

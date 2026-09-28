@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const { rows } = await pgQuery<{ id: string; label: string; email: string }>(`
     SELECT p.id,
            COALESCE(NULLIF(BTRIM(p.business_profile->>'companyName'), ''), NULLIF(BTRIM(p.name), ''), p.email) AS label,
-           p.email
+           CASE WHEN COALESCE((p.business_profile->>'internalOnly')::boolean, false) THEN '' ELSE p.email END AS email
       FROM public.profiles p
      WHERE p.role = 'user'
        AND COALESCE((to_jsonb(p)->>'is_active')::boolean, true)
@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
     const selected = await pgQuery<{ id: string; label: string; email: string }>(`
       SELECT p.id,
              COALESCE(NULLIF(BTRIM(p.business_profile->>'companyName'), ''), NULLIF(BTRIM(p.name), ''), p.email) AS label,
-             p.email
+             CASE WHEN COALESCE((p.business_profile->>'internalOnly')::boolean, false) THEN '' ELSE p.email END AS email
         FROM public.profiles p
        WHERE p.id = $1 AND p.role = 'user'
          AND COALESCE((to_jsonb(p)->>'is_active')::boolean, true)

@@ -18,10 +18,13 @@ export default defineEventHandler(async (event) => {
   }
 
   const result = await pgQuery(
-    `SELECT t.id, t.email, t.name, t.slug, t.logo, t.phone, t.whatsapp,
+    `SELECT t.id,
+            CASE WHEN COALESCE((p.business_profile->>'internalOnly')::boolean, false) THEN '' ELSE t.email END AS email,
+            t.name, t.slug, t.logo, t.phone, t.whatsapp,
             t.plan, t.is_active, t.show_on_portal, t.created_at, t.updated_at,
             t.last_login_at
      FROM public.builder_tenants t
+     LEFT JOIN public.profiles p ON p.id = t.id
      ${whereClause}
      ORDER BY t.created_at DESC`,
     values

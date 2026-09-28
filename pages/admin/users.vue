@@ -10,6 +10,8 @@ type ManagedUser = {
   id: string
   name: string
   email: string
+  company_name: string | null
+  internal_only: boolean
   whatsapp: string | null
   role: UserRole
   is_active: boolean
@@ -26,7 +28,9 @@ const saving = ref(false)
 const error = ref('')
 const notice = ref('')
 const editingId = ref<string | null>(null)
-const form = reactive({ name: '', email: '', whatsapp: '', password: '', role: 'user' as UserRole, is_active: true })
+const editingInternalOnly = ref(false)
+const form = reactive({ name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user' as UserRole, hasPlatformAccess: false, is_active: true })
+const requiresLogin = computed(() => form.role !== 'user' || form.hasPlatformAccess)
 const permissions = reactive<Record<AccessArea, Record<AccessAction, boolean>>>(Object.fromEntries(
   ACCESS_AREAS.map(area => [area.id, Object.fromEntries(ACCESS_ACTIONS.map(action => [action.id, false]))])
 ) as Record<AccessArea, Record<AccessAction, boolean>>)
@@ -41,13 +45,15 @@ const clearPermissions = () => {
 }
 const resetForm = () => {
   editingId.value = null
-  Object.assign(form, { name: '', email: '', whatsapp: '', password: '', role: 'user', is_active: true })
+  editingInternalOnly.value = false
+  Object.assign(form, { name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user', hasPlatformAccess: false, is_active: true })
   clearPermissions()
   error.value = ''
 }
 const editUser = (user: ManagedUser) => {
   editingId.value = user.id
-  Object.assign(form, { name: user.name, email: user.email, whatsapp: user.whatsapp || '', password: '', role: user.role, is_active: user.is_active })
+  editingInternalOnly.value = user.internal_only === true
+  Object.assign(form, { name: user.internal_only ? '' : user.name, companyName: user.company_name || '', email: user.email, whatsapp: user.whatsapp || '', password: '', role: user.role, hasPlatformAccess: !user.internal_only, is_active: user.is_active })
   clearPermissions()
   for (const area of ACCESS_AREAS) for (const action of ACCESS_ACTIONS) {
     permissions[area.id][action.id] = user.permissions?.[area.id]?.[action.id] === true
@@ -95,19 +101,23 @@ const save = async () => {
         method: 'PATCH',
         body: {
           name: form.name,
+          companyName: form.companyName,
+          hasPlatformAccess: form.hasPlatformAccess,
+          email: form.email,
+          whatsapp: form.whatsapp,
           role: form.role,
           is_active: form.is_active,
           permissions: selectedPermissions(),
           ...(form.password ? { password: form.password } : {})
         }
       })
-      notice.value = 'Acesso atualizado.'
+      notice.value = editingInternalOnly.value && form.hasPlatformAccess ? 'Acesso à plataforma habilitado.' : 'Cadastro atualizado.'
     } else {
       await $fetch('/api/admin/users', {
         method: 'POST',
         body: { ...form, permissions: selectedPermissions() }
       })
-      notice.value = 'Usuário criado.'
+      notice.value = form.role === 'user' ? 'Empresa criada. Ela já está disponível para os editores.' : 'Usuário criado.'
     }
     resetForm()
     await load()
@@ -135,21 +145,29 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
       <p v-if="notice" class="users-notice" role="status">{{ notice }}</p>
       <p v-if="error" class="users-error" role="alert">{{ error }}</p>
 
-      <section class="users-card" aria-label="Cadastro de usuário">
+      <section class="users-card" aria-label="Cadastro de empresa ou usuário">
         <div class="users-section-heading">
-          <h2>{{ editingId ? 'Editar usuário' : 'Criar usuário' }}</h2>
+          <h2>{{ editingId ? 'Editar usuário' : form.role === 'user' ? 'Criar empresa' : 'Criar usuário' }}</h2>
           <button v-if="editingId" type="button" @click="resetForm">Cancelar edição</button>
         </div>
         <form class="users-form" @submit.prevent="save">
-          <label>Nome <input v-model="form.name" required minlength="2" maxlength="120" autocomplete="off"></label>
-          <label>E-mail <input v-model="form.email" required type="email" :disabled="!!editingId" autocomplete="off"></label>
-          <label>WhatsApp para entrar <input v-model="form.whatsapp" required type="tel" :disabled="!!editingId" placeholder="(64) 99999-9999" autocomplete="off"></label>
-          <label>{{ editingId ? 'Nova senha (opcional)' : 'Senha inicial' }} <input v-model="form.password" type="password" :required="!editingId" minlength="8" autocomplete="new-password"></label>
+          <label v-if="form.role === 'user'">Nome da empresa <input v-model="form.companyName" required minlength="2" maxlength="160" autocomplete="organization" placeholder="Ex.: Mercado Central"></label>
           <label>Nível de acesso
-            <select v-model="form.role">
+            <select v-model="form.role" :disabled="editingInternalOnly">
               <option v-for="role in roles" :key="role.value" :value="role.value">{{ role.label }}</option>
             </select>
           </label>
+          <label v-if="form.role === 'user'" class="users-checkbox">
+            <input v-model="form.hasPlatformAccess" type="checkbox" :disabled="!!editingId && !editingInternalOnly">
+            Permitir acesso à plataforma
+          </label>
+          <p v-if="form.role === 'user' && !requiresLogin" class="users-help">Uso interno: a empresa ficará disponível para administradores e editores, sem login próprio.</p>
+          <template v-if="requiresLogin">
+            <label>{{ form.role === 'user' ? 'Nome do responsável' : 'Nome' }} <input v-model="form.name" required minlength="2" maxlength="120" autocomplete="off"></label>
+            <label>E-mail <input v-model="form.email" required type="email" :disabled="!!editingId && !editingInternalOnly" autocomplete="off"></label>
+            <label>WhatsApp para entrar <input v-model="form.whatsapp" required type="tel" :disabled="!!editingId && !editingInternalOnly" placeholder="(64) 99999-9999" autocomplete="off"></label>
+            <label>{{ editingId && !editingInternalOnly ? 'Nova senha (opcional)' : 'Senha inicial' }} <input v-model="form.password" type="password" :required="!editingId || editingInternalOnly" minlength="8" autocomplete="new-password"></label>
+          </template>
           <label v-if="editingId" class="users-checkbox"><input v-model="form.is_active" type="checkbox" :disabled="editingId === auth.user.value?.id"> Usuário ativo</label>
 
           <fieldset v-if="form.role === 'editor'" class="users-permissions">
@@ -166,17 +184,17 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
             </div>
           </fieldset>
 
-          <button class="users-save" type="submit" :disabled="saving">{{ saving ? 'Salvando…' : editingId ? 'Salvar acesso' : 'Criar usuário' }}</button>
+          <button class="users-save" type="submit" :disabled="saving">{{ saving ? 'Salvando…' : editingId ? 'Salvar acesso' : form.role === 'user' ? 'Criar empresa' : 'Criar usuário' }}</button>
         </form>
       </section>
 
       <section class="users-card" aria-label="Usuários cadastrados">
         <div class="users-section-heading"><h2>Usuários cadastrados</h2><span>{{ users.length }}</span></div>
-        <input v-model="search" class="users-search" type="search" placeholder="Buscar por nome, e-mail ou WhatsApp" aria-label="Buscar usuários">
+        <input v-model="search" class="users-search" type="search" placeholder="Buscar empresa, nome, e-mail ou WhatsApp" aria-label="Buscar usuários">
         <p v-if="loading">Carregando usuários…</p>
         <div v-else class="users-list">
           <article v-for="user in users" :key="user.id" class="users-list-item">
-            <div><strong>{{ user.name || user.email }}</strong><small>{{ user.email }} · {{ user.whatsapp || 'Sem WhatsApp' }}</small></div>
+            <div><strong>{{ user.company_name || user.name || user.email }}</strong><small>{{ user.internal_only ? 'Uso interno · sem acesso à plataforma' : `${user.name} · ${user.email} · ${user.whatsapp || 'Sem WhatsApp'}` }}</small></div>
             <span class="users-role">{{ roleLabel(user.role) }}</span>
             <span :class="user.is_active ? 'users-active' : 'users-inactive'">{{ user.is_active ? 'Ativo' : 'Desativado' }}</span>
             <button v-if="canManage(user)" type="button" @click="editUser(user)">Editar</button>
@@ -199,6 +217,7 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
 .users-section-heading button, .users-list-item button { color: #2563eb; font-weight: 700; }
 .users-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .users-form > label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
+.users-help { grid-column: 1 / -1; margin: -4px 0 0; color: #64748b; font-size: 13px; }
 .users-form input:not([type=checkbox]), .users-form select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; font-size: 14px; }
 .users-form input:disabled { background: #f1f5f9; }
 .users-form .users-checkbox { flex-direction: row; align-items: center; }

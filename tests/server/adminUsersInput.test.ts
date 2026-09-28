@@ -18,4 +18,14 @@ describe('cadastro administrativo de usuários', () => {
     expect(() => parseManagedUserInput({ ...sample, role: 'super_admin' }, 'super_admin')).toThrow()
     expect(parseManagedUserInput({ ...sample, role: 'admin' }, 'super_admin').role).toBe('admin')
   })
+
+  it('exige nome de empresa para criar conta de cliente e preserva o nome normalizado', () => {
+    expect(() => parseManagedUserInput({ role: 'user' }, 'admin')).toThrow()
+    expect(parseManagedUserInput({ role: 'user', companyName: '  Mercado   Central  ' }, 'admin')).toMatchObject({
+      companyName: 'Mercado Central', name: 'Mercado Central', email: '', whatsapp: '', password: '', hasPlatformAccess: false
+    })
+    expect(parseManagedUserInput({ ...sample, role: 'user', companyName: 'Mercado Central', hasPlatformAccess: true }, 'admin').email).toBe('maria@example.com')
+    expect(parseManagedUserInput({ ...sample, role: 'user', companyName: 'Mercado Central' }, 'admin').hasPlatformAccess).toBe(true)
+    expect(() => parseManagedUserInput({ role: 'user', companyName: 'Mercado Central', hasPlatformAccess: true }, 'admin')).toThrow()
+  })
 })
