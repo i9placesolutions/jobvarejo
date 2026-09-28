@@ -1419,8 +1419,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
     <div class="flex-1 w-full h-full max-w-480 mx-auto overflow-hidden flex flex-col relative">
 
       <!-- Top Bar -->
-      <header class="dash-topbar px-5 flex items-center justify-between shrink-0 relative z-30 safe-top">
-        <div class="dash-brand flex items-center gap-2.5">
+      <header class="dash-topbar px-5 flex items-center justify-between gap-4 shrink-0 relative z-30 safe-top">
+        <div class="dash-brand flex items-center gap-2.5 shrink-0">
           <!-- Mobile hamburger -->
           <button
             v-if="dashMobile"
@@ -1439,7 +1439,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </NuxtLink>
         </div>
         <!-- Busca centralizada no desktop -->
-        <div v-if="!dashMobile" class="flex-1 max-w-md mx-6">
+        <div v-if="!dashMobile" class="flex-1 max-w-[520px] mx-2">
           <div class="dash-search relative">
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
@@ -1450,18 +1450,18 @@ const handleDropOnRoot = async (event: DragEvent) => {
             />
           </div>
         </div>
-        <div class="flex items-center gap-1.5">
-          <AccountSwitcher v-if="!dashMobile" />
+        <AccountSwitcher v-if="auth.isStaff.value" />
+        <div class="dash-topbar-actions flex items-center gap-2 shrink-0">
           <button
             ref="notificationButtonRef"
             @click.stop="toggleNotifications"
-            class="notification-button dash-topbar-icon w-11 h-11 sm:w-9 sm:h-9 flex items-center justify-center rounded-2xl sm:rounded-xl transition-all relative active:scale-95"
+            class="notification-button dash-topbar-icon w-10 h-10 flex items-center justify-center rounded-xl transition-all relative active:scale-95"
             aria-label="Notificações"
           >
             <Bell class="w-[18px] h-[18px]" />
             <span v-if="unreadCount > 0" class="dash-notification-dot absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-white"></span>
           </button>
-          <div v-if="auth.user.value" class="dash-user-menu flex items-center gap-2 px-1.5 sm:px-2.5 py-1.5 rounded-2xl sm:rounded-xl cursor-pointer transition-all group">
+          <div v-if="auth.user.value" class="dash-user-menu h-10 flex items-center gap-2 px-2.5 py-1.5 rounded-xl cursor-pointer transition-all group">
             <div class="dash-user-avatar w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden">
               <img v-if="auth.user.value.avatar_url" :src="auth.user.value.avatar_url" :alt="auth.user.value.name || 'Administrador'" class="w-full h-full object-cover" />
               <span v-else>{{ auth.user.value.name?.charAt(0) || 'U' }}</span>
@@ -1524,7 +1524,6 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <div class="px-2 pb-3 mt-auto shrink-0">
               <div class="sidebar-divider mx-1 mb-2"></div>
               <p class="sidebar-section-label px-2 mb-1">Configuração</p>
-              <AccountSwitcher v-if="dashMobile" />
               <NuxtLink to="/admin/users" class="dash-nav-item w-full" @click="showMobileDrawer = false"><User class="w-3.5 h-3.5 shrink-0"/><span class="flex-1 text-left">Usuários e acessos</span></NuxtLink>
               <NuxtLink to="/admin/musicgpt" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Mic2 class="w-3.5 h-3.5 shrink-0 text-violet-400"/><span class="flex-1 text-left">MusicGPT</span></NuxtLink>
               <NuxtLink to="/admin/storage" class="dash-nav-item w-full" @click="showMobileDrawer = false"><HardDrive class="w-3.5 h-3.5 shrink-0 text-slate-400"/><span class="flex-1 text-left">Storage</span></NuxtLink>
@@ -2779,6 +2778,16 @@ input:focus-visible {
 .dash-user-menu:hover .dash-user-name,
 .dash-user-menu:hover .lucide-chevron-down {
   color: #173d70;
+}
+
+@media (max-width: 1180px) {
+  .dash-admin .dash-brand-copy {
+    display: none;
+  }
+
+  .dash-admin .dash-brand-link img {
+    width: 132px;
+  }
 }
 
 .dash-admin .dash-mobile-search {
