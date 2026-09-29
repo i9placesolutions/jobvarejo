@@ -7,10 +7,10 @@ it('posiciona o limite abaixo de um nome com duas linhas e acompanha novas altur
   const limit = node({ name: 'smart_limit', text: 'LIMITE 5 UN POR CLIENTE', top: -110, height: 16 })
   const card = { getObjects: () => [title, limit] }
   positionProductLimitBelowName(card, 320, 360)
-  expect(limit.top).toBeCloseTo(-96 + 4.32)
+  expect(limit.top).toBeCloseTo(-96 + 4.32 + 2.52)
   title.height = 72
   positionProductLimitBelowName(card, 320, 360)
-  expect(limit.top).toBeCloseTo(-84 + 4.32)
+  expect(limit.top).toBeCloseTo(-84 + 4.32 + 2.52)
   const top = limit.top
   positionProductLimitBelowName(card, 320, 360)
   expect(limit.top).toBe(top)
@@ -39,8 +39,25 @@ it('mantém uma faixa opaca contrastante em limites antigos com preenchimento po
   const limit = node({ name: 'smart_limit', text: 'LIMITE 10 UN POR CLIENTE', fill: '#ef4444', styles: { 0: { 0: { fill: '#ef4444', fontWeight: '900' } } } })
   const card = { getObjects: () => [title, limit] }
   positionProductLimitBelowName(card, 320, 360)
-  expect(limit.backgroundColor).toBe('#facc15')
-  expect(limit.fill).toBe('#451a03')
-  expect(limit.styles[0][0]).toEqual({ fontWeight: '900' })
+  expect(limit.backgroundColor).toBe('')
+  expect(limit.fill).toBe('#59430f')
+  expect(limit.styles[0][0]).toEqual({})
   expect(limit.text).toBe('LIMITE 10 UN POR CLIENTE')
+})
+
+it('reutiliza o fundo compacto e o oculta quando o limite é removido', () => {
+  const title = node({ name: 'smart_title', top: -80, height: 35, width: 280 })
+  const limit = node({ name: 'smart_limit', text: 'LIMITE 6 UN POR CLIENTE', height: 16, calcTextWidth: () => 155 })
+  const objects: any[] = [title, limit]
+  const card = { getObjects: () => objects, insertAt: (index: number, value: any) => objects.splice(index, 0, value) }
+  positionProductLimitBelowName(card, 320, 360)
+  const badge = objects.find(o => o.name === 'product_limit_badge')
+  expect(badge.width).toBeLessThan(200)
+  expect(badge.rx).toBeGreaterThan(0)
+  positionProductLimitBelowName(card, 320, 360)
+  expect(objects.filter(o => o.name === 'product_limit_badge')).toHaveLength(1)
+  expect(limit.text).toBe('LIMITE 6 UN POR CLIENTE')
+  limit.text = ''
+  positionProductLimitBelowName(card, 320, 360)
+  expect(badge.visible).toBe(false)
 })

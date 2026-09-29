@@ -35,7 +35,7 @@ export const createPriceTemplateFitting = (deps: PriceTemplateFittingDeps) => {
     const decimal = deps.findByName(all, 'price_decimal_text') || deps.findByName(all, 'priceDecimal') || deps.findByName(all, 'price_decimal')
     const unit = deps.findByName(all, 'price_unit_text') || deps.findByName(all, 'priceUnit') || deps.findByName(all, 'price_unit')
     if (!priceBg || (!richPrice && (!integer || !decimal))) return
-    if (priceGroup.__preserveManualLayout === true && fitAuthoredPriceTier(priceBg, [currency, richPrice, integer, decimal, unit])) return
+    if (priceGroup.__preserveManualLayout === true && fitAuthoredPriceTier(priceBg, [currencyCircle, currency, richPrice, integer, decimal, unit])) return
 
     const anchors =
       deps.readSingleManualPriceAnchors(priceGroup) ||
@@ -349,6 +349,21 @@ export const createPriceTemplateFitting = (deps: PriceTemplateFittingDeps) => {
         left: Number(currencyCircle?.left || 0) + currencyOffsetX,
         top: Number(currencyCircle?.top || 0) + currencyOffsetY
       })
+      currency.initDimensions?.()
+      const circleH = deps.getObjectHorizontalBoundsLocal(currencyCircle)
+      const currencyBoundsH = deps.getObjectHorizontalBoundsLocal(currency)
+      if (circleH && currencyBoundsH && Math.abs(currencyOffsetX) < 1) {
+        const circleCenterX = (circleH.left + circleH.right) / 2
+        const currencyCenterX = (currencyBoundsH.left + currencyBoundsH.right) / 2
+        currency.set?.({ left: Number(currency.left || 0) + (circleCenterX - currencyCenterX) })
+      }
+      const circleV = deps.getObjectVerticalBoundsLocal(currencyCircle)
+      const currencyBoundsV = deps.getObjectVerticalBoundsLocal(currency)
+      if (circleV && currencyBoundsV && Math.abs(currencyOffsetY) < 1) {
+        const circleCenterY = (circleV.top + circleV.bottom) / 2
+        const currencyCenterY = (currencyBoundsV.top + currencyBoundsV.bottom) / 2
+        currency.set?.({ top: Number(currency.top || 0) + (circleCenterY - currencyCenterY) })
+      }
       currency.initDimensions?.()
     }
 

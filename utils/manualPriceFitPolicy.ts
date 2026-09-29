@@ -12,7 +12,7 @@ export const manualPriceTierFits = (background: any, objects: any[]): boolean =>
   }
   const frame = bounds(background)
   if (!frame) return false
-  const visible = objects.filter(object => object && object.visible !== false && Number(object.opacity ?? 1) > 0 && String(object.text ?? '').trim())
+  const visible = objects.filter(object => object && object.visible !== false && Number(object.opacity ?? 1) > 0 && (!('text' in object) || String(object.text ?? '').trim()))
   if (!visible.length) return true
   return visible.every(object => {
     object.initDimensions?.()
@@ -21,7 +21,7 @@ export const manualPriceTierFits = (background: any, objects: any[]): boolean =>
   })
 }
 
-/** Ajuste uniforme do conjunto de textos, sem redistribuir seus componentes. */
+/** Ajuste uniforme do conjunto de elementos autorados, sem redistribuir seus componentes. */
 export const fitAuthoredPriceTier = (background: any, objects: any[]): boolean => {
   if (!background) return false
   if (manualPriceTierFits(background, objects)) return true
@@ -32,7 +32,7 @@ export const fitAuthoredPriceTier = (background: any, objects: any[]): boolean =
     const y = Number(o.top ?? 0) - (o.originY === 'center' ? h / 2 : o.originY === 'bottom' ? h : 0)
     return { x, y, w, h }
   }
-  const shown = objects.filter(o => o && o.visible !== false && Number(o.opacity ?? 1) > 0 && String(o.text ?? '').trim())
+  const shown = objects.filter(o => o && o.visible !== false && Number(o.opacity ?? 1) > 0 && (!('text' in o) || String(o.text ?? '').trim()))
   const frame = bounds(background)
   const boxes = shown.map(bounds)
   if (!boxes.length || [frame, ...boxes].some(b => ![b.x,b.y,b.w,b.h].every(Number.isFinite) || b.w <= 0 || b.h <= 0)) return false

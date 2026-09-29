@@ -23562,14 +23562,21 @@ const constrainSinglePriceTextInsideBackground = (priceGroup: any) => {
     if (Math.abs(dx) > 0.001) moveTargets(fitTargets, dx);
 
     if (currency && hasCurrencyCircle) {
-        const circle = getObjectHorizontalBoundsLocal(currencyCircle);
-        const currencyBounds = getObjectHorizontalBoundsLocal(currency);
-        if (circle && currencyBounds) {
-            const circleCenter = (circle.left + circle.right) / 2;
-            const currencyCenter = (currencyBounds.left + currencyBounds.right) / 2;
-            currency.set?.({ left: Number(currency.left || 0) + (circleCenter - currencyCenter) });
-            currency.setCoords?.();
+        const circleH = getObjectHorizontalBoundsLocal(currencyCircle);
+        const currencyBoundsH = getObjectHorizontalBoundsLocal(currency);
+        if (circleH && currencyBoundsH) {
+            const circleCenterX = (circleH.left + circleH.right) / 2;
+            const currencyCenterX = (currencyBoundsH.left + currencyBoundsH.right) / 2;
+            currency.set?.({ left: Number(currency.left || 0) + (circleCenterX - currencyCenterX) });
         }
+        const circleV = getObjectVerticalBoundsLocal(currencyCircle);
+        const currencyBoundsV = getObjectVerticalBoundsLocal(currency);
+        if (circleV && currencyBoundsV) {
+            const circleCenterY = (circleV.top + circleV.bottom) / 2;
+            const currencyCenterY = (currencyBoundsV.top + currencyBoundsV.bottom) / 2;
+            currency.set?.({ top: Number(currency.top || 0) + (circleCenterY - currencyCenterY) });
+        }
+        currency.setCoords?.();
     }
 
     priceGroup.dirty = true;
