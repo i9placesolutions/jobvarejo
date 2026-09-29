@@ -292,34 +292,91 @@ export function drawRedesignCards(cards: ObjectNode[], overlay: CanvasRenderingC
     const priceBox = place(data.price)
     const priceTexts = leaves(data.price).filter(isText)
     const main = priceTexts.find(o => o.name === 'price_value_text')
-    // Etiquetas com condições extras continuam inteiras; nunca descartar preço
-    // de clube, atacado, unidade ou texto customizado.
+    // Renderização das etiquetas de preço (Splash de Varejo de Alto Impacto)
     if (priceTexts.every(o => ['price_value_text','price_currency_text','price_unit_text'].includes(o.name)) && main) {
-      round(overlay, { ...priceBox, top: priceBox.top + pad * .35 }, palette.priceDepth, pad)
-      round(overlay, priceBox, palette.priceBackground, pad, palette.priceStroke)
+      // 1. Sombra projetada e profundidade 3D do splash
+      overlay.save()
+      overlay.shadowColor = 'rgba(0, 0, 0, 0.45)'
+      overlay.shadowBlur = Math.max(6, pad * 0.9)
+      overlay.shadowOffsetY = pad * 0.45
+
+      // Base com extrusão/profundidade
+      const depthOffset = Math.max(3, pad * 0.3)
+      round(overlay, { ...priceBox, top: priceBox.top + depthOffset }, palette.priceDepth, Math.max(8, pad * 0.7))
+
+      // 2. Fundo do preço com gradiente luminoso
+      const priceGrad = overlay.createLinearGradient(priceBox.left, priceBox.top, priceBox.left, priceBox.top + priceBox.height)
+      const isDarkPriceBg = luminance(palette.priceBackground) < 0.35
+      if (isDarkPriceBg) {
+        priceGrad.addColorStop(0, tint(palette.priceBackground, 0.18))
+        priceGrad.addColorStop(0.5, palette.priceBackground)
+        priceGrad.addColorStop(1, shade(palette.priceBackground, 0.35))
+      } else {
+        priceGrad.addColorStop(0, tint(palette.priceBackground, 0.25))
+        priceGrad.addColorStop(1, shade(palette.priceBackground, 0.12))
+      }
+      round(overlay, priceBox, priceGrad, Math.max(8, pad * 0.7), palette.priceStroke)
+      overlay.restore()
+
+      // Borda interna de realce brilhante (highlight)
+      overlay.save()
+      overlay.strokeStyle = 'rgba(255, 255, 255, 0.35)'
+      overlay.lineWidth = Math.max(1.5, pad * 0.08)
+      overlay.beginPath()
+      overlay.roundRect(priceBox.left + 1.5, priceBox.top + 1.5, priceBox.width - 3, priceBox.height - 3, Math.max(6, pad * 0.6))
+      overlay.stroke()
+      overlay.restore()
+
       const currency = priceTexts.find(o => o.name === 'price_currency_text')
       const unit = priceTexts.find(o => o.name === 'price_unit_text')
       if (currency) {
-        const badge = { left: priceBox.left + priceBox.width * .045, top: priceBox.top + priceBox.height * .31, width: priceBox.width * .18, height: priceBox.height * .4 }
-        round(overlay, badge, palette.priceCurrencyBackground, Math.min(badge.width, badge.height) / 2)
+        const badge = { left: priceBox.left + priceBox.width * .04, top: priceBox.top + priceBox.height * .24, width: priceBox.width * .20, height: priceBox.height * .50 }
+        const badgeGrad = overlay.createLinearGradient(badge.left, badge.top, badge.left, badge.top + badge.height)
+        badgeGrad.addColorStop(0, tint(palette.priceCurrencyBackground, 0.25))
+        badgeGrad.addColorStop(1, shade(palette.priceCurrencyBackground, 0.2))
+        round(overlay, badge, badgeGrad, Math.min(badge.width, badge.height) / 2, 'rgba(255, 255, 255, 0.5)')
         text(overlay, String(currency.text), badge, badge.height * .58, palette.priceCurrencyText)
       }
-      const valueBox = { left: priceBox.left + priceBox.width * .24, top: priceBox.top, width: priceBox.width * .7, height: priceBox.height * .78 }
+      const valueBox = { left: priceBox.left + priceBox.width * .25, top: priceBox.top, width: priceBox.width * .71, height: priceBox.height * .80 }
       const parts = /^(\d+(?:\.\d{3})*),(\d{2})$/.exec(String(main.text))
       if (parts) {
-        let size = valueBox.height * 1.32
-        const measure = (value: string, fontSize: number) => { overlay.font = `800 ${fontSize}px "Barlow Condensed", Arial, sans-serif`; return overlay.measureText(value).width }
-        while (measure(parts[1]!, size) + measure(',' + parts[2]!, size * .5) > valueBox.width && size > 4) size -= .5
-        const largeWidth = measure(parts[1]!, size), smallWidth = measure(',' + parts[2]!, size * .5)
+        let size = valueBox.height * 1.35
+        const measure = (value: string, fontSize: number) => { overlay.font = `900 ${fontSize}px "Barlow Condensed", Arial, sans-serif`; return overlay.measureText(value).width }
+        while (measure(parts[1]!, size) + measure(',' + parts[2]!, size * .52) > valueBox.width && size > 4) size -= .5
+        const largeWidth = measure(parts[1]!, size), smallWidth = measure(',' + parts[2]!, size * .52)
         const x = valueBox.left + (valueBox.width - largeWidth - smallWidth) / 2
+        
+        // Sombra suave no texto do valor para garantir contraste de varejo
+        overlay.save()
+        overlay.shadowColor = 'rgba(0,0,0,0.5)'
+        overlay.shadowBlur = 3
+        overlay.shadowOffsetY = 1.5
         overlay.fillStyle = palette.priceText; overlay.textAlign = 'left'; overlay.textBaseline = 'middle'
-        overlay.font = `800 ${size}px "Barlow Condensed", Arial, sans-serif`
+        overlay.font = `900 ${size}px "Barlow Condensed", Arial, sans-serif`
         overlay.fillText(parts[1]!, x, valueBox.top + valueBox.height * .58)
-        overlay.font = `800 ${size * .5}px "Barlow Condensed", Arial, sans-serif`
-        overlay.fillText(',' + parts[2]!, x + largeWidth, valueBox.top + valueBox.height * .4)
-      } else text(overlay, String(main.text), valueBox, priceBox.height * .78, palette.priceText)
-      if (unit) text(overlay, String(unit.text), { left: priceBox.left + priceBox.width * .55, top: priceBox.top + priceBox.height * .76, width: priceBox.width * .37, height: priceBox.height * .18 }, priceBox.height * .18, palette.priceUnitText)
-    } else contain(overlay, sprite(data.price), priceBox)
+        overlay.font = `900 ${size * .52}px "Barlow Condensed", Arial, sans-serif`
+        overlay.fillText(',' + parts[2]!, x + largeWidth, valueBox.top + valueBox.height * .40)
+        overlay.restore()
+      } else {
+        overlay.save()
+        overlay.shadowColor = 'rgba(0,0,0,0.5)'
+        overlay.shadowBlur = 3
+        overlay.shadowOffsetY = 1.5
+        text(overlay, String(main.text), valueBox, priceBox.height * .78, palette.priceText)
+        overlay.restore()
+      }
+      if (unit) {
+        text(overlay, String(unit.text), { left: priceBox.left + priceBox.width * .50, top: priceBox.top + priceBox.height * .75, width: priceBox.width * .44, height: priceBox.height * .20 }, priceBox.height * .20, palette.priceUnitText)
+      }
+    } else {
+      // Para etiquetas complexas/compostas, aplica sombra projetada e borda de destaque
+      overlay.save()
+      overlay.shadowColor = 'rgba(0, 0, 0, 0.45)'
+      overlay.shadowBlur = Math.max(6, pad * 0.8)
+      overlay.shadowOffsetY = pad * 0.35
+      contain(overlay, sprite(data.price), priceBox)
+      overlay.restore()
+    }
   })
   return { slots, area, productCount: cards.length }
 }
