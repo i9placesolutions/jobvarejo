@@ -120,7 +120,14 @@ function keydown(event: KeyboardEvent) {
   if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.value)) { event.preventDefault(); last.focus() }
   else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.value)) { event.preventDefault(); first.focus() }
 }
-watch(pageId, () => { localPreview.value = null; receiptId.value = matching.value.find(r => r.pageId === pageId.value)?.id || ''; zoom.value = 100 })
+watch(pageId, (newPageId) => {
+  localPreview.value = null
+  receiptId.value = matching.value.find(r => r.pageId === newPageId)?.id || ''
+  zoom.value = 100
+  if (ready.value && !receiptId.value && newPageId) {
+    void previewLayout()
+  }
+})
 watch(imageView, async value => { if (value) { await nextTick(); dialog.value?.querySelector<HTMLElement>('.image-viewer button')?.focus() } })
 watch(historyOpen, async value => { if (value) { await nextTick(); dialog.value?.querySelector<HTMLElement>('.history-viewer button')?.focus() } })
 watch(() => props.pages.map(p => p.id), ids => {
@@ -166,7 +173,12 @@ async function refresh() {
     ready.value = true
     if (!receiptId.value) {
       const saved = readyResults.value.find(r => r.pageId === pageId.value) || readyResults.value[0]
-      if (saved) await showResult(saved)
+      if (saved) {
+        await showResult(saved)
+      } else if (pageId.value) {
+        // Conferência automática ao abrir caso ainda não haja resultado salvo
+        void previewLayout()
+      }
     }
     for (const r of receipts.value.filter(r => r.status === 'processing' || r.status === 'uncertain')) {
       if (disposed) break
