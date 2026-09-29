@@ -2327,11 +2327,14 @@ const syncFrameClips = (
     if (!includeSpatialChildren) {
         ensureFrameRuntimeCache();
         const directChildren = cachedFrameDirectChildrenById?.get(frameId) || [];
-        children = directChildren.filter((child: any) => child && child !== frame && !child.isFrame);
+        children = directChildren.filter((child: any) => child && child !== frame && !child.isFrame && !child.isSmartObject && !child.isProductCard && !isProductCardContainer(child));
     } else {
         // Full scan path is kept for structural moments (load/drop) where we may need to
         // auto-bind unparented objects that ended up physically inside the frame.
-        const allObjects = canvas.value.getObjects().filter((o: any) => o !== frame && !o.isFrame);
+        // Product cards and smart objects should NEVER be bound or clipped by frames (they have their own zone lifecycle).
+        const allObjects = canvas.value.getObjects().filter((o: any) =>
+            o !== frame && !o.isFrame && !o.isSmartObject && !o.isProductCard && !isProductCardContainer(o)
+        );
         const frameBounds = frame.getBoundingRect ? frame.getBoundingRect() : null;
 
         children = allObjects.filter((o: any) => {
@@ -4221,8 +4224,10 @@ import {
     FLYER_TEMPLATE_FORMATS,
     buildFlyerTemplateConfigFromPages,
     getFlyerTemplateFormat,
+    inferFormatIdFromPage,
     resolveFlyerTemplateModelIdForPage,
-    type FlyerTemplateFormatId
+    type FlyerTemplateFormatId,
+    type FlyerTemplateSummary
 } from '~/utils/flyerTemplateApi'
 import {
     MES_DO_CONSUMIDOR_ASSETS,
@@ -4417,6 +4422,10 @@ const editorProps = defineProps<{
     quickMode?: boolean
 }>()
 const isQuickMode = computed(() => editorProps.quickMode === true)
+const QuickModeThemeSwitchModal = defineAsyncComponent(() => import('./QuickModeThemeSwitchModal.vue'))
+const showQuickThemeSwitchModal = ref(false)
+const isSwitchingTheme = ref(false)
+
 const isQuickModeLockedObject = (obj: any): boolean => {
     if (!isQuickMode.value || !obj) return false
     if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
@@ -5805,6 +5814,179 @@ const resizeQuickModePage = (formatId: string) => {
             isQuickModePageResizeInFlight.value = false
         }
     })()
+}
+
+/**
+ * Troca completa de tema no Editor Rápido ("ao trocar substituir tudo").
+ * Substitui o layout, a arte visual e os blueprints pelo novo tema selecionado,
+ * preservando integralmente os produtos adicionados, preços, imagens e dados da loja.
+ */
+const handleQuickModeThemeSwitch = async (targetTheme: FlyerTemplateSummary) => {
+    if (!targetTheme?.id || isSwitchingTheme.value) return
+    isSwitchingTheme.value = true
+    cancelQuickTemplateMaintenance()
+
+    try {
+        const templateId = String(targetTheme.id).trim()
+        const headers = await getApiAuthHeaders()
+        const fullProject = await $fetch<any>('/api/projects', {
+            headers,
+            query: { id: templateId, library: '1' }
+        })
+
+        const sourcePages = getStoredTemplatePages(fullProject?.canvas_data)
+        if (!sourcePages.length) {
+            throw new Error('O tema selecionado não possui páginas disponíveis.')
+        }
+
+        const newTemplateConfig = buildFlyerTemplateConfigFromPages(
+            fullProject?.template_config,
+            sourcePages,
+            templateId
+        )
+
+        if (!Array.isArray(newTemplateConfig.pageBlueprints) || !newTemplateConfig.pageBlueprints.length) {
+            throw new Error('O tema selecionado não possui blueprints válidos.')
+        }
+
+        // Salvar snapshot prévio para garantir histórico e persistência
+        await Promise.resolve(saveCurrentState({
+            allowEmptyOverwrite: true,
+            reason: 'quick-theme-switch-before',
+            source: 'user',
+            skipCoalesce: true,
+            skipIfUnchanged: false
+        }))
+        await flushPersistenceNow('quick-theme-switch:before', { force: true })
+
+        // 1. Coleta dados dinâmicos da página atual
+        const dynamicContent = captureFormatDynamicContent(canvas.value?.getObjects?.() || [])
+        const products = collectQuickModeProductsForFormatResize()
+        const validity = {
+            startDate: quickValidityStartDate.value,
+            endDate: quickValidityEndDate.value,
+            mode: quickValidityMode.value,
+            whileStocks: quickValidityWhileStocks.value,
+            show: quickShowValidity.value,
+            dateFormat: quickValidityDateFormat.value,
+            scope: { ...quickOfferScope.value }
+        }
+        const profileForTheme = getQuickBusinessProfilePayload(
+            Object.keys(quickBusinessProfile.value || {}).length
+                ? quickBusinessProfile.value
+                : await $fetch<any>('/api/profile', { headers: await getApiAuthHeaders() })
+        )
+
+        // 2. Determinar o modelo e formato alvo
+        const active = activePage.value
+        const currentFormat = active ? getQuickPageFormat(active) : null
+        const targetFormatId = (
+            currentFormat && newTemplateConfig.formatIds?.includes(currentFormat.id as FlyerTemplateFormatId)
+                ? currentFormat.id
+                : newTemplateConfig.defaultFormatId
+        ) as FlyerTemplateFormatId
+        const targetFormat = getFlyerTemplateFormat(targetFormatId)
+
+        const defaultModel = newTemplateConfig.models?.find(m => m.id === newTemplateConfig.defaultModelId) || newTemplateConfig.models?.[0]
+        const targetModelId = String(defaultModel?.id || newTemplateConfig.defaultModelId || 'model-1').trim()
+        const targetModelName = String(defaultModel?.name || 'Modelo 1').trim()
+
+        // Buscar blueprint correspondente no novo tema
+        let targetBlueprint = newTemplateConfig.pageBlueprints.find(b => (
+            String(b.templateModelId || '').trim() === targetModelId &&
+            b.templateFormatId === targetFormat.id
+        ))
+        if (!targetBlueprint) {
+            targetBlueprint = newTemplateConfig.pageBlueprints.find(b => b.templateFormatId === targetFormat.id)
+        }
+        if (!targetBlueprint) {
+            targetBlueprint = newTemplateConfig.pageBlueprints[0]
+        }
+        if (!targetBlueprint) {
+            throw new Error('Não foi encontrada uma composição correspondente no novo tema.')
+        }
+
+        // 3. Atualizar configuração de template do projeto
+        project.templateConfig = newTemplateConfig
+
+        const nextWidth = Math.max(320, Math.round(targetBlueprint.width || targetFormat.width))
+        const nextHeight = Math.max(320, Math.round(targetBlueprint.height || targetFormat.height))
+
+        // 4. Substituir a página ativa pelo blueprint do novo tema
+        const pageToReplaceId = active?.id || project.pages[0]?.id
+        if (!pageToReplaceId) throw new Error('Nenhuma página ativa para substituir.')
+
+        const replacedPage = await replacePageFromTemplateSource(pageToReplaceId, {
+            ...targetBlueprint,
+            width: nextWidth,
+            height: nextHeight
+        }, {
+            name: `${targetModelName} · ${targetBlueprint.templateFormatLabel || targetFormat.label}`,
+            metadata: {
+                templateModelId: targetModelId,
+                templateModelName: targetModelName,
+                templateFormatId: targetBlueprint.templateFormatId || targetFormat.id,
+                templateFormatLabel: targetBlueprint.templateFormatLabel || targetFormat.label,
+                templateThemeId: targetBlueprint.templateThemeId || targetTheme.id,
+                templateThemeName: targetBlueprint.templateThemeName || targetTheme.name,
+                templateCompositionManaged: true,
+                templateSourcePageId: String(targetBlueprint.sourcePageId || '').trim() || undefined
+            }
+        })
+
+        if (!replacedPage) {
+            throw new Error('Não foi possível carregar a arte do novo tema.')
+        }
+
+        // 5. Ao "substituir tudo", se existiam outras páginas antigas do tema anterior,
+        // remove as outras páginas para deixar a composição limpa e focada no novo tema.
+        if (project.pages && project.pages.length > 1) {
+            const pagesToKeep = project.pages.filter((p: any) => String(p?.id || '') === String(replacedPage.id || ''))
+            if (pagesToKeep.length > 0) {
+                project.pages = pagesToKeep
+                project.activePageIndex = 0
+            }
+        }
+
+        const previousSession = activePageLoadSessionId
+        pageReloadToken.value += 1
+        if (!await waitForTemplatePageReady(replacedPage.id, previousSession)) {
+            throw new Error('A composição do novo tema não terminou de carregar.')
+        }
+
+        // 6. Preencher produtos preservados na nova grade de produtos do tema
+        if (products.length) {
+            const productsApplied = await rebuildQuickModeProductsForSelectedFormat(products)
+            if (!productsApplied) {
+                console.warn('[quick-editor] Nova arte não possui zona compatível ou não reconstruiu produtos automaticamente.')
+            }
+        }
+
+        // 7. Reaplicar dynamic business bindings e validade
+        restoreFormatDynamicContent(canvas.value?.getObjects?.() || [], dynamicContent)
+        await applyQuickBusinessProfileBindings(profileForTheme, { persist: false })
+        handleQuickModeValidityUpdate(validity, { persist: false })
+        alignQuickModeFrameToPage(replacedPage)
+
+        // 8. Salvar e persistir
+        await Promise.resolve(saveCurrentState({
+            allowEmptyOverwrite: true,
+            reason: 'quick-theme-switch-complete',
+            source: 'user',
+            skipCoalesce: true,
+            skipIfUnchanged: false
+        }))
+        await ensureQuickPageThumbnail(replacedPage, true)
+        await flushPersistenceNow('quick-theme-switch-complete', { force: true })
+
+        showQuickThemeSwitchModal.value = false
+        notifyEditorInfo(`Tema "${targetTheme.name}" aplicado com sucesso! Tudo foi substituído e seus produtos foram mantidos.`)
+    } catch (err: any) {
+        console.error('[quick-editor] Erro ao trocar tema:', err)
+        notifyEditorError(err?.message || 'Falha ao trocar o tema.')
+    } finally {
+        isSwitchingTheme.value = false
+    }
 }
 
 let pageSwitchRequestId = 0
@@ -30325,6 +30507,7 @@ const handleAutoOfferLayout = async () => {
             @select-page="switchToPage"
             @request-delete-page="requestDeleteQuickModePage"
             @use-template-model="useQuickModeTemplateModel"
+            @switch-theme="showQuickThemeSwitchModal = true"
           />
 
           <!-- Canvas Stage -->
@@ -30338,10 +30521,11 @@ const handleAutoOfferLayout = async () => {
                 :format-label="quickModePageToolbarFormat.label"
                 :width="quickModePageToolbarDimensions.width"
                 :height="quickModePageToolbarDimensions.height"
-                :busy="isParsingProducts || isProcessing || isQuickModePageResizeInFlight"
+                :busy="isParsingProducts || isProcessing || isQuickModePageResizeInFlight || isSwitchingTheme"
                 @duplicate-page="duplicateQuickModePage"
                 @add-page="addQuickModePage"
                 @resize-page="resizeQuickModePage"
+                @switch-theme="showQuickThemeSwitchModal = true"
               />
 
               <QuickModeCanvasControls
@@ -31083,6 +31267,16 @@ const handleAutoOfferLayout = async () => {
         :restoring-key="restoringHistoryKey"
         @close="showHistoryModal = false"
         @restore="restoreFromHistoryItem"
+      />
+
+      <!-- Quick Mode Theme Switch Modal -->
+      <QuickModeThemeSwitchModal
+        v-if="isQuickMode && showQuickThemeSwitchModal"
+        :open="showQuickThemeSwitchModal"
+        :current-theme-id="String(project.templateConfig?.sourceTemplateId || '').trim()"
+        :busy="isSwitchingTheme || isProcessing || isParsingProducts"
+        @close="showQuickThemeSwitchModal = false"
+        @select-template="handleQuickModeThemeSwitch"
       />
 
   </div>

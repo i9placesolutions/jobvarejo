@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ClipboardPaste,
   Layers,
+  Palette,
   Trash2,
   Image as CanvasIcon,
   ShoppingBasket,
@@ -171,6 +172,7 @@ const emit = defineEmits<{
   (event: 'select-page', pageId: string): void
   (event: 'request-delete-page', pageId: string): void
   (event: 'use-template-model', modelId: string): void
+  (event: 'switch-theme'): void
 }>()
 
 const isProductAreaSwatchSelected = (currentColor: string | null, swatch: string) => (
@@ -1287,8 +1289,21 @@ const useTemplateModel = (modelId: string) => {
     <aside v-if="quickPages.length || templateModels.length" class="quick-mode-pages-rail" aria-label="Modelos e páginas do encarte">
       <section v-if="templateModels.length" class="quick-mode-models" aria-label="Modelos disponíveis">
         <div class="quick-mode-models__header">
-          <span>Modelos</span>
-          <small>Reutilizáveis</small>
+          <div>
+            <span>Modelos</span>
+            <small>Reutilizáveis</small>
+          </div>
+          <button
+            type="button"
+            class="quick-mode-theme-switch-btn"
+            :disabled="props.busy"
+            title="Trocar o tema do encarte e substituir tudo preservando produtos"
+            aria-label="Trocar tema"
+            @click="emit('switch-theme')"
+          >
+            <Palette :size="12" aria-hidden="true" />
+            <span>Trocar tema</span>
+          </button>
         </div>
         <div class="quick-mode-models__list">
           <button
@@ -1427,10 +1442,16 @@ const useTemplateModel = (modelId: string) => {
 
 .quick-mode-models__header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 6px;
   padding: 0 4px;
+}
+
+.quick-mode-models__header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
 }
 
 .quick-mode-models__header span {
@@ -1445,6 +1466,32 @@ const useTemplateModel = (modelId: string) => {
 .quick-mode-models__header small {
   color: rgba(255, 255, 255, 0.42);
   font-size: 8px;
+}
+
+.quick-mode-theme-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(185, 208, 255, 0.22);
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #c7dcff;
+  padding: 3px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.quick-mode-theme-switch-btn:hover:not(:disabled) {
+  border-color: rgba(185, 208, 255, 0.5);
+  background: rgba(59, 130, 246, 0.25);
+  color: #fff;
+}
+
+.quick-mode-theme-switch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .quick-mode-models__list {

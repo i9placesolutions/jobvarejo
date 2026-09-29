@@ -100,7 +100,7 @@ export const isValidClipPath = (clipPath: any): boolean => {
         return false
     }
 
-    if (typeof clipPath.render !== 'function') return false
+    if (typeof clipPath.render !== 'function' || typeof clipPath.toObject !== 'function') return false
 
     if (clipPath.clipPath && !isValidClipPath(clipPath.clipPath)) {
         return false

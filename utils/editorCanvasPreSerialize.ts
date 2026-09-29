@@ -30,19 +30,51 @@ export const prepareCanvasForSerialization = (
   const allCanvasObjects: any[] = []
   const visited = new Set<any>()
   const visit = (obj: any) => {
-    if (!obj || visited.has(obj) || !opts.isValidFabricCanvasObject(obj)) return
+    if (!obj || visited.has(obj)) return
     visited.add(obj)
-    allCanvasObjects.push(obj)
+
+    // Se o objeto tem um clipPath com toObject inválido, conserta imediatamente
+    if (obj.clipPath && (typeof obj.clipPath.toObject !== 'function' || !opts.isValidFabricCanvasObject(obj.clipPath))) {
+      try {
+        if (typeof obj.set === 'function') obj.set('clipPath', null);
+        else obj.clipPath = null;
+      } catch {
+        obj.clipPath = null;
+      }
+      if (obj._frameClipOwner) {
+        try { delete obj._frameClipOwner; } catch { /* ignore */ }
+      }
+    }
+
+    if (opts.isValidFabricCanvasObject(obj)) {
+      allCanvasObjects.push(obj)
+    }
 
     if (typeof obj.getObjects === 'function') {
       const children = obj.getObjects() || []
       children.forEach((child: any) => visit(child))
+    } else if (Array.isArray(obj._objects)) {
+      obj._objects.forEach((child: any) => visit(child))
     }
   }
 
   topLevelCanvasObjects.forEach((obj: any) => visit(obj))
 
   allCanvasObjects.forEach((obj: any) => {
+    // Sanitização preventiva: qualquer clipPath que não tenha toObject ou não seja válido Fabric
+    // deve ser removido antes de entrar no toJSON() para evitar erro de serialização.
+    if (obj?.clipPath && (typeof obj.clipPath.toObject !== 'function' || !opts.isValidFabricCanvasObject(obj.clipPath))) {
+      try {
+        if (typeof obj.set === 'function') obj.set('clipPath', null);
+        else obj.clipPath = null;
+      } catch {
+        obj.clipPath = null;
+      }
+      if (obj._frameClipOwner) {
+        try { delete obj._frameClipOwner; } catch { /* ignore */ }
+      }
+    }
+
     opts.ensurePersistentContentFlags(obj)
     opts.ensureObjectPersistentId(obj)
 

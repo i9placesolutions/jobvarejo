@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ChevronDown, Copy, Maximize2, Plus } from 'lucide-vue-next'
+import { ChevronDown, Copy, Maximize2, Palette, Plus } from 'lucide-vue-next'
 import { FLYER_TEMPLATE_FORMATS, type FlyerTemplateFormatId } from '~/utils/flyerTemplateApi'
 
 const mobileOptionsOpen = ref(false)
@@ -19,6 +19,7 @@ const emit = defineEmits<{
   (event: 'duplicate-page', pageId: string): void
   (event: 'add-page', formatId: FlyerTemplateFormatId): void
   (event: 'resize-page', formatId: FlyerTemplateFormatId): void
+  (event: 'switch-theme'): void
 }>()
 
 const addMenuOpen = ref(false)
@@ -146,6 +147,18 @@ watch(() => props.currentPageId, closeMenus)
           </button>
         </div>
       </div>
+
+      <button
+        type="button"
+        class="quick-mode-page-toolbar__action"
+        :disabled="props.busy"
+        aria-label="Trocar tema do encarte"
+        title="Trocar tema do encarte e substituir tudo preservando produtos"
+        @click="closeMenus(); emit('switch-theme')"
+      >
+        <Palette class="h-4 w-4" aria-hidden="true" />
+        <span>Trocar tema</span>
+      </button>
     </div>
   </div>
 </template>

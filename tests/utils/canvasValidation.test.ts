@@ -93,6 +93,7 @@ describe('isValidClipPath', () => {
   const validClip = (overrides: any = {}) => ({
     type: 'rect',
     render: () => {},
+    toObject: () => ({}),
     ...overrides
   })
 
@@ -108,11 +109,15 @@ describe('isValidClipPath', () => {
   })
 
   it('rejeita objeto sem type', () => {
-    expect(isValidClipPath({ render: () => {} })).toBe(false)
+    expect(isValidClipPath({ render: () => {}, toObject: () => ({}) })).toBe(false)
   })
 
   it('rejeita objeto sem render', () => {
-    expect(isValidClipPath({ type: 'rect' })).toBe(false)
+    expect(isValidClipPath({ type: 'rect', toObject: () => ({}) })).toBe(false)
+  })
+
+  it('rejeita objeto sem toObject', () => {
+    expect(isValidClipPath({ type: 'rect', render: () => {} })).toBe(false)
   })
 
   it('aceita rect simples valido', () => {

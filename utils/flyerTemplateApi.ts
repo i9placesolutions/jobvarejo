@@ -118,7 +118,7 @@ const getStoredProjectPages = (canvasData: any): any[] => {
   return []
 }
 
-const inferFormatIdFromPage = (page: any): FlyerTemplateFormatId => {
+export const inferFormatIdFromPage = (page: any): FlyerTemplateFormatId => {
   const width = Number(page?.width || 0)
   const height = Number(page?.height || 0)
   // O tamanho salvo da página é a fonte de verdade para a biblioteca do
