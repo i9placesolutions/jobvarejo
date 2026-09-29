@@ -873,7 +873,6 @@ const useTemplateModel = (modelId: string) => {
     </nav>
     <aside class="quick-mode-sidebar" :aria-label="mobileSection === 'tools' ? 'Ajustes da edição rápida' : 'Produtos da edição rápida'">
     <div class="quick-mode-sidebar__content">
-      <button v-if="mobileSection === 'tools'" type="button" class="w-full rounded-lg bg-amber-400 px-3 py-3 text-sm font-bold text-zinc-950" :disabled="props.busy" @click="emit('enhance')">Melhorar todas as páginas com IA</button>
       <p v-if="mobileSection === 'tools' && !productsReviewed" class="quick-mobile-import-copy">Confira os produtos para liberar a grade, as cores e as outras opções.</p>
       <div class="quick-mode-sidebar__topbar">
         <div class="quick-mode-sidebar__title-wrap">
