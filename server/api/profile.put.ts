@@ -19,6 +19,13 @@ export default defineEventHandler(async (event) => {
   const incoming = body?.business_profile ?? body ?? {}
   const businessProfile = mergeBusinessProfile(current?.business_profile, incoming)
 
+  const incomingModules = Array.isArray(body?.selected_modules)
+    ? JSON.stringify(body.selected_modules.filter((m: any) => typeof m === 'string'))
+    : null
+  const onboardingCompleted = body?.onboarding_completed !== undefined
+    ? Boolean(body.onboarding_completed)
+    : null
+
   const row = await pgOneOrNull<any>(
     `update public.profiles
         set business_profile = ($1::jsonb - 'logoPreference' - 'internalOnly') ||
@@ -28,12 +35,18 @@ export default defineEventHandler(async (event) => {
             CASE WHEN business_profile ? 'internalOnly'
               THEN jsonb_build_object('internalOnly', business_profile->'internalOnly')
               ELSE '{}'::jsonb END,
+            selected_modules = coalesce($3::jsonb, selected_modules),
+            onboarding_completed = coalesce($4::boolean, onboarding_completed),
             updated_at = timezone('utc', now())
       where id = $2
       returning id,
                 CASE WHEN COALESCE((business_profile->>'internalOnly')::boolean, false) THEN '' ELSE email END AS email,
-                name, avatar_url, role, created_at, updated_at, business_profile`,
-    [JSON.stringify(businessProfile), user.id]
+                name, avatar_url, role, created_at, updated_at, business_profile,
+                coalesce(selected_modules, '["encartes", "cartazes", "radio"]'::jsonb) as selected_modules,
+                trial_starts_at, trial_ends_at,
+                coalesce(subscription_status, 'trial') as subscription_status,
+                coalesce(onboarding_completed, false) as onboarding_completed`,
+    [JSON.stringify(businessProfile), user.id, incomingModules, onboardingCompleted]
   )
 
   if (!row) {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const preferredLogoSource = useLogoImageSource()
-import { ArrowLeft, Check, CreditCard, FileUp, Loader2, MapPin, MessageCircle, Plus, Save, Search, Store, Trash2, X } from 'lucide-vue-next'
+import { ArrowLeft, Check, CreditCard, FileUp, Loader2, MapPin, MessageCircle, Plus, Save, Search, Store, Trash2, X, Radio, LayoutTemplate, WandSparkles, Sparkles } from 'lucide-vue-next'
 import {
   BUSINESS_PAYMENT_OPTIONS,
   DEFAULT_BUSINESS_PAYMENT_METHODS,
@@ -30,6 +30,9 @@ const successMessage = ref('')
 const logoInput = ref<HTMLInputElement | null>(null)
 const paymentCardSearch = ref('')
 const onboardingAddress = ref('')
+const onboardingWhatsApp = ref('')
+const onboardingCompanyName = ref('')
+const selectedModules = ref<string[]>(['encartes', 'cartazes', 'radio'])
 let entrySequence = 0
 
 const returnTarget = computed<string>(() => {
@@ -115,6 +118,11 @@ const loadProfile = async () => {
     const normalized = normalizeBusinessProfile(profile.value?.business_profile)
     Object.assign(form, normalized)
     onboardingAddress.value = normalized.address
+    onboardingWhatsApp.value = normalized.whatsapp
+    onboardingCompanyName.value = form.companyName || String(profile.value?.name || '')
+    if (Array.isArray(profile.value?.selected_modules) && profile.value.selected_modules.length) {
+      selectedModules.value = profile.value.selected_modules
+    }
     if (!form.companyName) form.companyName = String(profile.value?.name || '')
     if (!Array.isArray(form.paymentMethods)) form.paymentMethods = [...DEFAULT_BUSINESS_PAYMENT_METHODS]
     // The empty draft makes it obvious that another number/endereço can be
@@ -125,6 +133,20 @@ const loadProfile = async () => {
   } finally {
     isLoading.value = false
   }
+}
+
+const toggleModule = (modId: string) => {
+  if (selectedModules.value.includes(modId)) {
+    if (selectedModules.value.length > 1) {
+      selectedModules.value = selectedModules.value.filter(m => m !== modId)
+    }
+  } else {
+    selectedModules.value.push(modId)
+  }
+}
+
+const selectAllModules = () => {
+  selectedModules.value = ['radio', 'encartes', 'cartazes']
 }
 
 const isPaymentSelected = (id: string) => form.paymentMethods.includes(id)
@@ -167,8 +189,8 @@ const clearPaymentCards = () => {
 
 const saveProfile = async () => {
   if (isUploading.value) return
-  if (isOnboarding.value && (!form.logo.trim() || !form.instagram.trim() || !onboardingAddress.value.trim())) {
-    errorMessage.value = 'Informe a logo, o Instagram e o endereço da loja.'
+  if (isOnboarding.value && (!form.logo.trim() || !form.instagram.trim() || !onboardingAddress.value.trim() || !onboardingCompanyName.value.trim())) {
+    errorMessage.value = 'Informe a logo, o nome da empresa, o WhatsApp, o Instagram e o endereço da loja.'
     return
   }
   isSaving.value = true
@@ -182,12 +204,26 @@ const saveProfile = async () => {
       if (addresses.length) addresses[0] = { ...addresses[0]!, value: onboardingAddress.value.trim() }
       else addresses.push({ ...createEntry('address'), value: onboardingAddress.value.trim() })
     }
+    const whatsappList = cleanEntries(form.whatsappNumbers)
+    if (isOnboarding.value && onboardingWhatsApp.value.trim()) {
+      if (whatsappList.length) whatsappList[0] = { ...whatsappList[0]!, value: onboardingWhatsApp.value.trim() }
+      else whatsappList.push({ ...createEntry('whatsapp'), value: onboardingWhatsApp.value.trim() })
+    }
     const response = await $fetch<any>('/api/profile', {
       method: 'PUT',
       headers,
       body: {
+        selected_modules: selectedModules.value,
+        onboarding_completed: true,
         business_profile: isOnboarding.value
-          ? { logo: form.logo, instagram: form.instagram.trim(), addresses }
+          ? {
+              companyName: onboardingCompanyName.value.trim() || form.companyName,
+              logo: form.logo,
+              instagram: form.instagram.trim(),
+              whatsapp: onboardingWhatsApp.value.trim() || form.whatsapp,
+              whatsappNumbers: whatsappList,
+              addresses
+            }
           : {
               ...form,
               whatsappNumbers: cleanEntries(form.whatsappNumbers),
@@ -199,13 +235,20 @@ const saveProfile = async () => {
     const saved = normalizeBusinessProfile(response?.business_profile)
     Object.assign(form, saved)
     onboardingAddress.value = saved.address
+    onboardingWhatsApp.value = saved.whatsapp
+    onboardingCompanyName.value = saved.companyName
     ensureEntryDrafts()
-    successMessage.value = isOnboarding.value ? 'Dados do estabelecimento salvos.' : 'Cadastro comercial atualizado.'
+    successMessage.value = isOnboarding.value ? 'Dados do estabelecimento e módulos salvos! Teste de 15 dias liberado.' : 'Cadastro comercial atualizado.'
     if (isOnboarding.value && typeof window !== 'undefined') {
       window.localStorage.removeItem('jobvarejo:business-profile-onboarding-pending')
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('business-profile:updated', { detail: response }))
+    }
+    if (isOnboarding.value) {
+      setTimeout(() => {
+        navigateTo('/')
+      }, 1500)
     }
   } catch (error: any) {
     errorMessage.value = String(error?.data?.statusMessage || error?.message || 'Não foi possível salvar o cadastro.')
@@ -278,10 +321,72 @@ onMounted(loadProfile)
         </section>
 
         <section v-if="isOnboarding" class="profile-form surface">
-          <div class="surface-title"><div><p>DADOS DO ESTABELECIMENTO</p><h2>Onde encontrar sua loja</h2></div></div>
+          <div class="surface-title"><div><p>DADOS DA EMPRESA</p><h2>Informações do seu negócio</h2></div></div>
           <div class="onboarding-fields">
-            <label><span>Instagram</span><input v-model="form.instagram" type="text" maxlength="120" placeholder="@sualoja" required /></label>
-            <label><span>Endereço</span><textarea v-model="onboardingAddress" rows="2" maxlength="300" placeholder="Rua, número, bairro e cidade" required></textarea></label>
+            <label><span>Nome da empresa</span><input v-model="onboardingCompanyName" type="text" maxlength="160" placeholder="Supermercado Central" required /></label>
+            <div class="form-grid">
+              <label><span>WhatsApp comercial</span><input v-model="onboardingWhatsApp" type="text" maxlength="80" placeholder="(11) 99999-9999" required /></label>
+              <label><span>Instagram</span><input v-model="form.instagram" type="text" maxlength="120" placeholder="@sualoja" required /></label>
+            </div>
+            <label><span>Endereço completo</span><textarea v-model="onboardingAddress" rows="2" maxlength="300" placeholder="Rua, número, bairro, cidade - UF" required></textarea></label>
+          </div>
+        </section>
+
+        <section v-if="isOnboarding" class="profile-form surface">
+          <div class="surface-title">
+            <div>
+              <p>MÓDULOS DE SERVIÇO</p>
+              <h2>Escolha seus serviços para testar</h2>
+            </div>
+            <button type="button" class="select-all-btn" @click="selectAllModules">Selecionar todos</button>
+          </div>
+          <p class="surface-help">Você terá 15 dias de teste grátis com acesso total aos módulos selecionados. Pode selecionar 1, 2 ou todos!</p>
+
+          <div class="modules-selection-grid">
+            <div
+              :class="['module-choice-card', selectedModules.includes('encartes') ? 'is-selected' : '']"
+              @click="toggleModule('encartes')"
+            >
+              <div class="module-choice-top">
+                <span class="module-choice-icon bg-blue-50 text-blue-600"><LayoutTemplate :size="20" /></span>
+                <span :class="['module-checkbox', selectedModules.includes('encartes') ? 'checked' : '']">
+                  <Check v-if="selectedModules.includes('encartes')" :size="14" />
+                </span>
+              </div>
+              <h4>Encartes Digitais</h4>
+              <p>Criação de encartes rápidos para redes sociais e WhatsApp com modelos prontos.</p>
+              <span class="trial-tag">15 dias grátis</span>
+            </div>
+
+            <div
+              :class="['module-choice-card', selectedModules.includes('cartazes') ? 'is-selected' : '']"
+              @click="toggleModule('cartazes')"
+            >
+              <div class="module-choice-top">
+                <span class="module-choice-icon bg-emerald-50 text-emerald-600"><WandSparkles :size="20" /></span>
+                <span :class="['module-checkbox', selectedModules.includes('cartazes') ? 'checked' : '']">
+                  <Check v-if="selectedModules.includes('cartazes')" :size="14" />
+                </span>
+              </div>
+              <h4>Cartazes de Oferta</h4>
+              <p>Cartazista digital para ponto de venda com impressão em formatos A3, A4 e A5.</p>
+              <span class="trial-tag">15 dias grátis</span>
+            </div>
+
+            <div
+              :class="['module-choice-card', selectedModules.includes('radio') ? 'is-selected' : '']"
+              @click="toggleModule('radio')"
+            >
+              <div class="module-choice-top">
+                <span class="module-choice-icon bg-purple-50 text-purple-600"><Radio :size="20" /></span>
+                <span :class="['module-checkbox', selectedModules.includes('radio') ? 'checked' : '']">
+                  <Check v-if="selectedModules.includes('radio')" :size="14" />
+                </span>
+              </div>
+              <h4>Rádio Indoor</h4>
+              <p>Programação musical contínua, geração de vinhetas e locuções de ofertas.</p>
+              <span class="trial-tag">15 dias grátis</span>
+            </div>
           </div>
         </section>
 
@@ -367,4 +472,21 @@ onMounted(loadProfile)
 .card-library { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e2e8f0; }.card-library__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }.card-library__header h3 { margin: 0; font-size: 14px; }.card-library__header p { max-width: 560px; margin: 4px 0 14px; color: #64748b; font-size: 11px; line-height: 1.45; }.card-library__header strong { flex: 0 0 auto; color: #173d70; font-size: 10px; }.search-field { min-width: 220px; flex: 1; height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 10px; color: #94a3b8; border: 1px solid #dbe3ed; border-radius: 8px; background: #fff; }.search-field input { width: 100%; min-width: 0; border: 0; color: #172b45; font-size: 12px; outline: none; }.card-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; max-height: 470px; overflow: auto; padding: 2px; }.card-option { position: relative; min-width: 0; display: grid; gap: 5px; padding: 7px; border: 1px solid #e2e8f0; border-radius: 8px; color: #475569; background: #f8fafc; text-align: left; cursor: pointer; }.card-option__image { display: block; aspect-ratio: 313 / 198; overflow: hidden; border-radius: 5px; background: #e2e8f0; }.card-option__image img { width: 100%; height: 100%; display: block; object-fit: cover; }.card-option__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 700; }.card-library__empty { color: #64748b; font-size: 11px; }.textarea-field { display: grid; gap: 6px; margin-top: 16px; }.textarea-field span { color: #475569; font-size: 11px; font-weight: 700; }.textarea-field textarea { min-height: 72px; resize: vertical; padding: 9px 11px; border: 1px solid #dbe3ed; border-radius: 8px; color: #172b45; font-size: 12px; outline: none; }
 @media (max-width: 700px) { .page-header__inner, .page-main { padding-left: 14px; padding-right: 14px; }.page-intro h1 { font-size: 26px; }.repeatable-grid, .form-grid { grid-template-columns: 1fr; }.form-grid label.full, .repeatable-field--wide { grid-column: auto; }.back-link { display: none; }.payment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }.card-library__toolbar { flex-wrap: wrap; }.search-field { min-width: 100%; order: -1; }.repeatable-row, .repeatable-row--address { grid-template-columns: minmax(95px, .4fr) minmax(0, 1fr) 34px; } }
 @media (max-width: 430px) { .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.payment-actions { flex-wrap: wrap; }.payment-actions span { margin-left: 0; width: 100%; }.repeatable-row, .repeatable-row--address { grid-template-columns: 1fr 34px; }.repeatable-row input:first-child { grid-column: 1 / -1; }.repeatable-row textarea { grid-column: 1; }.repeatable-row--address .remove-entry { grid-column: 2; grid-row: 1 / span 2; height: 100%; } }
+
+.select-all-btn { color: #173d70; background: #eaf3ff; border: 1px solid #c8dcf4; border-radius: 999px; padding: 5px 12px; font-size: 11px; font-weight: 700; cursor: pointer; transition: background .15s ease; }
+.select-all-btn:hover { background: #d7e8fc; }
+.modules-selection-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.module-choice-card { display: flex; flex-direction: column; padding: 18px; border: 2px solid #e2e8f0; border-radius: 12px; background: #f8fafc; cursor: pointer; transition: all .18s ease; position: relative; }
+.module-choice-card:hover { border-color: #8fb8e6; background: #f0f6ff; transform: translateY(-2px); }
+.module-choice-card.is-selected { border-color: #2160b4; background: #f4f8fe; box-shadow: 0 4px 14px rgba(33,96,180,.12); }
+.module-choice-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.module-choice-icon { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; }
+.module-checkbox { width: 22px; height: 22px; border-radius: 6px; border: 2px solid #cbd5e1; display: grid; place-items: center; background: #fff; transition: all .15s ease; }
+.module-checkbox.checked { background: #2160b4; border-color: #2160b4; color: #fff; }
+.module-choice-card h4 { font-size: 14px; font-weight: 800; color: #172b45; margin: 0 0 6px; }
+.module-choice-card p { font-size: 11px; color: #64748b; line-height: 1.45; margin: 0 0 14px; flex: 1; }
+.trial-tag { align-self: flex-start; background: #dcfce7; color: #15803d; font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; letter-spacing: .05em; }
+@media (max-width: 768px) {
+  .modules-selection-grid { grid-template-columns: 1fr; }
+}
 </style>

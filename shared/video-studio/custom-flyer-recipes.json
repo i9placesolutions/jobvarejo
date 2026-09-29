@@ -4051,5 +4051,549 @@
       "labelEdge": "#df0600"
     },
     "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-42ec1562-a8ea-4a5d-9847-6a205739227b",
+    "sourceProject": "42ec1562-a8ea-4a5d-9847-6a205739227b",
+    "name": "Fecha Mês com Tudo",
+    "campaign": "FECHA MÊS COM TUDO",
+    "accent": "#ffb817",
+    "base": "#201b17",
+    "ink": "#201b17",
+    "label": "banner",
+    "labelNames": [
+      "Oferta do Dia — Etiqueta"
+    ],
+    "background": "fecha-mes-com-tudo-background.png",
+    "seal": "fecha-mes-com-tudo-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 23092608,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Fecha Mês com Tudo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "fecha-mes-com-tudo-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#ec6912",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffb817"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-2536b8a4-5773-4b5f-8946-3caf3492937e",
+    "sourceProject": "2536b8a4-5773-4b5f-8946-3caf3492937e",
+    "name": "Operação Fecha Mês — Vermelho e Prata",
+    "campaign": "OPERAÇÃO FECHA MÊS — VERMELHO E PRATA",
+    "accent": "#f3f4f6",
+    "base": "#720910",
+    "ink": "#720910",
+    "label": "banner",
+    "labelNames": [
+      "Preço Baixo É Aqui — Etiqueta"
+    ],
+    "background": "operacao-fecha-mes-vermelha-background.png",
+    "seal": "operacao-fecha-mes-vermelha-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 23092608,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Operação Fecha Mês — Vermelho e Prata",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "operacao-fecha-mes-vermelha-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df1427",
+      "labelInk": "#ffffff",
+      "labelEdge": "#f3f4f6"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-fe23a25d-5bf3-42fc-9087-287fb70a4d06",
+    "sourceProject": "fe23a25d-5bf3-42fc-9087-287fb70a4d06",
+    "name": "Operação Fecha Mês — Amarelo e Grafite",
+    "campaign": "OPERAÇÃO FECHA MÊS — AMARELO E GRAFITE",
+    "accent": "#ffdf00",
+    "base": "#222222",
+    "ink": "#222222",
+    "label": "banner",
+    "labelNames": [
+      "Mês da Economia — Etiqueta"
+    ],
+    "background": "operacao-fecha-mes-amarela-background.png",
+    "seal": "operacao-fecha-mes-amarela-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 23092608,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Operação Fecha Mês — Amarelo e Grafite",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "operacao-fecha-mes-amarela-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#323232",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdf00"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-ee7f8fe6-f0d8-461b-b7bc-d277ab097e02",
+    "sourceProject": "ee7f8fe6-f0d8-461b-b7bc-d277ab097e02",
+    "name": "Fecha Mês! — Calendário de Ofertas",
+    "campaign": "FECHA MÊS! — CALENDÁRIO DE OFERTAS",
+    "accent": "#ffe000",
+    "base": "#a40812",
+    "ink": "#a40812",
+    "label": "banner",
+    "labelNames": [
+      "Venha Fazer Economia — Etiqueta"
+    ],
+    "background": "fecha-mes-calendario-background.png",
+    "seal": "fecha-mes-calendario-seal.png",
+    "sealAspect": 1.3165599268069534,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 23092608,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "bokeh"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Fecha Mês! — Calendário de Ofertas",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "fecha-mes-calendario-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#ed1724",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe000"
+    },
+    "preserveBrandLayout": true
   }
 ]

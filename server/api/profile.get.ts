@@ -12,7 +12,11 @@ export default defineEventHandler(async (event) => {
     const row = await pgOneOrNull<any>(
       `select id,
               CASE WHEN COALESCE((business_profile->>'internalOnly')::boolean, false) THEN '' ELSE email END AS email,
-              name, avatar_url, role, created_at, updated_at, business_profile
+              name, avatar_url, role, created_at, updated_at, business_profile,
+              coalesce(selected_modules, '["encartes", "cartazes", "radio"]'::jsonb) as selected_modules,
+              trial_starts_at, trial_ends_at,
+              coalesce(subscription_status, 'trial') as subscription_status,
+              coalesce(onboarding_completed, false) as onboarding_completed
        from public.profiles
        where id = $1
        limit 1`,

@@ -18,6 +18,11 @@ type ProfileRow = {
   password_hash?: string | null
   reset_token_hash?: string | null
   reset_token_expires_at?: string | null
+  selected_modules?: string[]
+  trial_starts_at?: string | null
+  trial_ends_at?: string | null
+  subscription_status?: string
+  onboarding_completed?: boolean
 }
 
 let authColumnsEnsured = false
@@ -32,7 +37,12 @@ export const ensureAuthColumns = async (): Promise<void> => {
       add column if not exists reset_token_expires_at timestamptz,
       add column if not exists last_login_at timestamptz,
       add column if not exists login_whatsapp text,
-      add column if not exists login_whatsapp_verified_at timestamptz
+      add column if not exists login_whatsapp_verified_at timestamptz,
+      add column if not exists selected_modules jsonb not null default '["encartes", "cartazes", "radio"]'::jsonb,
+      add column if not exists trial_starts_at timestamptz not null default now(),
+      add column if not exists trial_ends_at timestamptz not null default (now() + interval '15 days'),
+      add column if not exists subscription_status text not null default 'trial',
+      add column if not exists onboarding_completed boolean not null default false
   `)
 
   await pgQuery(`
@@ -101,7 +111,12 @@ export const getProfileById = async (id: string): Promise<ProfileRow | null> => 
             p.role::text as role, p.password_hash, p.reset_token_hash, p.reset_token_expires_at,
             coalesce((to_jsonb(p)->>'is_active')::boolean, true) as is_active,
             coalesce(to_jsonb(p)->'editor_permissions', '{}'::jsonb) as editor_permissions,
-            p.business_profile
+            p.business_profile,
+            coalesce(to_jsonb(p)->'selected_modules', '["encartes", "cartazes", "radio"]'::jsonb) as selected_modules,
+            p.trial_starts_at,
+            p.trial_ends_at,
+            coalesce(p.subscription_status, 'trial') as subscription_status,
+            coalesce(p.onboarding_completed, false) as onboarding_completed
      from public.profiles p
      where p.id = $1
      limit 1`,
@@ -115,6 +130,9 @@ export const createProfileWithPassword = async (params: {
   whatsapp?: string | null
   passwordHash: string | null
   role: UserRole
+  businessProfile?: Record<string, any> | null
+  selectedModules?: string[] | null
+  onboardingCompleted?: boolean
 }, client?: PoolClient): Promise<ProfileRow> => {
   const query = <T extends import('pg').QueryResultRow>(sql: string, values: unknown[]) =>
     client ? client.query<T>(sql, values) : pgQuery<T>(sql, values)
@@ -149,15 +167,27 @@ export const createProfileWithPassword = async (params: {
     if (!authUnavailable) throw error
   }
 
+  const businessProfileJson = JSON.stringify(params.businessProfile || {})
+  const selectedModulesJson = JSON.stringify(params.selectedModules || ['encartes', 'cartazes', 'radio'])
+  const onboardingCompleted = Boolean(params.onboardingCompleted)
+
   if (authUserCreated) {
     const synchronized = (await query<ProfileRow>(
       `update public.profiles
           set email = $2, login_whatsapp = $3,
               login_whatsapp_verified_at = case when $3 is null then null else timezone('utc', now()) end,
-              name = $4, role = $5::user_role, password_hash = $6, updated_at = timezone('utc', now())
+              name = $4, role = $5::user_role, password_hash = $6,
+              business_profile = $7::jsonb,
+              selected_modules = $8::jsonb,
+              onboarding_completed = $9::boolean,
+              trial_starts_at = now(),
+              trial_ends_at = now() + interval '15 days',
+              subscription_status = 'trial',
+              updated_at = timezone('utc', now())
         where id = $1
-        returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at`,
-      [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash]
+        returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at,
+                  business_profile, selected_modules, trial_starts_at, trial_ends_at, subscription_status, onboarding_completed`,
+      [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash, businessProfileJson, selectedModulesJson, onboardingCompleted]
     )).rows[0] || null
     if (synchronized) return synchronized
   }
@@ -167,11 +197,12 @@ export const createProfileWithPassword = async (params: {
   try {
     const first = await query<ProfileRow>(
       `insert into public.profiles
-         (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash)
+         (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash, business_profile, selected_modules, onboarding_completed, trial_starts_at, trial_ends_at, subscription_status)
        values
-         ($1::uuid, $2, $3, case when $3 is null then null else timezone('utc', now()) end, $4, $5::user_role, $6)
-       returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at`,
-      [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash]
+         ($1::uuid, $2, $3, case when $3 is null then null else timezone('utc', now()) end, $4, $5::user_role, $6, $7::jsonb, $8::jsonb, $9::boolean, now(), now() + interval '15 days', 'trial')
+       returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at,
+                 business_profile, selected_modules, trial_starts_at, trial_ends_at, subscription_status, onboarding_completed`,
+      [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash, businessProfileJson, selectedModulesJson, onboardingCompleted]
     )
     rows = first.rows || []
     if (client) await client.query('RELEASE SAVEPOINT profile_insert')
@@ -187,11 +218,12 @@ export const createProfileWithPassword = async (params: {
 
     const fallback = await query<ProfileRow>(
       `insert into public.profiles
-         (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash)
+         (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash, business_profile, selected_modules, onboarding_completed, trial_starts_at, trial_ends_at, subscription_status)
        values
-         ($1::uuid, $2, $3, case when $3 is null then null else timezone('utc', now()) end, $4, $5, $6)
-       returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at`,
-      [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash]
+         ($1::uuid, $2, $3, case when $3 is null then null else timezone('utc', now()) end, $4, $5, $6, $7::jsonb, $8::jsonb, $9::boolean, now(), now() + interval '15 days', 'trial')
+       returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at,
+                 business_profile, selected_modules, trial_starts_at, trial_ends_at, subscription_status, onboarding_completed`,
+      [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash, businessProfileJson, selectedModulesJson, onboardingCompleted]
     )
     rows = fallback.rows || []
   }

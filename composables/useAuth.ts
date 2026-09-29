@@ -108,7 +108,21 @@ export const useAuth = () => {
     }
   }
 
-  const signUp = async (email: string, password: string, name: string, whatsapp: string, whatsappCode: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    name: string,
+    whatsapp: string,
+    whatsappCode: string,
+    extraDetails?: {
+      companyName?: string
+      logoUrl?: string
+      instagram?: string
+      address?: string
+      selectedModules?: string[]
+      autoLogin?: boolean
+    }
+  ) => {
     const normalizedEmail = String(email || '').trim().toLowerCase()
     const trimmedName = String(name || '').trim()
     const normalizedWhatsApp = normalizeBrazilWhatsApp(whatsapp)
@@ -127,9 +141,18 @@ export const useAuth = () => {
           whatsapp: normalizedWhatsApp,
           whatsapp_code: String(whatsappCode).trim(),
           password,
-          auto_login: false
+          company_name: extraDetails?.companyName,
+          logo_url: extraDetails?.logoUrl,
+          instagram: extraDetails?.instagram,
+          address: extraDetails?.address,
+          selected_modules: extraDetails?.selectedModules,
+          auto_login: extraDetails?.autoLogin ?? false
         }
       })
+      if (extraDetails?.autoLogin && data?.user) {
+        state.value.user = toUser(data.user)
+        state.value.isAuthenticated = true
+      }
       return data
     } catch (error: any) {
       const statusCode = Number(error?.statusCode || error?.response?.status || 0)
@@ -162,7 +185,7 @@ export const useAuth = () => {
     const role = state.value.user?.role
     if (role === 'super_admin' || role === 'admin') return true
     if (role === 'editor') return hasEditorPermission(state.value.user?.editorPermissions || {}, area, action)
-    return role === 'user' && ['encartes', 'videos', 'cartazes', 'loja'].includes(area)
+    return role === 'user' && ['encartes', 'videos', 'cartazes', 'radio', 'loja'].includes(area)
   }
 
   return {

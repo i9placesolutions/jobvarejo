@@ -65,6 +65,29 @@ export default defineEventHandler(async (event) => {
   const role: UserRole = currentUsers === 0 ? 'super_admin' : 'user'
   const passwordHash = await hashPassword(password)
 
+  // Extra business/company fields from registration onboarding
+  const companyName = String(body?.company_name || body?.business_name || '').trim() || name
+  const logoUrl = String(body?.logo_url || body?.logo || '').trim()
+  const instagram = String(body?.instagram || '').trim().replace(/^@+/, '')
+  const address = String(body?.address || '').trim()
+  const businessWhatsapp = normalizeBrazilWhatsApp(body?.business_whatsapp || body?.whatsapp) || whatsapp
+
+  const businessProfile = {
+    companyName,
+    logo: logoUrl,
+    instagram,
+    address,
+    addresses: address ? [{ id: 'address-1', label: 'Principal', value: address }] : [],
+    whatsapp: businessWhatsapp,
+    whatsappNumbers: businessWhatsapp ? [{ id: 'whatsapp-1', label: 'Principal', value: businessWhatsapp }] : []
+  }
+
+  const selectedModules = Array.isArray(body?.selected_modules) && body.selected_modules.length > 0
+    ? body.selected_modules.filter((m: any) => typeof m === 'string')
+    : ['encartes', 'cartazes', 'radio']
+
+  const onboardingCompleted = Boolean(body?.onboarding_completed || (companyName && (address || instagram || logoUrl)))
+
   let created
   try {
     created = await createProfileWithPassword({
@@ -72,7 +95,10 @@ export default defineEventHandler(async (event) => {
       email,
       whatsapp,
       passwordHash,
-      role
+      role,
+      businessProfile,
+      selectedModules,
+      onboardingCompleted
     })
   } catch (error: any) {
     if (String(error?.code || '') === '23505') {

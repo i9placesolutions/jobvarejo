@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sparkles, LayoutGrid, User, Mail, Shield, CalendarDays, LogOut, RefreshCw } from 'lucide-vue-next'
+import { Sparkles, LayoutGrid, User, Mail, Shield, CalendarDays, LogOut, RefreshCw, Clock, CreditCard, ArrowRight, Store, CheckCircle2 } from 'lucide-vue-next'
 
 definePageMeta({
   layout: false,
@@ -14,6 +14,24 @@ const profile = ref<any>(null)
 const isLoading = ref(true)
 const loadError = ref('')
 const profileLoadedAt = ref<string | null>(null)
+
+const trialDaysLeft = computed(() => {
+  if (!profile.value?.trial_ends_at) return 0
+  const end = new Date(profile.value.trial_ends_at).getTime()
+  const now = Date.now()
+  const diff = Math.ceil((end - now) / (1000 * 60 * 60 * 24))
+  return Math.max(0, diff)
+})
+
+const isTrial = computed(() => {
+  return profile.value?.subscription_status === 'trial' || trialDaysLeft.value > 0
+})
+
+const selectedModules = computed<string[]>(() => {
+  const mods = profile.value?.selected_modules
+  if (Array.isArray(mods) && mods.length > 0) return mods
+  return ['encartes', 'cartazes', 'radio']
+})
 
 const displayName = computed(() => {
   const profileName = String(profile.value?.name || '').trim()
@@ -233,6 +251,45 @@ watch(
                 </div>
               </div>
               <p class="text-[11px] text-slate-400 mt-4">Atualizado em {{ refreshedAt }}</p>
+            </section>
+
+            <!-- Plano e Período de Testes -->
+            <section class="md:col-span-3 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/60 to-indigo-50/40 p-6 shadow-xs">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold uppercase tracking-wider mb-2">
+                    <Clock class="w-3.5 h-3.5" />
+                    {{ isTrial ? 'Teste Grátis Ativo (15 dias)' : 'Assinatura' }}
+                  </div>
+                  <h3 class="text-xl font-bold text-slate-900">
+                    {{ isTrial ? `Você possui ${trialDaysLeft} dias restantes de teste grátis` : 'Plano Comercial' }}
+                  </h3>
+                  <p class="text-xs text-slate-600 mt-1">
+                    Aproveite todos os recursos dos módulos que você escolheu. Sem bloqueios durante o período de avaliação.
+                  </p>
+                  <div class="mt-3 flex flex-wrap gap-2 text-xs">
+                    <span class="text-slate-500 font-medium">Serviços habilitados:</span>
+                    <span
+                      v-for="mod in selectedModules"
+                      :key="mod"
+                      class="px-2.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 font-semibold capitalize shadow-2xs"
+                    >
+                      {{ mod === 'radio' ? 'Rádio Indoor' : mod }}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="shrink-0 flex items-center gap-3">
+                  <NuxtLink
+                    to="/plans"
+                    class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 inline-flex items-center gap-2 transition-all"
+                  >
+                    <CreditCard class="w-4 h-4" />
+                    <span>Ver Planos & Pagamento</span>
+                    <ArrowRight class="w-3.5 h-3.5" />
+                  </NuxtLink>
+                </div>
+              </div>
             </section>
           </div>
         </div>
