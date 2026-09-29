@@ -107,13 +107,12 @@ describe('shouldUseIncomingTemplateSnapshot', () => {
 })
 
 describe('BUILTIN_LABEL_TEMPLATE_IDS', () => {
-  it('contem os 7 IDs built-in', () => {
-    expect(BUILTIN_LABEL_TEMPLATE_IDS.size).toBe(7)
+  it('contem os 6 IDs built-in', () => {
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.size).toBe(6)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_default')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_atacarejo_10fd')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_fardo_special')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_black_yellow')).toBe(true)
-    expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_red_burst')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_oferta_amarela')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_barlow_black')).toBe(true)
   })
@@ -122,7 +121,6 @@ describe('BUILTIN_LABEL_TEMPLATE_IDS', () => {
     expect(BUILTIN_DEFAULT_LABEL_TEMPLATE_ID).toBe('tpl_default')
     expect(BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID).toBe('tpl_atacarejo_10fd')
     expect(BUILTIN_FARDO_SPECIAL_LABEL_TEMPLATE_ID).toBe('tpl_fardo_special')
-    expect(BUILTIN_RED_BURST_LABEL_TEMPLATE_ID).toBe('tpl_red_burst')
   })
 })
 
@@ -130,10 +128,10 @@ describe('isBuiltInLabelTemplateId', () => {
   it('aceita IDs built-in', () => {
     expect(isBuiltInLabelTemplateId('tpl_default')).toBe(true)
     expect(isBuiltInLabelTemplateId('tpl_atacarejo_10fd')).toBe(true)
-    expect(isBuiltInLabelTemplateId('tpl_red_burst')).toBe(true)
   })
 
-  it('rejeita IDs custom', () => {
+  it('rejeita IDs custom ou removidos', () => {
+    expect(isBuiltInLabelTemplateId('tpl_red_burst')).toBe(false)
     expect(isBuiltInLabelTemplateId('tpl_user_123')).toBe(false)
     expect(isBuiltInLabelTemplateId('custom_label')).toBe(false)
   })

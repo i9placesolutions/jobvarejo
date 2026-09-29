@@ -1557,7 +1557,6 @@ const ensureLabelTemplatesReady = async () => {
     await ensureWholesaleReferenceLabelTemplate();
     await ensureBuiltInBlackYellowLabelTemplate();
     await ensureBuiltInOfertaAmarelaLabelTemplate();
-    await ensureBuiltInRedBurstLabelTemplate();
     await ensureBuiltInBarlowBlackLabelTemplate();
 
     // Generate/refresh previews in-memory.
