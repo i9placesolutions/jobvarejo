@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onUnmounted } from 'vue'
 import {
   ArrowDownAZ,
   ArrowLeft,
@@ -67,6 +68,7 @@ const previewTemplate = ref<FlyerTemplateSummary | null>(null)
 const previewDialog = ref<HTMLDialogElement | null>(null)
 const previewImageFailed = ref(false)
 const previewImageLoading = ref(false)
+let pickerLoadGeneration = 0
 const showTemplatePreview = async (template: FlyerTemplateSummary) => {
   previewTemplate.value = template
   previewImageFailed.value = false
@@ -254,30 +256,48 @@ const loadSavedProjects = async () => {
 }
 
 const loadPicker = async () => {
+  const requestGeneration = ++pickerLoadGeneration
   isPicking.value = true
   isOpening.value = true
   errorMessage.value = ''
   accountPreviewProfile.value = null
   accountPreviewProfileReady.value = false
+  let profileRequestStarted = false
   try {
     const headers = await getApiAuthHeaders()
+    if (requestGeneration !== pickerLoadGeneration) return
     // A aba inicial é a de modelos. Carregar todos os trabalhos em paralelo
     // bloqueava a primeira prévia quando a conta tinha muitos encartes.
-    const [models, profile] = await Promise.all([
-      listFlyerTemplates(headers, { library: true }),
-      $fetch<any>('/api/profile', { headers }).catch(() => null)
-    ])
+    void $fetch<any>('/api/profile', { headers })
+      .then((profile) => {
+        if (requestGeneration === pickerLoadGeneration) accountPreviewProfile.value = profile
+      })
+      .catch(() => {
+        if (requestGeneration === pickerLoadGeneration) accountPreviewProfile.value = null
+      })
+      .finally(() => {
+        if (requestGeneration === pickerLoadGeneration) accountPreviewProfileReady.value = true
+      })
+    profileRequestStarted = true
+
+    const models = await listFlyerTemplates(headers, { library: true })
+    if (requestGeneration !== pickerLoadGeneration) return
     templates.value = models
-    accountPreviewProfile.value = profile
   } catch (error: any) {
+    if (requestGeneration !== pickerLoadGeneration) return
     errorMessage.value = String(
       error?.data?.statusMessage ||
       error?.message ||
       'Não foi possível carregar os encartes. Tente novamente.'
     )
   } finally {
-    accountPreviewProfileReady.value = true
-    isOpening.value = false
+    if (requestGeneration === pickerLoadGeneration) {
+      if (!profileRequestStarted) {
+        accountPreviewProfile.value = null
+        accountPreviewProfileReady.value = true
+      }
+      isOpening.value = false
+    }
   }
 }
 
@@ -328,6 +348,10 @@ const openQuickEditor = async () => {
 
 onMounted(() => {
   void openQuickEditor()
+})
+
+onUnmounted(() => {
+  pickerLoadGeneration += 1
 })
 </script>
 
@@ -681,10 +705,9 @@ onMounted(() => {
             <button type="button" :aria-label="`Ver prévia de ${template.name}`" class="relative flex aspect-[3/1] w-full items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc] focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:-outline-offset-2" @click="showTemplatePreview(template)">
               <LayoutTemplate class="h-10 w-10 text-blue-300" />
               <AccountFlyerTemplatePreview
-                v-if="accountPreviewProfileReady"
-                :key="`${template.id}:${accountPreviewProfile?.id || 'account'}`"
                 :template-id="template.id"
                 :revision="template.updated_at"
+                :gallery-preview-url="template.gallery_preview_url"
                 :profile="accountPreviewProfile"
                 :profile-ready="accountPreviewProfileReady"
                 :eager="index < 4"
@@ -741,12 +764,14 @@ onMounted(() => {
         <div class="relative flex min-h-64 items-center justify-center bg-slate-100 p-4">
           <Loader2 v-if="previewImageLoading" class="absolute h-8 w-8 animate-spin text-blue-600" aria-label="Carregando prévia" />
           <AccountFlyerTemplatePreview
-            v-if="accountPreviewProfileReady && !previewImageFailed"
-            :key="`${previewTemplate.id}:${accountPreviewProfile?.id || 'account'}:dialog`"
+            v-if="!previewImageFailed"
+            :key="`${previewTemplate.id}:dialog`"
             :template-id="previewTemplate.id"
             :revision="previewTemplate.updated_at"
+            :gallery-preview-url="previewTemplate.gallery_preview_url"
             :profile="accountPreviewProfile"
             :profile-ready="accountPreviewProfileReady"
+            personalize
             eager
             fit="contain"
             class="relative max-h-[65dvh] max-w-full object-contain shadow-sm"

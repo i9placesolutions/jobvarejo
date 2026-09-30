@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { generateThumbnailFromCanvasJson } from '~/utils/editorThumbnail'
+import { removeFlyerAccountContacts } from '~/utils/flyerGalleryPreview'
 import {
   buildFlyerTemplateConfigFromPages,
   inferFormatIdFromPage,
@@ -17,7 +17,9 @@ import {
   getAccountFlyerLogoPreference,
   getAccountFlyerLogoSource,
   normalizeAccountFlyerCanvasImageSources,
-  runWithAccountFlyerPreviewConcurrency
+  runWithAccountFlyerPreviewConcurrency,
+  shouldRenderAccountFlyerPreview,
+  shouldStartAccountFlyerPreview
 } from '~/utils/accountFlyerTemplatePreview'
 import { autoTrimFabricImageAsync } from '~/utils/fabricImageHelpers'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
@@ -25,9 +27,11 @@ import { toWasabiProxyUrl } from '~/utils/storageProxy'
 const props = defineProps<{
   templateId: string
   revision?: string | null
+  galleryPreviewUrl?: string | null
   profile: any
   profileReady: boolean
   eager?: boolean
+  personalize?: boolean
   fit?: 'cover' | 'contain'
 }>()
 
@@ -37,6 +41,7 @@ const emit = defineEmits<{
 }>()
 
 const imageUrl = ref('')
+const galleryImageFailed = ref(false)
 const host = ref<HTMLElement | null>(null)
 const isVisible = ref(false)
 const isLoading = ref(false)
@@ -127,12 +132,14 @@ const loadPreview = async (requestGeneration: number): Promise<string> => {
   }
   if (requestGeneration !== generation || disposed) return ''
 
-  const safeCanvasJson = bindAccountLogoToFlyerCanvas(normalizeAccountFlyerCanvasImageSources(canvasJson), {
+  const contactSafeCanvasJson = removeFlyerAccountContacts(canvasJson)
+  const safeCanvasJson = bindAccountLogoToFlyerCanvas(normalizeAccountFlyerCanvasImageSources(contactSafeCanvasJson), {
     logoSrc: logoSource,
     logoSize,
     logoPreference
   })
   stage = 'renderizando a prévia do canvas'
+  const { generateThumbnailFromCanvasJson } = await import('~/utils/editorThumbnail')
   const thumbnail = await generateThumbnailFromCanvasJson({
     sourceJson: safeCanvasJson,
     staticCanvasCtor: StaticCanvas,
@@ -150,7 +157,23 @@ const loadPreview = async (requestGeneration: number): Promise<string> => {
 }
 
 const startPreview = () => {
-  if (!props.profileReady || !props.templateId || !isVisible.value || isLoading.value || imageUrl.value) return
+  if (!shouldStartAccountFlyerPreview({
+    profileReady: props.profileReady,
+    hasTemplateId: !!props.templateId,
+    isVisible: isVisible.value,
+    rendererInProgress: isLoading.value,
+    hasRenderedPreview: !!imageUrl.value
+  })) return
+  const hasGalleryPreview = !!props.galleryPreviewUrl && !galleryImageFailed.value
+  const shouldRender = shouldRenderAccountFlyerPreview({
+    hasGalleryPreview,
+    personalize: !!props.personalize,
+    accountHasLogo: !!getAccountFlyerLogoSource(props.profile)
+  })
+  if (!shouldRender) {
+    emit('loading-change', !galleryImageLoaded.value)
+    return
+  }
   const requestGeneration = ++generation
   const previewTaskKey = buildAccountFlyerPreviewCacheKey({
     templateId: props.templateId,
@@ -180,6 +203,10 @@ const startPreview = () => {
       .catch((error: any) => {
         if (requestGeneration !== generation || disposed) return
         imageUrl.value = ''
+        if (hasGalleryPreview) {
+          console.warn(`[AccountFlyerTemplatePreview] Personalização indisponível para o modelo ${props.templateId}; mantendo a miniatura neutra: ${String(error?.message || error)}`)
+          return
+        }
         if (retryAttempt < 1 && isVisible.value) {
           retryAttempt += 1
           console.info(`[AccountFlyerTemplatePreview] Nova tentativa ${retryAttempt}/1 para o modelo ${props.templateId}: ${String(error?.message || error)}`)
@@ -197,7 +224,7 @@ const startPreview = () => {
   }
   isLoading.value = true
   hasFailed.value = false
-  emit('loading-change', true)
+  if (!hasGalleryPreview || !galleryImageLoaded.value) emit('loading-change', true)
   if (props.revision) {
     void getCachedAccountFlyerPreview(previewTaskKey).then((cached) => {
       if (requestGeneration !== generation || disposed) return
@@ -208,6 +235,20 @@ const startPreview = () => {
       } else render()
     }).catch(render)
   } else render()
+}
+
+const galleryImageLoaded = ref(false)
+
+const handleGalleryImageLoad = () => {
+  galleryImageLoaded.value = true
+  emit('loading-change', false)
+}
+
+const handleGalleryImageError = () => {
+  galleryImageFailed.value = true
+  galleryImageLoaded.value = false
+  if (isLoading.value) return
+  if (isVisible.value && props.profileReady) startPreview()
 }
 
 const observeVisibility = () => {
@@ -234,25 +275,45 @@ const observeVisibility = () => {
   observer.observe(host.value)
 }
 
-onMounted(observeVisibility)
-watch(() => props.profileReady, (ready) => { if (ready) startPreview() })
-watch(() => [
+const getGalleryPreviewIdentity = () => JSON.stringify([
   props.templateId,
   String(props.revision || ''),
+  String(props.galleryPreviewUrl || '')
+])
+const getPersonalizationIdentity = () => JSON.stringify([
+  String(!!props.personalize),
   String(props.profile?.id || ''),
   getAccountFlyerLogoSource(props.profile),
   JSON.stringify(getAccountFlyerLogoPreference(props.profile))
-].join('|'), () => {
+])
+let galleryPreviewIdentity = getGalleryPreviewIdentity()
+let personalizationIdentity = getPersonalizationIdentity()
+
+onMounted(observeVisibility)
+watch(() => `${getGalleryPreviewIdentity()}::${getPersonalizationIdentity()}`, () => {
+  const nextGalleryPreviewIdentity = getGalleryPreviewIdentity()
+  const nextPersonalizationIdentity = getPersonalizationIdentity()
+  const galleryChanged = nextGalleryPreviewIdentity !== galleryPreviewIdentity
+  const personalizationChanged = nextPersonalizationIdentity !== personalizationIdentity
+  if (!galleryChanged && !personalizationChanged) return
+  galleryPreviewIdentity = nextGalleryPreviewIdentity
+  personalizationIdentity = nextPersonalizationIdentity
+
   generation += 1
   retryAttempt = 0
   if (retryTimer) clearTimeout(retryTimer)
   retryTimer = null
   imageUrl.value = ''
+  if (galleryChanged) {
+    galleryImageFailed.value = false
+    galleryImageLoaded.value = false
+  }
   hasFailed.value = false
   isLoading.value = false
   emit('loading-change', false)
   if (isVisible.value) startPreview()
 })
+watch(() => props.profileReady, (ready) => { if (ready) startPreview() })
 watch(() => props.eager, (eager) => {
   if (!eager) return
   isVisible.value = true
@@ -276,8 +337,19 @@ onUnmounted(() => {
     class="account-flyer-template-preview"
     :class="`account-flyer-template-preview--${props.fit || 'cover'}`"
   />
+  <img
+    v-else-if="props.galleryPreviewUrl && !galleryImageFailed"
+    :key="JSON.stringify([props.templateId, props.revision, props.galleryPreviewUrl])"
+    :src="props.galleryPreviewUrl"
+    :alt="''"
+    aria-hidden="true"
+    :loading="props.eager ? 'eager' : 'lazy'"
+    @load="handleGalleryImageLoad"
+    @error="handleGalleryImageError"
+    class="account-flyer-template-preview"
+    :class="`account-flyer-template-preview--${props.fit || 'cover'}`"
+  />
   <span
-    v-else
     ref="host"
     class="account-flyer-template-preview__host"
     :class="`account-flyer-template-preview__host--${props.fit || 'cover'}`"
@@ -291,11 +363,8 @@ onUnmounted(() => {
   inset: 0;
 }
 .account-flyer-template-preview__host--contain {
-  position: relative;
-  inset: auto;
-  display: block;
-  width: 1px;
-  height: 1px;
+  position: absolute;
+  inset: 0;
 }
 .account-flyer-template-preview {
   position: absolute;

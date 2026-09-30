@@ -57,7 +57,7 @@ describe('server-managed enhancement storage boundaries', () => {
     expect(() => assertClientStorageReadAllowed(result.replace('result.png', 'result-v4.png'))).not.toThrow()
     expect(() => assertClientStorageReadAllowed(result.replace('result.png', 'generated.png'))).toThrow()
   })
-  it.each([ledger, receipt, result])('blocks upload, presigned PUT and asset deletion of %s', async key => {
+  it.each([ledger, receipt, result, `imagens/catalogo-encartes/${'a'.repeat(64)}.webp`])('blocks upload, presigned PUT and asset deletion of %s', async key => {
     mocks.body.mockResolvedValue({ key, operation: 'put' })
     mocks.query.mockReturnValue({ key })
     for (const handler of [presign, upload, removeAsset]) {

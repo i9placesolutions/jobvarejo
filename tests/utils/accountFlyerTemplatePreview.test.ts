@@ -8,10 +8,42 @@ import {
   getAccountFlyerLogoPreference,
   getAccountFlyerLogoSource,
   normalizeAccountFlyerCanvasImageSources,
-  runWithAccountFlyerPreviewConcurrency
+  runWithAccountFlyerPreviewConcurrency,
+  shouldRenderAccountFlyerPreview,
+  shouldStartAccountFlyerPreview
 } from '~/utils/accountFlyerTemplatePreview'
 
 describe('accountFlyerTemplatePreview', () => {
+  it('uses one neutral image in an eager gallery card instead of rendering its canvas', () => {
+    expect(shouldStartAccountFlyerPreview({
+      profileReady: true,
+      hasTemplateId: true,
+      isVisible: true,
+      rendererInProgress: false,
+      hasRenderedPreview: false
+    })).toBe(true)
+    expect(shouldRenderAccountFlyerPreview({
+      hasGalleryPreview: true,
+      personalize: false,
+      accountHasLogo: true
+    })).toBe(false)
+  })
+
+  it('keeps the neutral modal image while personalized rendering is already in progress', () => {
+    expect(shouldStartAccountFlyerPreview({
+      profileReady: true,
+      hasTemplateId: true,
+      isVisible: true,
+      rendererInProgress: true,
+      hasRenderedPreview: false
+    })).toBe(false)
+    expect(shouldRenderAccountFlyerPreview({
+      hasGalleryPreview: true,
+      personalize: true,
+      accountHasLogo: true
+    })).toBe(true)
+  })
+
   it('isolates cached previews by account logo and model revision', () => {
     const base = {
       templateId: 'template-1',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   ArrowDownAZ,
   Eye,
@@ -45,6 +45,7 @@ const previewTemplate = ref<FlyerTemplateSummary | null>(null)
 const previewDialog = ref<HTMLDialogElement | null>(null)
 const previewImageFailed = ref(false)
 const previewImageLoading = ref(false)
+let templateLoadGeneration = 0
 
 const normalizeSearchValue = (value: unknown): string => String(value || '')
   .normalize('NFD')
@@ -168,32 +169,54 @@ const handleSelect = (template: FlyerTemplateSummary) => {
 
 const loadTemplates = async () => {
   if (isLoading.value) return
+  const requestGeneration = ++templateLoadGeneration
   isLoading.value = true
   errorMessage.value = ''
   accountPreviewProfile.value = null
   accountPreviewProfileReady.value = false
+  let profileRequestStarted = false
   try {
     const headers = await getApiAuthHeaders()
-    const [models, profile] = await Promise.all([
-      listFlyerTemplates(headers, { library: true }),
-      $fetch<any>('/api/profile', { headers }).catch(() => null)
-    ])
+    if (requestGeneration !== templateLoadGeneration) return
+    void $fetch<any>('/api/profile', { headers })
+      .then((profile) => {
+        if (requestGeneration === templateLoadGeneration) accountPreviewProfile.value = profile
+      })
+      .catch(() => {
+        if (requestGeneration === templateLoadGeneration) accountPreviewProfile.value = null
+      })
+      .finally(() => {
+        if (requestGeneration === templateLoadGeneration) accountPreviewProfileReady.value = true
+      })
+    profileRequestStarted = true
+
+    const models = await listFlyerTemplates(headers, { library: true })
+    if (requestGeneration !== templateLoadGeneration) return
     templates.value = models
-    accountPreviewProfile.value = profile
   } catch (err: any) {
+    if (requestGeneration !== templateLoadGeneration) return
     errorMessage.value = String(
       err?.data?.statusMessage ||
       err?.message ||
       'Não foi possível carregar os modelos.'
     )
   } finally {
-    accountPreviewProfileReady.value = true
-    isLoading.value = false
+    if (requestGeneration === templateLoadGeneration) {
+      if (!profileRequestStarted) {
+        accountPreviewProfile.value = null
+        accountPreviewProfileReady.value = true
+      }
+      isLoading.value = false
+    }
   }
 }
 
 onMounted(() => {
   void loadTemplates()
+})
+
+onUnmounted(() => {
+  templateLoadGeneration += 1
 })
 </script>
 
@@ -353,10 +376,9 @@ onMounted(() => {
             <div class="relative flex aspect-[3/1] w-full items-center justify-center overflow-hidden bg-slate-950">
               <LayoutTemplate class="h-10 w-10 text-slate-600" />
               <AccountFlyerTemplatePreview
-                v-if="accountPreviewProfileReady"
-                :key="`${template.id}:${accountPreviewProfile?.id || 'account'}`"
                 :template-id="template.id"
                 :revision="template.updated_at"
+                :gallery-preview-url="template.gallery_preview_url"
                 :profile="accountPreviewProfile"
                 :profile-ready="accountPreviewProfileReady"
                 :eager="index < 4"
@@ -464,12 +486,14 @@ onMounted(() => {
         <div class="relative flex min-h-64 items-center justify-center bg-slate-950 p-4">
           <Loader2 v-if="previewImageLoading" class="absolute h-8 w-8 animate-spin text-blue-500" aria-label="Carregando prévia" />
           <AccountFlyerTemplatePreview
-            v-if="accountPreviewProfileReady && !previewImageFailed"
-            :key="`${previewTemplate.id}:${accountPreviewProfile?.id || 'account'}:dialog`"
+            v-if="!previewImageFailed"
+            :key="`${previewTemplate.id}:dialog`"
             :template-id="previewTemplate.id"
             :revision="previewTemplate.updated_at"
+            :gallery-preview-url="previewTemplate.gallery_preview_url"
             :profile="accountPreviewProfile"
             :profile-ready="accountPreviewProfileReady"
+            personalize
             eager
             fit="contain"
             class="relative max-h-[65dvh] max-w-full object-contain shadow-md"

@@ -1,5 +1,6 @@
 const PUBLIC_STORAGE_PREFIXES = ['imagens/', 'uploads/', 'logo/'] as const
 const BUILDER_STORAGE_PREFIX = 'builder/'
+const FLYER_GALLERY_STORAGE_PREFIX = 'imagens/catalogo-encartes/'
 const MAX_STORAGE_PATH_LENGTH = 1024
 const UUID_SEGMENT = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 const LEGACY_PROJECT_PAGE_KEY_RE = new RegExp(
@@ -10,11 +11,11 @@ const LEGACY_PROJECT_PAGE_KEY_RE = new RegExp(
 export const normalizeStoragePath = (value: unknown): string =>
   String(value || '').trim().replace(/^\/+/, '')
 
-// Registros de cobrança e resultados são escritos exclusivamente pelo worker.
+// Registros de cobrança, resultados e miniaturas compartilhadas são escritos pelo servidor.
 // Ownership permite leitura, mas nunca alteração pelas APIs genéricas de storage.
 export const isServerManagedStorageKey = (key: string): boolean => {
   const normalized = normalizeStoragePath(key)
-  return /^projects\/[^/]+\/enhancement-ledger\.json(?:\/|$)/.test(normalized) ||
+  return normalized.startsWith(FLYER_GALLERY_STORAGE_PREFIX) || /^projects\/[^/]+\/enhancement-ledger\.json(?:\/|$)/.test(normalized) ||
     /^projects\/[^/]+\/[^/]+\/enhancements(?:\/|$)/.test(normalized)
 }
 
@@ -22,6 +23,7 @@ export const isServerManagedStorageKey = (key: string): boolean => {
 // máscaras e arquivos intermediários ficam restritos ao fluxo interno do servidor.
 export const assertClientStorageReadAllowed = (key: string): void => {
   const normalized = normalizeStoragePath(key)
+  if (normalized.startsWith(FLYER_GALLERY_STORAGE_PREFIX)) return
   if (!isServerManagedStorageKey(normalized)) return
   const isPublicEnhancementImage = /^projects\/[^/]+\/[^/]+\/enhancements\/[^/]+\/(?:original|result(?:-v\d+)?)\.png$/.test(normalized)
   if (!isPublicEnhancementImage) {

@@ -69,6 +69,7 @@ export type FlyerTemplateSummary = {
   id: string
   name: string
   preview_url: string | null
+  gallery_preview_url?: string | null
   preview_width: number | null
   preview_height: number | null
   updated_at: string | null

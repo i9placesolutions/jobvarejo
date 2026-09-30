@@ -29,6 +29,24 @@ const ACCOUNT_PREVIEW_CACHE_LIMIT = 256
 const accountPreviewMemoryCache = new Map<string, { imageUrl: string; touchedAt: number }>()
 let accountPreviewCacheDbPromise: Promise<IDBDatabase | null> | null = null
 
+export const shouldStartAccountFlyerPreview = (options: {
+  profileReady: boolean
+  hasTemplateId: boolean
+  isVisible: boolean
+  rendererInProgress: boolean
+  hasRenderedPreview: boolean
+}): boolean => options.profileReady &&
+  options.hasTemplateId &&
+  options.isVisible &&
+  !options.rendererInProgress &&
+  !options.hasRenderedPreview
+
+export const shouldRenderAccountFlyerPreview = (options: {
+  hasGalleryPreview: boolean
+  personalize: boolean
+  accountHasLogo: boolean
+}): boolean => !options.hasGalleryPreview || (options.personalize && options.accountHasLogo)
+
 /** The projects API returns page metadata in `canvas_data`; older rows may
  * still use the snake_case storage reference while current saves use camelCase. */
 export const getAccountFlyerTemplatePages = (project: any): any[] => {
@@ -85,7 +103,7 @@ export const buildAccountFlyerPreviewCacheKey = (options: {
   logoSource: string
   logoPreference?: AccountFlyerLogoPreference | null
   revision: string
-}): string => ['account-preview-v1',
+}): string => ['account-preview-v2',
   String(options.templateId || '').trim(),
   String(options.accountId || '').trim(),
   String(options.logoSource || '').trim(),

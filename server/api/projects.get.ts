@@ -1,3 +1,4 @@
+import { getFlyerGalleryPreviewKey } from '../utils/flyer-gallery-previews'
 import { requireAuthenticatedUser } from '../utils/auth'
 import { enforceRateLimit } from '../utils/rate-limit'
 import {
@@ -505,12 +506,19 @@ export default defineEventHandler(async (event) => {
           is_starred: _isStarred,
           ...summaryRest
         } = rest
+        const galleryKey = libraryRequest && summaryOnly
+          ? getFlyerGalleryPreviewKey(p.id, p.updated_at) : null
+        const galleryReadUrl = galleryKey
+          ? await resolveStorageReadUrl(galleryKey, p.user_id || user.id, { direct: false }) : null
+        const galleryPreviewUrl = galleryReadUrl && galleryKey
+          ? `${galleryReadUrl}&v=${galleryKey.slice(-69, -5)}` : null
         return {
           ...(summaryOnly ? summaryRest : rest),
+          ...(libraryRequest && summaryOnly ? { gallery_preview_url: galleryPreviewUrl } : {}),
           template_category: getFlyerTemplateCategory(p?.template_config),
           template_subcategory: getFlyerTemplateSubcategory(p?.template_config),
           template_category_label: getFlyerTemplateCategoryLabel(p?.template_config),
-          preview_url: await resolveProjectPreviewUrl(previewProject, p.user_id || user.id, {
+          preview_url: galleryPreviewUrl || await resolveProjectPreviewUrl(previewProject, p.user_id || user.id, {
             direct: !summaryOnly || libraryRequest
           }),
           ...previewSize,

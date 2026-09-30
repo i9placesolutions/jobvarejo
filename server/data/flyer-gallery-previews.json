@@ -1,0 +1,1272 @@
+{
+  "version": 1,
+  "assets": {
+    "07517edd-fd03-45d6-a826-4b450e4ee18b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/25788a511f24be0aa71376f57919e7095980dc025928e36e2031c60d76351c91.webp",
+      "sha256": "25788a511f24be0aa71376f57919e7095980dc025928e36e2031c60d76351c91",
+      "bytes": 13156,
+      "sourcePolicyVersion": 1
+    },
+    "0581b138-dcc7-47d7-9f75-bca449903693": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b9bdf1b79dbd09b607d5d042f8abd2c5011bbe33b9742cdf57536544ee5acfcd.webp",
+      "sha256": "b9bdf1b79dbd09b607d5d042f8abd2c5011bbe33b9742cdf57536544ee5acfcd",
+      "bytes": 11212,
+      "sourcePolicyVersion": 1
+    },
+    "011ee6b6-acac-4d01-9950-35abe62ac066": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/49634fe482916ee39b1d3cbb2bc56f401d06f890e4006ca3f738b592eee4328a.webp",
+      "sha256": "49634fe482916ee39b1d3cbb2bc56f401d06f890e4006ca3f738b592eee4328a",
+      "bytes": 13882,
+      "sourcePolicyVersion": 1
+    },
+    "09b08e6b-e3f8-4ed2-aa36-9e80b1adf718": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/233493d0dca7ea99eddfcdf39acef776d097f61fba03e20bd7a58ce52ea50b8b.webp",
+      "sha256": "233493d0dca7ea99eddfcdf39acef776d097f61fba03e20bd7a58ce52ea50b8b",
+      "bytes": 12134,
+      "sourcePolicyVersion": 1
+    },
+    "11264706-ea22-4ae1-bd52-fcf11df89a03": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/37d3d60b740e89064a7d557dd2e6c677ab05816542870500e4b9ab1761427a9f.webp",
+      "sha256": "37d3d60b740e89064a7d557dd2e6c677ab05816542870500e4b9ab1761427a9f",
+      "bytes": 13906,
+      "sourcePolicyVersion": 1
+    },
+    "1149e2e3-3c72-4bc2-8701-140d003ea949": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/9e9672eb51aac15a1b320995f35b729cdd9dc38ec5c6c7a8562e65e7d7cb0c43.webp",
+      "sha256": "9e9672eb51aac15a1b320995f35b729cdd9dc38ec5c6c7a8562e65e7d7cb0c43",
+      "bytes": 14420,
+      "sourcePolicyVersion": 1
+    },
+    "1555a997-254e-40a1-85b0-064f2247315e": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/9e8c1805ca437afa09c29463329f1db7f16e233f0f8df6d28029dd90587e959f.webp",
+      "sha256": "9e8c1805ca437afa09c29463329f1db7f16e233f0f8df6d28029dd90587e959f",
+      "bytes": 31772,
+      "sourcePolicyVersion": 1
+    },
+    "09f97ca1-7a0b-448d-bdd8-2c3be407d753": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/509a7d30303a675fe6b1123f66b8b419546d0ffd6ac858b6f6e5170cab34d0d6.webp",
+      "sha256": "509a7d30303a675fe6b1123f66b8b419546d0ffd6ac858b6f6e5170cab34d0d6",
+      "bytes": 14362,
+      "sourcePolicyVersion": 1
+    },
+    "187114ca-5538-4792-bce8-74b7a9405550": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/0a5a62dfdd07d2a6c9418b4fe045ac3fb04c34a2a6c0c629e6a5483152a6666a.webp",
+      "sha256": "0a5a62dfdd07d2a6c9418b4fe045ac3fb04c34a2a6c0c629e6a5483152a6666a",
+      "bytes": 18090,
+      "sourcePolicyVersion": 1
+    },
+    "16abbc12-b89b-40ef-a195-3f0ce8ef5f90": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/67a828bb48719dd0ed0ec2cdc8a3d4fcb16dc1f3f8dc2711e38317c503d5d7ec.webp",
+      "sha256": "67a828bb48719dd0ed0ec2cdc8a3d4fcb16dc1f3f8dc2711e38317c503d5d7ec",
+      "bytes": 13910,
+      "sourcePolicyVersion": 1
+    },
+    "18a76ca7-0221-4b79-ac75-ac7856e45660": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e032debe5128aa2d7c86cc8979080e705d7308ee4e74f08df9fb41b744cb7f2f.webp",
+      "sha256": "e032debe5128aa2d7c86cc8979080e705d7308ee4e74f08df9fb41b744cb7f2f",
+      "bytes": 14440,
+      "sourcePolicyVersion": 1
+    },
+    "167aecc3-3a83-4fdb-8f3d-437272e07455": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/1732422868c70086706a24ffe7baea828e3a8d0063ded5bb7281b90fd2f53a7e.webp",
+      "sha256": "1732422868c70086706a24ffe7baea828e3a8d0063ded5bb7281b90fd2f53a7e",
+      "bytes": 12912,
+      "sourcePolicyVersion": 1
+    },
+    "1d1733a2-a851-43db-a2d9-8bd94566bb2d": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/eb484d37fcb5ed72719be9623d4a082f9a9708049420d2b557165f7eb5a74bcf.webp",
+      "sha256": "eb484d37fcb5ed72719be9623d4a082f9a9708049420d2b557165f7eb5a74bcf",
+      "bytes": 12376,
+      "sourcePolicyVersion": 1
+    },
+    "1c2cef7b-5eef-44e0-a613-842245949c08": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/f05b59681878a6ac375079a1dcc155b013b0cddabcd8f9c0438d1f751358c45a.webp",
+      "sha256": "f05b59681878a6ac375079a1dcc155b013b0cddabcd8f9c0438d1f751358c45a",
+      "bytes": 19266,
+      "sourcePolicyVersion": 1
+    },
+    "1b9dbdcd-a872-4677-a8f0-f589b6171258": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/c9ccd30e00ea00f50013ddc29b300f1873bff0d2b978ac275857f57bbd7fa3e9.webp",
+      "sha256": "c9ccd30e00ea00f50013ddc29b300f1873bff0d2b978ac275857f57bbd7fa3e9",
+      "bytes": 15244,
+      "sourcePolicyVersion": 1
+    },
+    "18ab22da-0c14-43b4-90d1-75e05f5e2558": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/573ae3a4733e0d1d844ed201bac38077a9ddfaeb62511920c65a63230cf6b8ec.webp",
+      "sha256": "573ae3a4733e0d1d844ed201bac38077a9ddfaeb62511920c65a63230cf6b8ec",
+      "bytes": 10712,
+      "sourcePolicyVersion": 1
+    },
+    "1f6219e1-f877-41f1-a294-7f40a8f8f477": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/4f149449184f8fdcb9978b81a1aa79936abf0d317fd2eaf2ffe8faaa1c490a50.webp",
+      "sha256": "4f149449184f8fdcb9978b81a1aa79936abf0d317fd2eaf2ffe8faaa1c490a50",
+      "bytes": 13230,
+      "sourcePolicyVersion": 1
+    },
+    "1f1f2fbe-7b8a-4d7a-869c-91e7ebcea765": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/f9116f8d61fcf9f28aad745e9a29583703d89bbf8532f3c60ea4ee79f8e3b881.webp",
+      "sha256": "f9116f8d61fcf9f28aad745e9a29583703d89bbf8532f3c60ea4ee79f8e3b881",
+      "bytes": 11554,
+      "sourcePolicyVersion": 1
+    },
+    "1d98aad4-2379-4f8d-bc7d-0e89f03693e2": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/2caf811dea31b0cd1a2097e2c1668233de134ecdf7177a3858624f71d244e79a.webp",
+      "sha256": "2caf811dea31b0cd1a2097e2c1668233de134ecdf7177a3858624f71d244e79a",
+      "bytes": 22622,
+      "sourcePolicyVersion": 1
+    },
+    "1ece6ad9-8b17-4542-9860-d72390cae4d8": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b0e38e84b218022315f1ef6fd853f30406740dcbb54423ab21041d815673cd5e.webp",
+      "sha256": "b0e38e84b218022315f1ef6fd853f30406740dcbb54423ab21041d815673cd5e",
+      "bytes": 25588,
+      "sourcePolicyVersion": 1
+    },
+    "1ff4d7c4-f3b2-47dc-a0ff-c2909bc320b7": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/dc43df32a1db44c70917781a7891563d3d15b827b66cef0fa89cc850912fa966.webp",
+      "sha256": "dc43df32a1db44c70917781a7891563d3d15b827b66cef0fa89cc850912fa966",
+      "bytes": 18258,
+      "sourcePolicyVersion": 1
+    },
+    "2162ee00-bb07-4c4e-ab73-03118354695f": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/9cc300a6cb1655a4559ad817dedd6b08e179a107916fdbfdcde241e15f08b177.webp",
+      "sha256": "9cc300a6cb1655a4559ad817dedd6b08e179a107916fdbfdcde241e15f08b177",
+      "bytes": 13286,
+      "sourcePolicyVersion": 1
+    },
+    "2536b8a4-5773-4b5f-8946-3caf3492937e": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e8ca2dc6bc8b4855594acf28d634bda1a2ba0483cd00bb839bb301f0cb498174.webp",
+      "sha256": "e8ca2dc6bc8b4855594acf28d634bda1a2ba0483cd00bb839bb301f0cb498174",
+      "bytes": 14286,
+      "sourcePolicyVersion": 1
+    },
+    "231bf506-981f-4e7a-99d2-6cd2dfffc442": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/9c0414b927c0ac177293d2be478e265647cdf31b5914ff9ee02659eb076ceb88.webp",
+      "sha256": "9c0414b927c0ac177293d2be478e265647cdf31b5914ff9ee02659eb076ceb88",
+      "bytes": 14976,
+      "sourcePolicyVersion": 1
+    },
+    "283e90e7-27ba-411d-9268-e135a519a308": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/d32700bdbc8c068187b2003f32fbccb39e494c90d48a6259499e91e8c2d30463.webp",
+      "sha256": "d32700bdbc8c068187b2003f32fbccb39e494c90d48a6259499e91e8c2d30463",
+      "bytes": 14300,
+      "sourcePolicyVersion": 1
+    },
+    "29eecd6f-5047-4062-9699-50abc958d4fd": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/9b1b8c11ddf05a78f2ecf63fc9803bdc36e9f2e6d728b9d71e6123d604355ad0.webp",
+      "sha256": "9b1b8c11ddf05a78f2ecf63fc9803bdc36e9f2e6d728b9d71e6123d604355ad0",
+      "bytes": 10660,
+      "sourcePolicyVersion": 1
+    },
+    "29e264e5-f91c-4228-a66d-682e73267981": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/df0b9dceff7a4e0139ce6325d423702b778bb79c5391a180fa4fcfc199ad9021.webp",
+      "sha256": "df0b9dceff7a4e0139ce6325d423702b778bb79c5391a180fa4fcfc199ad9021",
+      "bytes": 14610,
+      "sourcePolicyVersion": 1
+    },
+    "27789662-66ee-4b56-a1ac-a90061b6862f": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/a2b20001f2a1ae286e8fb430381e0b8cce639dc5738852d5b21ee0e8b64f2ca5.webp",
+      "sha256": "a2b20001f2a1ae286e8fb430381e0b8cce639dc5738852d5b21ee0e8b64f2ca5",
+      "bytes": 12750,
+      "sourcePolicyVersion": 1
+    },
+    "2ce78c8c-a0d4-461b-bc01-d513c1cf3dc9": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/4e0ef92ba90c9101b95e0f5adb578e7d4a6625757b609c2523b076096b780c2a.webp",
+      "sha256": "4e0ef92ba90c9101b95e0f5adb578e7d4a6625757b609c2523b076096b780c2a",
+      "bytes": 11398,
+      "sourcePolicyVersion": 1
+    },
+    "2cda53c2-a5c1-47da-abea-fbb54a9cedc5": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/9bcae22d93e822a209ee5f3bc38feff1489648bead28a2f686688ecf5cf8e9db.webp",
+      "sha256": "9bcae22d93e822a209ee5f3bc38feff1489648bead28a2f686688ecf5cf8e9db",
+      "bytes": 12516,
+      "sourcePolicyVersion": 1
+    },
+    "2cd4be76-543e-4d93-b471-b71d389b1fe5": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/14260f1d7d9df5ee5977a900267352485bb0ef61a0f842c51720e1dff160c344.webp",
+      "sha256": "14260f1d7d9df5ee5977a900267352485bb0ef61a0f842c51720e1dff160c344",
+      "bytes": 14786,
+      "sourcePolicyVersion": 1
+    },
+    "2bf09a50-e066-4d05-aa85-278259d8752c": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/090e45d44d3a4cbf76c4ce27a8cbfe2a5053e2983bfb09f4e7379bb9453dfdf8.webp",
+      "sha256": "090e45d44d3a4cbf76c4ce27a8cbfe2a5053e2983bfb09f4e7379bb9453dfdf8",
+      "bytes": 13438,
+      "sourcePolicyVersion": 1
+    },
+    "2d098c27-eb79-4039-b132-cf0b723504b6": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/91353c4aae6e4cd8ee059b29225b736a79937238340cf5947b15c193b7c5da84.webp",
+      "sha256": "91353c4aae6e4cd8ee059b29225b736a79937238340cf5947b15c193b7c5da84",
+      "bytes": 13868,
+      "sourcePolicyVersion": 1
+    },
+    "2eabb51f-7918-497e-9aa5-40a05a15c102": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/0b61b167df1d30ff49217b3286db979d9e8781d7b875a8c30ad1d646e5c5a277.webp",
+      "sha256": "0b61b167df1d30ff49217b3286db979d9e8781d7b875a8c30ad1d646e5c5a277",
+      "bytes": 12842,
+      "sourcePolicyVersion": 1
+    },
+    "30416137-c816-49f9-912d-9a0c0a1f8568": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/056c7a2d78cf9b08759458ab4b3dc83d08061afdd111a8597a73acfcec8855f0.webp",
+      "sha256": "056c7a2d78cf9b08759458ab4b3dc83d08061afdd111a8597a73acfcec8855f0",
+      "bytes": 11764,
+      "sourcePolicyVersion": 1
+    },
+    "2db9ae75-936e-4f95-815c-636a3c5bb0c4": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/10b8b8745afe4f05025075ba73cf70666c71c0618fe25a21aec8d1d690d11db2.webp",
+      "sha256": "10b8b8745afe4f05025075ba73cf70666c71c0618fe25a21aec8d1d690d11db2",
+      "bytes": 15456,
+      "sourcePolicyVersion": 1
+    },
+    "330d181a-6b68-436b-9362-b0f0543dc344": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/a2147790eca9a8055283686c44ea3d1b89f5339f0a58c3bef02e16eb07ba3dd6.webp",
+      "sha256": "a2147790eca9a8055283686c44ea3d1b89f5339f0a58c3bef02e16eb07ba3dd6",
+      "bytes": 18260,
+      "sourcePolicyVersion": 1
+    },
+    "33c1dd75-f03d-40aa-adb6-ff74e75b8ebd": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/d33281bf5a472da7b9913de4a98a8bd282349ac923b3a316a91bc8994908875d.webp",
+      "sha256": "d33281bf5a472da7b9913de4a98a8bd282349ac923b3a316a91bc8994908875d",
+      "bytes": 13714,
+      "sourcePolicyVersion": 1
+    },
+    "31750d3a-1f50-42b3-95dd-72adc7f81e20": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/cd4fe4e5029738350165d1b0f63dab2ac5600ac5b3230c397c030419f9d3f2bd.webp",
+      "sha256": "cd4fe4e5029738350165d1b0f63dab2ac5600ac5b3230c397c030419f9d3f2bd",
+      "bytes": 17026,
+      "sourcePolicyVersion": 1
+    },
+    "3556fb20-ced6-4882-a7f3-965b89be114a": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/ec5ab200e5308b8f6d39172e47d50e266cf68cf9d9fb8b5a226a2627b4801f67.webp",
+      "sha256": "ec5ab200e5308b8f6d39172e47d50e266cf68cf9d9fb8b5a226a2627b4801f67",
+      "bytes": 17562,
+      "sourcePolicyVersion": 1
+    },
+    "3e2e827a-d0ce-4a80-b33d-11fdd99936c6": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b6058212708d8ed701d8dc17ee2c341945ca74ad872fac7db3286775c237d860.webp",
+      "sha256": "b6058212708d8ed701d8dc17ee2c341945ca74ad872fac7db3286775c237d860",
+      "bytes": 15892,
+      "sourcePolicyVersion": 1
+    },
+    "3d1e6929-a287-4a65-9874-eb2204fa46bc": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/aaaeeea943204e6ba1e4fef1352a303a71d78ba2d46973389561c254ebf25954.webp",
+      "sha256": "aaaeeea943204e6ba1e4fef1352a303a71d78ba2d46973389561c254ebf25954",
+      "bytes": 19030,
+      "sourcePolicyVersion": 1
+    },
+    "36c8e262-7319-4b2b-a504-8ace9fa1f18e": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/76e9b7769f7710a2d51b20842eaeadf0082fcdac5c900a900727a94dce8a1ea3.webp",
+      "sha256": "76e9b7769f7710a2d51b20842eaeadf0082fcdac5c900a900727a94dce8a1ea3",
+      "bytes": 17958,
+      "sourcePolicyVersion": 1
+    },
+    "3a257c5c-955e-473d-aef6-ad62209d0f98": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/36e21c621fb2db86f60cad51f9b5694cf0f0408a82a3504c7bd44e6a42f676be.webp",
+      "sha256": "36e21c621fb2db86f60cad51f9b5694cf0f0408a82a3504c7bd44e6a42f676be",
+      "bytes": 16090,
+      "sourcePolicyVersion": 1
+    },
+    "4245171c-9027-4e7d-98b3-e3c4970f94f9": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/8201d4951920a7593f31c0c64ef94247ec7344ebd38930990e2564a362ab4215.webp",
+      "sha256": "8201d4951920a7593f31c0c64ef94247ec7344ebd38930990e2564a362ab4215",
+      "bytes": 12572,
+      "sourcePolicyVersion": 1
+    },
+    "40e0c0e4-8f46-4df7-b171-9f5cb52b1cb6": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/89eab21704bd2959862911d553957c6769e29811f4580937ab1239ff3fadb398.webp",
+      "sha256": "89eab21704bd2959862911d553957c6769e29811f4580937ab1239ff3fadb398",
+      "bytes": 14664,
+      "sourcePolicyVersion": 1
+    },
+    "41155c29-28e7-4079-82cb-9b42819c6a49": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/ebb70fe8ba73b6c97915123a91a2d61f60e90f092d0f2dd2e2150767be977597.webp",
+      "sha256": "ebb70fe8ba73b6c97915123a91a2d61f60e90f092d0f2dd2e2150767be977597",
+      "bytes": 10708,
+      "sourcePolicyVersion": 1
+    },
+    "3f7ab336-b854-4f50-9c06-893e14247418": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/dae18fb2812ec7ca0b79d3ace276945188275aa11e657d1f1b64555097ce790a.webp",
+      "sha256": "dae18fb2812ec7ca0b79d3ace276945188275aa11e657d1f1b64555097ce790a",
+      "bytes": 17628,
+      "sourcePolicyVersion": 1
+    },
+    "430cea9f-0bb7-4c5b-a3c3-fb966af5b8fa": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/203b720306577d62b371edfd1a82f16a4c7585be49529a911b99cb0c4b25a1cb.webp",
+      "sha256": "203b720306577d62b371edfd1a82f16a4c7585be49529a911b99cb0c4b25a1cb",
+      "bytes": 11482,
+      "sourcePolicyVersion": 1
+    },
+    "448986b0-ac6a-4dc9-8af5-a756ea3a3e5d": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/f37736dc88703485084e876e0d5a1811fe10c05a772e5009a84eb26d33787bd4.webp",
+      "sha256": "f37736dc88703485084e876e0d5a1811fe10c05a772e5009a84eb26d33787bd4",
+      "bytes": 14610,
+      "sourcePolicyVersion": 1
+    },
+    "42ec1562-a8ea-4a5d-9847-6a205739227b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/74b6aac4fbf9fec0eb11d39c565b3b55053108abab292004a691e31959d87a66.webp",
+      "sha256": "74b6aac4fbf9fec0eb11d39c565b3b55053108abab292004a691e31959d87a66",
+      "bytes": 20024,
+      "sourcePolicyVersion": 1
+    },
+    "443b0c73-91f5-4053-898e-fa47854139b8": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b12c08abd658ee096e812b756cc8c5fadac8b3929aae0e28c37289269257d629.webp",
+      "sha256": "b12c08abd658ee096e812b756cc8c5fadac8b3929aae0e28c37289269257d629",
+      "bytes": 13844,
+      "sourcePolicyVersion": 1
+    },
+    "4a452f25-4ee0-4060-861c-7a388ce4d2ec": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/d900f7f256b3aa87ead52bd6df3ec91e835c1a586cdd949b9420f5686818e1f6.webp",
+      "sha256": "d900f7f256b3aa87ead52bd6df3ec91e835c1a586cdd949b9420f5686818e1f6",
+      "bytes": 15846,
+      "sourcePolicyVersion": 1
+    },
+    "4b8b98f0-9a34-46e3-ab41-ddcc6135c79d": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/7392bba6ab9020b30f009f04c6c12d33ca0091205401f51750d48b1ffad62a81.webp",
+      "sha256": "7392bba6ab9020b30f009f04c6c12d33ca0091205401f51750d48b1ffad62a81",
+      "bytes": 18744,
+      "sourcePolicyVersion": 1
+    },
+    "4ad7c82d-8f4d-4c21-81cc-6c1e11b1a952": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/1c197aeabc5924cbd57882c214777700bd4a0897cd32cdf46dffee37ec451ae2.webp",
+      "sha256": "1c197aeabc5924cbd57882c214777700bd4a0897cd32cdf46dffee37ec451ae2",
+      "bytes": 12516,
+      "sourcePolicyVersion": 1
+    },
+    "4702cd7d-af69-4dd6-b956-c84acac1946a": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/17e7b4b77e6e8708393555081a42f700f0e2b1a29a59882a6330b06c0bcf6517.webp",
+      "sha256": "17e7b4b77e6e8708393555081a42f700f0e2b1a29a59882a6330b06c0bcf6517",
+      "bytes": 12956,
+      "sourcePolicyVersion": 1
+    },
+    "4f092cdb-138c-4cf1-b2f7-4aacc018a890": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/76791ff3f6a81c38cdf9da1e7d661d90c3ac103b4f99ea8dd388a25ed4c82902.webp",
+      "sha256": "76791ff3f6a81c38cdf9da1e7d661d90c3ac103b4f99ea8dd388a25ed4c82902",
+      "bytes": 11862,
+      "sourcePolicyVersion": 1
+    },
+    "4fa00e96-746d-41bf-ac47-b2485be621f5": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/d18ea1d51eb53e58e190ea2527cd9806aed116b3f5e7ab2ba8ae51335d8cf277.webp",
+      "sha256": "d18ea1d51eb53e58e190ea2527cd9806aed116b3f5e7ab2ba8ae51335d8cf277",
+      "bytes": 13824,
+      "sourcePolicyVersion": 1
+    },
+    "4e4c6061-260b-4f90-b494-d1412b4d8f2a": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/65ae3e93cb7a3dddc2c5ea2f2775adfc096cf63c610d2371855a554644813011.webp",
+      "sha256": "65ae3e93cb7a3dddc2c5ea2f2775adfc096cf63c610d2371855a554644813011",
+      "bytes": 14084,
+      "sourcePolicyVersion": 1
+    },
+    "500e740b-4dac-4b52-9f41-ea0ce53674f8": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b4b019c9a405947cb068b377081733a62b514b4e1876b30073a005cf83172715.webp",
+      "sha256": "b4b019c9a405947cb068b377081733a62b514b4e1876b30073a005cf83172715",
+      "bytes": 14314,
+      "sourcePolicyVersion": 1
+    },
+    "565b05fd-394a-4b68-b794-4cedbfd8bad7": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/56296e3a2d0038ebd28b83e138fc4829e5190afc70f111bb82deceeef9c0d2fd.webp",
+      "sha256": "56296e3a2d0038ebd28b83e138fc4829e5190afc70f111bb82deceeef9c0d2fd",
+      "bytes": 14334,
+      "sourcePolicyVersion": 1
+    },
+    "590acdf5-85b0-4d7d-914a-4e8bfceee835": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/48c87691583e6cda5b8daa147fc17cd28d8822737d9feec5624d1630debda6ec.webp",
+      "sha256": "48c87691583e6cda5b8daa147fc17cd28d8822737d9feec5624d1630debda6ec",
+      "bytes": 17608,
+      "sourcePolicyVersion": 1
+    },
+    "50fbacc7-ec86-432e-b80e-1fedeb98ab70": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/661e4e023e317b77573111516210a2db5cf4612f40b6cc1ef835b3b5b47b859a.webp",
+      "sha256": "661e4e023e317b77573111516210a2db5cf4612f40b6cc1ef835b3b5b47b859a",
+      "bytes": 14796,
+      "sourcePolicyVersion": 1
+    },
+    "51f9a13e-c93a-49ba-b484-020c7f1646b4": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/a165ed6cf6d58158b242723b925a3d9b48cd03c687ece12713d730ed2a139bb2.webp",
+      "sha256": "a165ed6cf6d58158b242723b925a3d9b48cd03c687ece12713d730ed2a139bb2",
+      "bytes": 15772,
+      "sourcePolicyVersion": 1
+    },
+    "60114ab3-bb51-4e81-b164-9afa2ecd3437": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/9df9deb15a16a18035c5b9958c89eb34b9dd847aa9c3b93590cabced5a4406bd.webp",
+      "sha256": "9df9deb15a16a18035c5b9958c89eb34b9dd847aa9c3b93590cabced5a4406bd",
+      "bytes": 12278,
+      "sourcePolicyVersion": 1
+    },
+    "5de3aa49-dcc1-40ad-8ad2-85675463e966": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/dc084e2e607020bc81888ea86679f0f286c4a975f5eaf91fa2503427c88f1647.webp",
+      "sha256": "dc084e2e607020bc81888ea86679f0f286c4a975f5eaf91fa2503427c88f1647",
+      "bytes": 11806,
+      "sourcePolicyVersion": 1
+    },
+    "59c70825-c9bf-4543-b233-87a7ed8d2019": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/5b44cf3cef9b2e9437b8ec75332735edaeeafa5abd449cc0a9c44b640f89566d.webp",
+      "sha256": "5b44cf3cef9b2e9437b8ec75332735edaeeafa5abd449cc0a9c44b640f89566d",
+      "bytes": 16256,
+      "sourcePolicyVersion": 1
+    },
+    "5dfbc32d-16a7-4f66-90fa-7256719cbe17": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/5d765e6bf80373c8f289b75a14494e8ee9c8e10046df64646511a9b17c15d4cb.webp",
+      "sha256": "5d765e6bf80373c8f289b75a14494e8ee9c8e10046df64646511a9b17c15d4cb",
+      "bytes": 18484,
+      "sourcePolicyVersion": 1
+    },
+    "5b7e6ff7-7d12-40ca-8192-b638c1afb281": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/fff8c9c4b8f2ab86d051119d8b6f7b0d4748202439c88f66101f7c2d9f7c2e10.webp",
+      "sha256": "fff8c9c4b8f2ab86d051119d8b6f7b0d4748202439c88f66101f7c2d9f7c2e10",
+      "bytes": 12978,
+      "sourcePolicyVersion": 1
+    },
+    "5d3d74a4-eac4-448a-a528-e1af2014de72": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/0c4f12086644dcf716b1fc03caa54597268d132b57289ddd9dff6dc6794dd75a.webp",
+      "sha256": "0c4f12086644dcf716b1fc03caa54597268d132b57289ddd9dff6dc6794dd75a",
+      "bytes": 14926,
+      "sourcePolicyVersion": 1
+    },
+    "5aaf9556-ee5e-4165-887a-e989991bb05b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/31608472191ef3cb15d47616fa96a076e674708a8eb066bbe4aba1b4b5cb14c8.webp",
+      "sha256": "31608472191ef3cb15d47616fa96a076e674708a8eb066bbe4aba1b4b5cb14c8",
+      "bytes": 10724,
+      "sourcePolicyVersion": 1
+    },
+    "590f02fa-6c5e-4139-bfed-9617266aeddd": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/1ee7553dd89d34ceccd9c8398d1c500ffd2ca9ea4a0e0417208b49ffd1389f44.webp",
+      "sha256": "1ee7553dd89d34ceccd9c8398d1c500ffd2ca9ea4a0e0417208b49ffd1389f44",
+      "bytes": 10068,
+      "sourcePolicyVersion": 1
+    },
+    "6375766f-0f6d-41f9-b4e2-eb0d598ec904": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/4d949338fda4c2377a4bac89255db3b50b3ccc1be441ed4789e6c262c5b55522.webp",
+      "sha256": "4d949338fda4c2377a4bac89255db3b50b3ccc1be441ed4789e6c262c5b55522",
+      "bytes": 10216,
+      "sourcePolicyVersion": 1
+    },
+    "614eca03-600c-4b80-bf3a-5172dca9ed31": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/f1646442fd5181a59094eafd6ce1e196678999923e880f0e9c948fcd83ffbb22.webp",
+      "sha256": "f1646442fd5181a59094eafd6ce1e196678999923e880f0e9c948fcd83ffbb22",
+      "bytes": 10220,
+      "sourcePolicyVersion": 1
+    },
+    "6c1b2f8a-5037-44dd-bd99-661fc73285fd": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/5f842b1a7495f949bf1227b61b838aa7b0dcae8b431cc1e5da2365352ba037ac.webp",
+      "sha256": "5f842b1a7495f949bf1227b61b838aa7b0dcae8b431cc1e5da2365352ba037ac",
+      "bytes": 17362,
+      "sourcePolicyVersion": 1
+    },
+    "69c947f6-a66d-41b4-91e8-65c158f3b3fa": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e687f226580bafbdcbef4e2da43afc633060d24bf8b678213cfa7cab9bd37e61.webp",
+      "sha256": "e687f226580bafbdcbef4e2da43afc633060d24bf8b678213cfa7cab9bd37e61",
+      "bytes": 14050,
+      "sourcePolicyVersion": 1
+    },
+    "673f7bad-d4cd-492e-8683-57a73f061b07": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/91c377fd0d3fb93f7f1ebafcaa204ec74451e62ae6b82b30003f6d2f3d1abaf5.webp",
+      "sha256": "91c377fd0d3fb93f7f1ebafcaa204ec74451e62ae6b82b30003f6d2f3d1abaf5",
+      "bytes": 13316,
+      "sourcePolicyVersion": 1
+    },
+    "66aaabb8-33ef-43f3-a3f4-f8cb406f8862": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/39d8fd855f266ebb4b3e4d708b603febb32d43d37ed6844eea0c6dbc4a7252cf.webp",
+      "sha256": "39d8fd855f266ebb4b3e4d708b603febb32d43d37ed6844eea0c6dbc4a7252cf",
+      "bytes": 16726,
+      "sourcePolicyVersion": 1
+    },
+    "6a1de6f4-4cd8-46d2-b5d7-0a19c1afbcc4": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/66576ad2bcc1c37e7c76bbb65f0cdf6d5e14d67f1152fe25d7b6be018891154b.webp",
+      "sha256": "66576ad2bcc1c37e7c76bbb65f0cdf6d5e14d67f1152fe25d7b6be018891154b",
+      "bytes": 19060,
+      "sourcePolicyVersion": 1
+    },
+    "63766797-ee42-4f4c-8d4e-4d62e2aed16b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/1e7d2fd2ff040a2769a854fa988ddf92c66015d8ecb64040fec9efffc87e47fc.webp",
+      "sha256": "1e7d2fd2ff040a2769a854fa988ddf92c66015d8ecb64040fec9efffc87e47fc",
+      "bytes": 12536,
+      "sourcePolicyVersion": 1
+    },
+    "7361964b-0fd3-4ec2-a3ec-52b5fac3a4e8": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/765d47114c6f2dc507ea8e473e746a5615b13ddede878d268ed09c0b96c566fe.webp",
+      "sha256": "765d47114c6f2dc507ea8e473e746a5615b13ddede878d268ed09c0b96c566fe",
+      "bytes": 11004,
+      "sourcePolicyVersion": 1
+    },
+    "6d2a76ae-d271-4957-9d39-baf0532c016d": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/ea4734b5d11e8e9e52dcd5c44b7277ad74c55867ff22282054bf021cfe4530a4.webp",
+      "sha256": "ea4734b5d11e8e9e52dcd5c44b7277ad74c55867ff22282054bf021cfe4530a4",
+      "bytes": 21454,
+      "sourcePolicyVersion": 1
+    },
+    "6c79b35a-20ec-4292-8345-5dd7665622b8": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/420c8eee8452a716cbf286b0700d9075d213d2dc6deb641d13a24123700cde30.webp",
+      "sha256": "420c8eee8452a716cbf286b0700d9075d213d2dc6deb641d13a24123700cde30",
+      "bytes": 10814,
+      "sourcePolicyVersion": 1
+    },
+    "718f7d8b-019d-4854-b2b3-3f6adaec02ac": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/9ab45359f7f18b6493d34ab44e05a07c10e03079edfda2ab84a8e6aaca5a6717.webp",
+      "sha256": "9ab45359f7f18b6493d34ab44e05a07c10e03079edfda2ab84a8e6aaca5a6717",
+      "bytes": 11622,
+      "sourcePolicyVersion": 1
+    },
+    "6cab0846-804f-45f9-90cc-b385343fa3a6": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/68f55bdda616394180e09b2dc8eec29c385341575b4dae57d2a7ab4417874e16.webp",
+      "sha256": "68f55bdda616394180e09b2dc8eec29c385341575b4dae57d2a7ab4417874e16",
+      "bytes": 18262,
+      "sourcePolicyVersion": 1
+    },
+    "6e394169-6597-4d8a-afcc-191412fc2430": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/7692b73191a7f526a286403b7e6bd8b304bd64c1fb0e4b606ec9adb62f9da138.webp",
+      "sha256": "7692b73191a7f526a286403b7e6bd8b304bd64c1fb0e4b606ec9adb62f9da138",
+      "bytes": 18896,
+      "sourcePolicyVersion": 1
+    },
+    "7506f335-2bf6-4650-8206-b283585a5a16": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/3bee7c5f67dd3de70f91927ce00366cfccbab3991dfa459b481f6bfc14a87319.webp",
+      "sha256": "3bee7c5f67dd3de70f91927ce00366cfccbab3991dfa459b481f6bfc14a87319",
+      "bytes": 19910,
+      "sourcePolicyVersion": 1
+    },
+    "741b8910-18ba-479f-b4e2-e78f13cea583": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/a6a623c734689ab58ff5403f7ed6be0cd6dc13ddaf46e5c6321046b6ecb64ae6.webp",
+      "sha256": "a6a623c734689ab58ff5403f7ed6be0cd6dc13ddaf46e5c6321046b6ecb64ae6",
+      "bytes": 16358,
+      "sourcePolicyVersion": 1
+    },
+    "7689af0a-1e71-411e-be63-f7366a3d46cc": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/9e17489599a175d470182fc30b89488bcf1405ebe3d2ffdb4eac497db53d484a.webp",
+      "sha256": "9e17489599a175d470182fc30b89488bcf1405ebe3d2ffdb4eac497db53d484a",
+      "bytes": 15490,
+      "sourcePolicyVersion": 1
+    },
+    "77ec8426-e304-41d7-8151-fe4d16b87eba": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e6511bc1b50347fe043ba41a17a40661664895498abbb6c93ab855a75ea40e29.webp",
+      "sha256": "e6511bc1b50347fe043ba41a17a40661664895498abbb6c93ab855a75ea40e29",
+      "bytes": 14344,
+      "sourcePolicyVersion": 1
+    },
+    "79b35576-5450-42a5-964f-cc320e280f21": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/2a534866d2ad8558b11d07b04add80f9b234c47f4ff698a619c7678cecc1ab3e.webp",
+      "sha256": "2a534866d2ad8558b11d07b04add80f9b234c47f4ff698a619c7678cecc1ab3e",
+      "bytes": 15326,
+      "sourcePolicyVersion": 1
+    },
+    "767d3b5e-902f-4429-a1dd-4642a953884d": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/497aa56c2e617f6c3104ee85d204a6f76bb3d03e2b2bb589017cad035207d52b.webp",
+      "sha256": "497aa56c2e617f6c3104ee85d204a6f76bb3d03e2b2bb589017cad035207d52b",
+      "bytes": 15720,
+      "sourcePolicyVersion": 1
+    },
+    "7c170f87-12c7-4558-a797-e5fe05665629": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/13c61da589f0e3706055abfa8015268d201c79c7779a23878a5d51e4f75c5368.webp",
+      "sha256": "13c61da589f0e3706055abfa8015268d201c79c7779a23878a5d51e4f75c5368",
+      "bytes": 15496,
+      "sourcePolicyVersion": 1
+    },
+    "7babe998-b93b-401c-8c82-c13d8f84eb51": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b06b4492ea07b3e74df2ec5fbcb8a2e4a1d07eb1479ead8635b31e4537729dfb.webp",
+      "sha256": "b06b4492ea07b3e74df2ec5fbcb8a2e4a1d07eb1479ead8635b31e4537729dfb",
+      "bytes": 20202,
+      "sourcePolicyVersion": 1
+    },
+    "7b963a28-a70f-42dc-96ad-42c77e57de22": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/d19d8466c7cd026aeda3e57157231da3fa58eb61a6ac62ff07981e4c53cc3830.webp",
+      "sha256": "d19d8466c7cd026aeda3e57157231da3fa58eb61a6ac62ff07981e4c53cc3830",
+      "bytes": 13742,
+      "sourcePolicyVersion": 1
+    },
+    "7b8da3b2-3fb0-43f7-846b-f02ad017500a": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/a679ce9111bf1e90ab22f41c649e5aaf9d061d4093fc0b42a707261f02a1ce3d.webp",
+      "sha256": "a679ce9111bf1e90ab22f41c649e5aaf9d061d4093fc0b42a707261f02a1ce3d",
+      "bytes": 11598,
+      "sourcePolicyVersion": 1
+    },
+    "81092a72-c807-46a5-8996-a0eb8c229446": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/dd60715281fe672b2bdef30681883e6eaf2108d345c807fe3b428eb424a4bcaa.webp",
+      "sha256": "dd60715281fe672b2bdef30681883e6eaf2108d345c807fe3b428eb424a4bcaa",
+      "bytes": 14686,
+      "sourcePolicyVersion": 1
+    },
+    "7ce038d3-8c64-4884-a8c0-c4d976df5ac0": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/7c894c27e7408f79c67b1da8bc9589c4c99331dcf71a82d736dab340a9c143cc.webp",
+      "sha256": "7c894c27e7408f79c67b1da8bc9589c4c99331dcf71a82d736dab340a9c143cc",
+      "bytes": 15924,
+      "sourcePolicyVersion": 1
+    },
+    "82c90116-464a-49ff-9cf8-c612239f1519": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/61c86f91d261b96ea89f40949ba75190fda15f4d32b50f01525a1c7e24d0274f.webp",
+      "sha256": "61c86f91d261b96ea89f40949ba75190fda15f4d32b50f01525a1c7e24d0274f",
+      "bytes": 12948,
+      "sourcePolicyVersion": 1
+    },
+    "8226c02d-02ad-4a2e-90f0-d3efc67e28fa": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/05f4c7fbb997f1f42aebd6f57f2ff1cd2b1460c33af780c80db34c72d1fdfa62.webp",
+      "sha256": "05f4c7fbb997f1f42aebd6f57f2ff1cd2b1460c33af780c80db34c72d1fdfa62",
+      "bytes": 15142,
+      "sourcePolicyVersion": 1
+    },
+    "869776ba-4084-4375-8d8f-5b8432795b22": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/d9da781ae63cdc109cfac5c64eec203c7dde15ff5d44dd9a0bda1425d13b466c.webp",
+      "sha256": "d9da781ae63cdc109cfac5c64eec203c7dde15ff5d44dd9a0bda1425d13b466c",
+      "bytes": 11256,
+      "sourcePolicyVersion": 1
+    },
+    "84405af9-8cb1-484c-b759-9b3a2ba8d946": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/eccd5c033a54a42cc531f5883e99ca380605baf9128cda03c61bac70b51e2560.webp",
+      "sha256": "eccd5c033a54a42cc531f5883e99ca380605baf9128cda03c61bac70b51e2560",
+      "bytes": 11510,
+      "sourcePolicyVersion": 1
+    },
+    "86b65ef4-ec55-46e0-8361-2a6c31b2f972": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/cf1fb56ca98ec57e96645c96e8c6594c05b9a54f41a157d367bc9ef7b8cddea4.webp",
+      "sha256": "cf1fb56ca98ec57e96645c96e8c6594c05b9a54f41a157d367bc9ef7b8cddea4",
+      "bytes": 13534,
+      "sourcePolicyVersion": 1
+    },
+    "82d00ae9-c8a6-476f-936a-89a13cca86bc": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/a7fc76b71ac1ae0216f10baeea60f049037ef290031ae3d5d3d61abe16bdefef.webp",
+      "sha256": "a7fc76b71ac1ae0216f10baeea60f049037ef290031ae3d5d3d61abe16bdefef",
+      "bytes": 14902,
+      "sourcePolicyVersion": 1
+    },
+    "88947f96-face-4e89-b6a1-3f3f2044d97b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/56e010e3ef9f66f354acdec7e009c84834be2b14493c2347aceb6bb6ad1793b3.webp",
+      "sha256": "56e010e3ef9f66f354acdec7e009c84834be2b14493c2347aceb6bb6ad1793b3",
+      "bytes": 15838,
+      "sourcePolicyVersion": 1
+    },
+    "89fe4bd3-0962-463e-ae12-97e10f308493": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/a9250eb04965eea7aecc58e61cb1c4751ebf0a4ded9134bb36a3267d59d03316.webp",
+      "sha256": "a9250eb04965eea7aecc58e61cb1c4751ebf0a4ded9134bb36a3267d59d03316",
+      "bytes": 15158,
+      "sourcePolicyVersion": 1
+    },
+    "87d633a3-da24-4245-90e7-7000cf26f988": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/8750273871ee12884eee9146999a8bbb983a9b0aea7178eaf459a3289393ba46.webp",
+      "sha256": "8750273871ee12884eee9146999a8bbb983a9b0aea7178eaf459a3289393ba46",
+      "bytes": 19198,
+      "sourcePolicyVersion": 1
+    },
+    "8a916ada-108e-4801-ad97-f7fd03d96ea0": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/fe75877328b971ac6aaf82fb517378f5ff968e8bfdc1b72e2b95d35064125071.webp",
+      "sha256": "fe75877328b971ac6aaf82fb517378f5ff968e8bfdc1b72e2b95d35064125071",
+      "bytes": 13496,
+      "sourcePolicyVersion": 1
+    },
+    "8df7651c-6b91-4f14-8fed-0eebacf7581a": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/1bbcd112153a3cd06cfb7f21674bb4e8e8d6bf2530a73c4551841057615c1dba.webp",
+      "sha256": "1bbcd112153a3cd06cfb7f21674bb4e8e8d6bf2530a73c4551841057615c1dba",
+      "bytes": 14736,
+      "sourcePolicyVersion": 1
+    },
+    "8ce62416-c892-446f-b627-3f0996d1826e": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/f67119263fdf5022ed2ada9b3e5f42b138ac761872b3266f95293844fb3b3467.webp",
+      "sha256": "f67119263fdf5022ed2ada9b3e5f42b138ac761872b3266f95293844fb3b3467",
+      "bytes": 14278,
+      "sourcePolicyVersion": 1
+    },
+    "91c3492a-41ef-42de-a15c-8832824d0091": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/4d08f22d6ebb508e677d245173ae97118f0efd02a050a8476931a3236ee85005.webp",
+      "sha256": "4d08f22d6ebb508e677d245173ae97118f0efd02a050a8476931a3236ee85005",
+      "bytes": 11990,
+      "sourcePolicyVersion": 1
+    },
+    "8ed3deab-f003-49ba-8cf3-2df11c8202e0": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b3ad244b9e81d7acea97d64db365d4e9f052471e7790a47f8b2c26930b22f98a.webp",
+      "sha256": "b3ad244b9e81d7acea97d64db365d4e9f052471e7790a47f8b2c26930b22f98a",
+      "bytes": 16360,
+      "sourcePolicyVersion": 1
+    },
+    "990c6cb5-a6f6-428a-b044-8721319ab6e4": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/1a777850e75fdd8e4755166fae8ecfbfa29a387c42b726bf6c9ffe3ab7c3ec48.webp",
+      "sha256": "1a777850e75fdd8e4755166fae8ecfbfa29a387c42b726bf6c9ffe3ab7c3ec48",
+      "bytes": 20958,
+      "sourcePolicyVersion": 1
+    },
+    "98052446-deb9-4989-8be1-83e202e02f27": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/002ce3d70153aa7341edd4ef4f897ab5f1d122d89328e3ae099426bf8e822d24.webp",
+      "sha256": "002ce3d70153aa7341edd4ef4f897ab5f1d122d89328e3ae099426bf8e822d24",
+      "bytes": 13032,
+      "sourcePolicyVersion": 1
+    },
+    "95f32397-8316-4176-adb4-10e2bbda9cf5": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/7e8f7dec1b66f85deeb0f8aee44fc150de6a0f139a656ea407b864ee071424d7.webp",
+      "sha256": "7e8f7dec1b66f85deeb0f8aee44fc150de6a0f139a656ea407b864ee071424d7",
+      "bytes": 12368,
+      "sourcePolicyVersion": 1
+    },
+    "93dff870-741e-4a0c-8c37-4a22c87dddde": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/551b753311dcf2984cca52ec0b0f6fcb1f5d4b022f9838767da8692d0fce9a7c.webp",
+      "sha256": "551b753311dcf2984cca52ec0b0f6fcb1f5d4b022f9838767da8692d0fce9a7c",
+      "bytes": 14252,
+      "sourcePolicyVersion": 1
+    },
+    "9bb5f0d1-bdc7-4560-a4fd-511b32610b0a": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/c03b97c7cf97b9df188aedd86e98697611746334c8701c089c38bc75b821ae48.webp",
+      "sha256": "c03b97c7cf97b9df188aedd86e98697611746334c8701c089c38bc75b821ae48",
+      "bytes": 19708,
+      "sourcePolicyVersion": 1
+    },
+    "9db3b4c8-1455-490f-bcff-13316fd9d028": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/c5d26542a8d98a39261aa9829193fe20976247f81a7f33ea7c285b05889ace98.webp",
+      "sha256": "c5d26542a8d98a39261aa9829193fe20976247f81a7f33ea7c285b05889ace98",
+      "bytes": 15788,
+      "sourcePolicyVersion": 1
+    },
+    "99388014-34fe-4d48-831b-24d28f25abda": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/0e10b8451a0b00b8639f4c413d1f31495a80fa05e6cb1a5a9679e9be3575f0ba.webp",
+      "sha256": "0e10b8451a0b00b8639f4c413d1f31495a80fa05e6cb1a5a9679e9be3575f0ba",
+      "bytes": 14658,
+      "sourcePolicyVersion": 1
+    },
+    "9df9264e-8a88-41bc-b4c6-1481fcb75b6c": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/ca01c57b31be9aa3e7291a0b8585ce9ee005f09ba1c61512ded5e3ac3dd2753c.webp",
+      "sha256": "ca01c57b31be9aa3e7291a0b8585ce9ee005f09ba1c61512ded5e3ac3dd2753c",
+      "bytes": 18040,
+      "sourcePolicyVersion": 1
+    },
+    "a307ebdd-c0b1-4a6c-9091-ee4005246c50": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/cdd7547ab537c23317a263da22d42fce5be899dad27911b0b5798ac135749508.webp",
+      "sha256": "cdd7547ab537c23317a263da22d42fce5be899dad27911b0b5798ac135749508",
+      "bytes": 15350,
+      "sourcePolicyVersion": 1
+    },
+    "a0ad029a-3d67-49c6-83cb-65a74b8c6ae4": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/fb2a67fd1519b746b0220e2f1ab69130040ae3c3c732120243fe0606e1db4868.webp",
+      "sha256": "fb2a67fd1519b746b0220e2f1ab69130040ae3c3c732120243fe0606e1db4868",
+      "bytes": 10472,
+      "sourcePolicyVersion": 1
+    },
+    "9f8fb237-abf9-4470-baea-62e4de8539bf": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/c73b9fb5a0b9a12fe470d7454ba16bb59ff02854f95a3621c815cea48738b6ce.webp",
+      "sha256": "c73b9fb5a0b9a12fe470d7454ba16bb59ff02854f95a3621c815cea48738b6ce",
+      "bytes": 9966,
+      "sourcePolicyVersion": 1
+    },
+    "a4d011ae-770a-4098-b7c6-c63e82c175e7": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/4e31029c272a9b2664e84d639133583c6b9af81c53918f002863e765f3e7a1eb.webp",
+      "sha256": "4e31029c272a9b2664e84d639133583c6b9af81c53918f002863e765f3e7a1eb",
+      "bytes": 16802,
+      "sourcePolicyVersion": 1
+    },
+    "a715443f-d6b4-45ed-a28f-18b1e8517c42": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/3b0cd12f12dd43142f8e40eac9176beddb512b8085e0c3e84f1455bab8fd03de.webp",
+      "sha256": "3b0cd12f12dd43142f8e40eac9176beddb512b8085e0c3e84f1455bab8fd03de",
+      "bytes": 22868,
+      "sourcePolicyVersion": 1
+    },
+    "ab690e7b-f393-4416-b81c-e6ad3da654a4": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/353bbbec9fae066a8fbf7313bdb227539a35a0106e6b31138aeced554ff797e0.webp",
+      "sha256": "353bbbec9fae066a8fbf7313bdb227539a35a0106e6b31138aeced554ff797e0",
+      "bytes": 17514,
+      "sourcePolicyVersion": 1
+    },
+    "a99bb0c3-c1f7-4e75-8ced-8ddce17476b7": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/0c4c8b26e2572e5a006e3df1432267e14ba2365247c8389b0537e394e3461cf8.webp",
+      "sha256": "0c4c8b26e2572e5a006e3df1432267e14ba2365247c8389b0537e394e3461cf8",
+      "bytes": 11944,
+      "sourcePolicyVersion": 1
+    },
+    "a6940573-cacc-4c0a-8dcf-c78214e7b661": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/ae7ef933c4afbc6bfa8f28fc0d26e6329ffe29b308523c1d49fb059affde9bec.webp",
+      "sha256": "ae7ef933c4afbc6bfa8f28fc0d26e6329ffe29b308523c1d49fb059affde9bec",
+      "bytes": 15702,
+      "sourcePolicyVersion": 1
+    },
+    "ab7f7789-7298-4b34-b4c7-6d8f583d870a": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/4ccdc4506f3e7b287fac5ea91a31ed7b85463801898ade3a4dfb84a2061170a2.webp",
+      "sha256": "4ccdc4506f3e7b287fac5ea91a31ed7b85463801898ade3a4dfb84a2061170a2",
+      "bytes": 20042,
+      "sourcePolicyVersion": 1
+    },
+    "b117569e-52dc-4279-b495-e55fc263c3aa": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/51c05641497cfcda9a602733d7dc9814e48bdce58dbffdfddaa72b686033ab31.webp",
+      "sha256": "51c05641497cfcda9a602733d7dc9814e48bdce58dbffdfddaa72b686033ab31",
+      "bytes": 12938,
+      "sourcePolicyVersion": 1
+    },
+    "ae849f4d-db0f-49eb-851c-97150216e4bb": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/1a627b6fadb1d1e3bcf84fafe088f135936f792f9f98cd3294de7c8eea7e364a.webp",
+      "sha256": "1a627b6fadb1d1e3bcf84fafe088f135936f792f9f98cd3294de7c8eea7e364a",
+      "bytes": 22702,
+      "sourcePolicyVersion": 1
+    },
+    "b101ac2c-1e71-45fa-9d7f-657f001fcd00": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b1b3464e62b06d565fb174fa4491f9d9385362d33be195926f27337e13b8d6b3.webp",
+      "sha256": "b1b3464e62b06d565fb174fa4491f9d9385362d33be195926f27337e13b8d6b3",
+      "bytes": 15346,
+      "sourcePolicyVersion": 1
+    },
+    "bdb34119-7241-449d-94e0-de05c8289646": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/41002876c35c7858ede65654889e307fbe376497a9b5534adf71a9840440ed01.webp",
+      "sha256": "41002876c35c7858ede65654889e307fbe376497a9b5534adf71a9840440ed01",
+      "bytes": 11958,
+      "sourcePolicyVersion": 1
+    },
+    "ba3907a1-1319-4e2b-80e0-90f20a3353fc": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e19985e158e6cca69079a24fea37c5943fc1e832f9e8d517f0c25d85b9f60e90.webp",
+      "sha256": "e19985e158e6cca69079a24fea37c5943fc1e832f9e8d517f0c25d85b9f60e90",
+      "bytes": 17646,
+      "sourcePolicyVersion": 1
+    },
+    "b8a497c1-b11a-431a-95a9-d97cb985980d": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/4d2af1a313a505a61c7699e6e3c01916a51b1775764fc10c1a04f66a0eae91ea.webp",
+      "sha256": "4d2af1a313a505a61c7699e6e3c01916a51b1775764fc10c1a04f66a0eae91ea",
+      "bytes": 16672,
+      "sourcePolicyVersion": 1
+    },
+    "b59443c7-f4ba-4070-93e5-ee1ff34b07b8": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e8c46138270cba01fe5ba5e81dba38a3d1aaec2532879ffcf5b5918dd1a925df.webp",
+      "sha256": "e8c46138270cba01fe5ba5e81dba38a3d1aaec2532879ffcf5b5918dd1a925df",
+      "bytes": 40176,
+      "sourcePolicyVersion": 1
+    },
+    "c0ba0eab-7b60-41cd-b1f9-3b197446c14e": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/dbdd8c69f4d4994e0222fd3c1e002003d388e9c023c6a629a05eea0392e1a53f.webp",
+      "sha256": "dbdd8c69f4d4994e0222fd3c1e002003d388e9c023c6a629a05eea0392e1a53f",
+      "bytes": 12526,
+      "sourcePolicyVersion": 1
+    },
+    "bf5ee0e4-82eb-4de4-a46b-cc2dd712803b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/190e097279958cb6aad296506ac2e5ff32d0ca48129542c078c31d952495c15e.webp",
+      "sha256": "190e097279958cb6aad296506ac2e5ff32d0ca48129542c078c31d952495c15e",
+      "bytes": 13618,
+      "sourcePolicyVersion": 1
+    },
+    "bfad873e-26f2-4abb-a219-6be73ef7bd4b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/39969748262b7c66b46b907b77bb8b3da7988ad1175d931e3342ca374343b334.webp",
+      "sha256": "39969748262b7c66b46b907b77bb8b3da7988ad1175d931e3342ca374343b334",
+      "bytes": 17410,
+      "sourcePolicyVersion": 1
+    },
+    "c11924b4-3438-4e49-bd0e-56f702d4843d": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e5b219289d7d5242a5033904d5b512e6e1f20d428dbbc104f78a3e57dd90bb91.webp",
+      "sha256": "e5b219289d7d5242a5033904d5b512e6e1f20d428dbbc104f78a3e57dd90bb91",
+      "bytes": 16394,
+      "sourcePolicyVersion": 1
+    },
+    "c69acb2e-1446-40a5-913e-82cfd822cffc": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/ce83f515ebed7decc3a12263dfcfe3ef7291ddf50b6a69b2c138d0be7153792a.webp",
+      "sha256": "ce83f515ebed7decc3a12263dfcfe3ef7291ddf50b6a69b2c138d0be7153792a",
+      "bytes": 17228,
+      "sourcePolicyVersion": 1
+    },
+    "c29dc200-8b17-42a3-aa5f-14b96e9dc959": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/4426d8e26e36aead68a15aa0176f2189b0a77c048835aec7bd8d4f9a10d8ee13.webp",
+      "sha256": "4426d8e26e36aead68a15aa0176f2189b0a77c048835aec7bd8d4f9a10d8ee13",
+      "bytes": 13524,
+      "sourcePolicyVersion": 1
+    },
+    "c3613d1f-caca-42d6-877b-ee23b2fd68bb": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/19ec75237259d20e8217f999b1ff0a687645c0e2494adb96f506e11bdc387ffe.webp",
+      "sha256": "19ec75237259d20e8217f999b1ff0a687645c0e2494adb96f506e11bdc387ffe",
+      "bytes": 13324,
+      "sourcePolicyVersion": 1
+    },
+    "c1d25a5b-e9aa-4888-8f1a-45aa80b35a44": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/6262ac73aa4ec887271d33d6bac4caab227bd1a1fbb4c8db4677a2a34dadd81f.webp",
+      "sha256": "6262ac73aa4ec887271d33d6bac4caab227bd1a1fbb4c8db4677a2a34dadd81f",
+      "bytes": 12386,
+      "sourcePolicyVersion": 1
+    },
+    "c83f1ed2-2fc4-4656-96c5-e18e88a4c9c5": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/862ab2a0ac31fe8dfb4d9e8d9003639dc0c51ec74bc11e075ac0080909b5f183.webp",
+      "sha256": "862ab2a0ac31fe8dfb4d9e8d9003639dc0c51ec74bc11e075ac0080909b5f183",
+      "bytes": 20804,
+      "sourcePolicyVersion": 1
+    },
+    "caffd4fc-bb12-4bb0-aef9-75fccbd67f28": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/c36dd35255c96b4e399608e92fba546878ece91c65987ceb0de926f95020c404.webp",
+      "sha256": "c36dd35255c96b4e399608e92fba546878ece91c65987ceb0de926f95020c404",
+      "bytes": 12538,
+      "sourcePolicyVersion": 1
+    },
+    "c8077f8c-9116-48d4-a0a9-c25e1a8e2e73": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/f1772004e5c600e68464a443cf8b8682365fadb7485354473bbc90cf633db0d7.webp",
+      "sha256": "f1772004e5c600e68464a443cf8b8682365fadb7485354473bbc90cf633db0d7",
+      "bytes": 17760,
+      "sourcePolicyVersion": 1
+    },
+    "cb48f210-676e-496d-89b8-d00d4c06a64c": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/48af699827d483edff166c17c4ac976b2e7dcebb897e921ef03ed747a76b538f.webp",
+      "sha256": "48af699827d483edff166c17c4ac976b2e7dcebb897e921ef03ed747a76b538f",
+      "bytes": 15554,
+      "sourcePolicyVersion": 1
+    },
+    "cf634706-b20f-4f4b-ab9b-dc4c9334368f": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/cdc8d86420def2888c9f723a3b9106fa40537767e6a1f7ad0a3d2c5edbf286cc.webp",
+      "sha256": "cdc8d86420def2888c9f723a3b9106fa40537767e6a1f7ad0a3d2c5edbf286cc",
+      "bytes": 13382,
+      "sourcePolicyVersion": 1
+    },
+    "d214f77a-3d3a-4f42-8cac-43f6234265f2": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/bf1e672cf99b9c01944cbec1d122c03078cf7d655fa979e2232ee8a8cd9b3ea8.webp",
+      "sha256": "bf1e672cf99b9c01944cbec1d122c03078cf7d655fa979e2232ee8a8cd9b3ea8",
+      "bytes": 19708,
+      "sourcePolicyVersion": 1
+    },
+    "d6dac003-8244-41fd-ad1f-a8b701041bea": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b08fbb301fec0862c2c379314d3b3915d2416931365f5104a99e65ce434b93ee.webp",
+      "sha256": "b08fbb301fec0862c2c379314d3b3915d2416931365f5104a99e65ce434b93ee",
+      "bytes": 17176,
+      "sourcePolicyVersion": 1
+    },
+    "d43191fb-535a-4ed5-abb1-aef974ac4335": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/69bc435d3ee52eebeeee2f056579f71812b0c7378197795c23fb3ba024c07c8b.webp",
+      "sha256": "69bc435d3ee52eebeeee2f056579f71812b0c7378197795c23fb3ba024c07c8b",
+      "bytes": 14490,
+      "sourcePolicyVersion": 1
+    },
+    "dcfac1f8-d020-4504-a3b8-94857976a0e9": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/c836a062cc5d8708b23b3379e27d2eb69b4d7ececac5d234f6db9b3b18e5c758.webp",
+      "sha256": "c836a062cc5d8708b23b3379e27d2eb69b4d7ececac5d234f6db9b3b18e5c758",
+      "bytes": 14668,
+      "sourcePolicyVersion": 1
+    },
+    "d6e5df76-0d63-41fa-8cbd-edd5bf29a259": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/85f3bc1fb8884158a86673cf8a349d2a10d1c3b4857dd734d181c88b02ab6aff.webp",
+      "sha256": "85f3bc1fb8884158a86673cf8a349d2a10d1c3b4857dd734d181c88b02ab6aff",
+      "bytes": 11792,
+      "sourcePolicyVersion": 1
+    },
+    "d8a13735-9a14-4c6b-845c-34593fd8d7f2": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/66085141aa8604ca1e1a26275e3d4bfffda7e597ba9ebea6d1fef98262098e24.webp",
+      "sha256": "66085141aa8604ca1e1a26275e3d4bfffda7e597ba9ebea6d1fef98262098e24",
+      "bytes": 15498,
+      "sourcePolicyVersion": 1
+    },
+    "dbcdae8f-2214-462b-84e2-3b7e9a149194": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/81344794bee408f0f211a996c11700070df6e9962d505fab06beeb692ff3374a.webp",
+      "sha256": "81344794bee408f0f211a996c11700070df6e9962d505fab06beeb692ff3374a",
+      "bytes": 10638,
+      "sourcePolicyVersion": 1
+    },
+    "e08d3ae2-4357-4de2-a518-581e1b9ee1b9": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/6a99d2cb3bab48d27f6de67afcd15efafe525109008d3be338d45f74d00a68ce.webp",
+      "sha256": "6a99d2cb3bab48d27f6de67afcd15efafe525109008d3be338d45f74d00a68ce",
+      "bytes": 15556,
+      "sourcePolicyVersion": 1
+    },
+    "df8be120-75ae-4bc7-b952-ba47e50f0b45": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/62dcbbd38dcaa99371209db39d3382625cc5992569861aaf52b1d35f9fa2f07f.webp",
+      "sha256": "62dcbbd38dcaa99371209db39d3382625cc5992569861aaf52b1d35f9fa2f07f",
+      "bytes": 19692,
+      "sourcePolicyVersion": 1
+    },
+    "dfa7a4d0-821c-4454-be7c-4c0cf602d1dd": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e657721ab0e9696b369791cf3b03d6aa0ca795b78b19fb4148af3d1082e1e272.webp",
+      "sha256": "e657721ab0e9696b369791cf3b03d6aa0ca795b78b19fb4148af3d1082e1e272",
+      "bytes": 13224,
+      "sourcePolicyVersion": 1
+    },
+    "e0719515-a234-4328-8551-91eaa34c527c": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/8b0076cb696627576145d477cef50dbc7fc3462e23f090fa8fb57c1c0b6edff0.webp",
+      "sha256": "8b0076cb696627576145d477cef50dbc7fc3462e23f090fa8fb57c1c0b6edff0",
+      "bytes": 16250,
+      "sourcePolicyVersion": 1
+    },
+    "e3c01941-7973-4999-9886-082332bdd00b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/83abfc69f9f93f58fb22d32c3ea8618b2a2627651e8e4046753c9463fde2270f.webp",
+      "sha256": "83abfc69f9f93f58fb22d32c3ea8618b2a2627651e8e4046753c9463fde2270f",
+      "bytes": 20210,
+      "sourcePolicyVersion": 1
+    },
+    "e5dc2833-ef7e-4958-9639-fbd0fe17688b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/97dfbb702fcded6ced43929391a64450c6aade420b06b0b7e8e82e48ff277018.webp",
+      "sha256": "97dfbb702fcded6ced43929391a64450c6aade420b06b0b7e8e82e48ff277018",
+      "bytes": 13826,
+      "sourcePolicyVersion": 1
+    },
+    "e2c78a0d-09b4-488d-beeb-dc9e3f4ce3e2": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/2b16ec87b35826c510174564fdbd6e8e36c57321f7f3e3c22501340a106b0c3a.webp",
+      "sha256": "2b16ec87b35826c510174564fdbd6e8e36c57321f7f3e3c22501340a106b0c3a",
+      "bytes": 17290,
+      "sourcePolicyVersion": 1
+    },
+    "e092b15b-fb4b-4f32-8978-dc023c1f8c2d": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/a308b5c4fb0435fa79ca775ab2f33376f218a352b44fe487d2ef63bc744a781e.webp",
+      "sha256": "a308b5c4fb0435fa79ca775ab2f33376f218a352b44fe487d2ef63bc744a781e",
+      "bytes": 17774,
+      "sourcePolicyVersion": 1
+    },
+    "eb8b8763-fbc4-420b-9c0a-0bdb6ae2bdad": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/660f758c5c47b56e52c14662e4ee44d51654a9a3e52f1889260b739fd4aebe03.webp",
+      "sha256": "660f758c5c47b56e52c14662e4ee44d51654a9a3e52f1889260b739fd4aebe03",
+      "bytes": 15870,
+      "sourcePolicyVersion": 1
+    },
+    "ea0d0789-3081-409c-b830-10739806b065": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/532ca6efa17226c02ad6d5ceef7d4bd9bdeca530cce3ad6fbb1dbf16a8d61d69.webp",
+      "sha256": "532ca6efa17226c02ad6d5ceef7d4bd9bdeca530cce3ad6fbb1dbf16a8d61d69",
+      "bytes": 8710,
+      "sourcePolicyVersion": 1
+    },
+    "e6a9cff8-e500-47a6-a931-c7f321a5434d": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/fa698c321eecafccc5ec8b95ee713e3696530fb7e35fa4ba8b268665c783b8af.webp",
+      "sha256": "fa698c321eecafccc5ec8b95ee713e3696530fb7e35fa4ba8b268665c783b8af",
+      "bytes": 17722,
+      "sourcePolicyVersion": 1
+    },
+    "e69be142-fce7-4c83-8775-66e03030c071": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/2989dc387c130b69b65d429d0bb42c2acfea2a0003461d94e05bb5c7b75f11dd.webp",
+      "sha256": "2989dc387c130b69b65d429d0bb42c2acfea2a0003461d94e05bb5c7b75f11dd",
+      "bytes": 17614,
+      "sourcePolicyVersion": 1
+    },
+    "ee7f8fe6-f0d8-461b-b7bc-d277ab097e02": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/c3d29c6180070a29588d09de86a8b29df15419fa57d367afb83c8af21205d08a.webp",
+      "sha256": "c3d29c6180070a29588d09de86a8b29df15419fa57d367afb83c8af21205d08a",
+      "bytes": 16308,
+      "sourcePolicyVersion": 1
+    },
+    "ef64f202-f51e-4df1-abec-06bcc643f05a": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/ef8d132331d97b774b1dae5e0ca30cb66600810af93b72880d9c22d0adfb09f4.webp",
+      "sha256": "ef8d132331d97b774b1dae5e0ca30cb66600810af93b72880d9c22d0adfb09f4",
+      "bytes": 15270,
+      "sourcePolicyVersion": 1
+    },
+    "f2d6f6a1-0096-4c7f-a656-c2799bbfffba": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/f4e167e836a0ddee85589a28a8efc28c5d6fccb787fbeb670be88e1135d41be7.webp",
+      "sha256": "f4e167e836a0ddee85589a28a8efc28c5d6fccb787fbeb670be88e1135d41be7",
+      "bytes": 10958,
+      "sourcePolicyVersion": 1
+    },
+    "eda6e0c8-eb39-4361-8da0-763329a2f71b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/395b5e5f2e07bace42a93ef77d4d4b3066f229afab96f48ec846749809192fda.webp",
+      "sha256": "395b5e5f2e07bace42a93ef77d4d4b3066f229afab96f48ec846749809192fda",
+      "bytes": 15704,
+      "sourcePolicyVersion": 1
+    },
+    "f322c0a9-4942-431a-9bf9-4dc1d4384bae": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e0588c447b11392aaef7f9da754dcd198817832c5216652c60919de868bb53d1.webp",
+      "sha256": "e0588c447b11392aaef7f9da754dcd198817832c5216652c60919de868bb53d1",
+      "bytes": 10640,
+      "sourcePolicyVersion": 1
+    },
+    "f43160c9-df3c-43cc-846a-3b14e199530b": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/aae0faac526413dda5f947bf2e2571cfca76461c4163ab89991f8025cca09e5a.webp",
+      "sha256": "aae0faac526413dda5f947bf2e2571cfca76461c4163ab89991f8025cca09e5a",
+      "bytes": 15074,
+      "sourcePolicyVersion": 1
+    },
+    "f2fcc88f-1d67-486a-b4c8-d0561a47c505": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/e05b8776343a951cb4716f7743a992f91758d32587620055763fa95d2689e83c.webp",
+      "sha256": "e05b8776343a951cb4716f7743a992f91758d32587620055763fa95d2689e83c",
+      "bytes": 14936,
+      "sourcePolicyVersion": 1
+    },
+    "f756b6a1-4725-4dbe-9d5a-ee0eb8af5462": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/ba3aa446f05ed4c081f8062f2a48bc836c122f20bcb1d6b9bd9ad981cebb04e3.webp",
+      "sha256": "ba3aa446f05ed4c081f8062f2a48bc836c122f20bcb1d6b9bd9ad981cebb04e3",
+      "bytes": 13968,
+      "sourcePolicyVersion": 1
+    },
+    "fca4e039-f585-4bb6-9022-370d490e163f": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/379f10374445e8ee66258a042a3ff9b58381a5f999f09feb385cd24c40baf95e.webp",
+      "sha256": "379f10374445e8ee66258a042a3ff9b58381a5f999f09feb385cd24c40baf95e",
+      "bytes": 14320,
+      "sourcePolicyVersion": 1
+    },
+    "f7c57c47-7c1d-45d8-a62a-3359a65da3f1": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/adea03bdf2f88d5c08d57c81acdf7256bbe0e51adaa6a596538210ce33e732de.webp",
+      "sha256": "adea03bdf2f88d5c08d57c81acdf7256bbe0e51adaa6a596538210ce33e732de",
+      "bytes": 15758,
+      "sourcePolicyVersion": 1
+    },
+    "f88b9f02-0da3-43cd-9378-ca2a96450555": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/b049b4e6482a639cec03eb89780fbd826ad6696a2bffb20f9dd487a0c0bca61d.webp",
+      "sha256": "b049b4e6482a639cec03eb89780fbd826ad6696a2bffb20f9dd487a0c0bca61d",
+      "bytes": 13420,
+      "sourcePolicyVersion": 1
+    },
+    "fc95b924-a8a0-4deb-9b44-fdbc568a925f": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/f7d24084be8557f40bb5c56e3024a58d04b341bc36962c4652044450339f4a76.webp",
+      "sha256": "f7d24084be8557f40bb5c56e3024a58d04b341bc36962c4652044450339f4a76",
+      "bytes": 19070,
+      "sourcePolicyVersion": 1
+    },
+    "fe23a25d-5bf3-42fc-9087-287fb70a4d06": {
+      "revision": "2026-09-30T01:26:59.889Z",
+      "key": "imagens/catalogo-encartes/88a7aa02c8ff44cf857e0a813066707d409ffa0a8a0adf471df04edce35594b5.webp",
+      "sha256": "88a7aa02c8ff44cf857e0a813066707d409ffa0a8a0adf471df04edce35594b5",
+      "bytes": 13978,
+      "sourcePolicyVersion": 1
+    }
+  }
+}
