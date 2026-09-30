@@ -7,7 +7,7 @@
     "env:check:full": "node scripts/check-env.mjs --profile=full",
     "env:sync:github": "bash scripts/sync-github-secrets.sh",
     "predev": "npm run env:check",
-    "prebuild": "npm run env:check:full",
+    "prebuild": "npm run env:check:full && node scripts/video-studio/check-catalog-storage.mjs",
     "prepreview": "npm run env:check:full",
     "pregenerate": "npm run env:check:full",
     "build": "nuxt build",

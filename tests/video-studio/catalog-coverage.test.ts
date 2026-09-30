@@ -1,11 +1,15 @@
-import {readFileSync,existsSync} from 'node:fs'
-import {createHash} from 'node:crypto'
+import {readFileSync} from 'node:fs'
 import {describe,it,expect} from 'vitest'
 import {VIDEO_BACKGROUNDS,backgroundAsset} from '../../shared/video-studio/backgrounds'
 import {newVideoFromTemplate,applyVideoTemplate} from '../../shared/video-studio/templates'
 import {videoDocumentSchema} from '../../server/utils/video-studio/schema'
 import {FLYER_RECIPES} from '../../shared/video-studio/flyer-recipes'
 import {isBuiltinMusic,ATMOSPHERE_EFFECTS} from '../../shared/video-studio/effect-catalog'
+const catalog=JSON.parse(readFileSync('shared/video-studio/catalog-assets.json','utf8'))
+const hasCatalogAsset=(path:string)=>{
+ const asset=catalog.assets[path]
+ return Boolean(asset&&/^[a-f0-9]{64}$/.test(asset.sha256)&&Number.isSafeInteger(asset.bytes)&&asset.bytes>=0&&asset.contentType&&asset.key===`video-studio/catalog/${asset.sha256}/${path}`)
+}
 describe('Cobertura do catálogo de encartes',()=>{
  const recipes=Object.values(FLYER_RECIPES)
  it('identifica cada encarte por ID e mantém uma trilha própria por modelo',()=>{
@@ -13,12 +17,12 @@ describe('Cobertura do catálogo de encartes',()=>{
   expect(recipes.some(r=>r.sourceProject==='d6e5df76-0d63-41fa-8cbd-edd5bf29a259')).toBe(true)
   expect(new Set(recipes.map(r=>r.sourceProject)).size).toBe(recipes.length)
   expect(new Set(recipes.map(r=>r.music)).size).toBe(recipes.length)
-  const hashes=recipes.map(r=>{expect(isBuiltinMusic(r.music)).toBe(true);return createHash('sha256').update(readFileSync(`public/video-studio/audio/${r.music}.mp3`)).digest('hex')})
+  const hashes=recipes.map(r=>{expect(isBuiltinMusic(r.music)).toBe(true);const path=`audio/${r.music}.mp3`;expect(hasCatalogAsset(path)).toBe(true);return catalog.assets[path].sha256})
   expect(new Set(hashes).size).toBe(recipes.length)
  })
  it('não deixa referências de arte quebradas e preserva os fundos vetoriais',()=>{
   for(const r of recipes){expect(Boolean(r.seal||r.nativeTitle)).toBe(true);expect(Boolean(r.background||r.backgroundGradient)).toBe(true)
-   for(const a of [r.background,r.seal,r.energyBackground,r.energyBackgroundVertical].filter(Boolean))expect(existsSync(`public/video-studio/templates/${a}`)).toBe(true)
+   for(const a of [r.background,r.seal,r.energyBackground,r.energyBackgroundVertical].filter(Boolean))expect(hasCatalogAsset(`templates/${a}`)).toBe(true)
   }
  })
  it('preserva a paleta do encarte em todos os modelos sem sobreposição genérica',()=>{
@@ -30,7 +34,7 @@ describe('Cobertura do catálogo de encartes',()=>{
  })
  it('oferece seis fundos com arte própria em cada formato e mantém a escolha do usuário',()=>{
   for(const bg of VIDEO_BACKGROUNDS){
-   for(const format of ['vertical','horizontal'] as const)expect(existsSync('public/video-studio/templates/'+backgroundAsset(bg.id,format))).toBe(true)
+   for(const format of ['vertical','horizontal'] as const)expect(hasCatalogAsset('templates/'+backgroundAsset(bg.id,format))).toBe(true)
    const doc=newVideoFromTemplate('alerta');doc.background=bg.id;applyVideoTemplate(doc,'saldao');expect(doc.background).toBe(bg.id);expect(doc.templateRevision).toBe(19);expect(videoDocumentSchema.safeParse(doc).success).toBe(true)
   }
   expect(videoDocumentSchema.safeParse({...newVideoFromTemplate('alerta'),background:'https://outra-origem'}).success).toBe(false)

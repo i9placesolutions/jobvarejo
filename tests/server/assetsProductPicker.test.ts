@@ -27,6 +27,13 @@ beforeEach(() => {
 })
 
 describe('busca manual de imagens salvas', () => {
+  it('ordena Café Pilão pela identidade completa antes das alternativas da família', async () => {
+    mocks.query.mockReturnValue({ q: 'CAFÉ PILÃO 500G', productName: 'CAFÉ PILÃO 500G', familySearch: '1', paginated: '1', ai: '0', includeCache: '0' })
+    const keys = ['imagens/cafe-santa-helena-500g.webp', 'imagens/cafe-pilao-250g.webp', 'imagens/cafe-pilao-500g.webp']
+    mocks.list.mockResolvedValue(keys.map(key => ({ key })))
+    const results: any = await handler({} as any)
+    expect(results.items.map((asset: any) => asset.key)).toEqual([keys[2], keys[1], keys[0]])
+  })
   it('encontra os arquivos reais com hífens e palavras intercaladas', async () => {
     const results: any = await handler({} as any)
     expect(results.map((asset: any) => asset.key)).toEqual(expect.arrayContaining(originalKeys))

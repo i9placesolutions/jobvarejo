@@ -61,7 +61,7 @@ export const normalizeGlobalStyles = (
         cardBorderRadius: defaults.cardBorderRadius ?? 8,
         cardBorderWidth: defaults.cardBorderWidth ?? 0,
         prodNameScale: defaults.prodNameScale ?? 1,
-        prodNameLineHeight: defaults.prodNameLineHeight ?? 1.05,
+        prodNameLineHeight: defaults.prodNameLineHeight ?? 0.95,
         prodNameOffsetY: defaults.prodNameOffsetY ?? 0,
         splashScale: defaults.splashScale ?? 1,
         splashTextScale: defaults.splashTextScale ?? 1,

@@ -2,7 +2,7 @@
 import { ref, computed, inject, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { collectProjectColors } from '~/utils/projectColors'
 import { useProject } from '~/composables/useProject'
-import { sampleCanvasColor } from '~/utils/canvasColorSampler'
+import ArtworkEyedropper from './ArtworkEyedropper.vue'
 import { X, Pipette } from 'lucide-vue-next'
 
 interface Props {
@@ -44,10 +44,7 @@ const isDraggingColor = ref(false)
 const isDraggingHue = ref(false)
 const isDraggingAlpha = ref(false)
 const isEyedropperActive = ref(false)
-const supportsEyeDropper = ref(false)
-onMounted(() => {
-  supportsEyeDropper.value = typeof (window as any).EyeDropper === 'function'
-})
+const eyedropper = ref<InstanceType<typeof ArtworkEyedropper> | null>(null)
 const colorAreaRef = ref<HTMLElement | null>(null)
 const hueSliderRef = ref<HTMLElement | null>(null)
 const alphaSliderRef = ref<HTMLElement | null>(null)
@@ -394,119 +391,16 @@ const updateFromRGB = (index: number, value: number) => {
   lightness.value = hsl.l
 }
 
-const isCanvasEyedropperActive = ref(false)
-const eyedropperHint = ref('Clique na cor desejada dentro da arte. Esc para cancelar.')
-const loupeCanvas = ref<HTMLCanvasElement | null>(null)
-const loupeColor = ref<string | null>(null)
-const loupePosition = ref({ left: 0, top: 0 })
-let loupeFrame = 0
-let loupePoint = { x: 0, y: 0 }
-const canvasAtPoint = (x: number, y: number) => {
-  const hit = document.elementsFromPoint(x, y)
-    .find(element => element instanceof HTMLCanvasElement && !element.closest('.eyedropper-loupe'))
-  return hit?.closest('.canvas-container')?.querySelector<HTMLCanvasElement>('canvas.lower-canvas')
-    ?? (hit instanceof HTMLCanvasElement ? hit : null)
-}
-const refreshLoupe = () => {
-  loupeFrame = 0
-  if (!isCanvasEyedropperActive.value) return
-  const { x, y } = loupePoint
-  loupePosition.value = {
-    left: Math.max(8, Math.min(x + 24, window.innerWidth - 168)),
-    top: Math.max(8, Math.min(y + 24, window.innerHeight - 180))
-  }
-  const context = loupeCanvas.value?.getContext('2d')
-  context?.clearRect(0, 0, 110, 110)
-  loupeColor.value = null
-  try {
-    const canvas = canvasAtPoint(x, y)
-    if (!canvas) return
-    loupeColor.value = sampleCanvasColor(canvas, x, y)
-    if (!loupeColor.value || !context) return
-    const rect = canvas.getBoundingClientRect()
-    const pixelX = Math.floor((x - rect.left) * canvas.width / rect.width)
-    const pixelY = Math.floor((y - rect.top) * canvas.height / rect.height)
-    context.imageSmoothingEnabled = false
-    context.drawImage(canvas, pixelX - 5, pixelY - 5, 11, 11, 0, 0, 110, 110)
-  } catch {
-    // Canvas protegido: não mostrar uma amostra anterior como se fosse a cor atual.
-    loupeColor.value = null
-  }
-}
-const moveLoupe = (event: MouseEvent) => {
-  if (!isCanvasEyedropperActive.value) return
-  loupePoint = { x: event.clientX, y: event.clientY }
-  if (!loupeFrame) loupeFrame = requestAnimationFrame(refreshLoupe)
-}
-const cancelCanvasEyedropper = () => {
-  isCanvasEyedropperActive.value = false
-  if (loupeFrame) cancelAnimationFrame(loupeFrame)
-  loupeFrame = 0
-  loupeColor.value = null
-}
-onUnmounted(cancelCanvasEyedropper)
-const handleEyedropperKey = (event: KeyboardEvent) => {
-  if (!isCanvasEyedropperActive.value) return
-  event.preventDefault()
-  event.stopImmediatePropagation()
-  if (event.key === 'Escape') cancelCanvasEyedropper()
-}
-onMounted(() => window.addEventListener('keydown', handleEyedropperKey, true))
-onUnmounted(() => window.removeEventListener('keydown', handleEyedropperKey, true))
-watch(() => props.show, (show) => { if (!show) cancelCanvasEyedropper() })
-
-// Aplica a cor pelo mesmo fluxo do seletor, preservando a opacidade.
+watch(() => props.show, (show) => { if (!show) eyedropper.value?.cancel() })
+// Preserva a opacidade atual do seletor ao capturar uma cor.
 const applyPickedColor = (hex: string) => {
-  if (!/^#[0-9a-f]{6}$/i.test(hex)) return
   const hsl = hexToHsl(hex)
   hue.value = hsl.h
   saturation.value = hsl.s
   lightness.value = hsl.l
   hexInput.value = hex.slice(1).toUpperCase()
 }
-
-const pickCanvasColor = (event: MouseEvent) => {
-  try {
-    const canvas = canvasAtPoint(event.clientX, event.clientY)
-    const hex = canvas ? sampleCanvasColor(canvas, event.clientX, event.clientY) : null
-    if (!hex) {
-      eyedropperHint.value = 'Clique em uma área com cor dentro da arte. Esc para cancelar.'
-      return
-    }
-    applyPickedColor(hex)
-    cancelCanvasEyedropper()
-  } catch {
-    eyedropperHint.value = 'Não foi possível ler esta arte. Uma imagem pode estar bloqueando a captura. Esc para cancelar.'
-  }
-}
-
-// Eyedropper functionality
-const startEyedropper = (event: MouseEvent) => {
-  if (isEyedropperActive.value) return
-  if (!supportsEyeDropper.value) {
-    eyedropperHint.value = 'Clique na cor desejada dentro da arte. Esc para cancelar.'
-    isCanvasEyedropperActive.value = true
-    loupePoint = { x: event.clientX, y: event.clientY }
-    nextTick(refreshLoupe)
-    return
-  }
-  
-  isEyedropperActive.value = true
-  
-  const eyeDropper = new (window as any).EyeDropper()
-  
-  eyeDropper.open()
-    .then((result: any) => {
-      if (result && result.sRGBHex) {
-        applyPickedColor(result.sRGBHex)
-      }
-      isEyedropperActive.value = false
-    })
-    .catch((err: any) => {
-      // User cancelled or error
-      isEyedropperActive.value = false
-    })
-}
+const startEyedropper = (event: MouseEvent) => eyedropper.value?.start(event)
 
 const close = () => {
   handleMouseUp()
@@ -607,6 +501,7 @@ watch(() => props.show, (newVal) => {
 </script>
 
 <template>
+  <ArtworkEyedropper ref="eyedropper" @pick="applyPickedColor" @active-change="isEyedropperActive = $event" />
   <teleport to="body">
     <Transition
       enter-active-class="transition duration-200 ease-out"
@@ -617,38 +512,15 @@ watch(() => props.show, (newVal) => {
       leave-to-class="opacity-0 scale-95"
     >
       <div
-        v-if="internalShow"
+        v-if="internalShow && !isEyedropperActive"
         class="fixed inset-0 z-10100"
-        :class="{ 'cursor-crosshair': isCanvasEyedropperActive }"
-        @pointermove="moveLoupe"
         @pointerdown.stop
         @pointerup.stop
         @mousedown.stop
         @mouseup.stop
-        @click.self="isCanvasEyedropperActive ? pickCanvasColor($event) : close()"
+        @click.self="close()"
       >
         <div
-          v-if="isCanvasEyedropperActive"
-          class="eyedropper-loupe"
-          :style="{ left: `${loupePosition.left}px`, top: `${loupePosition.top}px` }"
-          aria-hidden="true"
-        >
-          <div class="eyedropper-loupe-image">
-            <canvas ref="loupeCanvas" width="110" height="110" />
-            <div class="eyedropper-loupe-grid" />
-            <div class="eyedropper-loupe-target" />
-          </div>
-          <div class="eyedropper-loupe-value">
-            <span :style="{ backgroundColor: loupeColor || 'transparent' }" />
-            {{ loupeColor?.toUpperCase() || 'Aponte para a arte' }}
-          </div>
-        </div>
-        <div v-if="isCanvasEyedropperActive" class="fixed top-6 left-1/2 -translate-x-1/2 flex items-center gap-3 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white shadow-xl" @click.stop>
-          <span role="status" class="pointer-events-none">{{ eyedropperHint }}</span>
-          <button type="button" class="underline cursor-pointer" @click="cancelCanvasEyedropper">Cancelar</button>
-        </div>
-        <div
-          v-show="!isCanvasEyedropperActive"
           class="fixed bg-[#2a2a2a] border border-white/10 rounded-xl shadow-2xl w-70 max-h-[calc(100dvh-24px)] overflow-y-auto z-10101"
           :style="{ top: `${pickerPosition.top}px`, left: `${pickerPosition.left}px` }"
           @click.stop
@@ -873,56 +745,6 @@ watch(() => props.show, (newVal) => {
 </template>
 
 <style scoped>
-.eyedropper-loupe {
-  position: fixed;
-  z-index: 10103;
-  pointer-events: none;
-  width: 154px;
-  box-sizing: border-box;
-  padding: 10px;
-  border: 1px solid #71717a;
-  border-radius: 14px;
-  background: #18181b;
-  color: white;
-  box-shadow: 0 8px 30px #0008;
-}
-.eyedropper-loupe-image {
-  position: relative;
-  width: 110px;
-  height: 110px;
-  margin: 0 auto;
-  overflow: hidden;
-  border-radius: 7px;
-  background: #3f3f46;
-}
-.eyedropper-loupe-image canvas { display: block; width: 110px; height: 110px; }
-.eyedropper-loupe-grid {
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(to right, #0002 1px, transparent 1px), linear-gradient(to bottom, #0002 1px, transparent 1px);
-  background-size: 10px 10px;
-}
-.eyedropper-loupe-target {
-  position: absolute;
-  left: 50px;
-  top: 50px;
-  width: 10px;
-  height: 10px;
-  box-sizing: border-box;
-  border: 1px solid white;
-  box-shadow: 0 0 0 1px black;
-}
-.eyedropper-loupe-value {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 9px;
-  font: 11px/16px monospace;
-  white-space: nowrap;
-}
-.eyedropper-loupe-value span { width: 12px; height: 12px; border: 1px solid #a1a1aa; border-radius: 3px; flex-shrink: 0; }
-
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;

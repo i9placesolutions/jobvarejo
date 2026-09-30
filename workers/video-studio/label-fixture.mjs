@@ -1,11 +1,12 @@
 import {register} from 'tsx/esm/api';register()
-import {readFile,cp,writeFile} from 'node:fs/promises'
+import {readFile,copyFile,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {renderVideo,root} from './engine.mjs'
+import {resolveCatalogAsset} from './catalog-assets.mjs'
 const {buildVideoTimeline}=await import('../../shared/video-studio/model.ts')
 const dir=join(root,'output/video-studio-impact'),doc=JSON.parse(await readFile(join(dir,'document.json'),'utf8'))
 const media=Object.fromEntries([doc.brand.logo,...doc.offers.map(o=>o.image)].filter(Boolean).map(id=>[id,id+'.png']))
-for(const name of ['energy','impact','whoosh'])await cp(join(root,'public/video-studio/audio',name+'.mp3'),join(dir,name+'.mp3'))
+for(const name of ['energy','impact','whoosh'])await copyFile(await resolveCatalogAsset(`audio/${name}.mp3`,{root}),join(dir,name+'.mp3'))
 const scenes=buildVideoTimeline(doc)
 const {adaptVideoLabel}=await import('../../shared/video-studio/labels.ts')
 const rows=JSON.parse(await readFile(join(root,'output/video-studio-professional/labels.json'),'utf8'))

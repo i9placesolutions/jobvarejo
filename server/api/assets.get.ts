@@ -375,7 +375,7 @@ export default defineEventHandler(async (event) => {
         const familySearch = String(query.familySearch || '') === '1';
         const scoreAssetText = (text: string) => Math.max(
             scoreByTokens(text, queryVariants),
-            familySearch ? scoreProductFamilySuggestion({ name: rawSearch }, text) * 100 : 0
+            familySearch ? scoreProductFamilySuggestion({ name: productName || rawSearch, brand, flavor, weight }, text) * 100 : 0
         );
 
         const assetNameByKey = new Map<string, string>();

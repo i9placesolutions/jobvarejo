@@ -1298,9 +1298,9 @@ onBeforeUnmount(() => {
                   step="0.01"
                   inputmode="decimal"
                   class="value-input"
-                  :value="(globalStyles?.prodNameLineHeight ?? 1.05).toFixed(2)"
+                  :value="(globalStyles?.prodNameLineHeight ?? 0.95).toFixed(2)"
                   aria-label="Altura de linha"
-                  @input="_dUpdateGlobalFloat('prodNameLineHeight', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.prodNameLineHeight ?? 1.05, 0.8, 1.8, 2)"
+                  @input="_dUpdateGlobalFloat('prodNameLineHeight', ($event.target as HTMLInputElement).valueAsNumber, globalStyles?.prodNameLineHeight ?? 0.95, 0.8, 1.8, 2)"
                 />
                 <span class="value-suffix">lh</span>
               </div>
@@ -1309,7 +1309,7 @@ onBeforeUnmount(() => {
               type="range"
               min="80"
               max="180"
-              :value="Math.round((globalStyles?.prodNameLineHeight ?? 1.05) * 100)"
+              :value="Math.round((globalStyles?.prodNameLineHeight ?? 0.95) * 100)"
               class="slider text-emerald-400"
               @input="updateGlobal('prodNameLineHeight', Number(($event.target as HTMLInputElement).value) / 100)"
             />

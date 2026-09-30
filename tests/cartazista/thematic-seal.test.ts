@@ -49,3 +49,15 @@ it('cabeçalho não altera o corpo, inclusive ofertas com dois preços', async()
   expect(body(after.composition)).toEqual(body(before))
  }
 })
+
+it('substitui a logo legada do cartaz pela conta ativa em vez de reaproveitar a imagem salva',()=>{
+ const source=rebuildCartazistaComposition(createCartazistaDocument()).composition
+ const logo=source.layers.find(layer=>layer.id==='cartaz-logo')!
+ logo.binding=''
+ logo.src='/api/art-studio/assets/11111111-1111-4111-8111-111111111111'
+ logo.visible=true
+ const profile={companyName:'Loja ativa',whatsapp:'',address:'',instagram:''}
+ const branded=hydrateCartazistaBusiness(source,profile,'/api/art-studio/brand-logo')
+ expect(branded.layers.find(layer=>layer.id==='cartaz-logo')).toMatchObject({binding:'logo',src:'/api/art-studio/brand-logo',visible:true})
+ expect(hydrateCartazistaBusiness(source,profile,'').layers.find(layer=>layer.id==='cartaz-logo')).toMatchObject({binding:'logo',src:'',visible:false})
+})

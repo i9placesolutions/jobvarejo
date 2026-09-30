@@ -23,6 +23,7 @@ import { compactBusinessFooter } from '~/utils/compactBusinessFooter'
 import { normalizeQuickBusinessFooter } from '~/utils/quickBusinessFooterTypography'
 import { syncProductNameColor } from '~/utils/productNameColors'
 import { isProductNameText, collectProductNameTexts } from '~/utils/productNameTypographyScope'
+import { upgradeProductNameLineHeightDefaults } from '~/utils/productNameLineHeightDefaults'
 import { fitResponsiveProductName } from '~/utils/productCardResponsiveTypography'
 import { onMounted, onUnmounted, ref, shallowRef, watch, watchEffect, triggerRef, computed, nextTick, defineAsyncComponent, provide } from 'vue'
 import { createEditorCanvasActionsController } from '~/utils/editorCanvasActionsController'
@@ -131,6 +132,8 @@ import { buildPathStringFromPenData } from '~/utils/pathHelpers'
 import { computeArrangedOrder } from '~/utils/arrangeOrder'
 import { mapLimit } from '~/utils/asyncHelpers'
 import { scheduleIdleWork } from '~/utils/idleSchedule'
+import { collectUsedLabelTemplateIds, mergeScopedLabelTemplates, loadLabelTemplateCatalogChunks } from '~/utils/editorLabelTemplateUsage'
+import { rememberQuickDefaultColor, resolveQuickDefaultColor, setQuickTextPaint } from '~/utils/quickModeColorDefaults'
 import { CANVAS_CUSTOM_PROPS, DUPLICATE_CLONE_PROPS, DUPLICATE_OFFSET } from '~/utils/canvasCustomProps'
 import {
     resolveTemplateCompositionFrameBinding
@@ -575,12 +578,13 @@ import {
     buildSelectionSyncPayload,
     buildZoneSelectionConfig,
     applyViewportTransformToRect,
+    getCanvasObjectFloatingPos,
     getSelectedObjectFloatingPos,
     refreshSelectedRefWithRecovery,
     syncSelectionDomainState
 } from '~/utils/editorSelectionRuntime'
 import { applyVisibleSelectionChrome, attachFabricControlLayer, EDITOR_SELECTION_CHROME, patchFabricObjectSelectionDefaults, setFabricControlsHiddenDuringTransform } from '~/utils/fabricControlLayer'
-import { createFooterPaymentGroup } from '~/utils/footerPaymentImages'
+import { createFooterPaymentGroup, isFooterPaymentGroupCurrent } from '~/utils/footerPaymentImages'
 import { STORE_DYNAMIC_FIELDS } from '~/utils/storeDynamicFields'
 import {
     buildProductZoneDiagnostics,
@@ -1365,6 +1369,9 @@ const hasLoadedLabelTemplatesFromDb = ref(false)
 // override de uma definição global já carregada.
 const isLabelTemplateLibraryAuthoritative = ref(false)
 let labelTemplatesLoadPromise: Promise<void> | null = null
+const verifiedLabelTemplateIds = new Set<string>()
+let labelLibraryGeneration = 0
+const isLabelTemplateVerified = (id: string) => isLabelTemplateLibraryAuthoritative.value || verifiedLabelTemplateIds.has(id)
 
 const openGlobalLabelTemplates = () => {
     const projectId = String(project.id || '').trim()
@@ -1431,6 +1438,7 @@ const hydrateLabelTemplatesFromProjectJson = (json: any) => {
     for (const t of raw as any[]) {
         if (!t?.id) continue;
         const id = String(t.id);
+        if (verifiedLabelTemplateIds.has(id)) continue;
         const incomingTemplate = normalizeLabelTemplateRecordAsManual(t);
         const prev = byId.get(id);
         if (!prev) {
@@ -1499,21 +1507,44 @@ const normalizeDbLabelTemplate = (row: any): LabelTemplate | null => {
     }) as LabelTemplate;
 }
 
-const loadLabelTemplatesFromDb = async (force = false) => {
+const loadLabelTemplatesFromDb = async (force = false, ids?: string[]) => {
     if (!force && hasLoadedLabelTemplatesFromDb.value && isLabelTemplateLibraryAuthoritative.value) return;
-    if (labelTemplatesLoadPromise) return labelTemplatesLoadPromise;
+    if (labelTemplatesLoadPromise) {
+        await labelTemplatesLoadPromise;
+        return loadLabelTemplatesFromDb(force, ids);
+    }
+    const requestedIds = ids ? [...new Set(ids)].filter(id => force || !verifiedLabelTemplateIds.has(id)) : null;
+    if (requestedIds && !requestedIds.length) return;
+    const requestGeneration = labelLibraryGeneration;
+    const requestUserId = String(currentUser.value?.id || '');
+    const isStaleLibraryRequest = () => isCanvasDestroyed.value || requestGeneration !== labelLibraryGeneration || requestUserId !== String(currentUser.value?.id || '');
 
     hasLoadedLabelTemplatesFromDb.value = false;
     labelTemplatesLoadPromise = (async () => {
         try {
-            const userId = currentUser.value?.id || undefined;
             const headers = await getApiAuthHeaders();
-            const resp: any = await $fetch('/api/label-templates', { method: 'GET', headers, query: userId ? { userId } : {} });
+            if (isStaleLibraryRequest()) return;
+            const resp: any = await loadLabelTemplateCatalogChunks(requestedIds, async batch => {
+                if (isStaleLibraryRequest()) throw new Error('Sessão da biblioteca alterada.');
+                return $fetch('/api/label-templates', { method: 'GET', headers, query: batch ? { ids: batch.join(','), preview: '0' } : {} });
+            });
             if (resp?.success === false) {
                 throw new Error(String(resp?.message || 'A biblioteca de etiquetas não pôde ser carregada.'));
             }
             const rows = Array.isArray(resp?.templates) ? resp.templates : [];
             const incoming = rows.map(normalizeDbLabelTemplate).filter(Boolean) as LabelTemplate[];
+
+            if (isStaleLibraryRequest()) return;
+            if (requestedIds && !resp?.missingTable) {
+                // Only these IDs are authoritative. Other pages may still need
+                // their embedded snapshots until their own scoped request completes.
+                requestedIds.forEach(id => verifiedLabelTemplateIds.add(id));
+                const verifiedIncoming = incoming.map(template => normalizeLabelTemplateRecordAsManual({
+                    ...template, __fromDb: true, __localOverride: undefined
+                })) as LabelTemplate[];
+                labelTemplates.value = mergeScopedLabelTemplates(labelTemplates.value || [], requestedIds, verifiedIncoming);
+                return;
+            }
 
             // An empty catalog is common before the first built-in seed and
             // must not erase snapshots embedded in the project. The seed
@@ -1528,14 +1559,19 @@ const loadLabelTemplatesFromDb = async (force = false) => {
             // Uma resposta não vazia fecha a porta para snapshots do projeto.
             // O banco é a biblioteca global; não fazemos merge por timestamp
             // nem preservamos `__localOverride` antigo nessa situação.
-            labelTemplates.value = incoming.map((template: any) => normalizeLabelTemplateRecordAsManual({
+            const verifiedIncoming = incoming.map((template: any) => normalizeLabelTemplateRecordAsManual({
                 ...template,
                 __fromDb: true,
                 __localOverride: undefined
             })) as LabelTemplate[];
+            incoming.forEach(t => verifiedLabelTemplateIds.add(String(t.id)));
+            labelTemplates.value = resp?.complete === false
+                ? mergeScopedLabelTemplates(labelTemplates.value || [], incoming.map(t => String(t.id)), verifiedIncoming)
+                : verifiedIncoming;
             hasLoadedLabelTemplatesFromDb.value = true;
-            isLabelTemplateLibraryAuthoritative.value = true;
+            isLabelTemplateLibraryAuthoritative.value = resp?.complete !== false;
         } catch (err) {
+            if (isStaleLibraryRequest()) return;
             // Falha de rede/tabela mantém o fallback do projeto disponível e
             // permite uma nova tentativa ao abrir o editor novamente.
             hasLoadedLabelTemplatesFromDb.value = false;
@@ -1547,6 +1583,16 @@ const loadLabelTemplatesFromDb = async (force = false) => {
     })();
 
     return labelTemplatesLoadPromise;
+}
+
+const ensureUsedLabelTemplatesReady = async () => {
+    const pageId = String(activePage.value?.id || '');
+    const ids = collectUsedLabelTemplateIds(activePage.value?.canvasData);
+    if (!ids.length) return;
+    // The standard fallback is needed if a referenced template was deleted.
+    await loadLabelTemplatesFromDb(false, [...ids, BUILTIN_DEFAULT_LABEL_TEMPLATE_ID]);
+    if (isCanvasDestroyed.value || pageId !== String(activePage.value?.id || '')) return;
+    await applyGlobalLabelTemplatesToCanvas('used-label-library-ready');
 }
 
 const ensureLabelTemplatesReady = async () => {
@@ -1600,7 +1646,7 @@ const ensureLabelTemplatesReady = async () => {
 }
 
 const hasAuthoritativeGlobalLabelTemplate = (templateId: string): boolean => {
-    if (!isLabelTemplateLibraryAuthoritative.value) return false;
+    if (!isLabelTemplateVerified(templateId)) return false;
     return (labelTemplates.value || []).some((template: any) => (
         String(template?.id || '').trim() === String(templateId || '').trim() &&
         template?.__fromDb === true
@@ -4334,6 +4380,16 @@ const { recentColors, addRecentColor } = useRecentColors()
 
 // Users state
 const currentUser = computed(() => auth.user.value)
+watch(() => currentUser.value?.id || '', () => {
+    labelLibraryGeneration += 1;
+    verifiedLabelTemplateIds.clear();
+    labelTemplates.value = [];
+    hasLoadedLabelTemplatesFromDb.value = false;
+    isLabelTemplateLibraryAuthoritative.value = false;
+    if (isInitialDesignLoadDone.value && currentUser.value?.id) {
+        void ensureUsedLabelTemplatesReady().catch(() => {});
+    }
+}, { flush: 'sync' })
 const collaborators = ref<any[]>([])
 
 // Generate color from string (consistent color for same name/email)
@@ -6066,22 +6122,15 @@ const scheduleInitialLabelTemplateSync = () => {
     if (initialLabelTemplateSyncScheduled || isCanvasDestroyed.value) return
     if (!isInitialDesignLoadDone.value) return
 
-    // O modo rápido precisa abrir e permanecer responsivo assim que o design
-    // chega. A biblioteca de etiquetas rasteriza vários grupos e aplica
-    // alterações nos cards; fazer isso automaticamente durante a primeira
-    // renderização cria um ciclo de atualização no EditorCanvas. No modo rápido
-    // a biblioteca continua sendo carregada quando o usuário abre a revisão ou
-    // o seletor de etiqueta, portanto nada funcional é perdido.
-    if (isQuickMode.value) return
-
     initialLabelTemplateSyncScheduled = true
     scheduleIdleWork(() => {
         if (isCanvasDestroyed.value) return
-        void ensureLabelTemplatesReady().catch((err) => {
-            console.warn('[labelTemplates] Sincronização inicial dos modelos built-in falhou', err)
+        void ensureUsedLabelTemplatesReady().catch((err) => {
+            console.warn('[labelTemplates] Sincronização das etiquetas usadas falhou', err)
         })
-    }, 5000)
+    }, 1800)
 }
+
 let isBulkProductMutation = false
 let lastTransformMutationAt = 0
 let activePageLoadSessionId = 0
@@ -6345,6 +6394,7 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     const timeoutMs = getCanvasLoadTimeoutMs(sessionId)
     try {
         sanitizeCanvasJsonBeforeLoad(json)
+        if (isQuickMode.value && Array.isArray(json?.objects)) upgradeProductNameLineHeightDefaults(json.objects)
         // Fabric carrega as imagens com CORS; um preloader paralelo duplicava as requisições.
         if (sessionId !== activePageLoadSessionId || isCanvasDestroyed.value) {
             throw new Error('Load session became stale')
@@ -7426,7 +7476,7 @@ const quickSelectedProductName = computed(() => {
 const quickSelectedNameCard = computed(() => findProductCardParentGroup(quickSelectedProductName.value))
 const applyQuickProductNameColor = async (value: string | null, afterApply?: () => void): Promise<boolean> => {
     const selected = quickSelectedNameCard.value
-    if (!selected || (value !== null && !/^#[\da-f]{6}$/i.test(value))) return false
+    if (!selected || (value !== null && value !== 'transparent' && !/^#[\da-f]{6}$/i.test(value))) return false
     const zone = findProductZoneById(selected.parentZoneId)
     const cards = flattenCardColorObjects(canvas.value?.getObjects?.() || [])
         .filter(object => object._productData && object.parentZoneId === selected.parentZoneId)
@@ -7712,6 +7762,10 @@ const quickModeSelectedColorTargets = computed((): QuickEditableColorTarget[] =>
     if (isLikelyProductCard(active)) return matches.filter(target => target.kind === 'product-card')
     return matches
 })
+const quickModeSelectedText = computed(() => {
+    void selectedObjectRef.value
+    return isQuickNativeTextObject(canvas.value?.getActiveObject?.())
+})
 const quickModeElementColorDismissed = ref(false)
 const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
 watch(() => selectedObjectRef.value?._customId, () => { quickModeElementColorDismissed.value = false })
@@ -7804,7 +7858,7 @@ const persistQuickModeColorChange = async (reason: string) => {
 const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
     if (!isQuickMode.value || !canvas.value) return
     const color = normalizeQuickModeColor(payload?.value)
-    if (payload?.targetId === 'selected-product-name') {
+    if (payload?.targetId === 'selected-product-name' && quickSelectedNameCard.value) {
         if (!color) return
         quickProductNameColorScope.value = 'selected'
         await applyQuickProductNameColor(color, () => addRecentColor(color))
@@ -7816,6 +7870,8 @@ const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
     if (!target || !appliedColor) return
 
     target.objects.forEach(({ object, property }) => {
+        rememberQuickDefaultColor(object, property)
+        setQuickTextPaint(object, appliedColor)
         object.set?.({ [property]: appliedColor })
         if (target.kind === 'product-area') {
             object.set?.({ productAreaBackgroundMode: appliedColor === 'transparent' ? 'transparent' : 'custom', stroke: 'transparent', shadow: null })
@@ -7834,15 +7890,17 @@ const applyQuickModeColorChange = async (payload: QuickModeColorChange) => {
 
 const clearQuickModeColor = async (targetId: string) => {
     if (!isQuickMode.value || !canvas.value) return
-    if (targetId === 'selected-product-name') {
+    if (targetId === 'selected-product-name' && quickSelectedNameCard.value) {
         quickProductNameColorScope.value = 'selected'
-        await applyQuickProductNameColor(null)
+        await applyQuickProductNameColor('transparent')
         return
     }
     const target = getQuickModeColorTarget(targetId)
     if (!target) return
 
     target.objects.forEach(({ object, property }) => {
+        rememberQuickDefaultColor(object, property)
+        setQuickTextPaint(object, 'transparent')
         object.set?.({ [property]: 'transparent', ...(target.kind === 'product-card' ? { stroke: 'transparent' } : {}) })
         if (target.kind === 'product-area') object.set?.({ productAreaBackgroundMode: 'transparent', stroke: 'transparent', shadow: null })
         if (property === 'fill') applyDynamicBusinessTextColor(object, 'transparent')
@@ -7853,6 +7911,36 @@ const clearQuickModeColor = async (targetId: string) => {
         touchQuickModeObjectAncestors(object)
     })
     await persistQuickModeColorChange(`quick-color-clear-${target.kind}`)
+}
+
+const restoreQuickModeColor = async (targetId: string) => {
+    if (!isQuickMode.value || !canvas.value) return
+    if (targetId === 'selected-product-name' && quickSelectedNameCard.value) {
+        quickProductNameColorScope.value = 'selected'
+        await applyQuickProductNameColor(null)
+        return
+    }
+    const target = getQuickModeColorTarget(targetId)
+    if (!target) return
+    target.objects.forEach(({ object, property }) => {
+        let color = resolveQuickDefaultColor(object, property)
+        if (target.kind === 'product-card' && object.group) {
+            const card = object.group
+            card._cardStyleOverrides = { ...card._cardStyleOverrides }
+            for (const key of ['cardColor', 'isProdBgTransparent', 'cardBorderWidth']) delete card._cardStyleOverrides[key]
+            const styles = getZoneGlobalStyles(findProductZoneById(card.parentZoneId))
+            color = resolveProductCardColor(styles, card._cardHighlighted === true, card._cardStyleOverrides)
+            object.set?.({ stroke: styles.cardBorderColor || 'transparent', strokeWidth: styles.cardBorderWidth || 0 })
+        }
+        object.set?.({ [property]: color })
+        setQuickTextPaint(object, color)
+        if (property === 'fill') applyDynamicBusinessTextColor(object, color)
+        if (target.kind === 'product-area') object.set?.({ productAreaBackgroundMode: 'custom' })
+        if (target.kind === 'product-card' && object.group) syncProductNameColor(object.group, getZoneGlobalStyles(findProductZoneById(object.group.parentZoneId)))
+        object.setCoords?.()
+        touchQuickModeObjectAncestors(object)
+    })
+    await persistQuickModeColorChange(`quick-color-restore-${target.kind}`)
 }
 
 const applyQuickModeOpacityChange = async (payload: QuickModeOpacityChange) => {
@@ -7896,12 +7984,15 @@ const refreshSelectedRef = (extra?: Record<string, any>) => {
 }
 
 const selectedObjectPos = ref<{top: number, left: number, width: number, height: number, visible: boolean}>({ top: 0, left: 0, width: 0, height: 0, visible: false })
+// O painel de personalização acompanha o próprio elemento, inclusive filhos
+// de cards; selectedObjectPos continua dedicado às ações de zonas/imagens.
+const quickModeElementAnchor = ref({ top: 0, left: 0, width: 0, height: 0, visible: false })
 const quickModeElementColorPosition = computed(() => {
-    const anchor = selectedObjectPos.value
+    const anchor = quickModeElementAnchor.value
     const viewportWidth = wrapperEl.value?.clientWidth || 800
     const viewportHeight = wrapperEl.value?.clientHeight || 600
     const menuWidth = 280
-    const menuHeight = 286
+    const menuHeight = quickModeSelectedText.value ? 480 : 360
     const right = anchor.left + anchor.width + 12
     return {
         left: `${right + menuWidth <= viewportWidth - 8 ? right : Math.max(8, anchor.left - menuWidth - 12)}px`,
@@ -9574,12 +9665,13 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
             repairedQuickPageGeometry = true
         }
         if (isQuickMode.value) {
-            void ensureQuickPageThumbnail(pageToLoad, true)
+            void ensureQuickPageThumbnail(pageToLoad, repairedQuickPageGeometry)
         }
         completedPageLoadSessionId = loadSessionId
         lastLoadedPageKey = nextPageId ? nextPageLoadKey : null
         isInitialDesignLoadDone.value = true
         scheduleInitialLabelTemplateSync()
+        if (initialLabelTemplateSyncScheduled) void ensureUsedLabelTemplatesReady().catch(() => {})
         scheduleCanvasDataPrefetch(nextPageId)
         schedulePreparedCanvasDataPrewarm(nextPageId)
     }
@@ -9627,7 +9719,7 @@ watch([activePage, () => canvas.value, isProjectLoaded, isFabricReady, pageReloa
 
         if (!isStaleLoad() && loadedOk && isQuickMode.value && canvas.value) {
             if (project.templateConfig?.quickValidity) {
-                handleQuickModeValidityUpdate(project.templateConfig.quickValidity);
+                handleQuickModeValidityUpdate(project.templateConfig.quickValidity, { background: true });
             } else {
                 // Modelos criados antes de `template_config.quickValidity`
                 // guardam as datas no próprio Textbox. Reidratar aqui evita
@@ -10326,48 +10418,33 @@ const applyContainmentConstraints = (obj: any) => {
 onMounted(async () => {
   isCanvasDestroyed.value = false;
   isCanvasJsonLoadInProgress = false;
-  // Run non-critical network warmups in background.
-  // Do not block canvas/Fabric boot on auth/templates/uploads.
-  void (async () => {
-      // FIX #7: check isCanvasDestroyed between each async step so writes to
-      // reactive refs don't happen after the component has been unmounted.
-      try {
-          await auth.getSession()
-      } catch (err) {
-          console.warn('[boot] auth.getSession falhou:', err)
-      }
-      if (isCanvasDestroyed.value) return
-
-      await Promise.allSettled([
-          loadLabelTemplatesFromDb(),
-          refreshAiStudioUploads(),
-          productZoneStructuresState.load(),
-          productCardConfigurationState.load()
-      ])
-      if (isCanvasDestroyed.value) return
-
-      // O projeto pode ter sido hidratado antes da resposta das configuracoes
-      // globais. Reaplica a receita agora para cobrir esse caminho de boot.
-      scheduleGlobalProductLibrariesApply('boot-global-libraries')
-
-      // Carrega a biblioteca real de etiquetas (incluindo os modelos salvos em
-      // "Etiquetas") em segundo plano. O modo rápido não agenda a sincronização
-      // pesada durante a primeira pintura, mas ainda precisa usar os modelos
-      // reais assim que o canvas estiver pronto.
-      void ensureLabelTemplatesReady().catch((err) => {
-          console.warn('[boot] ensureLabelTemplatesReady falhou:', err)
-      })
-
-      try {
-          await loadCollaborators()
-      } catch (err) {
-          console.warn('[boot] loadCollaborators falhou:', err)
-      }
-      if (isCanvasDestroyed.value) return
-
-      // Retry image recovery once auth/session is stabilized.
-      scheduleMissingProductImageRecovery(260, 8);
-  })()
+  // Libraries compete with Fabric images for bandwidth and CPU. Start only
+  // after the active design has painted; explicit selectors still load on demand.
+  const stopBootWarmupWatch = watch(
+      () => isInitialDesignLoadDone.value && !isDesignLoading.value && !isCanvasJsonLoadInProgress,
+      ready => {
+          if (!ready || isCanvasDestroyed.value) return
+          stopBootWarmupWatch()
+          scheduleIdleWork(() => {
+              if (isCanvasDestroyed.value) return
+              void (async () => {
+                  await ensureUsedLabelTemplatesReady()
+                  if (isCanvasDestroyed.value) return
+                  await Promise.allSettled([
+                      productZoneStructuresState.load(),
+                      productCardConfigurationState.load()
+                  ])
+                  if (isCanvasDestroyed.value) return
+                  scheduleGlobalProductLibrariesApply('boot-global-libraries')
+                  // Upload history is only used by the AI dialog; opening it
+                  // already refreshes that list. Keep collaborator recovery late.
+                  await loadCollaborators().catch(() => {})
+                  if (!isCanvasDestroyed.value) scheduleMissingProductImageRecovery(260, 8)
+              })().catch(err => console.warn('[boot] Bibliotecas secundárias:', err))
+          }, 1800)
+      },
+      { flush: 'post' }
+  )
 
   // Initialize Project Store ONLY if it's a new project (default ID)
   // If loading existing project, editor/[id].vue will call loadProjectDB first
@@ -14554,6 +14631,7 @@ const rulerGuides = computed(() => (viewShowGuides.value ? userGuidesIndex.value
 const updateFloatingUI = () => {
     if (!canvas.value) return;
     const active = canvas.value.getActiveObject();
+    quickModeElementAnchor.value = getCanvasObjectFloatingPos(active, canvas.value.viewportTransform);
     const productImageContext = resolveSelectedProductImageActionContext(active);
     if (productImageContext?.image) {
         selectedObjectPos.value = getProductImageFloatingPos(productImageContext.image);
@@ -14591,6 +14669,7 @@ const updateSelection = () => {
     });
     if (!payload) return;
     const { active, selectionUiState, floatingPos } = payload;
+    quickModeElementAnchor.value = getCanvasObjectFloatingPos(active, canvas.value.viewportTransform);
     if (!active) {
         selectedProductImageSubTarget.value = null;
         selectedProductImageSelectionKind.value = 'none';
@@ -14799,6 +14878,9 @@ const getEditorReactivityContext = () => ({
     updateProductImageSelectionIntent,
     updateScrollbars,
     updateSelection,
+    onQuickModeElementPointerDown: () => {
+        if (isQuickMode.value) quickModeElementColorDismissed.value = false;
+    },
     getReactivityBoundCanvas: () => reactivityBoundCanvas,
     setReactivityBoundCanvas: (value: any) => { reactivityBoundCanvas = value },
     getTeardownReactivity: () => teardownReactivity,
@@ -16063,7 +16145,7 @@ const openPageEnhancement = async () => {
     finally { preparingPageEnhancement.value = false }
 }
 
-const preparePageEnhancement = async (pageId: string, mode: 'finish' | 'redesign' = 'redesign') => {
+const preparePageEnhancement = async (pageId: string, mode: 'finish' | 'redesign' = 'redesign', previewOnly = false) => {
     const page = project.pages.find((p: any) => p.id === pageId)
     if (!page || !canvas.value || !fabric) throw new Error('Página indisponível.')
     await flushLogoPreference()
@@ -16094,10 +16176,10 @@ const preparePageEnhancement = async (pageId: string, mode: 'finish' | 'redesign
         if (frames.length > 1) throw new Error('Esta página tem vários quadros. Separe os quadros em páginas antes de melhorar.')
         const bounds = frames[0] ? getFrameBounds(frames[0]) : null
         const { prepareEnhancedPageInput, prepareRedesignPageInput } = await import('~/utils/pageEnhancementRender')
-        const prepareInput = mode === 'redesign' ? prepareRedesignPageInput : prepareEnhancedPageInput
+        const prepareInput = mode === 'redesign' && !previewOnly ? prepareRedesignPageInput : prepareEnhancedPageInput
         const { withProductZonesHiddenForOutput } = await loadExportShareController()
         const context = { ...getExportShareContext(), canvas: { value: offscreen }, safeRequestRenderAll: () => offscreen.renderAll() }
-        return await withProductZonesHiddenForOutput(context, () => prepareInput({ canvas: offscreen, fabric, width: page.width, height: page.height,
+        return await withProductZonesHiddenForOutput(context, () => prepareInput({ canvas: offscreen, fabric, width: page.width, height: page.height, allowFullProtection: previewOnly,
             ...(bounds ? { crop: { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height } } : {}) }))
     } finally { await offscreen.dispose() }
 }
@@ -17190,8 +17272,7 @@ const handleGlobalLabelTemplatesUpdated = (event: Event) => {
         if (index >= 0) next[index] = incoming;
         else next.push(incoming);
         labelTemplates.value = next;
-        hasLoadedLabelTemplatesFromDb.value = true;
-        isLabelTemplateLibraryAuthoritative.value = true;
+        verifiedLabelTemplateIds.add(String(incoming.id));
         void applyGlobalLabelTemplatesToCanvas('label-library-event');
         return;
     }
@@ -17200,8 +17281,7 @@ const handleGlobalLabelTemplatesUpdated = (event: Event) => {
         labelTemplates.value = (labelTemplates.value || []).filter(
             (template: any) => String(template?.id || '') !== String(detail.templateId || '')
         );
-        hasLoadedLabelTemplatesFromDb.value = true;
-        isLabelTemplateLibraryAuthoritative.value = true;
+        verifiedLabelTemplateIds.add(String(detail.templateId));
         void applyGlobalLabelTemplatesToCanvas('label-library-delete');
         return;
     }
@@ -18035,22 +18115,24 @@ const importOneProductPerPage = async (products: any[], opts?: ProductImportOpti
         refreshCanvasObjects({ immediate: true })
         safeRequestRenderAll()
     }
-    // A página escolhida recebe o primeiro produto; só os demais precisam de cópias.
-    isHistoryProcessing.value = true
-    try { await loadFromJsonSafe(snapshots[0]) } finally { isHistoryProcessing.value = false }
-    refreshCanvasObjects({ immediate: true })
-    safeRequestRenderAll()
-    await saveCurrentState({ reason: 'one-product-per-page-first', source: 'user', skipCoalesce: true, skipIfUnchanged: false })
+    const appendPages = opts?.mode === 'append'
+    if (!appendPages) {
+        isHistoryProcessing.value = true
+        try { await loadFromJsonSafe(snapshots[0]) } finally { isHistoryProcessing.value = false }
+        refreshCanvasObjects({ immediate: true })
+        safeRequestRenderAll()
+        await saveCurrentState({ reason: 'one-product-per-page-first', source: 'user', skipCoalesce: true, skipIfUnchanged: false })
+    }
     const sourceIndex = project.pages.findIndex((page: any) => page.id === sourcePage.id)
-    for (let index = 1; index < snapshots.length; index++) {
+    for (let index = appendPages ? 0 : 1; index < snapshots.length; index++) {
         await createPageFromTemplateSource({ ...sourcePage, canvasData: snapshots[index], canvasDataPath: undefined, thumbnailUrl: undefined }, {
             activate: false,
-            insertAfterIndex: sourceIndex + index - 1,
+            insertAfterIndex: sourceIndex + index - (appendPages ? 0 : 1),
             name: String(products[index]?.name || products[index]?.productName || `Produto ${index + 1}`)
         })
     }
     await flushPersistenceNow('one-product-per-page', { force: true })
-    notifyEditorInfo(`${snapshots.length} produtos distribuídos: o primeiro na página atual e os demais nas cópias.`)
+    notifyEditorInfo(appendPages ? `${snapshots.length} páginas criadas. Os produtos da página atual foram mantidos.` : `${snapshots.length} produtos distribuídos: o primeiro na página atual e os demais nas cópias.`)
 }
 
 const quickCompletedProductReviews = ref(0)
@@ -19511,7 +19593,7 @@ const quickModeRequiredBusinessFields = computed<string[]>(() => {
 
 const hydrateQuickModeDataFromCanvas = () => {
     if (isQuickMode.value && project.templateConfig?.quickValidity) {
-        handleQuickModeValidityUpdate(project.templateConfig.quickValidity)
+        handleQuickModeValidityUpdate(project.templateConfig.quickValidity, { background: true })
         return
     }
     const validity = getQuickValidityTextObjects()[0] as any
@@ -19556,7 +19638,7 @@ const hydrateQuickModeDataFromCanvas = () => {
             show: quickShowValidity.value,
             dateFormat: quickValidityDateFormat.value,
             scope: quickOfferScope.value
-        })
+        }, { background: true })
     }
 }
 
@@ -19624,7 +19706,7 @@ const ensureQuickValidityTextObject = (): any | null => {
 let quickBusinessBindingSequence = 0
 const applyQuickBusinessProfileBindings = async (
     payload: any,
-    options: { persist?: boolean } = {}
+    options: { persist?: boolean; background?: boolean } = {}
 ): Promise<void> => {
     const bindingSequence = ++quickBusinessBindingSequence
     const profile = getQuickBusinessProfilePayload(payload)
@@ -19641,9 +19723,11 @@ const applyQuickBusinessProfileBindings = async (
         const name = `header-whatsapp-${label._customId || label.left}`
         const existingPhone = canvas.value.getObjects().find((o: any) => o.name === name)
         if (existingPhone) {
-            existingPhone.set({fontSize:32,dynamicFieldBaseFontSize:32,dynamicFieldAutoFitFontSize:32})
-            existingPhone.initDimensions?.()
-            changed = true
+            if (existingPhone.fontSize !== 32 || existingPhone.dynamicFieldBaseFontSize !== 32 || existingPhone.dynamicFieldAutoFitFontSize !== 32) {
+                existingPhone.set({fontSize:32,dynamicFieldBaseFontSize:32,dynamicFieldAutoFitFontSize:32})
+                existingPhone.initDimensions?.()
+                changed = true
+            }
             continue
         }
         const anchor = label.getPointByOrigin('left', 'bottom')
@@ -19733,10 +19817,16 @@ const applyQuickBusinessProfileBindings = async (
         sanitizeAllClipPaths()
     }
     for (const slot of canvas.value.getObjects().filter((o: any) => o.businessProfileField === 'footerPaymentImages')) {
-        slot.set({ visible: !!profile.footerPaymentImages?.length && (quickBusinessFieldOverrides.value.footerPaymentImages ?? slot.quickFieldEnabled !== false) })
+        const enabled = quickBusinessFieldOverrides.value.footerPaymentImages ?? slot.quickFieldEnabled !== false
+        const visible = !!profile.footerPaymentImages?.length && enabled
+        if (slot.visible !== visible || slot.quickFieldEnabled !== enabled) {
+            slot.set({ visible, quickFieldEnabled: enabled })
+            changed = true
+        }
     }
     changed = compactBusinessFooter(canvas.value.getObjects()) || changed
     for (const slot of canvas.value.getObjects().filter((o: any) => o.businessProfileField === 'footerPaymentImages')) {
+        if (isFooterPaymentGroupCurrent(slot, profile.footerPaymentImages)) continue
         try {
             const group = await createFooterPaymentGroup(fabric, slot, profile.footerPaymentImages)
             if (!isCurrentPage()) { group.dispose(); return }
@@ -19752,7 +19842,7 @@ const applyQuickBusinessProfileBindings = async (
         safeRequestRenderAll()
     }
     if (options.persist !== false && (changed || logoChanged)) {
-        await persistQuickModeDataChange('quick-business-profile', expectedPageId)
+        await persistQuickModeDataChange('quick-business-profile', expectedPageId, options)
     }
 }
 
@@ -19825,13 +19915,21 @@ const persistInactiveQuickBusinessFields = async () => {
             return result
         })
         const paymentData = cloneCanvasDataForLoad(updated || page.canvasData)
+        let paymentChanged = false
         for (const slot of paymentData.objects || []) {
-            if (slot.businessProfileField === 'footerPaymentImages') slot.visible = !!profile.footerPaymentImages?.length && (overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false)
+            if (slot.businessProfileField !== 'footerPaymentImages') continue
+            const enabled = overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false
+            const visible = !!profile.footerPaymentImages?.length && enabled
+            if (slot.visible !== visible || slot.quickFieldEnabled !== enabled) {
+                slot.visible = visible
+                slot.quickFieldEnabled = enabled
+                paymentChanged = true
+            }
         }
         let finalFooterChanged = compactBusinessFooter(paymentData.objects || [])
-        let paymentChanged = false
         for (const [slotIndex, slot] of (paymentData.objects || []).entries()) {
             if (slot.businessProfileField !== 'footerPaymentImages') continue
+            if (isFooterPaymentGroupCurrent(slot, profile.footerPaymentImages)) continue
             const group = await createFooterPaymentGroup(fabric, slot, profile.footerPaymentImages)
             group.set({ visible: !!profile.footerPaymentImages?.length && (overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false), quickFieldEnabled: overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false })
             paymentData.objects[slotIndex] = group.toObject(['_customId', 'parentFrameId', 'name', 'layerName', 'businessProfileField', 'quickFieldEnabled', 'footerPaymentWidth', 'footerPaymentHeight'])
@@ -19844,7 +19942,7 @@ const persistInactiveQuickBusinessFields = async () => {
     }
 }
 
-const persistQuickModeDataChange = async (reason: string, expectedPageId = getActiveProjectPageId()) => {
+const persistQuickModeDataChange = async (reason: string, expectedPageId = getActiveProjectPageId(), options: { background?: boolean } = {}) => {
     if (expectedPageId !== getActiveProjectPageId()) return
     await Promise.resolve(saveCurrentState({
         allowEmptyOverwrite: true,
@@ -19852,10 +19950,13 @@ const persistQuickModeDataChange = async (reason: string, expectedPageId = getAc
         expectedPageId,
         source: 'user',
         skipCoalesce: true,
-        skipIfUnchanged: false
+        skipIfUnchanged: !!options.background
     }))
-    if (reason === 'quick-business-profile' || reason === 'quick-data-validity' || reason.startsWith('quick-data-field:')) await persistInactiveQuickBusinessFields()
+    // Hidratar uma página não é uma edição dos dados de todas as outras páginas.
+    // Mudanças explícitas no formulário continuam propagando para o encarte inteiro.
+    if (!options.background && (reason === 'quick-business-profile' || reason === 'quick-data-validity' || reason.startsWith('quick-data-field:'))) await persistInactiveQuickBusinessFields()
     if (expectedPageId !== getActiveProjectPageId()) return
+    if (options.background) { triggerAutoSave(); return }
     await flushPersistenceNow(reason, { force: true })
 }
 
@@ -19919,7 +20020,7 @@ const handleQuickModeValidityUpdate = (payload: {
     whileStocks?: boolean
     show?: boolean
     scope?: Partial<OfferValidityScope>
-}, options: { persist?: boolean } = {}) => {
+}, options: { persist?: boolean; background?: boolean } = {}) => {
     quickValidityDateFormat.value = normalizeOfferDateFormat(payload.dateFormat)
     quickValidityStartDate.value = String(payload?.startDate || '').trim()
     quickValidityEndDate.value = String(payload?.endDate || '').trim()
@@ -20019,7 +20120,7 @@ const handleQuickModeValidityUpdate = (payload: {
     if (!changed && !layoutRepair.changed) return
     refreshCanvasObjects()
     safeRequestRenderAll()
-    if (options.persist !== false) void persistQuickModeDataChange('quick-data-validity')
+    if (options.persist !== false) void persistQuickModeDataChange('quick-data-validity', getActiveProjectPageId(), options)
 }
 
 const handleAdvancedValidityPromptConfirm = (payload: {
@@ -20169,7 +20270,7 @@ const refreshBusinessProfile = async () => {
             isDesignLoading.value ||
             isCanvasJsonLoadInProgress
         ) return
-        await applyQuickBusinessProfileBindings(profile, { persist: isQuickMode.value })
+        await applyQuickBusinessProfileBindings(profile, { persist: isQuickMode.value, background: true })
     } catch {
         // A quick seed can still render with its embedded profile when the
         // authenticated profile endpoint is temporarily unavailable.
@@ -20203,7 +20304,7 @@ watch(
             isCanvasJsonLoadInProgress
         ) return
         if (lastLoadedPageKey !== `${projectId}:${pageId}` || completedPageLoadSessionId !== activePageLoadSessionId) return
-        void applyQuickBusinessProfileBindings(quickBusinessProfile.value, { persist: isQuickMode.value }).catch(error => {
+        void applyQuickBusinessProfileBindings(quickBusinessProfile.value, { persist: isQuickMode.value, background: true }).catch(error => {
             console.warn('[quick-editor] Falha ao reaplicar cadastro após o carregamento da página:', error)
         })
     },
@@ -20253,6 +20354,7 @@ const ensureQuickPageThumbnail = async (page: any, refresh = false): Promise<voi
     if (!refresh && (hasInlineThumb || (!isTemplatePage && hasStoredThumb))) return
 
     const sourceJson = livePage.canvasData
+    const sourceFingerprint = computeCanvasFingerprint(sourceJson)
     try {
         const dataURL = await generateThumbnailFromCanvasJson({
             sourceJson,
@@ -20265,8 +20367,9 @@ const ensureQuickPageThumbnail = async (page: any, refresh = false): Promise<voi
         if (!dataURL) return
         const latestIndex = project.pages.findIndex((item: any) => String(item?.id || '').trim() === pageId)
         if (latestIndex < 0) return
-        // Após waitForTemplatePageReady o canvasData pode ser re-sincronizado;
-        // a miniatura ainda representa a mesma página e deve ser aplicada.
+        // Uma edição pode acontecer enquanto as imagens remotas são carregadas.
+        // Não publique uma prévia antiga nem gere um save extra para esse estado.
+        if (computeCanvasFingerprint(project.pages[latestIndex]?.canvasData) !== sourceFingerprint) return
         updatePageThumbnail(latestIndex, dataURL)
         if (refresh) triggerAutoSave()
     } catch (error) {
@@ -29990,10 +30093,10 @@ const applyGlobalLabelTemplatesToCanvas = async (reason = 'global-label-template
             const snapshotTemplateId = String((zone as any)?._zoneTemplateSnapshotId || '').trim();
             const templateId = styleTemplateId || snapshotTemplateId;
             const zoneCards = getZoneChildren(zone);
-            const hasDeletedZoneTemplate = isLabelTemplateLibraryAuthoritative.value && !!templateId && !availableTemplates.has(templateId);
-            const hasDeletedCardTemplate = isLabelTemplateLibraryAuthoritative.value && zoneCards.some((card: any) => {
+            const hasDeletedZoneTemplate = isLabelTemplateVerified(templateId) && !!templateId && !availableTemplates.has(templateId);
+            const hasDeletedCardTemplate = zoneCards.some((card: any) => {
                 const cardId = String((card as any)?.__cardLabelTemplateId || '').trim();
-                return !!cardId && !availableTemplates.has(cardId);
+                return !!cardId && isLabelTemplateVerified(cardId) && !availableTemplates.has(cardId);
             });
             // Modelos com composição própria mantêm sua arte. Só entram na
             // migração quando realmente apontam para uma etiqueta excluída.
@@ -30016,7 +30119,7 @@ const applyGlobalLabelTemplatesToCanvas = async (reason = 'global-label-template
                     const cardTemplateStillExists = labelTemplates.value.some((item: any) => (
                         String(item?.id || '').trim() === cardTemplateId
                     ));
-                    if (!cardTemplateStillExists) return isLabelTemplateLibraryAuthoritative.value;
+                    if (!cardTemplateStillExists) return isLabelTemplateVerified(cardTemplateId);
                     // A card explicitly customized in the quick editor keeps
                     // its own label by design. Inherited cards, however, must
                     // match both the selected ID and the library's visual
@@ -30566,15 +30669,23 @@ const handleAutoOfferLayout = async () => {
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
                   <QuickModeElementColorMenu
-                    v-if="isQuickMode && quickModeSelectedColorTargets.length && selectedObjectPos.visible && !quickModeElementColorDismissed && !isDesignLoading && !figmaCrop.isCropActive.value"
+                    v-if="isQuickMode && quickModeSelectedColorTargets.length && quickModeElementAnchor.visible && !quickModeElementColorDismissed && !isDesignLoading && !figmaCrop.isCropActive.value"
                     :key="selectedObjectRef?._customId || quickModeSelectedColorTargets[0]?.id"
                     :targets="quickModeSelectedColorTargets"
                     :recent-colors="recentColors"
+                    :text-selected="quickModeSelectedText"
+                    :font-family="quickModeNativeFontFamily"
+                    :font-size="quickFontSize"
+                    :typography="quickTypography"
                     :busy="isParsingProducts || isProcessing"
                     :style="quickModeElementColorPosition"
                     @apply-color="applyQuickModeColorChange"
                     @clear-color="clearQuickModeColor"
                     @apply-opacity="applyQuickModeOpacityChange"
+                    @restore-color="restoreQuickModeColor"
+                    @apply-font="applyQuickModeNativeFont"
+                    @apply-font-size="applyQuickFontSize"
+                    @apply-typography="applyQuickTypography"
                     @close="quickModeElementColorDismissed = true"
                   />
                    <label
@@ -30659,7 +30770,14 @@ const handleAutoOfferLayout = async () => {
                     style="z-index: 200;"
                     aria-live="polite"
                   >
-                    <div class="px-4 py-3 rounded-lg bg-zinc-950/70 border border-white/10 shadow-xl">
+                    <img
+                      v-if="activePage?.thumbnail || activePage?.thumbnailUrl"
+                      :src="activePage.thumbnail || activePage.thumbnailUrl"
+                      alt="Prévia da página enquanto a arte carrega"
+                      class="absolute inset-0 h-full w-full object-contain p-4 pointer-events-none"
+                      decoding="async"
+                    />
+                    <div class="relative px-4 py-3 rounded-lg bg-zinc-950/70 border border-white/10 shadow-xl">
                       <div class="flex items-center gap-2">
                         <div class="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
                         <p class="text-sm text-white/90">{{ designLoadMessage }}</p>
@@ -31244,7 +31362,7 @@ const handleAutoOfferLayout = async () => {
         {{ aiToast.message }}
       </div>
 
-      <PageEnhancementDialog v-if="showPageEnhancement" :project-id="String(project.id)" :pages="project.pages" :prepare-page="preparePageEnhancement" @close="showPageEnhancement = false" />
+      <PageEnhancementDialog v-if="showPageEnhancement" :project-id="String(project.id)" :initial-page-id="String(activePage?.id || '')" :pages="project.pages" :prepare-page="preparePageEnhancement" @close="showPageEnhancement = false" />
     <div
         v-if="isExportDownloadInProgress"
         class="fixed inset-0 z-(--z-toast) pointer-events-none flex items-center justify-center"

@@ -15,7 +15,6 @@ import {
   X,
   Zap
 } from 'lucide-vue-next'
-import { getProjectPreviewSource } from '~/utils/dashboardProjectPreview'
 import {
   createFlyerTemplate,
   FLYER_TEMPLATE_FORMATS,
@@ -48,6 +47,8 @@ definePageMeta({
 const { getApiAuthHeaders } = useApiAuth()
 
 const templates = ref<FlyerTemplateSummary[]>([])
+const accountPreviewProfile = ref<any>(null)
+const accountPreviewProfileReady = ref(false)
 const isLoading = ref(true)
 const loadError = ref('')
 const searchQuery = ref('')
@@ -346,15 +347,24 @@ const formatTemplateStructure = (template: FlyerTemplateSummary): string => {
 const loadTemplates = async () => {
   isLoading.value = true
   loadError.value = ''
+  accountPreviewProfile.value = null
+  accountPreviewProfileReady.value = false
   try {
     const headers = await getApiAuthHeaders()
     const categoriesRequest = listFlyerTemplateCategories(headers).catch(() => [])
-    templates.value = await listFlyerTemplates(headers)
+    const profileRequest = $fetch<any>('/api/profile', { headers }).catch(() => null)
+    const [models, profile] = await Promise.all([
+      listFlyerTemplates(headers, { library: true }),
+      profileRequest
+    ])
+    templates.value = models
+    accountPreviewProfile.value = profile
     categories.value = await categoriesRequest
   } catch (error: any) {
     loadError.value = String(error?.data?.statusMessage || error?.message || 'Não foi possível carregar os modelos.')
     templates.value = []
   } finally {
+    accountPreviewProfileReady.value = true
     isLoading.value = false
   }
 }
@@ -612,18 +622,18 @@ onUnmounted(() => {
         <div v-else class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <article v-for="(template, index) in filteredTemplates" :key="template.id" class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/5">
             <div class="relative flex aspect-[3/1] items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc]">
-              <img
-                v-if="getProjectPreviewSource(template)"
-                :src="getProjectPreviewSource(template) || undefined"
-                :alt="template.name"
-                class="absolute inset-0 h-full w-full object-cover object-top"
-                :loading="index < 8 ? 'eager' : 'lazy'"
-                decoding="async"
-                :fetchpriority="index < 4 ? 'high' : (index < 8 ? 'auto' : 'low')"
-              />
-              <div v-else class="flex h-24 w-24 items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-white/70 text-blue-300">
+              <div class="flex h-24 w-24 items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-white/70 text-blue-300">
                 <LayoutTemplate class="h-8 w-8" />
               </div>
+              <AccountFlyerTemplatePreview
+                v-if="accountPreviewProfileReady"
+                :key="`${template.id}:${accountPreviewProfile?.id || 'account'}`"
+                :template-id="template.id"
+                :profile="accountPreviewProfile"
+                :profile-ready="accountPreviewProfileReady"
+                :eager="index < 4"
+                class="absolute inset-0 h-full w-full object-cover object-top"
+              />
               <span class="absolute left-3 top-3 rounded-full bg-blue-600/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm">Modelo</span>
             </div>
             <div class="p-4">

@@ -1,5 +1,8 @@
 import { Rect, util } from 'fabric'
 
+const PRODUCT_LIMIT_TEXT_COLOR = '#ffffff'
+const PRODUCT_LIMIT_BADGE_COLOR = '#b91c1c'
+
 /** O limite acompanha a altura final do nome, inclusive após quebra de linha. */
 export const positionProductLimitBelowName = (card: any, width: number, height: number) => {
   const children = card?.getObjects?.() || []
@@ -22,7 +25,7 @@ export const positionProductLimitBelowName = (card: any, width: number, height: 
   const maxWidth = width * 0.84
   const padX = Math.max(3, width * 0.022)
   const padY = Math.max(2, height * 0.007)
-  limit.set?.({ backgroundColor: '', fill: '#59430f', textBackgroundColor: '', stroke: null, strokeWidth: 0,
+  limit.set?.({ backgroundColor: '', fill: PRODUCT_LIMIT_TEXT_COLOR, textBackgroundColor: '', stroke: null, strokeWidth: 0,
     fontFamily: 'Barlow', fontWeight: 700, fontSize: Math.max(1, Math.min(width * 0.05, height * 0.052)),
     scaleX: 1, scaleY: 1, width: maxWidth - padX * 2, textAlign: 'center', lineHeight: 1.05 })
   for (const line of Object.values(limit.styles || {})) {
@@ -57,7 +60,7 @@ export const positionProductLimitBelowName = (card: any, width: number, height: 
   badge?.set?.({ originX: 'center', originY: 'top', left: titleCenter, top,
     width: Math.min(maxWidth, Number(limit.width) + padX * 2), height: Number(limit.height) + padY * 2,
     rx: Math.max(3, width * 0.015), ry: Math.max(3, width * 0.015),
-    fill: '#fff2c4', stroke: '#e8c96c', strokeWidth: Math.max(0.5, width * 0.002),
+    fill: PRODUCT_LIMIT_BADGE_COLOR, stroke: PRODUCT_LIMIT_BADGE_COLOR, strokeWidth: Math.max(0.5, width * 0.002),
     scaleX: 1, scaleY: 1, visible: true })
   if (isNewBadge) {
     // insertAt recebe coordenadas do canvas e as converte para o grupo.

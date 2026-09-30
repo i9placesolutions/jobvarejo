@@ -9,6 +9,20 @@ export const PERIODIC_SAVE_INTERVAL_MS = 90_000
 
 export type SaveSource = 'user' | 'system'
 
+/** Uma sincronização automática não pode limpar uma edição ainda pendente. */
+export const resolvePageUpdateDirtyPolicy = (opts: {
+  wasDirty: boolean
+  source?: SaveSource
+  markUnsaved?: boolean
+}): { dirty: boolean; markUnsaved: boolean } => {
+  const system = opts.source === 'system'
+  const carriesPendingEdit = system && opts.wasDirty
+  return {
+    dirty: !system || carriesPendingEdit || !!opts.markUnsaved,
+    markUnsaved: carriesPendingEdit || (opts.markUnsaved ?? !system)
+  }
+}
+
 export type SaveStatePolicyInput = {
   forceEmptyOverwrite?: boolean
   allowEmptyOverwrite?: boolean

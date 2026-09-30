@@ -22,7 +22,7 @@ const UNIT_MAP: Record<string, string> = {
     fardo: 'fd', fardos: 'fd',
 };
 const STOP_WORDS = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'e', 'para', 'por', 'no', 'na']);
-const PROCESS_VERSION = 'birefnet-v1';
+const PROCESS_VERSION = 'birefnet-v2';
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024; // 12MB
 
 const normalizeSearchTerm = (term: string): string => {

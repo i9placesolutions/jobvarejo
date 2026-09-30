@@ -3,6 +3,7 @@ import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises'
 import {resolve} from 'node:path'
 import {register} from '../../workers/video-studio/node_modules/tsx/dist/esm/api/index.mjs'
 import {renderVideo} from '../../workers/video-studio/engine.mjs'
+import {resolveCatalogAsset} from '../../workers/video-studio/catalog-assets.mjs'
 register()
 const {newVideoFromTemplate}=await import('../../shared/video-studio/templates.ts')
 const {buildVideoTimeline}=await import('../../shared/video-studio/model.ts')
@@ -18,7 +19,7 @@ const families=requested?[]:[...new Set(recipes.map(r=>r.backgroundKind))].map(k
 for(const r of (requested?[]:recipes.filter(r=>r.nativeTitle)))if(!families.includes(r))families.push(r)
 for(const r of [...selected,...families.filter(r=>!selected.includes(r))]){
  const document=newVideoFromTemplate(r.id);document.brand=source.brand;document.offers=source.offers;document.validity='20 A 27/09/2026'
- await copyFile('public/video-studio/audio/'+r.music+'.mp3',dir+'/music.mp3')
+ await copyFile(await resolveCatalogAsset(`audio/${r.music}.mp3`,{root:resolve('.') }),dir+'/music.mp3')
  const scenes=buildVideoTimeline(document),media=Object.fromEntries(ids.map(id=>[id,id+'.png']))
  for(const format of ['vertical','horizontal']){
   const props={document,label:resolveVideoLabel(labels,r.id),format,media,scenes,music:'music.mp3'}

@@ -14,10 +14,16 @@ import ArtShell from '~/components/art-studio/ArtShell.vue'
 import ArtPreview from '~/components/art-studio/ArtPreview.vue'
 import {
   ART_FORMATS,
+  type ArtComposition,
   type ArtTemplate,
   type ArtDesign
 } from '~/types/art-studio'
-import { artError, resizeArt } from '~/utils/art-studio/composition'
+import {
+  artError,
+  personalizeArt,
+  resizeArt
+} from '~/utils/art-studio/composition'
+import { normalizeBusinessProfile } from '~/utils/businessProfile'
 definePageMeta({ layout: false, middleware: 'auth', ssr: false })
 useHead({ title: 'Estúdio de Artes • JobVarejo' })
 const route = useRoute(),
@@ -43,6 +49,51 @@ const search = ref(''),
 const chosenSizes = ref<string[]>(['1080x1350'])
 const selectedSize = ref('1080x1350'),
   personalizedName = ref('')
+const emptyBrandValues = (): Record<string, string> => ({
+  companyName: '',
+  logo: '',
+  phone: '',
+  address: '',
+  instagram: '',
+  date: new Date().toLocaleDateString('pt-BR')
+})
+const brandValues = ref(emptyBrandValues())
+const loadBrand = async () => {
+  brandValues.value = emptyBrandValues()
+  try {
+    const response = await $fetch<{ business_profile: unknown }>('/api/profile')
+    const business = normalizeBusinessProfile(response.business_profile)
+    brandValues.value = {
+      companyName: business.companyName,
+      logo: business.logo ? '/api/art-studio/brand-logo' : '',
+      phone: business.whatsapp || business.phone,
+      address: business.address,
+      instagram: business.instagram,
+      date: new Date().toLocaleDateString('pt-BR')
+    }
+  } catch {
+    // Sem perfil disponível, os slots de logo permanecem vazios; nunca usam
+    // uma marca salva na composição de outra conta.
+  }
+}
+const previewForActiveAccount = (composition: ArtComposition) =>
+  personalizeArt(composition, brandValues.value)
+const templatePreviews = computed<Record<string, ArtComposition>>(() =>
+  Object.fromEntries(
+    templates.value.map((template) => [
+      template.id,
+      previewForActiveAccount(template.composition)
+    ])
+  )
+)
+const designPreviews = computed<Record<string, ArtComposition>>(() =>
+  Object.fromEntries(
+    designs.value.map((design) => [
+      design.id,
+      previewForActiveAccount(design.composition)
+    ])
+  )
+)
 const categories = computed(() => [
   'Todos',
   ...new Set(templates.value.map((t) => t.category))
@@ -82,12 +133,15 @@ const load = async () => {
   loading.value = true
   error.value = ''
   try {
-    const result = await $fetch<{
-      templates: ArtTemplate[]
-      databaseReady: boolean
-    }>('/api/art-studio/templates', {
-      query: active.value === 'admin' ? { admin: '1' } : {}
-    })
+    const [result] = await Promise.all([
+      $fetch<{
+        templates: ArtTemplate[]
+        databaseReady: boolean
+      }>('/api/art-studio/templates', {
+        query: active.value === 'admin' ? { admin: '1' } : {}
+      }),
+      loadBrand()
+    ])
     if (version !== request) return
     templates.value = result.templates
     databaseReady.value = result.databaseReady
@@ -122,7 +176,7 @@ const preview = async (template: ArtTemplate) => {
 const previewComposition = computed(() => {
   if (!picked.value) return null
   const [w, h] = selectedSize.value.split('x').map(Number)
-  return resizeArt(picked.value.composition, w!, h!)
+  return resizeArt(previewForActiveAccount(picked.value.composition), w!, h!)
 })
 const start = () => {
   if (!picked.value) return
@@ -284,8 +338,9 @@ const start = () => {
           class="design-card"
           ><div class="design-image">
             <ArtPreview
-              :composition="design.composition"
+              :composition="designPreviews[design.id] || design.composition"
               :label="design.name"
+              lazy
             /><span class="card-action"
               >Continuar editando <ArrowUpRight :size="16"
             /></span>
@@ -313,8 +368,9 @@ const start = () => {
             @click="preview(item)"
           >
             <ArtPreview
-              :composition="item.composition"
+              :composition="templatePreviews[item.id] || item.composition"
               :label="item.name"
+              lazy
             /><span class="editable-badge">{{
               item.published ? 'EDITÁVEL' : 'RASCUNHO'
             }}</span

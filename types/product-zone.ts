@@ -337,6 +337,7 @@ export interface GlobalStyles {
   prodNameWeight?: number;
   prodNameAlign?: 'left' | 'center' | 'right';
   prodNameLineHeight?: number;
+  prodNameLineHeightDefaultVersion?: number;
   prodNameOffsetY?: number;
   prodNameTransform?: 'none' | 'upper' | 'lower';
   // Limite
@@ -1222,7 +1223,8 @@ export const DEFAULT_GLOBAL_STYLES: GlobalStyles = {
   prodNameScale: 1,
   prodNameWeight: 700,
   prodNameAlign: 'center',
-  prodNameLineHeight: 1.05,
+  prodNameLineHeight: 0.95,
+  prodNameLineHeightDefaultVersion: 1,
   prodNameOffsetY: 0,
   prodNameTransform: 'upper',
   limitColor: '#ef4444',

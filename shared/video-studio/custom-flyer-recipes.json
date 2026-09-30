@@ -4595,5 +4595,6498 @@
       "labelEdge": "#ffe000"
     },
     "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-c3613d1f-caca-42d6-877b-ee23b2fd68bb",
+    "sourceProject": "c3613d1f-caca-42d6-877b-ee23b2fd68bb",
+    "name": "Terça de Ofertas — Supermercado",
+    "campaign": "TERÇA DE OFERTAS — SUPERMERCADO",
+    "accent": "#ffdb19",
+    "base": "#061f65",
+    "ink": "#061f65",
+    "label": "banner",
+    "labelNames": [
+      "Varejo — Vermelha com Borda Amarela"
+    ],
+    "background": "terca-ofertas-supermercado-background.png",
+    "seal": "terca-ofertas-supermercado-seal.png",
+    "sealAspect": 2.467289719626168,
+    "posterLayout": "thematic-seal",
+    "music": "model-c3613d1f-caca-42d6-877b-ee23b2fd68bb",
+    "musicStyle": "tropical",
+    "bpm": 132,
+    "seed": 2212864008,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-right",
+      "text": "word-pop",
+      "price": "elastic",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "ribbons",
+        "orbit"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Terça de Ofertas — Supermercado",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "terca-ofertas-supermercado-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#075de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdb19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffdb1924, transparent 55%), linear-gradient(145deg, #061f65, #080b12)"
+  },
+  {
+    "id": "flyer-6c79b35a-20ec-4292-8345-5dd7665622b8",
+    "sourceProject": "6c79b35a-20ec-4292-8345-5dd7665622b8",
+    "name": "Aqui a Oferta é Garantida!",
+    "campaign": "AQUI A OFERTA É GARANTIDA!",
+    "accent": "#ffd222",
+    "base": "#171819",
+    "ink": "#171819",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "oferta-garantida-background.png",
+    "seal": "oferta-garantida-seal.png",
+    "sealAspect": 1.0287206266318538,
+    "posterLayout": "thematic-seal",
+    "music": "model-6c79b35a-20ec-4292-8345-5dd7665622b8",
+    "musicStyle": "house",
+    "bpm": 118,
+    "seed": 962930082,
+    "transition": "spin",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "elastic",
+      "text": "tilt",
+      "price": "tilt",
+      "camera": "handheld",
+      "atmosphere": [
+        "orbit",
+        "prism"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "sparkle"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Aqui a Oferta é Garantida!",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "oferta-garantida-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#37312a",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd222"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffd22224, transparent 55%), linear-gradient(145deg, #171819, #080b12)"
+  },
+  {
+    "id": "flyer-1f1f2fbe-7b8a-4d7a-869c-91e7ebcea765",
+    "sourceProject": "1f1f2fbe-7b8a-4d7a-869c-91e7ebcea765",
+    "name": "Super Ofertas — Moedas",
+    "campaign": "SUPER OFERTAS — MOEDAS",
+    "accent": "#ffd222",
+    "base": "#171819",
+    "ink": "#171819",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "super-ofertas-moedas-background.png",
+    "seal": "super-ofertas-moedas-seal.png",
+    "sealAspect": 1.1410488245931283,
+    "posterLayout": "thematic-seal",
+    "music": "model-1f1f2fbe-7b8a-4d7a-869c-91e7ebcea765",
+    "musicStyle": "disco",
+    "bpm": 128,
+    "seed": 1519143063,
+    "transition": "blur",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "tracking",
+      "price": "rise",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "pop"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Super Ofertas — Moedas",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "super-ofertas-moedas-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#37312a",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd222"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffd22224, transparent 55%), linear-gradient(145deg, #171819, #080b12)"
+  },
+  {
+    "id": "flyer-dbcdae8f-2214-462b-84e2-3b7e9a149194",
+    "sourceProject": "dbcdae8f-2214-462b-84e2-3b7e9a149194",
+    "name": "Promoção de Quinta Feira",
+    "campaign": "PROMOÇÃO DE QUINTA FEIRA",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "promocao-quinta-feira-background.png",
+    "seal": "promocao-quinta-feira-seal.png",
+    "sealAspect": 1.0150442477876107,
+    "posterLayout": "thematic-seal",
+    "music": "model-dbcdae8f-2214-462b-84e2-3b7e9a149194",
+    "musicStyle": "tropical",
+    "bpm": 136,
+    "seed": 475728646,
+    "transition": "rgb",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "stretch",
+      "price": "whip-right",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "grid",
+        "laser-sweep"
+      ],
+      "transitionSound": "glitch",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "harvest",
+    "revision": 2,
+    "layoutName": "Promoção de Quinta Feira",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "promocao-quinta-feira-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-bdb34119-7241-449d-94e0-de05c8289646",
+    "sourceProject": "bdb34119-7241-449d-94e0-de05c8289646",
+    "name": "Fim de Mês de Ofertas",
+    "campaign": "FIM DE MÊS DE OFERTAS",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "fim-mes-ofertas-background.png",
+    "seal": "fim-mes-ofertas-seal.png",
+    "sealAspect": 1.0114638447971782,
+    "posterLayout": "thematic-seal",
+    "music": "model-bdb34119-7241-449d-94e0-de05c8289646",
+    "musicStyle": "funk",
+    "bpm": 138,
+    "seed": 3417851462,
+    "transition": "spin",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "elastic",
+      "text": "tilt",
+      "price": "tilt",
+      "camera": "handheld",
+      "atmosphere": [
+        "orbit",
+        "prism"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "sparkle"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Fim de Mês de Ofertas",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "fim-mes-ofertas-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-f322c0a9-4942-431a-9bf9-4dc1d4384bae",
+    "sourceProject": "f322c0a9-4942-431a-9bf9-4dc1d4384bae",
+    "name": "Ofertas de Novembro",
+    "campaign": "OFERTAS DE NOVEMBRO",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "ofertas-novembro-background.png",
+    "seal": "ofertas-novembro-seal.png",
+    "sealAspect": 1.4194961664841184,
+    "posterLayout": "thematic-seal",
+    "music": "model-f322c0a9-4942-431a-9bf9-4dc1d4384bae",
+    "musicStyle": "house",
+    "bpm": 128,
+    "seed": 956902868,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-right",
+      "text": "word-pop",
+      "price": "elastic",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "ribbons",
+        "orbit"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Ofertas de Novembro",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "ofertas-novembro-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-84405af9-8cb1-484c-b759-9b3a2ba8d946",
+    "sourceProject": "84405af9-8cb1-484c-b759-9b3a2ba8d946",
+    "name": "Super Saldão",
+    "campaign": "SUPER SALDÃO",
+    "accent": "#ffe027",
+    "base": "#8f2308",
+    "ink": "#8f2308",
+    "label": "banner",
+    "labelNames": [
+      "Oferta do Dia — Etiqueta"
+    ],
+    "background": "super-saldao-background.png",
+    "seal": "super-saldao-seal.png",
+    "sealAspect": 1.362135922330097,
+    "posterLayout": "thematic-seal",
+    "music": "model-84405af9-8cb1-484c-b759-9b3a2ba8d946",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 3197020941,
+    "transition": "whip-up",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stretch",
+      "price": "slam",
+      "camera": "swing",
+      "atmosphere": [
+        "spotlights",
+        "ribbons"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Super Saldão",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "super-saldao-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#f46a09",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe027"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffe02724, transparent 55%), linear-gradient(145deg, #8f2308, #080b12)"
+  },
+  {
+    "id": "flyer-5b7e6ff7-7d12-40ca-8192-b638c1afb281",
+    "sourceProject": "5b7e6ff7-7d12-40ca-8192-b638c1afb281",
+    "name": "Ofertas da Padaria",
+    "campaign": "OFERTAS DA PADARIA",
+    "accent": "#ffc766",
+    "base": "#422011",
+    "ink": "#422011",
+    "label": "banner",
+    "labelNames": [
+      "Ofertas do Açougue — Ouro e Brasa"
+    ],
+    "background": "ofertas-padaria-background.png",
+    "seal": "ofertas-padaria-seal.png",
+    "sealAspect": 1.2209188660801564,
+    "posterLayout": "thematic-seal",
+    "music": "model-5b7e6ff7-7d12-40ca-8192-b638c1afb281",
+    "musicStyle": "house",
+    "bpm": 136,
+    "seed": 1526876874,
+    "transition": "iris",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "whip",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "spark-burst"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Ofertas da Padaria",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "ofertas-padaria-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#9c4e21",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffc766"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffc76624, transparent 55%), linear-gradient(145deg, #422011, #080b12)"
+  },
+  {
+    "id": "flyer-09b08e6b-e3f8-4ed2-aa36-9e80b1adf718",
+    "sourceProject": "09b08e6b-e3f8-4ed2-aa36-9e80b1adf718",
+    "name": "Mega Oferta — Azul",
+    "campaign": "MEGA OFERTA — AZUL",
+    "accent": "#ffdb19",
+    "base": "#061f65",
+    "ink": "#061f65",
+    "label": "banner",
+    "labelNames": [
+      "Hoje é Dia de Limpeza — Segunda — Etiqueta"
+    ],
+    "background": "mega-oferta-azul-background.png",
+    "seal": "mega-oferta-azul-seal.png",
+    "sealAspect": 1.1605415860735009,
+    "posterLayout": "thematic-seal",
+    "music": "model-09b08e6b-e3f8-4ed2-aa36-9e80b1adf718",
+    "musicStyle": "drive",
+    "bpm": 128,
+    "seed": 2476767192,
+    "transition": "spin",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "elastic",
+      "text": "tilt",
+      "price": "tilt",
+      "camera": "handheld",
+      "atmosphere": [
+        "orbit",
+        "prism"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "sparkle"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Mega Oferta — Azul",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "mega-oferta-azul-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#075de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdb19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffdb1924, transparent 55%), linear-gradient(145deg, #061f65, #080b12)"
+  },
+  {
+    "id": "flyer-7361964b-0fd3-4ec2-a3ec-52b5fac3a4e8",
+    "sourceProject": "7361964b-0fd3-4ec2-a3ec-52b5fac3a4e8",
+    "name": "Leve+ Pague− — Azul",
+    "campaign": "LEVE+ PAGUE− — AZUL",
+    "accent": "#ffdb19",
+    "base": "#061f65",
+    "ink": "#061f65",
+    "label": "banner",
+    "labelNames": [
+      "Hoje é Dia de Limpeza — Segunda — Etiqueta"
+    ],
+    "background": "leve-mais-pague-menos-azul-background.png",
+    "seal": "leve-mais-pague-menos-azul-seal.png",
+    "sealAspect": 1.106060606060606,
+    "posterLayout": "thematic-seal",
+    "music": "model-7361964b-0fd3-4ec2-a3ec-52b5fac3a4e8",
+    "musicStyle": "house",
+    "bpm": 114,
+    "seed": 982835739,
+    "transition": "smoke",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "rise",
+      "text": "word-pop",
+      "price": "drop",
+      "camera": "handheld",
+      "atmosphere": [
+        "smoke-plumes",
+        "embers"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Leve+ Pague− — Azul",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "leve-mais-pague-menos-azul-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#075de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdb19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffdb1924, transparent 55%), linear-gradient(145deg, #061f65, #080b12)"
+  },
+  {
+    "id": "flyer-673f7bad-d4cd-492e-8683-57a73f061b07",
+    "sourceProject": "673f7bad-d4cd-492e-8683-57a73f061b07",
+    "name": "Preço Baixo Todo Dia!",
+    "campaign": "PREÇO BAIXO TODO DIA!",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "preco-baixo-todo-dia-background.png",
+    "seal": "preco-baixo-todo-dia-seal.png",
+    "sealAspect": 1.044309296264118,
+    "posterLayout": "thematic-seal",
+    "music": "model-673f7bad-d4cd-492e-8683-57a73f061b07",
+    "musicStyle": "disco",
+    "bpm": 134,
+    "seed": 370908166,
+    "transition": "rgb",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "stretch",
+      "price": "whip-right",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "grid",
+        "laser-sweep"
+      ],
+      "transitionSound": "glitch",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Preço Baixo Todo Dia!",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "preco-baixo-todo-dia-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-9f8fb237-abf9-4470-baea-62e4de8539bf",
+    "sourceProject": "9f8fb237-abf9-4470-baea-62e4de8539bf",
+    "name": "Leve+ Pague− — Vermelho",
+    "campaign": "LEVE+ PAGUE− — VERMELHO",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "leve-mais-pague-menos-vermelho-background.png",
+    "seal": "leve-mais-pague-menos-vermelho-seal.png",
+    "sealAspect": 1.0876736111111112,
+    "posterLayout": "thematic-seal",
+    "music": "model-9f8fb237-abf9-4470-baea-62e4de8539bf",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 1820674083,
+    "transition": "blur",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "tracking",
+      "price": "rise",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "pop"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Leve+ Pague− — Vermelho",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "leve-mais-pague-menos-vermelho-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-d43191fb-535a-4ed5-abb1-aef974ac4335",
+    "sourceProject": "d43191fb-535a-4ed5-abb1-aef974ac4335",
+    "name": "Aqui tem o Menor Preço!",
+    "campaign": "AQUI TEM O MENOR PREÇO!",
+    "accent": "#ffdb19",
+    "base": "#061f65",
+    "ink": "#061f65",
+    "label": "banner",
+    "labelNames": [
+      "Hoje é Dia de Limpeza — Segunda — Etiqueta"
+    ],
+    "background": "aqui-menor-preco-background.png",
+    "seal": "aqui-menor-preco-seal.png",
+    "sealAspect": 1.417258883248731,
+    "posterLayout": "thematic-seal",
+    "music": "model-d43191fb-535a-4ed5-abb1-aef974ac4335",
+    "musicStyle": "house",
+    "bpm": 132,
+    "seed": 657254969,
+    "transition": "smoke",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "rise",
+      "text": "word-pop",
+      "price": "drop",
+      "camera": "handheld",
+      "atmosphere": [
+        "smoke-plumes",
+        "embers"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Aqui tem o Menor Preço!",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "aqui-menor-preco-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#075de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdb19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffdb1924, transparent 55%), linear-gradient(145deg, #061f65, #080b12)"
+  },
+  {
+    "id": "flyer-614eca03-600c-4b80-bf3a-5172dca9ed31",
+    "sourceProject": "614eca03-600c-4b80-bf3a-5172dca9ed31",
+    "name": "Ofertas do Dia — Carrinho",
+    "campaign": "OFERTAS DO DIA — CARRINHO",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "ofertas-dia-carrinho-background.png",
+    "seal": "ofertas-dia-carrinho-seal.png",
+    "sealAspect": 1.0995594713656387,
+    "posterLayout": "thematic-seal",
+    "music": "model-614eca03-600c-4b80-bf3a-5172dca9ed31",
+    "musicStyle": "house",
+    "bpm": 136,
+    "seed": 2343869773,
+    "transition": "blur",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "tracking",
+      "price": "rise",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "pop"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Ofertas do Dia — Carrinho",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "ofertas-dia-carrinho-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-0581b138-dcc7-47d7-9f75-bca449903693",
+    "sourceProject": "0581b138-dcc7-47d7-9f75-bca449903693",
+    "name": "Leve Mais Pague Menos! — Faixas",
+    "campaign": "LEVE MAIS PAGUE MENOS! — FAIXAS",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "leve-mais-pague-menos-faixas-background.png",
+    "seal": "leve-mais-pague-menos-faixas-seal.png",
+    "sealAspect": 0.9982547993019197,
+    "posterLayout": "thematic-seal",
+    "music": "model-0581b138-dcc7-47d7-9f75-bca449903693",
+    "musicStyle": "breakbeat",
+    "bpm": 112,
+    "seed": 4027022247,
+    "transition": "fade",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "tilt",
+      "text": "rise",
+      "price": "elastic",
+      "camera": "none",
+      "atmosphere": [
+        "spotlights",
+        "ribbons"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "sparkle"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Leve Mais Pague Menos! — Faixas",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "leve-mais-pague-menos-faixas-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-07517edd-fd03-45d6-a826-4b450e4ee18b",
+    "sourceProject": "07517edd-fd03-45d6-a826-4b450e4ee18b",
+    "name": "Oferta Especial — Circular",
+    "campaign": "OFERTA ESPECIAL — CIRCULAR",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "oferta-especial-circular-background.png",
+    "seal": "oferta-especial-circular-seal.png",
+    "sealAspect": 1.1001788908765653,
+    "posterLayout": "thematic-seal",
+    "music": "model-07517edd-fd03-45d6-a826-4b450e4ee18b",
+    "musicStyle": "drive",
+    "bpm": 140,
+    "seed": 3122503171,
+    "transition": "whip-up",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stretch",
+      "price": "slam",
+      "camera": "swing",
+      "atmosphere": [
+        "spotlights",
+        "ribbons"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Oferta Especial — Circular",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "oferta-especial-circular-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-f88b9f02-0da3-43cd-9378-ca2a96450555",
+    "sourceProject": "f88b9f02-0da3-43cd-9378-ca2a96450555",
+    "name": "Ofertas do App — Azul",
+    "campaign": "OFERTAS DO APP — AZUL",
+    "accent": "#ffdb19",
+    "base": "#061f65",
+    "ink": "#061f65",
+    "label": "banner",
+    "labelNames": [
+      "Hoje é Dia de Limpeza — Segunda — Etiqueta"
+    ],
+    "background": "ofertas-app-azul-background.png",
+    "seal": "ofertas-app-azul-seal.png",
+    "sealAspect": 1.050610820244328,
+    "posterLayout": "thematic-seal",
+    "music": "model-f88b9f02-0da3-43cd-9378-ca2a96450555",
+    "musicStyle": "house",
+    "bpm": 140,
+    "seed": 438882254,
+    "transition": "iris",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "whip",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "spark-burst"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Ofertas do App — Azul",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "ofertas-app-azul-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#075de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdb19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffdb1924, transparent 55%), linear-gradient(145deg, #061f65, #080b12)"
+  },
+  {
+    "id": "flyer-6375766f-0f6d-41f9-b4e2-eb0d598ec904",
+    "sourceProject": "6375766f-0f6d-41f9-b4e2-eb0d598ec904",
+    "name": "Ofertas do App — Vermelho",
+    "campaign": "OFERTAS DO APP — VERMELHO",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "ofertas-app-vermelho-background.png",
+    "seal": "ofertas-app-vermelho-seal.png",
+    "sealAspect": 1.129973474801061,
+    "posterLayout": "thematic-seal",
+    "music": "model-6375766f-0f6d-41f9-b4e2-eb0d598ec904",
+    "musicStyle": "house",
+    "bpm": 132,
+    "seed": 1614095446,
+    "transition": "rgb",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "stretch",
+      "price": "whip-right",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "grid",
+        "laser-sweep"
+      ],
+      "transitionSound": "glitch",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Ofertas do App — Vermelho",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "ofertas-app-vermelho-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-29eecd6f-5047-4062-9699-50abc958d4fd",
+    "sourceProject": "29eecd6f-5047-4062-9699-50abc958d4fd",
+    "name": "Economia Sempre!",
+    "campaign": "ECONOMIA SEMPRE!",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "economia-sempre-background.png",
+    "seal": "economia-sempre-seal.png",
+    "sealAspect": 1.3420796890184645,
+    "posterLayout": "thematic-seal",
+    "music": "model-29eecd6f-5047-4062-9699-50abc958d4fd",
+    "musicStyle": "pop",
+    "bpm": 124,
+    "seed": 2244102299,
+    "transition": "smoke",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "rise",
+      "text": "word-pop",
+      "price": "drop",
+      "camera": "handheld",
+      "atmosphere": [
+        "smoke-plumes",
+        "embers"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Economia Sempre!",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "economia-sempre-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-a0ad029a-3d67-49c6-83cb-65a74b8c6ae4",
+    "sourceProject": "a0ad029a-3d67-49c6-83cb-65a74b8c6ae4",
+    "name": "Terça de Ofertas — Carrinho",
+    "campaign": "TERÇA DE OFERTAS — CARRINHO",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "terca-ofertas-carrinho-background.png",
+    "seal": "terca-ofertas-carrinho-seal.png",
+    "sealAspect": 1.0792163543441227,
+    "posterLayout": "thematic-seal",
+    "music": "model-a0ad029a-3d67-49c6-83cb-65a74b8c6ae4",
+    "musicStyle": "breakbeat",
+    "bpm": 124,
+    "seed": 4016484010,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "earthquake",
+      "atmosphere": [
+        "shockwave",
+        "speed-lines"
+      ],
+      "transitionSound": "bass-hit",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Terça de Ofertas — Carrinho",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "terca-ofertas-carrinho-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-18a76ca7-0221-4b79-ac75-ac7856e45660",
+    "sourceProject": "18a76ca7-0221-4b79-ac75-ac7856e45660",
+    "name": "Mega Inauguração",
+    "campaign": "MEGA INAUGURAÇÃO",
+    "accent": "#ffd222",
+    "base": "#171819",
+    "ink": "#171819",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "mega-inauguracao-background.png",
+    "seal": "mega-inauguracao-seal.png",
+    "sealAspect": 1.1038353601496727,
+    "posterLayout": "thematic-seal",
+    "music": "model-18a76ca7-0221-4b79-ac75-ac7856e45660",
+    "musicStyle": "breakbeat",
+    "bpm": 132,
+    "seed": 358449671,
+    "transition": "whip-up",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stretch",
+      "price": "slam",
+      "camera": "swing",
+      "atmosphere": [
+        "spotlights",
+        "ribbons"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Mega Inauguração",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "mega-inauguracao-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#37312a",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd222"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffd22224, transparent 55%), linear-gradient(145deg, #171819, #080b12)"
+  },
+  {
+    "id": "flyer-590f02fa-6c5e-4139-bfed-9617266aeddd",
+    "sourceProject": "590f02fa-6c5e-4139-bfed-9617266aeddd",
+    "name": "Oferta Especial — Escudo",
+    "campaign": "OFERTA ESPECIAL — ESCUDO",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "oferta-especial-escudo-background.png",
+    "seal": "oferta-especial-escudo-seal.png",
+    "sealAspect": 0.9893805309734514,
+    "posterLayout": "thematic-seal",
+    "music": "model-590f02fa-6c5e-4139-bfed-9617266aeddd",
+    "musicStyle": "house",
+    "bpm": 132,
+    "seed": 3045845647,
+    "transition": "fade",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "tilt",
+      "text": "rise",
+      "price": "elastic",
+      "camera": "none",
+      "atmosphere": [
+        "spotlights",
+        "ribbons"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "sparkle"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Oferta Especial — Escudo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "oferta-especial-escudo-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-95f32397-8316-4176-adb4-10e2bbda9cf5",
+    "sourceProject": "95f32397-8316-4176-adb4-10e2bbda9cf5",
+    "name": "Mega Oferta — Etiqueta",
+    "campaign": "MEGA OFERTA — ETIQUETA",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "mega-oferta-etiqueta-background.png",
+    "seal": "mega-oferta-etiqueta-seal.png",
+    "sealAspect": 1.4968017057569296,
+    "posterLayout": "thematic-seal",
+    "music": "model-95f32397-8316-4176-adb4-10e2bbda9cf5",
+    "musicStyle": "house",
+    "bpm": 140,
+    "seed": 2861769436,
+    "transition": "rgb",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "stretch",
+      "price": "whip-right",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "grid",
+        "laser-sweep"
+      ],
+      "transitionSound": "glitch",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Mega Oferta — Etiqueta",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "mega-oferta-etiqueta-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-167aecc3-3a83-4fdb-8f3d-437272e07455",
+    "sourceProject": "167aecc3-3a83-4fdb-8f3d-437272e07455",
+    "name": "Quarta do Hortifruti — Cesta",
+    "campaign": "QUARTA DO HORTIFRUTI — CESTA",
+    "accent": "#ffe019",
+    "base": "#063e20",
+    "ink": "#063e20",
+    "label": "banner",
+    "labelNames": [
+      "Venha Economizar de Verdade — Etiqueta"
+    ],
+    "background": "quarta-hortifruti-cesta-background.png",
+    "seal": "quarta-hortifruti-cesta-seal.png",
+    "sealAspect": 1.0118543607112616,
+    "posterLayout": "thematic-seal",
+    "music": "model-167aecc3-3a83-4fdb-8f3d-437272e07455",
+    "musicStyle": "tropical",
+    "bpm": 140,
+    "seed": 1154343251,
+    "transition": "whip-up",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stretch",
+      "price": "slam",
+      "camera": "swing",
+      "atmosphere": [
+        "spotlights",
+        "ribbons"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "harvest",
+    "revision": 2,
+    "layoutName": "Quarta do Hortifruti — Cesta",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quarta-hortifruti-cesta-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#178d39",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe019"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffe01924, transparent 55%), linear-gradient(145deg, #063e20, #080b12)"
+  },
+  {
+    "id": "flyer-dfa7a4d0-821c-4454-be7c-4c0cf602d1dd",
+    "sourceProject": "dfa7a4d0-821c-4454-be7c-4c0cf602d1dd",
+    "name": "Detona Preços",
+    "campaign": "DETONA PREÇOS",
+    "accent": "#ffcf24",
+    "base": "#171719",
+    "ink": "#171719",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "detona-precos-background.png",
+    "seal": "detona-precos-seal.png",
+    "sealAspect": 1.2078754578754578,
+    "posterLayout": "thematic-seal",
+    "music": "model-dfa7a4d0-821c-4454-be7c-4c0cf602d1dd",
+    "musicStyle": "house",
+    "bpm": 136,
+    "seed": 3902086523,
+    "transition": "blur",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "tracking",
+      "price": "rise",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "pop"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Detona Preços",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "detona-precos-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#db1020",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffcf24"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffcf2424, transparent 55%), linear-gradient(145deg, #171719, #080b12)"
+  },
+  {
+    "id": "flyer-89fe4bd3-0962-463e-ae12-97e10f308493",
+    "sourceProject": "89fe4bd3-0962-463e-ae12-97e10f308493",
+    "name": "O Maior Garante o Menor Preço",
+    "campaign": "O MAIOR GARANTE O MENOR PREÇO",
+    "accent": "#ffdb19",
+    "base": "#061f65",
+    "ink": "#061f65",
+    "label": "banner",
+    "labelNames": [
+      "Hoje é Dia de Limpeza — Segunda — Etiqueta"
+    ],
+    "background": "maior-menor-preco-background.png",
+    "seal": "maior-menor-preco-seal.png",
+    "sealAspect": 1.2191387559808613,
+    "posterLayout": "thematic-seal",
+    "music": "model-89fe4bd3-0962-463e-ae12-97e10f308493",
+    "musicStyle": "rock",
+    "bpm": 126,
+    "seed": 4083530815,
+    "transition": "diagonal",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-right",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "earthquake",
+      "atmosphere": [
+        "speed-lines",
+        "lightning"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "O Maior Garante o Menor Preço",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "maior-menor-preco-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#075de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdb19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffdb1924, transparent 55%), linear-gradient(145deg, #061f65, #080b12)"
+  },
+  {
+    "id": "flyer-82c90116-464a-49ff-9cf8-c612239f1519",
+    "sourceProject": "82c90116-464a-49ff-9cf8-c612239f1519",
+    "name": "Leve Mais Pague Menos — Calculadora",
+    "campaign": "LEVE MAIS PAGUE MENOS — CALCULADORA",
+    "accent": "#ffdb19",
+    "base": "#061f65",
+    "ink": "#061f65",
+    "label": "banner",
+    "labelNames": [
+      "Hoje é Dia de Limpeza — Segunda — Etiqueta"
+    ],
+    "background": "leve-mais-calculadora-background.png",
+    "seal": "leve-mais-calculadora-seal.png",
+    "sealAspect": 0.9278096800656276,
+    "posterLayout": "thematic-seal",
+    "music": "model-82c90116-464a-49ff-9cf8-c612239f1519",
+    "musicStyle": "house",
+    "bpm": 118,
+    "seed": 3951797694,
+    "transition": "iris",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "whip",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "spark-burst"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Leve Mais Pague Menos — Calculadora",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "leve-mais-calculadora-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#075de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdb19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffdb1924, transparent 55%), linear-gradient(145deg, #061f65, #080b12)"
+  },
+  {
+    "id": "flyer-2cda53c2-a5c1-47da-abea-fbb54a9cedc5",
+    "sourceProject": "2cda53c2-a5c1-47da-abea-fbb54a9cedc5",
+    "name": "Esquenta Black Friday — Escudo Vermelho",
+    "campaign": "ESQUENTA BLACK FRIDAY — ESCUDO VERMELHO",
+    "accent": "#ffcf24",
+    "base": "#171719",
+    "ink": "#171719",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "esquenta-black-friday-escudo-background.png",
+    "seal": "esquenta-black-friday-escudo-seal.png",
+    "sealAspect": 1.0237226277372262,
+    "posterLayout": "thematic-seal",
+    "music": "model-2cda53c2-a5c1-47da-abea-fbb54a9cedc5",
+    "musicStyle": "house",
+    "bpm": 128,
+    "seed": 3485194861,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "earthquake",
+      "atmosphere": [
+        "fire-jets",
+        "embers",
+        "spark-burst"
+      ],
+      "transitionSound": "boom",
+      "accentSound": "explosion-retail"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Esquenta Black Friday — Escudo Vermelho",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "esquenta-black-friday-escudo-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#db1020",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffcf24"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffcf2424, transparent 55%), linear-gradient(145deg, #171719, #080b12)"
+  },
+  {
+    "id": "flyer-f2d6f6a1-0096-4c7f-a656-c2799bbfffba",
+    "sourceProject": "f2d6f6a1-0096-4c7f-a656-c2799bbfffba",
+    "name": "Operação Bota Fora",
+    "campaign": "OPERAÇÃO BOTA FORA",
+    "accent": "#ffdb19",
+    "base": "#061f65",
+    "ink": "#061f65",
+    "label": "banner",
+    "labelNames": [
+      "Hoje é Dia de Limpeza — Segunda — Etiqueta"
+    ],
+    "background": "operacao-bota-fora-background.png",
+    "seal": "operacao-bota-fora-seal.png",
+    "sealAspect": 1.1420345489443378,
+    "posterLayout": "thematic-seal",
+    "music": "model-f2d6f6a1-0096-4c7f-a656-c2799bbfffba",
+    "musicStyle": "house",
+    "bpm": 118,
+    "seed": 3505108867,
+    "transition": "fade",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "tilt",
+      "text": "rise",
+      "price": "elastic",
+      "camera": "none",
+      "atmosphere": [
+        "spotlights",
+        "ribbons"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "sparkle"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Operação Bota Fora",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "operacao-bota-fora-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#075de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdb19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffdb1924, transparent 55%), linear-gradient(145deg, #061f65, #080b12)"
+  },
+  {
+    "id": "flyer-5aaf9556-ee5e-4165-887a-e989991bb05b",
+    "sourceProject": "5aaf9556-ee5e-4165-887a-e989991bb05b",
+    "name": "Preços Baixos — Roxo",
+    "campaign": "PREÇOS BAIXOS — ROXO",
+    "accent": "#ffda19",
+    "base": "#2b0865",
+    "ink": "#2b0865",
+    "label": "banner",
+    "labelNames": [
+      "Barlow Black"
+    ],
+    "background": "precos-baixos-roxo-background.png",
+    "seal": "precos-baixos-roxo-seal.png",
+    "sealAspect": 1.068840579710145,
+    "posterLayout": "thematic-seal",
+    "music": "model-5aaf9556-ee5e-4165-887a-e989991bb05b",
+    "musicStyle": "house",
+    "bpm": 140,
+    "seed": 2139553485,
+    "transition": "diagonal",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-right",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "earthquake",
+      "atmosphere": [
+        "speed-lines",
+        "lightning"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Preços Baixos — Roxo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "precos-baixos-roxo-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#701de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #2b0865, #080b12)"
+  },
+  {
+    "id": "flyer-27789662-66ee-4b56-a1ac-a90061b6862f",
+    "sourceProject": "27789662-66ee-4b56-a1ac-a90061b6862f",
+    "name": "Saldão de Ofertas",
+    "campaign": "SALDÃO DE OFERTAS",
+    "accent": "#ffcf24",
+    "base": "#171719",
+    "ink": "#171719",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "saldao-ofertas-background.png",
+    "seal": "saldao-ofertas-seal.png",
+    "sealAspect": 1.0417362270450752,
+    "posterLayout": "thematic-seal",
+    "music": "model-27789662-66ee-4b56-a1ac-a90061b6862f",
+    "musicStyle": "house",
+    "bpm": 118,
+    "seed": 1934246480,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "earthquake",
+      "atmosphere": [
+        "shockwave",
+        "speed-lines"
+      ],
+      "transitionSound": "bass-hit",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Saldão de Ofertas",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "saldao-ofertas-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#db1020",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffcf24"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffcf2424, transparent 55%), linear-gradient(145deg, #171719, #080b12)"
+  },
+  {
+    "id": "flyer-4ad7c82d-8f4d-4c21-81cc-6c1e11b1a952",
+    "sourceProject": "4ad7c82d-8f4d-4c21-81cc-6c1e11b1a952",
+    "name": "Esquenta Black Friday — Placa Dourada",
+    "campaign": "ESQUENTA BLACK FRIDAY — PLACA DOURADA",
+    "accent": "#ffd222",
+    "base": "#171819",
+    "ink": "#171819",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "esquenta-black-friday-placa-background.png",
+    "seal": "esquenta-black-friday-placa-seal.png",
+    "sealAspect": 1.190121155638397,
+    "posterLayout": "thematic-seal",
+    "music": "model-4ad7c82d-8f4d-4c21-81cc-6c1e11b1a952",
+    "musicStyle": "rock",
+    "bpm": 128,
+    "seed": 1092204673,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "earthquake",
+      "atmosphere": [
+        "fire-jets",
+        "embers",
+        "spark-burst"
+      ],
+      "transitionSound": "boom",
+      "accentSound": "explosion-retail"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Esquenta Black Friday — Placa Dourada",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "esquenta-black-friday-placa-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#37312a",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd222"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffd22224, transparent 55%), linear-gradient(145deg, #171819, #080b12)"
+  },
+  {
+    "id": "flyer-8a916ada-108e-4801-ad97-f7fd03d96ea0",
+    "sourceProject": "8a916ada-108e-4801-ad97-f7fd03d96ea0",
+    "name": "Aqui é Mais Barato",
+    "campaign": "AQUI É MAIS BARATO",
+    "accent": "#ffe019",
+    "base": "#063e20",
+    "ink": "#063e20",
+    "label": "banner",
+    "labelNames": [
+      "Venha Economizar de Verdade — Etiqueta"
+    ],
+    "background": "aqui-mais-barato-background.png",
+    "seal": "aqui-mais-barato-seal.png",
+    "sealAspect": 1.3890041493775933,
+    "posterLayout": "thematic-seal",
+    "music": "model-8a916ada-108e-4801-ad97-f7fd03d96ea0",
+    "musicStyle": "drive",
+    "bpm": 136,
+    "seed": 667230486,
+    "transition": "rgb",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "stretch",
+      "price": "whip-right",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "grid",
+        "laser-sweep"
+      ],
+      "transitionSound": "glitch",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Aqui é Mais Barato",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "aqui-mais-barato-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#178d39",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe019"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffe01924, transparent 55%), linear-gradient(145deg, #063e20, #080b12)"
+  },
+  {
+    "id": "flyer-7b8da3b2-3fb0-43f7-846b-f02ad017500a",
+    "sourceProject": "7b8da3b2-3fb0-43f7-846b-f02ad017500a",
+    "name": "Notificação de Ofertas",
+    "campaign": "NOTIFICAÇÃO DE OFERTAS",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "notificacao-ofertas-background.png",
+    "seal": "notificacao-ofertas-seal.png",
+    "sealAspect": 0.9555741827326069,
+    "posterLayout": "thematic-seal",
+    "music": "model-7b8da3b2-3fb0-43f7-846b-f02ad017500a",
+    "musicStyle": "house",
+    "bpm": 128,
+    "seed": 3996946760,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "earthquake",
+      "atmosphere": [
+        "shockwave",
+        "speed-lines"
+      ],
+      "transitionSound": "bass-hit",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Notificação de Ofertas",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "notificacao-ofertas-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-2ce78c8c-a0d4-461b-bc01-d513c1cf3dc9",
+    "sourceProject": "2ce78c8c-a0d4-461b-bc01-d513c1cf3dc9",
+    "name": "Segunda Verde",
+    "campaign": "SEGUNDA VERDE",
+    "accent": "#ffe019",
+    "base": "#063e20",
+    "ink": "#063e20",
+    "label": "banner",
+    "labelNames": [
+      "Venha Economizar de Verdade — Etiqueta"
+    ],
+    "background": "segunda-verde-background.png",
+    "seal": "segunda-verde-seal.png",
+    "sealAspect": 1.0941828254847645,
+    "posterLayout": "thematic-seal",
+    "music": "model-2ce78c8c-a0d4-461b-bc01-d513c1cf3dc9",
+    "musicStyle": "tropical",
+    "bpm": 128,
+    "seed": 2427028763,
+    "transition": "blur",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "tracking",
+      "price": "rise",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "pop"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "harvest",
+    "revision": 2,
+    "layoutName": "Segunda Verde",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "segunda-verde-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#178d39",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe019"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffe01924, transparent 55%), linear-gradient(145deg, #063e20, #080b12)"
+  },
+  {
+    "id": "flyer-18ab22da-0c14-43b4-90d1-75e05f5e2558",
+    "sourceProject": "18ab22da-0c14-43b4-90d1-75e05f5e2558",
+    "name": "Quinta da Carne — Faca",
+    "campaign": "QUINTA DA CARNE — FACA",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "quinta-carne-faca-background.png",
+    "seal": "quinta-carne-faca-seal.png",
+    "sealAspect": 1.299806576402321,
+    "posterLayout": "thematic-seal",
+    "music": "model-18ab22da-0c14-43b4-90d1-75e05f5e2558",
+    "musicStyle": "rock",
+    "bpm": 132,
+    "seed": 2002485483,
+    "transition": "blur",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "tracking",
+      "price": "rise",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "dust",
+        "bokeh"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "pop"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Quinta da Carne — Faca",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "quinta-carne-faca-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-c1d25a5b-e9aa-4888-8f1a-45aa80b35a44",
+    "sourceProject": "c1d25a5b-e9aa-4888-8f1a-45aa80b35a44",
+    "name": "Alerta de Ofertas!",
+    "campaign": "ALERTA DE OFERTAS!",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "alerta-ofertas-background.png",
+    "seal": "alerta-ofertas-seal.png",
+    "sealAspect": 1.0260723296888141,
+    "posterLayout": "thematic-seal",
+    "music": "model-c1d25a5b-e9aa-4888-8f1a-45aa80b35a44",
+    "musicStyle": "electro",
+    "bpm": 136,
+    "seed": 3316576481,
+    "transition": "whip-up",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stretch",
+      "price": "slam",
+      "camera": "swing",
+      "atmosphere": [
+        "spotlights",
+        "ribbons"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "alarm",
+    "revision": 2,
+    "layoutName": "Alerta de Ofertas!",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "alerta-ofertas-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-7b963a28-a70f-42dc-96ad-42c77e57de22",
+    "sourceProject": "7b963a28-a70f-42dc-96ad-42c77e57de22",
+    "name": "Fim de Semana de Ofertas — Dourado",
+    "campaign": "FIM DE SEMANA DE OFERTAS — DOURADO",
+    "accent": "#ffd222",
+    "base": "#171819",
+    "ink": "#171819",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "fim-semana-ofertas-dourado-background.png",
+    "seal": "fim-semana-ofertas-dourado-seal.png",
+    "sealAspect": 0.9974533106960951,
+    "posterLayout": "thematic-seal",
+    "music": "model-7b963a28-a70f-42dc-96ad-42c77e57de22",
+    "musicStyle": "disco",
+    "bpm": 136,
+    "seed": 1286114575,
+    "transition": "diagonal",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-right",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "earthquake",
+      "atmosphere": [
+        "speed-lines",
+        "lightning"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Fim de Semana de Ofertas — Dourado",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "fim-semana-ofertas-dourado-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#37312a",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd222"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffd22224, transparent 55%), linear-gradient(145deg, #171819, #080b12)"
+  },
+  {
+    "id": "flyer-430cea9f-0bb7-4c5b-a3c3-fb966af5b8fa",
+    "sourceProject": "430cea9f-0bb7-4c5b-a3c3-fb966af5b8fa",
+    "name": "Aqui tem as Melhores Ofertas",
+    "campaign": "AQUI TEM AS MELHORES OFERTAS",
+    "accent": "#ffdb19",
+    "base": "#061f65",
+    "ink": "#061f65",
+    "label": "banner",
+    "labelNames": [
+      "Hoje é Dia de Limpeza — Segunda — Etiqueta"
+    ],
+    "background": "aqui-melhores-ofertas-background.png",
+    "seal": "aqui-melhores-ofertas-seal.png",
+    "sealAspect": 1.1626168224299065,
+    "posterLayout": "thematic-seal",
+    "music": "model-430cea9f-0bb7-4c5b-a3c3-fb966af5b8fa",
+    "musicStyle": "synth",
+    "bpm": 132,
+    "seed": 2984694204,
+    "transition": "iris",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "whip",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "spark-burst"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Aqui tem as Melhores Ofertas",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "aqui-melhores-ofertas-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#075de0",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdb19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffdb1924, transparent 55%), linear-gradient(145deg, #061f65, #080b12)"
+  },
+  {
+    "id": "flyer-a99bb0c3-c1f7-4e75-8ced-8ddce17476b7",
+    "sourceProject": "a99bb0c3-c1f7-4e75-8ced-8ddce17476b7",
+    "name": "Queima de Estoque — Laranja",
+    "campaign": "QUEIMA DE ESTOQUE — LARANJA",
+    "accent": "#ffe027",
+    "base": "#8f2308",
+    "ink": "#8f2308",
+    "label": "banner",
+    "labelNames": [
+      "Oferta do Dia — Etiqueta"
+    ],
+    "background": "queima-estoque-laranja-background.png",
+    "seal": "queima-estoque-laranja-seal.png",
+    "sealAspect": 1.1543624161073827,
+    "posterLayout": "thematic-seal",
+    "music": "model-a99bb0c3-c1f7-4e75-8ced-8ddce17476b7",
+    "musicStyle": "rock",
+    "bpm": 118,
+    "seed": 1106284866,
+    "transition": "rgb",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "zoom-out",
+      "text": "stretch",
+      "price": "whip-right",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "grid",
+        "laser-sweep"
+      ],
+      "transitionSound": "glitch",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Queima de Estoque — Laranja",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "queima-estoque-laranja-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#f46a09",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe027"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffe02724, transparent 55%), linear-gradient(145deg, #8f2308, #080b12)"
+  },
+  {
+    "id": "flyer-41155c29-28e7-4079-82cb-9b42819c6a49",
+    "sourceProject": "41155c29-28e7-4079-82cb-9b42819c6a49",
+    "name": "Semana das Ofertas — Amarelo",
+    "campaign": "SEMANA DAS OFERTAS — AMARELO",
+    "accent": "#ffda19",
+    "base": "#740510",
+    "ink": "#740510",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Rústica Vermelha — Etiqueta"
+    ],
+    "background": "semana-ofertas-amarelo-background.png",
+    "seal": "semana-ofertas-amarelo-seal.png",
+    "sealAspect": 1.194681861348528,
+    "posterLayout": "thematic-seal",
+    "music": "model-41155c29-28e7-4079-82cb-9b42819c6a49",
+    "musicStyle": "disco",
+    "bpm": 118,
+    "seed": 3553470035,
+    "transition": "diagonal",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "whip-right",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "earthquake",
+      "atmosphere": [
+        "speed-lines",
+        "lightning"
+      ],
+      "transitionSound": "suction",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Semana das Ofertas — Amarelo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "semana-ofertas-amarelo-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#df101b",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda19"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffda1924, transparent 55%), linear-gradient(145deg, #740510, #080b12)"
+  },
+  {
+    "id": "flyer-91c3492a-41ef-42de-a15c-8832824d0091",
+    "sourceProject": "91c3492a-41ef-42de-a15c-8832824d0091",
+    "name": "Semana das Ofertas — Preto",
+    "campaign": "SEMANA DAS OFERTAS — PRETO",
+    "accent": "#ffcf24",
+    "base": "#171719",
+    "ink": "#171719",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "semana-ofertas-preto-background.png",
+    "seal": "semana-ofertas-preto-seal.png",
+    "sealAspect": 1.2306985294117647,
+    "posterLayout": "thematic-seal",
+    "music": "model-91c3492a-41ef-42de-a15c-8832824d0091",
+    "musicStyle": "electro",
+    "bpm": 118,
+    "seed": 500384390,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "earthquake",
+      "atmosphere": [
+        "shockwave",
+        "speed-lines"
+      ],
+      "transitionSound": "bass-hit",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 2,
+    "layoutName": "Semana das Ofertas — Preto",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "semana-ofertas-preto-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#db1020",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffcf24"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffcf2424, transparent 55%), linear-gradient(145deg, #171719, #080b12)"
+  },
+  {
+    "id": "flyer-98052446-deb9-4989-8be1-83e202e02f27",
+    "sourceProject": "98052446-deb9-4989-8be1-83e202e02f27",
+    "name": "Esquenta Black Friday — Seta",
+    "campaign": "ESQUENTA BLACK FRIDAY — SETA",
+    "accent": "#ffd222",
+    "base": "#171819",
+    "ink": "#171819",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "esquenta-black-friday-seta-background.png",
+    "seal": "esquenta-black-friday-seta-seal.png",
+    "sealAspect": 1.6080347448425625,
+    "posterLayout": "thematic-seal",
+    "music": "model-98052446-deb9-4989-8be1-83e202e02f27",
+    "musicStyle": "house",
+    "bpm": 118,
+    "seed": 2529167617,
+    "transition": "smoke",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "slam",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "earthquake",
+      "atmosphere": [
+        "fire",
+        "embers",
+        "smoke-plumes"
+      ],
+      "transitionSound": "bass-hit",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Esquenta Black Friday — Seta",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "esquenta-black-friday-seta-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#37312a",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd222"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffd22224, transparent 55%), linear-gradient(145deg, #171819, #080b12)"
+  },
+  {
+    "id": "flyer-63766797-ee42-4f4c-8d4e-4d62e2aed16b",
+    "sourceProject": "63766797-ee42-4f4c-8d4e-4d62e2aed16b",
+    "name": "Black Friday — Industrial Retangular",
+    "campaign": "BLACK FRIDAY — INDUSTRIAL RETANGULAR",
+    "accent": "#ffcf24",
+    "base": "#171719",
+    "ink": "#171719",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "black-friday-industrial-retangular-background.png",
+    "seal": "black-friday-industrial-retangular-seal.png",
+    "sealAspect": 1.6933019976498238,
+    "posterLayout": "thematic-seal",
+    "music": "model-63766797-ee42-4f4c-8d4e-4d62e2aed16b",
+    "musicStyle": "drive",
+    "bpm": 136,
+    "seed": 2239541596,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "earthquake",
+      "atmosphere": [
+        "fire-jets",
+        "embers",
+        "spark-burst"
+      ],
+      "transitionSound": "boom",
+      "accentSound": "explosion-retail"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Black Friday — Industrial Retangular",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "black-friday-industrial-retangular-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#db1020",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffcf24"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffcf2424, transparent 55%), linear-gradient(145deg, #171719, #080b12)"
+  },
+  {
+    "id": "flyer-4702cd7d-af69-4dd6-b956-c84acac1946a",
+    "sourceProject": "4702cd7d-af69-4dd6-b956-c84acac1946a",
+    "name": "Black Friday — Industrial Octogonal",
+    "campaign": "BLACK FRIDAY — INDUSTRIAL OCTOGONAL",
+    "accent": "#ffcf24",
+    "base": "#171719",
+    "ink": "#171719",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "black-friday-industrial-octogonal-background.png",
+    "seal": "black-friday-industrial-octogonal-seal.png",
+    "sealAspect": 1.0924528301886793,
+    "posterLayout": "thematic-seal",
+    "music": "model-4702cd7d-af69-4dd6-b956-c84acac1946a",
+    "musicStyle": "breakbeat",
+    "bpm": 124,
+    "seed": 2819202727,
+    "transition": "smoke",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "slam",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "earthquake",
+      "atmosphere": [
+        "fire",
+        "embers",
+        "smoke-plumes"
+      ],
+      "transitionSound": "bass-hit",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Black Friday — Industrial Octogonal",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "black-friday-industrial-octogonal-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#db1020",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffcf24"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffcf2424, transparent 55%), linear-gradient(145deg, #171719, #080b12)"
+  },
+  {
+    "id": "flyer-c29dc200-8b17-42a3-aa5f-14b96e9dc959",
+    "sourceProject": "c29dc200-8b17-42a3-aa5f-14b96e9dc959",
+    "name": "Black Esquenta Friday — Fogo",
+    "campaign": "BLACK ESQUENTA FRIDAY — FOGO",
+    "accent": "#ffd222",
+    "base": "#171819",
+    "ink": "#171819",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "black-esquenta-friday-fogo-background.png",
+    "seal": "black-esquenta-friday-fogo-seal.png",
+    "sealAspect": 0.9398496240601504,
+    "posterLayout": "thematic-seal",
+    "music": "model-c29dc200-8b17-42a3-aa5f-14b96e9dc959",
+    "musicStyle": "house",
+    "bpm": 140,
+    "seed": 456185423,
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "earthquake",
+      "atmosphere": [
+        "fire-jets",
+        "embers",
+        "spark-burst"
+      ],
+      "transitionSound": "boom",
+      "accentSound": "explosion-retail"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Black Esquenta Friday — Fogo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "black-esquenta-friday-fogo-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#37312a",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd222"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffd22224, transparent 55%), linear-gradient(145deg, #171819, #080b12)"
+  },
+  {
+    "id": "flyer-869776ba-4084-4375-8d8f-5b8432795b22",
+    "sourceProject": "869776ba-4084-4375-8d8f-5b8432795b22",
+    "name": "Black Friday Antecipado",
+    "campaign": "BLACK FRIDAY ANTECIPADO",
+    "accent": "#ffd222",
+    "base": "#171819",
+    "ink": "#171819",
+    "label": "banner",
+    "labelNames": [
+      "Quarta Suína — Ouro e Madeira — Etiqueta"
+    ],
+    "background": "black-friday-antecipado-background.png",
+    "seal": "black-friday-antecipado-seal.png",
+    "sealAspect": 1.0258236865538735,
+    "posterLayout": "thematic-seal",
+    "music": "model-869776ba-4084-4375-8d8f-5b8432795b22",
+    "musicStyle": "tropical",
+    "bpm": 108,
+    "seed": 2834467705,
+    "transition": "smoke",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "slam",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "earthquake",
+      "atmosphere": [
+        "fire",
+        "embers",
+        "smoke-plumes"
+      ],
+      "transitionSound": "bass-hit",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 2,
+    "layoutName": "Black Friday Antecipado",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        845,
+        698,
+        900,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "black-friday-antecipado-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#37312a",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd222"
+    },
+    "preserveBrandLayout": true,
+    "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffd22224, transparent 55%), linear-gradient(145deg, #171819, #080b12)"
   }
 ]

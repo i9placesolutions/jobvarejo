@@ -16,6 +16,14 @@ coverage
 playwright-report
 test-results
 /artifacts/
+/output/
+/public/video-studio/**/*.png
+/public/video-studio/**/*.jpg
+/public/video-studio/**/*.jpeg
+/public/video-studio/**/*.webp
+/public/video-studio/**/*.mp3
+/public/video-studio/**/*.wav
+/public/video-studio/**/*.mp4
 /.prettierignore
 /.prettierrc
 /*.md

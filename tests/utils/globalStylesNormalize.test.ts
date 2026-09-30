@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { normalizeGlobalStyles } from '~/utils/globalStylesNormalize'
+import { DEFAULT_GLOBAL_STYLES } from '~/types/product-zone'
 import type { GlobalStyles } from '~/types/product-zone'
 
 const baseDefaults: GlobalStyles = {
@@ -31,6 +32,10 @@ const baseDefaults: GlobalStyles = {
 } as any
 
 describe('normalizeGlobalStyles', () => {
+  it('usa 95% como padrão e preserva entrelinhas escolhidas', () => {
+    expect(normalizeGlobalStyles({}, DEFAULT_GLOBAL_STYLES).prodNameLineHeight).toBe(0.95)
+    expect(normalizeGlobalStyles({ prodNameLineHeight: 1.2 }, DEFAULT_GLOBAL_STYLES).prodNameLineHeight).toBe(1.2)
+  })
   it('null/undefined: retorna defaults', () => {
     const r1 = normalizeGlobalStyles(null, baseDefaults)
     expect(r1.cardColor).toBe('#ffffff')

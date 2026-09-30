@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { productSuggestionFamily, scoreProductFamilySuggestion } from '~/utils/productSuggestionFamily'
+import { productSuggestionWeightMatches, scoreProductFamilySuggestion } from '~/utils/productSuggestionFamily'
 import { collectAssetSearchPages } from '~/utils/collectAssetSearchPages'
 import { ref, computed, watch, nextTick } from 'vue'
 import Dialog from './ui/Dialog.vue'
 import EmbeddedProductReview from './EmbeddedProductReview.vue'
+import ProductSuggestionTile from './ProductSuggestionTile.vue'
 import '~/assets/css/video-review-palette.css'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
@@ -98,6 +99,12 @@ const step = ref<'input' | 'review'>('input')
 const listFileInput = ref<HTMLInputElement | null>(null)
 const reviewImageUploadInput = ref<HTMLInputElement | null>(null)
 const importMode = ref<'replace' | 'append'>('replace')
+const showImportModeChoice = ref(false)
+const importModeFirstButton = ref<HTMLButtonElement | null>(null)
+watch(showImportModeChoice, async (open) => {
+    if (open) { await nextTick(); importModeFirstButton.value?.focus() }
+})
+const existingProductCount = computed(() => Math.max(0, Number(props.existingCount || 0)))
 const targetMode = ref<ImportTargetMode>('zone')
 const importSource = ref<ImportSourceMode>('manual')
 const selectedFrameIds = ref<string[]>([])
@@ -123,6 +130,7 @@ const appendBaseProducts = ref<SmartProduct[] | null>(null)
 const reviewFilter = ref<ReviewFilter>('all')
 const zoneFilterId = ref<string | null>(null)
 let reviewSuggestionGeneration = 0
+const reviewSuggestionQueries = new Map<string, string>()
 const reviewSuggestionMap = ref<Record<string, SmartProductImageCandidate[]>>({})
 const reviewSuggestionLoadingMap = ref<Record<string, boolean>>({})
 const reviewSuggestionErrorMap = ref<Record<string, string | null>>({})
@@ -672,7 +680,7 @@ const oneProductPerPage = ref(props.initialOneProductPerPage === true)
 watch(() => props.modelValue, (open) => { if (open) oneProductPerPage.value = props.initialOneProductPerPage === true })
 const autoFillImages = ref(props.initialAutoFillImages === true)
 watch(() => props.modelValue, (open) => { if (open) autoFillImages.value = props.initialAutoFillImages === true })
-const handleImport = async () => {
+const submitImport = async () => {
     if (isSubmittingImport.value || importButtonDisabled.value) return
     isSubmittingImport.value = true
 
@@ -720,6 +728,24 @@ const handleImport = async () => {
     }
 }
 
+const handleImport = async () => {
+    if (isSubmittingImport.value || importButtonDisabled.value) return
+    if (isQrofertasPresentation.value && props.destination !== 'video' && existingProductCount.value > 0) {
+        showImportModeChoice.value = true
+        return
+    }
+    await submitImport()
+}
+
+const confirmImportMode = async (mode: 'append' | 'replace') => {
+    if (!showImportModeChoice.value || isSubmittingImport.value || importButtonDisabled.value) return
+    importMode.value = mode
+    showImportModeChoice.value = false
+    await submitImport()
+}
+
+watch(() => props.modelValue, () => { showImportModeChoice.value = false })
+
 const quickReviewConfirmed = ref(false)
 watch(() => props.modelValue, () => { quickReviewConfirmed.value = false })
 
@@ -731,7 +757,7 @@ const addAllQuickProductsToEncarte = () => {
         return
     }
 
-    // A revisão mantém a escolha de adicionar ou substituir feita pelo usuário.
+    // Ask at application time, so existing products are never replaced silently.
     handleImport()
 }
 
@@ -1445,7 +1471,7 @@ const filterReviewCandidatesForProduct = (
     .map(candidate => ({ candidate, score: scoreProductFamilySuggestion(product, [candidate.title, candidate.key].filter(Boolean).join(' ')) }))
     .filter(({ candidate, score }) => score > 0 || candidateMatchesProductIdentity(product, candidate))
     .sort((a, b) => b.score - a.score)
-    .map(({ candidate }) => ({ ...candidate, recommended: candidateMatchesProductIdentity(product, candidate) }))
+    .map(({ candidate }) => ({ ...candidate, recommended: candidateMatchesProductIdentity(product, candidate) && productSuggestionWeightMatches(product, [candidate.title, candidate.key].filter(Boolean).join(' ')) }))
 
 const mergeReviewCandidates = (...lists: Array<SmartProductImageCandidate[] | undefined | null>): SmartProductImageCandidate[] => {
     const merged: SmartProductImageCandidate[] = []
@@ -1552,7 +1578,12 @@ const importReadinessToneClass = computed(() => {
 })
 
 watch(
-    () => [props.modelValue, step.value, activeReviewRow.value?.productId || '', activeReviewDecisionState.value, quickExpandedProductIndex.value] as const,
+    () => [
+        props.modelValue, step.value, activeReviewRow.value?.productId || '',
+        activeReviewDecisionState.value, quickExpandedProductIndex.value,
+        [activeReviewRow.value?.product.name, activeReviewRow.value?.product.brand,
+            activeReviewRow.value?.product.flavor, activeReviewRow.value?.product.weight].join('|')
+    ] as const,
     ([open, currentStep, productId, decision]) => {
         if (!open || currentStep !== 'review' || !productId) return
         if (isQrofertasPresentation.value && quickExpandedProductIndex.value === null) return
@@ -1592,21 +1623,23 @@ const fetchReviewSuggestionsForRow = async (
     if (!row) return
     const productId = String(row.productId || '').trim()
     if (!productId) return
-    if (reviewSuggestionLoadingMap.value[productId]) return
-    if (!options.force && Array.isArray(reviewSuggestionMap.value[productId]) && reviewSuggestionMap.value[productId]!.length > 0) {
-        return
-    }
-    const query = buildCacheSearchTerm(row.product)
+    const product = { ...row.product }
+    const query = buildCacheSearchTerm(product)
     if (query.length < MIN_ASSET_SEARCH_CHARS) return
+    const sameQuery = reviewSuggestionQueries.get(productId) === query
+    if (sameQuery && reviewSuggestionLoadingMap.value[productId]) return
+    if (sameQuery && !options.force && reviewSuggestionMap.value[productId]?.length) return
+    reviewSuggestionQueries.set(productId, query)
+    if (!sameQuery || options.force) reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: [] }
 
     reviewSuggestionLoadingMap.value = { ...reviewSuggestionLoadingMap.value, [productId]: true }
     reviewSuggestionErrorMap.value = { ...reviewSuggestionErrorMap.value, [productId]: null }
 
     const generation = reviewSuggestionGeneration
-    const isCurrent = () => generation === reviewSuggestionGeneration
+    const isCurrent = () => generation === reviewSuggestionGeneration && reviewSuggestionQueries.get(productId) === query
     const append = (candidates: SmartProductImageCandidate[]) => {
         if (!isCurrent()) return
-        const next = filterReviewCandidatesForProduct(row.product, candidates)
+        const next = filterReviewCandidatesForProduct(product, candidates)
         reviewSuggestionMap.value = {
             ...reviewSuggestionMap.value,
             [productId]: mergeReviewCandidates(reviewSuggestionMap.value[productId] || [], next)
@@ -1618,11 +1651,13 @@ const fetchReviewSuggestionsForRow = async (
             return await fetchUntyped('/api/assets', {
                 headers, timeout: 30_000, retry: 0,
                 query: {
-                    q: productSuggestionFamily(row.product) || query,
+                    q: query.slice(0, 120),
                     familySearch: '1', limit: 200, paginated: '1', cursor, ai: '0',
                     fresh: options.force && !cursor ? '1' : undefined,
-                    productName: productSuggestionFamily(row.product),
-                    brand: '', flavor: '', weight: ''
+                    productName: String(product.name || '').slice(0, 120),
+                    brand: String(product.brand || '').slice(0, 80),
+                    flavor: String(product.flavor || '').slice(0, 80),
+                    weight: String(extractWeightFromName(product.name) || product.weight || '').slice(0, 40)
                 }
             })
         }, items => append(items.map((asset, index) => mapAssetToReviewCandidate(asset, index))
@@ -2276,6 +2311,7 @@ watch(() => props.modelValue, (newVal) => {
         lockedTargetZoneId.value = ''
         reviewFilter.value = 'all'
         reviewSuggestionGeneration += 1
+        reviewSuggestionQueries.clear()
         reviewSuggestionMap.value = {}
         reviewSuggestionLoadingMap.value = {}
         reviewSuggestionErrorMap.value = {}
@@ -2299,6 +2335,7 @@ watch(() => props.modelValue, (newVal) => {
     lockedTargetZoneId.value = String(props.initialTargetZoneId || '').trim()
     reviewFilter.value = 'all'
     reviewSuggestionGeneration += 1
+    reviewSuggestionQueries.clear()
     reviewSuggestionMap.value = {}
     reviewSuggestionLoadingMap.value = {}
     reviewSuggestionErrorMap.value = {}
@@ -4010,20 +4047,17 @@ const getAssetDisplayName = (asset: any): string => {
                                     Buscando imagens...
                                 </div>
                                 <div v-else-if="activeReviewCandidates.length" class="grid gap-2 grid-cols-2 xl:grid-cols-3">
-                                    <button
+                                    <ProductSuggestionTile
                                         v-for="(candidate, candidateIndex) in activeReviewCandidates"
                                         :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
+                                        :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)"
+                                        :label="candidate.title || 'Imagem do produto'"
                                         :aria-label="`Usar imagem ${candidateIndex + 1}`"
-                                        type="button"
+                                        :recommended="candidate.recommended"
+                                        :source-label="candidate.source === 's3' ? 'Storage' : 'Busca'"
                                         class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/4"
-                                        @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
-                                    >
-                                        <div class="relative aspect-4/3 bg-zinc-900/60">
-                                            <img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" loading="lazy" decoding="async" />
-                                            <div v-if="candidate.recommended" class="absolute left-1.5 top-1.5 rounded-md bg-emerald-500/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">Recomendada</div>
-                                            <div class="absolute right-1.5 top-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">{{ candidate.source === 's3' ? 'Storage' : 'Busca' }}</div>
-                                        </div>
-                                    </button>
+                                        @select="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
+                                    />
                                 </div>
                                 <div v-else class="rounded-lg border border-dashed border-zinc-800 px-4 py-5 text-center text-[10px] text-zinc-500">
                                     {{ activeReviewSuggestionError || 'Nenhuma imagem compatível encontrada. Use Enviar imagem ou Storage.' }}
@@ -4198,22 +4232,10 @@ const getAssetDisplayName = (asset: any): string => {
           <div class="flex w-full min-w-0 flex-col gap-3">
             <p v-if="destination === 'video'" class="text-sm font-semibold">{{ productsForImport.length }} de {{ maxImportProducts }} ofertas selecionadas</p>
             <p v-if="submissionError || importValidation || videoSelectionIssue" role="alert" class="text-sm text-red-300">{{ submissionError || importValidation || videoSelectionIssue }}</p>
-            <details v-if="quickReviewConfirmed && destination !== 'video'" open class="rounded-xl border border-white/10 text-sm text-zinc-300">
-              <summary class="cursor-pointer px-3 py-2">Opções de aplicação</summary>
-              <div class="space-y-3 p-3">
-                <label v-if="props.existingCount" class="block">
-                  <span class="mb-2 block">Como usar a lista conferida?</span>
-                  <select v-model="importMode" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2" :disabled="isSubmittingImport">
-                    <option value="append">Adicionar aos produtos atuais</option>
-                    <option value="replace">Substituir os produtos atuais</option>
-                  </select>
-                </label>
-            <label class="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 text-sm text-white">
+            <label v-if="quickReviewConfirmed && destination !== 'video'" class="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 text-sm text-white">
                 <input v-model="oneProductPerPage" type="checkbox" class="mt-1 accent-violet-500" :disabled="isSubmittingImport" />
-                <span class="min-w-0"><strong class="block font-semibold">Um produto por página</strong><small class="mt-1 block leading-relaxed text-zinc-400">Usa esta página para o primeiro produto e cria {{ Math.max(0, products.length - 1) }} cópias para os demais, no mesmo formato.</small></span>
+                <span class="min-w-0"><strong class="block font-semibold">Um produto por página</strong><small class="mt-1 block leading-relaxed text-zinc-400">{{ oneProductPerPage && existingProductCount > 0 ? 'Ao aplicar, escolha se mantém esta página e cria novas ou substitui seus produtos.' : `Usa esta página para o primeiro produto e cria ${Math.max(0, products.length - 1)} cópias para os demais, no mesmo formato.` }}</small></span>
             </label>
-              </div>
-            </details>
             <button
                 type="button"
                 class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-lg shadow-emerald-950/30 transition-colors hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-50"
@@ -4228,6 +4250,32 @@ const getAssetDisplayName = (asset: any): string => {
           </div>
         </template>
     </component>
+
+    <Dialog
+        v-model="showImportModeChoice"
+        title="Já há produtos nesta página"
+        width="min(480px, calc(100vw - 2rem))"
+    >
+        <div role="dialog" aria-modal="true" aria-label="Como aplicar a lista conferida?" @keydown.esc.prevent.stop="showImportModeChoice = false" class="space-y-4">
+            <p class="text-sm leading-relaxed text-zinc-300">
+                Esta página já tem {{ existingProductCount }} {{ existingProductCount === 1 ? 'produto' : 'produtos' }}.
+                Como deseja aplicar {{ productsForImport.length === 1 ? 'o' : 'os' }} {{ productsForImport.length }} {{ productsForImport.length === 1 ? 'produto conferido' : 'produtos conferidos' }}?
+            </p>
+            <div class="space-y-3">
+                <button ref="importModeFirstButton" type="button" class="w-full rounded-xl border border-zinc-600 bg-zinc-800 p-4 text-left transition-colors hover:border-sky-400 hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-sky-400 disabled:opacity-50" :disabled="importButtonDisabled" @click="confirmImportMode('append')">
+                    <strong class="block text-sm text-white">Adicionar aos atuais</strong>
+                    <span class="mt-1 block text-xs leading-relaxed text-zinc-400">{{ oneProductPerPage ? 'Mantém esta página e cria uma nova página para cada produto conferido.' : 'Mantém os produtos da página e acrescenta a lista conferida.' }}</span>
+                </button>
+                <button type="button" class="w-full rounded-xl border border-zinc-600 bg-zinc-800 p-4 text-left transition-colors hover:border-sky-400 hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-sky-400 disabled:opacity-50" :disabled="importButtonDisabled" @click="confirmImportMode('replace')">
+                    <strong class="block text-sm text-white">Substituir os atuais</strong>
+                    <span class="mt-1 block text-xs leading-relaxed text-zinc-400">{{ oneProductPerPage ? 'Substitui os produtos desta página pelo primeiro da lista e cria páginas para os demais.' : 'Remove os produtos atuais da página e coloca a lista conferida.' }}</span>
+                </button>
+            </div>
+        </div>
+        <template #footer>
+            <button type="button" class="rounded-lg px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white focus-visible:outline-2 focus-visible:outline-sky-400" @click="showImportModeChoice = false">Voltar à revisão</button>
+        </template>
+    </Dialog>
 
     <Dialog :surface-class="destination === 'video' ? 'video-review-palette' : undefined"
         v-if="isQrofertasPresentation && activeReviewRowMeta"
@@ -4349,16 +4397,16 @@ const getAssetDisplayName = (asset: any): string => {
                 <div v-if="isImageSuggestionsExpanded(activeReviewRowMeta.productId)" :id="`quick-image-suggestions-${activeReviewRowMeta.productId}`" class="mt-3 space-y-2">
                     <div v-if="isActiveReviewSuggestionLoading && !activeReviewCandidates.length" class="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-5 text-center text-[10px] text-zinc-500">Buscando imagens...</div>
                     <div v-else-if="activeReviewCandidates.length" class="grid grid-cols-2 xl:grid-cols-3 gap-2">
-                        <button
+                        <ProductSuggestionTile
                             v-for="(candidate, candidateIndex) in activeReviewCandidates"
                             :key="getReviewCandidateRenderKey(candidate, candidateIndex)"
+                            :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)"
+                            :label="candidate.title || 'Imagem do produto'"
                             :aria-label="`Usar imagem ${candidateIndex + 1}`"
-                            type="button"
+                            :recommended="candidate.recommended"
                             class="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 text-left transition-colors hover:border-emerald-500/40"
-                            @click="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
-                        >
-                            <div class="relative aspect-4/3 bg-zinc-900/60"><img :src="resolveProductImageUrl(candidate.previewUrl || candidate.url)" class="h-full w-full object-contain p-2" alt="" loading="lazy" decoding="async" /></div>
-                        </button>
+                            @select="applyCandidateToReviewRow(activeReviewRowMeta, candidate)"
+                        />
                     </div>
                     <div v-else class="rounded-lg border border-dashed border-zinc-800 px-3 py-5 text-center text-[10px] text-zinc-500">{{ activeReviewSuggestionError || 'Nenhuma imagem compatível encontrada. Use Enviar imagem para escolher um arquivo.' }}</div>
                 </div>

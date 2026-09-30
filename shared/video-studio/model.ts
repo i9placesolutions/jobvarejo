@@ -1,4 +1,5 @@
 import type {VideoLayoutEdits,VideoEditorState} from './layout-editing'
+import {mapNarrationScripts} from './narration'
 import type {VideoBackground} from './backgrounds'
 import {FLYER_RECIPES} from './flyer-recipes'
 import {videoTemplateCopy} from './template-copy'
@@ -77,10 +78,7 @@ export function suggestVideoScripts(doc: VideoDocument): VideoScript[] {
     {id:'outro', text:`${doc.brand.name.trim()?`Aproveite no ${doc.brand.name}!`:'Aproveite as ofertas!'}${doc.validityMode!=='none'&&doc.validity ? ` ${doc.validity}.` : ''}`} ]
 }
 export function narrationScripts(doc: VideoDocument, text: string): VideoScript[] | null {
-  const ids=['intro',...doc.offers.map(o=>o.id),'outro']
-  const lines=text.replace(/\r/g,'').split('\n').map(line=>line.trim()).filter(Boolean)
-  if(lines.length!==ids.length||lines.some(line=>line.length>700))return null
-  return ids.map((id,index)=>({id,text:lines[index]!}))
+  return mapNarrationScripts(doc,text)
 }
 export function videoNarrationText(doc: VideoDocument): string {
   return doc.narrationText ?? doc.scripts.map(script=>script.text).join('\n')
@@ -122,16 +120,22 @@ export function videoAudioIdentityMatches(identity: unknown, doc: VideoDocument)
 export function estimateSpeechSeconds(text: string): number { return Math.max(1.2, text.trim().split(/\s+/).filter(Boolean).length / 2.35 + .35) }
 export function buildVideoTimeline(doc: VideoDocument, durations?: Record<string, number>): VideoScene[] {
   const ids = ['intro', ...doc.offers.map(o=>o.id), 'outro']
-  const minimums = ids.map((id,i)=> i===0 ? 2 : i===ids.length-1 ? 4.5 : 3)
+  let minimums: number[] = ids.map((id,i)=> i===0 ? 2 : i===ids.length-1 ? 4.5 : 3)
   const speech = ids.map(id=>doc.voice.enabled ? (durations ? (durations[id] ?? NaN) : estimateSpeechSeconds(doc.scripts.find(s=>s.id===id)?.text||'')) : 0)
   if (speech.some(n=>!Number.isFinite(n)||n<0)) throw new Error('A locução de uma das cenas ainda não está pronta.')
   const budget = doc.duration * VIDEO_FPS - 2 // margem para a duração do contêiner AAC/MP4
+  // Com ajuste automático, os mínimos visuais também se adaptam; reserva
+  // espaço para as pausas e o arredondamento dos frames antes do áudio chegar.
+  if(doc.voice.enabled&&doc.autoFitVoice!==false){
+    const minimumTotal=minimums.reduce((a,b)=>a+b,0)*VIDEO_FPS
+    if(minimumTotal>budget*.85)minimums=minimums.map(n=>Math.floor(n*VIDEO_FPS*budget*.85/minimumTotal)/VIDEO_FPS)
+  }
   const atRate=(rate:number)=>minimums.map((minimum,i)=>Math.ceil(Math.max(minimum,doc.voice.enabled?speech[i]!/rate+.25:minimum)*VIDEO_FPS))
   const total=(values:number[])=>values.reduce((a,b)=>a+b,0)
   let playbackRate=1
   if(total(atRate(1))>budget&&doc.voice.enabled&&doc.autoFitVoice!==false){
-    if(total(atRate(2))>budget)throw new Error(`Mesmo acelerando a locução em 2×, o conteúdo ultrapassa ${doc.duration} segundos. Encurte o roteiro ou use menos produtos.`)
     let low=1,high=2
+    while(total(atRate(high))>budget)high*=2
     for(let i=0;i<32;i++){const middle=(low+high)/2;if(total(atRate(middle))<=budget)high=middle;else low=middle}
     playbackRate=Math.ceil(high*1000)/1000
   }
@@ -151,7 +155,7 @@ export function validateVideoForGeneration(doc: VideoDocument): string[] {
   if((doc.validityMode==='date_range'||!doc.validityMode)&&doc.validityRange?.start&&doc.validityRange?.end&&doc.validityRange.end<doc.validityRange.start)errors.push('A data final deve ser igual ou posterior à inicial.')
   if(!doc.offers.length)errors.push('Adicione pelo menos um produto.')
   for(const o of doc.offers){if(!o.name.trim()||parseOfferPrice(o.price)===null)errors.push('Confira o nome e o preço de todos os produtos.');if(!o.image)errors.push(`Adicione a imagem de ${o.name||'cada produto'}.`)}
-  if(doc.voice.enabled){const ids=['intro',...doc.offers.map(o=>o.id),'outro'];if(ids.some(id=>!doc.scripts.find(s=>s.id===id)?.text.trim()))errors.push('Revise o texto da abertura, das ofertas e do encerramento.');if(doc.narrationText!==undefined&&JSON.stringify(narrationScripts(doc,doc.narrationText))!==JSON.stringify(doc.scripts))errors.push(`Mantenha ${ids.length} linhas no roteiro: abertura, uma por produto e encerramento.`)}
+  if(doc.voice.enabled){const ids=['intro',...doc.offers.map(o=>o.id),'outro'];if(ids.some(id=>!doc.scripts.find(s=>s.id===id)?.text.trim()))errors.push('Revise o texto da abertura, das ofertas e do encerramento.');if(doc.narrationText!==undefined&&JSON.stringify(narrationScripts(doc,doc.narrationText))!==JSON.stringify(doc.scripts))errors.push('Confira o texto completo da locução antes de gerar o áudio.')}
   try {buildVideoTimeline(doc)}catch(e){errors.push((e as Error).message)}
   return [...new Set(errors)]
 }

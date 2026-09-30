@@ -15,6 +15,7 @@ const png = (width: number, height: number, pixels: number[]) =>
 const maskPng = (width: number, height: number, values: number[]) =>
   png(width, height, values.flatMap(value => [value, value, value, 255]))
 const raw = (buffer: Buffer) => sharp(buffer).ensureAlpha().raw().toBuffer()
+let expectedProviderCalls = 0
 
 it('sends the original page proportion to the image API', () => {
   expect(enhancementAspectRatio(1080, 1920)).toBe('9:16')
@@ -48,12 +49,13 @@ it('builds the redesign input from the original shell plus guide and commercial 
 })
 
 beforeEach(() => {
+  expectedProviderCalls = 0
   vi.stubGlobal('createError', (options: { statusCode: number; statusMessage: string }) =>
     Object.assign(new Error(options.statusMessage), options))
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected provider/network call') }))
 })
 afterEach(() => {
-  expect(fetch).not.toHaveBeenCalled()
+  expect(fetch).toHaveBeenCalledTimes(expectedProviderCalls)
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
   vi.resetAllMocks()
@@ -157,12 +159,73 @@ describe('startEnhancement admission (mock storage/database, no paid calls)', ()
     expect(objects.size).toBe(0)
   })
 
-  it('rejects a distinct request while an attempt is active without consuming quota', async () => {
+  it('admits two distinct requests and rejects a third without consuming quota', async () => {
+    const body = await bodyFor()
+    const first = await startEnhancement(userId, body)
+    const second = await startEnhancement(userId, { ...body, quality: 'high' })
+    expect(second.run).toBeTypeOf('function')
+    expect(second.receipt.id).not.toBe(first.receipt.id)
+    const snapshot = new Map(objects)
+    const changed = dataUrl(await png(2, 1, [90, 20, 30, 255, 50, 60, 70, 255]))
+    await expect(startEnhancement(userId, { ...body, original: changed })).rejects.toMatchObject({ statusCode: 409 })
+    expect(objects).toEqual(snapshot)
+  })
+
+  it('counts older active requests even when the latest attempts have finished', async () => {
+    const now = new Date().toISOString()
+    const attempts = ['a', 'b', 'c', 'd'].map(char => ({ projectId, id: char.repeat(32) }))
+    objects.set(ledgerKey, JSON.stringify({ day: now.slice(0, 10), attempts }))
+    attempts.forEach((attempt, index) => objects.set(`projects/${userId}/${projectId}/enhancements/${attempt.id}/receipt.json`,
+      JSON.stringify({ status: index < 2 ? 'processing' : 'completed', updatedAt: now })))
+    const snapshot = new Map(objects)
+    await expect(startEnhancement(userId, await bodyFor())).rejects.toMatchObject({ statusCode: 409 })
+    expect(objects).toEqual(snapshot)
+  })
+
+  it('shares the two-page limit across projects of the same user', async () => {
+    const otherProject = '22222222-3333-4444-8555-666666666666'
+    const now = new Date().toISOString()
+    const attempts = [projectId, otherProject].map((ownerProject, i) => ({ projectId: ownerProject, id: String(i).repeat(32) }))
+    objects.set(ledgerKey, JSON.stringify({ day: now.slice(0, 10), attempts }))
+    attempts.forEach(attempt => objects.set(`projects/${userId}/${attempt.projectId}/enhancements/${attempt.id}/receipt.json`,
+      JSON.stringify({ status: 'processing', updatedAt: now })))
+    const snapshot = new Map(objects)
+    await expect(startEnhancement(userId, await bodyFor())).rejects.toMatchObject({ statusCode: 409 })
+    expect(objects).toEqual(snapshot)
+  })
+
+  it('does not consume another user concurrency slots or alter their ledger', async () => {
     const body = await bodyFor()
     await startEnhancement(userId, body)
-    const snapshot = new Map(objects)
-    await expect(startEnhancement(userId, { ...body, quality: 'high' })).rejects.toMatchObject({ statusCode: 409 })
-    expect(objects).toEqual(snapshot)
+    await startEnhancement(userId, { ...body, quality: 'high' })
+    const ownerLedger = objects.get(ledgerKey)
+    vi.mocked(pgOneOrNull).mockResolvedValueOnce({ canvas_data: [{ id: 'page-a' }] } as never)
+    const other = await startEnhancement('user-b', body)
+    expect(other.run).toBeTypeOf('function')
+    expect(objects.get(ledgerKey)).toEqual(ownerLedger)
+    expect(JSON.parse(objects.get('projects/user-b/enhancement-ledger.json')!.toString()).attempts).toHaveLength(1)
+  })
+
+  it('does not count the same active receipt twice in the ledger', async () => {
+    const body = await bodyFor()
+    const first = await startEnhancement(userId, body)
+    const ledger = JSON.parse(objects.get(ledgerKey)!.toString())
+    ledger.attempts.push({ projectId, id: first.receipt.id })
+    objects.set(ledgerKey, JSON.stringify(ledger))
+    const second = await startEnhancement(userId, { ...body, quality: 'high' })
+    expect(second.run).toBeTypeOf('function')
+  })
+
+  it('opens a slot when a previous page completes without rerunning that page', async () => {
+    const body = await bodyFor()
+    const first = await startEnhancement(userId, body)
+    await startEnhancement(userId, { ...body, quality: 'high' })
+    objects.set(`projects/${userId}/${projectId}/enhancements/${first.receipt.id}/receipt.json`,
+      JSON.stringify({ ...first.receipt, status: 'completed', costUsd: 0.1 }))
+    const changed = dataUrl(await png(2, 1, [90, 20, 30, 255, 50, 60, 70, 255]))
+    expect((await startEnhancement(userId, { ...body, original: changed })).run).toBeTypeOf('function')
+    expect((await startEnhancement(userId, body)).run).toBeNull()
+    expect(JSON.parse(objects.get(ledgerKey)!.toString()).attempts).toHaveLength(3)
   })
 
   it('rejects stale clients before storage or a paid job', async () => {
@@ -170,7 +233,7 @@ describe('startEnhancement admission (mock storage/database, no paid calls)', ()
     expect(objects.size).toBe(0)
   })
   it('rejects the previous redesign version before storage or a paid job', async () => {
-    await expect(startEnhancement(userId, {...await bodyFor(), mode: 'redesign', pipelineVersion: 'retail-layout-v13'})).rejects.toMatchObject({statusCode:409})
+    await expect(startEnhancement(userId, {...await bodyFor(), mode: 'redesign', pipelineVersion: 'retail-layout-v15'})).rejects.toMatchObject({statusCode:409})
     expect(objects.size).toBe(0)
   })
   it('rejects a mismatched layout guide before any storage write', async () => {
@@ -203,6 +266,47 @@ describe('startEnhancement admission (mock storage/database, no paid calls)', ()
     })
     expect(result.receipt.mode).toBe('redesign')
     expect(result.run).toBeTypeOf('function')
+  })
+
+  it('uses only the visible original even when reconstructed layers contain other products', async () => {
+    const body = await bodyFor()
+    const guide = dataUrl(await png(2, 1, [200, 0, 0, 255, 200, 0, 0, 255]))
+    const overlay = dataUrl(await png(2, 1, [0, 200, 0, 255, 0, 0, 0, 0]))
+    const { receipt } = await startEnhancement(userId, {
+      ...body, mode: 'redesign', pipelineVersion: REDESIGN_VERSION,
+      guide, overlay, redesignArea: { left: 0, top: 0, width: 2, height: 1 }
+    })
+    expect(objects.get(receipt.referenceKey!)).toEqual(decodePagePng(body.original))
+    expect(objects.get(receipt.referenceKey!)).not.toEqual(decodePagePng(guide))
+    expect(objects.get(receipt.referenceKey!)).not.toEqual(decodePagePng(overlay))
+  })
+
+  it('dispatches independent pages with exactly their own original, never other layers or previous results', async () => {
+    vi.mocked(pgOneOrNull).mockResolvedValue({ canvas_data: [{ id: 'page-a' }, { id: 'page-b' }] } as never)
+    const generated = await png(2, 1, [100, 100, 100, 255, 100, 100, 100, 255])
+    const provider = vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+      data: [{ b64_json: generated.toString('base64') }], usage: { cost: 0.05 }
+    }) })
+    vi.stubGlobal('fetch', provider) // Fully mocked: no paid request or network.
+    expectedProviderCalls = 2
+    const first = await bodyFor()
+    const originals = [first.original, dataUrl(await png(2, 1, [200, 0, 0, 255, 200, 0, 0, 255]))]
+    const overlay = dataUrl(await png(2, 1, [0, 200, 0, 255, 0, 0, 0, 0]))
+    for (const [index, pageId] of ['page-a', 'page-b'].entries()) {
+      const job = await startEnhancement(userId, {
+        ...first, pageId, original: originals[index], mode: 'redesign', pipelineVersion: REDESIGN_VERSION,
+        guide: dataUrl(generated), overlay, redesignArea: { left: 0, top: 0, width: 2, height: 1 }
+      })
+      await job.run!()
+      expect(job.receipt.status).toBe('completed')
+      const payload = JSON.parse(provider.mock.calls[index]![1].body)
+      expect(payload.input_references).toEqual([{ type: 'image_url', image_url: { url: originals[index] } }])
+      expect(payload.n).toBe(1)
+      expect(payload.prompt).toContain('ÚNICA fonte de conteúdo')
+      expect(payload.prompt).toContain('Não crie novos cards')
+      expect(payload.prompt).toBe(job.receipt.prompt)
+      expect(objects.get(job.receipt.referenceKey!)).toEqual(decodePagePng(originals[index]))
+    }
   })
 
   it('rejects attempt 21 without writing a receipt or changing the ledger', async () => {

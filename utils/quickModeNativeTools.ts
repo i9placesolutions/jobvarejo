@@ -152,7 +152,7 @@ export const getQuickNativeColorProperty = (object: any): 'fill' | 'stroke' | nu
 
   if (!isTransparentPaint(object.fill)) return 'fill'
   if (!isTransparentPaint(object.stroke)) return 'stroke'
-  return type === 'line' ? 'stroke' : null
+  return type === 'line' || object._quickDefaultColors?.stroke ? 'stroke' : 'fill'
 }
 
 export const collectQuickNativeColorTargets = (objects: any[]): Array<{ object: any; property: 'fill' | 'stroke' }> => (
@@ -213,7 +213,8 @@ const resolvePaintProperty = (object: any): 'fill' | 'stroke' | null => {
   if (hasPaint(object.stroke)) return 'stroke'
   // Card backgrounds are valid targets even when the model deliberately
   // starts transparent, so the user can choose a color later.
-  if (QUICK_CARD_BACKGROUND_NAMES.has(normalizedName(object))) return 'fill'
+  if (QUICK_CARD_BACKGROUND_NAMES.has(normalizedName(object)) || object._quickDefaultColors?.fill) return 'fill'
+  if (object._quickDefaultColors?.stroke) return 'stroke'
   return null
 }
 

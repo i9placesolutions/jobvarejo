@@ -82,3 +82,12 @@ coverage/
 # Isolated local video builds
 /.nuxt-video-*/
 /.output-video-*/
+
+# Catálogo de mídia hospedado no Wasabi (manifesto em shared/video-studio).
+/public/video-studio/**/*.png
+/public/video-studio/**/*.jpg
+/public/video-studio/**/*.jpeg
+/public/video-studio/**/*.webp
+/public/video-studio/**/*.mp3
+/public/video-studio/**/*.wav
+/public/video-studio/**/*.mp4

@@ -6,11 +6,12 @@ const {buildVideoTimeline,videoAudioIdentity}=await import('../../shared/video-s
 import pg from 'pg'
 import { S3Client,GetObjectCommand,PutObjectCommand } from '@aws-sdk/client-s3'
 import { randomUUID,createHash } from 'node:crypto'
-import { readFile,writeFile,mkdtemp,rm,cp } from 'node:fs/promises'
+import { readFile,writeFile,mkdtemp,rm } from 'node:fs/promises'
 import { tmpdir,hostname } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { renderVideo,probe,root } from './engine.mjs'
+import {copyCatalogAsset} from './catalog-assets.mjs'
 import { createVideoCover } from './cover.mjs'
 import { renewVideoLease } from './lease.mjs'
 import { requestVideoAudio } from './provider.mjs'
@@ -25,6 +26,7 @@ const cfg=(name)=>process.env[name]||process.env['NUXT_'+name]||''
 const endpoint=cfg('WASABI_ENDPOINT').replace(/^https?:\/\//,'')
 const s3=new S3Client({endpoint:`https://${endpoint}`,region:cfg('WASABI_REGION')||'us-east-1',credentials:{accessKeyId:cfg('WASABI_ACCESS_KEY'),secretAccessKey:cfg('WASABI_SECRET_KEY')},forcePathStyle:true})
 const bucket=cfg('WASABI_BUCKET')||'jobvarejo',workerId=`${hostname()}:${process.pid}`
+const catalogStorage={s3,bucket,root}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms))
 const hash=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
 const SPEECH_VERSION=3
@@ -94,7 +96,7 @@ async function generate(job,dir){
    const speech=await createRetailSpeech({apiKey:cfg('ELEVENLABS_API_KEY'),voiceId:clone.voiceId,text:fullVoiceText(scripts)})
    const file=join(dir,'full-voice.audio');await writeFile(file,speech.bytes)
    const info=await probe(file),duration=Number(info.format?.duration)
-   if(!info.streams?.some(s=>s.codec_type==='audio')||!Number.isFinite(duration)||duration<=0||duration>180)throw Error('A ElevenLabs retornou um áudio inválido.')
+   if(!info.streams?.some(s=>s.codec_type==='audio')||!Number.isFinite(duration)||duration<=0)throw Error('A ElevenLabs retornou um áudio inválido.')
    const metadata={fingerprint:identity,provider:'elevenlabs',model:ELEVEN_RETAIL_MODEL,mode:'full-v1',speechVersion:SPEECH_VERSION,voiceProfileId:voice.profileId,sampleSha256:clone.sampleSha256,sampleVersion:voice.sampleVersion||null,requestId:speech.requestId,usage:voiceUsage(fullVoiceText(scripts))}
    asset={...await store(job,'voice','Locução completa — '+doc.title,speech.bytes,'audio/mpeg','mp3',duration,metadata),metadata}
    state['full-voice']={provider:'elevenlabs',sending:false,voiceId:clone.voiceId,model:ELEVEN_RETAIL_MODEL,requestId:speech.requestId,asset:{id:asset.id,duration}}
@@ -133,15 +135,15 @@ async function generate(job,dir){
  for(const s of scenes)if(doc.voice.enabled&&!voice.fullVoice)s.audio=(await assetFile(voice.clips[s.id].assetId,job.user_id,dir)).name
  const voiceAudio=doc.voice.enabled&&voice.fullVoice?(await assetFile(voice.fullVoice.assetId,job.user_id,dir)).name:undefined
  let music
- if(doc.audio.music!=='none'){if(isBuiltinMusic(doc.audio.music)){music='music.mp3';await cp(join(root,'public/video-studio/audio',doc.audio.music+'.mp3'),join(dir,music))}else{const asset=await assetFile(doc.audio.music,job.user_id,dir);const info=await probe(asset.file);if(!info.streams?.some(s=>s.codec_type==='audio'))throw Error('A música enviada não é um áudio válido.');music=asset.name}}
- for(const name of ['impact','whoosh'])await cp(join(root,'public/video-studio/audio',name+'.mp3'),join(dir,name+'.mp3'))
+ if(doc.audio.music!=='none'){if(isBuiltinMusic(doc.audio.music)){music='music.mp3';await copyCatalogAsset(`audio/${doc.audio.music}.mp3`,join(dir,music),{...catalogStorage,jobDir:dir})}else{const asset=await assetFile(doc.audio.music,job.user_id,dir);const info=await probe(asset.file);if(!info.streams?.some(s=>s.codec_type==='audio'))throw Error('A música enviada não é um áudio válido.');music=asset.name}}
+ if(!doc.motion)for(const name of ['impact','whoosh'])await copyCatalogAsset(`audio/${name}.mp3`,join(dir,`${name}.mp3`),{...catalogStorage,jobDir:dir})
  const outputs=[]
  for(let i=0;i<doc.formats.length;i++){
   const format=doc.formats[i],output=join(dir,format+'.mp4')
   const recovered=(await pool.query("SELECT id,duration FROM video_studio_assets WHERE user_id=$1 AND kind='render' AND metadata->>'jobId'=$2 AND metadata->>'format'=$3 ORDER BY created_at DESC LIMIT 1",[job.user_id,job.id,format])).rows[0]
   if(recovered){outputs.push({format,assetId:recovered.id,duration:recovered.duration});continue}
   let previous=-1
-  const info=await renderVideo({document:doc,label:job.payload.label,media,scenes,format,music,voiceAudio,impact:'impact.mp3',whoosh:'whoosh.mp3'},dir,output,p=>{const n=Math.floor((i+p)/doc.formats.length*95);if(n>previous+4){previous=n;pool.query('UPDATE public.video_studio_jobs SET progress=$1 WHERE id=$2 AND lease_token=$3 AND status=\'running\'',[n,job.id,job.lease_token]).catch(()=>{})}})
+  const info=await renderVideo({document:doc,label:job.payload.label,media,scenes,format,music,voiceAudio,impact:'impact.mp3',whoosh:'whoosh.mp3'},dir,output,p=>{const n=Math.floor((i+p)/doc.formats.length*95);if(n>previous+4){previous=n;pool.query('UPDATE public.video_studio_jobs SET progress=$1 WHERE id=$2 AND lease_token=$3 AND status=\'running\'',[n,job.id,job.lease_token]).catch(()=>{})}},{catalogStorage})
   const asset=await store(job,'render',doc.title+' — '+format,await readFile(output),'video/mp4','mp4',Number(info.format.duration),{jobId:job.id,revision:job.revision,format})
   let coverAssetId
   try{

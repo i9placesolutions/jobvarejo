@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { productSuggestionFamily, scoreProductFamilySuggestion as score } from '../../utils/productSuggestionFamily'
+import { productSuggestionFamily, productSuggestionWeightMatches, scoreProductFamilySuggestion as score } from '../../utils/productSuggestionFamily'
 it('expande abreviações e inclui linguiça com e sem marca', () => {
  const p = { name: 'LING TOSC DE FRANGO FRICO KG' }
  expect(productSuggestionFamily(p)).toBe('linguica')
@@ -25,4 +25,18 @@ it('a consulta expandida encontra arquivos abreviados e plurais da biblioteca', 
  expect(score(query, 'imagens/manual-ling-tosc-frango-frico-kg.webp')).toBeGreaterThan(0)
  expect(score(query, 'Linguiças Sadia')).toBeGreaterThan(0)
  expect(score(query, 'Pizza de linguiça')).toBe(0)
+})
+
+it('prioriza Pilão escrito no nome mesmo quando a marca não foi preenchida', () => {
+ const p = { name: 'CAFÉ PILÃO TRADICIONAL 500G' }
+ expect(score(p, 'imagens/05-cafe-pilao-500g-97a4d21504ac.jpg')).toBeGreaterThan(score(p, 'Café Santa Helena tradicional 500g'))
+ expect(score(p, 'Café Pilão tradicional 500g')).toBeGreaterThan(score(p, 'Café Pilão tradicional 250g'))
+ expect(score(p, 'Café Pilão tradicional 250g')).toBeGreaterThan(score(p, 'Café Santa Helena tradicional 500g'))
+ expect(score(p, 'Café Santa Helena')).toBeGreaterThan(0)
+})
+
+it('não recomenda outra gramatura, com conversão de unidades', () => {
+ expect(productSuggestionWeightMatches({ name: 'CAFÉ PILÃO 500G' }, 'Café Pilão 250gr')).toBe(false)
+ expect(productSuggestionWeightMatches({ name: 'CAFÉ PILÃO 500G' }, 'Café Pilão 0,5 kg')).toBe(true)
+ expect(productSuggestionWeightMatches({ name: 'CAFÉ PILÃO 500G' }, 'Café Pilão')).toBe(true)
 })

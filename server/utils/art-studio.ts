@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
 import type { ArtComposition } from '~/types/art-studio'
+import { isArtStoreLogoLayer } from '~/utils/art-studio/composition'
 import { requireAuthenticatedUser } from './auth'
 import { pgQuery } from './postgres'
 import { enforceRateLimit } from './rate-limit'
@@ -74,7 +75,10 @@ export const normalizeArtTemplateBindings = (composition: ArtComposition) => {
   for (const layer of [composition, ...(composition.alternates || [])].flatMap(
     (page) => page.layers
   )) {
-    if (layer.binding === 'logo' && layer.kind === 'image') layer.src = ''
+    if (isArtStoreLogoLayer(layer)) {
+      layer.binding = 'logo'
+      layer.src = ''
+    }
     if (layer.binding && layer.kind === 'text' && placeholders[layer.binding])
       layer.text = placeholders[layer.binding]
   }

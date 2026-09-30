@@ -3,8 +3,10 @@ import { ArrowUpRight, Grid, LayoutTemplate, SlidersHorizontal, Tag, Zap } from 
 import type { Component } from 'vue'
 
 const route = useRoute()
+const auth = useAuth()
 
 type WorkspaceTool = {
+  id: 'models' | 'quick' | 'labels' | 'zones' | 'cards'
   title: string
   description: string
   to: string
@@ -14,18 +16,21 @@ type WorkspaceTool = {
 
 const tools: WorkspaceTool[] = [
   {
+    id: 'models',
     title: 'Modelos',
     description: 'Crie e reutilize layouts completos.',
     to: '/flyer-templates',
     icon: LayoutTemplate
   },
   {
+    id: 'quick',
     title: 'Edição rápida',
     description: 'Preencha um modelo com as ofertas.',
     to: '/quick-editor',
     icon: Zap
   },
   {
+    id: 'labels',
     title: 'Etiquetas',
     description: 'Defina os selos e preços do encarte.',
     to: '/label-templates?returnTo=/flyer-templates',
@@ -33,12 +38,14 @@ const tools: WorkspaceTool[] = [
     icon: Tag
   },
   {
+    id: 'zones',
     title: 'Zonas',
     description: 'Ajuste a estrutura das ofertas.',
     to: '/zone-structures',
     icon: Grid
   },
   {
+    id: 'cards',
     title: 'Cards',
     description: 'Configure a apresentação dos produtos.',
     to: '/card-configurations',
@@ -46,6 +53,10 @@ const tools: WorkspaceTool[] = [
   }
 ]
 
+const isCommonUser = computed(() => auth.user.value?.role === 'user')
+const visibleTools = computed(() =>
+  isCommonUser.value ? tools.filter((tool) => tool.id === 'quick') : tools
+)
 const isActive = (tool: WorkspaceTool) => route.path === (tool.activePath || tool.to)
 </script>
 
@@ -53,13 +64,13 @@ const isActive = (tool: WorkspaceTool) => route.path === (tool.activePath || too
   <section class="encarte-workspace-nav" aria-labelledby="encarte-workspace-title">
     <div class="encarte-workspace-nav__intro">
       <p class="encarte-workspace-nav__eyebrow">Área Encartes</p>
-      <h2 id="encarte-workspace-title">Tudo do seu encarte, no mesmo lugar.</h2>
-      <p>Comece pelo modelo e use os ajustes abaixo somente quando precisar. Vídeos e cartazes continuam em seus próprios espaços.</p>
+      <h2 id="encarte-workspace-title">{{ isCommonUser ? 'Edite suas ofertas rapidamente.' : 'Tudo do seu encarte, no mesmo lugar.' }}</h2>
+      <p>{{ isCommonUser ? 'Use a edição rápida para preencher as ofertas nos modelos já preparados para sua loja.' : 'Comece pelo modelo e use os ajustes abaixo somente quando precisar. Vídeos e cartazes continuam em seus próprios espaços.' }}</p>
     </div>
 
-    <nav class="encarte-workspace-nav__items" aria-label="Ferramentas de encartes">
+    <nav class="encarte-workspace-nav__items" :class="{ 'encarte-workspace-nav__items--single': isCommonUser }" aria-label="Ferramentas de encartes">
       <NuxtLink
-        v-for="tool in tools"
+        v-for="tool in visibleTools"
         :key="tool.title"
         :to="tool.to"
         class="encarte-workspace-nav__item"
@@ -121,6 +132,8 @@ const isActive = (tool: WorkspaceTool) => route.path === (tool.activePath || too
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 9px;
 }
+
+.encarte-workspace-nav__items--single { grid-template-columns: minmax(0, 320px); }
 
 .encarte-workspace-nav__item {
   display: grid;

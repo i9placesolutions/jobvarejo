@@ -1,5 +1,6 @@
 import { reactive, ref, computed, watch } from 'vue'
 import { computeCanvasFingerprint } from '~/utils/editorCanvasState'
+import { resolvePageUpdateDirtyPolicy } from '~/utils/editorSavePolicy'
 import { normalizeCanvasAssetUrls } from '~/utils/canvasAssetUrls'
 import {
     buildFlyerTemplatePageBlueprints,
@@ -11,6 +12,7 @@ import {
 } from '~/utils/flyerTemplateNaming'
 import { clonePageCanvasDataWithFreshIds } from '~/utils/projectCanvasDuplication'
 import { isValidityOnlyCanvas } from '~/utils/canvasIntegrity'
+import { canvasReadCache, type CanvasReadVersion } from '~/utils/editorCanvasReadCache'
 
 export interface Page {
     id: string;
@@ -887,6 +889,7 @@ const getDeferredCanvasPrefetchIds = (activePageId?: string | null, limit = 2): 
 
 export const useProject = () => {
     const { getApiAuthHeaders } = useApiAuth()
+    const { user: canvasCacheUser } = useAuth()
     const { saveCanvasData, saveThumbnail, loadCanvasData, loadCanvasDataFromPath, recoverLatestNonEmptyCanvasData, deleteProjectFiles, saveStatus: storageSaveStatus } = useStorage()
 
     const activePage = computed(() => project.pages[project.activePageIndex])
@@ -916,10 +919,24 @@ export const useProject = () => {
         // mas conseguiu gravar os metadados no DB.
         const expectedCanvasSavedAt = Number(opts.pageMeta?.canvasSavedAt || 0)
         const canvasRevision = normalizeCanvasRevision(opts.pageMeta?.canvasRevision)
+        // Metadata comes from the authenticated project GET before this read.
+        // Timestamp + revision invalidate edits/restores even when the S3 key is reused.
+        const cacheVersion: CanvasReadVersion = {
+            userId: String(canvasCacheUser.value?.id || ''), projectId: opts.projectId,
+            pageId: opts.pageId, path: preferredPath, savedAt: expectedCanvasSavedAt,
+            revision: canvasRevision
+        }
 
         if (preferredPath) {
             console.log('📥 Buscando canvasData do Storage:', preferredPath)
-            serverCanvasData = await loadCanvasDataFromPath(preferredPath)
+            serverCanvasData = await canvasReadCache.read(cacheVersion)
+            if (serverCanvasData) {
+                if (import.meta.dev) console.debug('[canvas-cache] hit:', opts.pageId)
+            } else {
+                serverCanvasData = await loadCanvasDataFromPath(preferredPath)
+                // Snapshot the network result before draft/URL normalization mutates it.
+                void canvasReadCache.write(cacheVersion, serverCanvasData)
+            }
             if (serverCanvasData) {
                 const objectCount = getCanvasObjectCount(serverCanvasData)
                 const wasabiTs = getCanvasSavedAt(serverCanvasData)
@@ -1330,14 +1347,17 @@ export const useProject = () => {
                 });
             }
             
+            const dirtyPolicy = resolvePageUpdateDirtyPolicy({
+                wasDirty: !!project.pages[index].dirty,
+                source: opts.source,
+                markUnsaved: opts.markUnsaved
+            })
             project.pages[index].canvasData = stampedJson
             project.pages[index].lastSavedFingerprint = fingerprint
             if (!project.pages[index].lastLoadedFingerprint) {
                 project.pages[index].lastLoadedFingerprint = fingerprint
             }
-            project.pages[index].dirty = opts.source === 'system'
-                ? !!opts.markUnsaved
-                : true
+            project.pages[index].dirty = dirtyPolicy.dirty
             
             // Verificar se foi salvo corretamente
             const savedObjectCount = project.pages[index].canvasData?.objects?.length || 0;
@@ -1347,8 +1367,7 @@ export const useProject = () => {
                 console.log(`✅ updatePageData: ${savedObjectCount} objeto(s) salvos corretamente`);
             }
             
-            const shouldMarkUnsaved = opts.markUnsaved ?? (opts.source !== 'system')
-            if (shouldMarkUnsaved) markAsUnsaved()
+            if (dirtyPolicy.markUnsaved) markAsUnsaved()
             // Also persist a local draft to survive reloads/offline.
             const p = project.pages[index]
             const shouldFlushLocalDraftsNow = opts.source === 'system'
@@ -2189,9 +2208,18 @@ export const useProject = () => {
                                 page.thumbnailDirty = false
                             }
 	                        page.lastPersistedObjectCount = getCanvasObjectCount(page.canvasData)
-	                        if (page.canvasData) {
-	                            page.lastSavedFingerprint = computeCanvasFingerprint(page.canvasData)
-	                        }
+                        if (page.canvasData) {
+                            page.lastSavedFingerprint = computeCanvasFingerprint(page.canvasData)
+                            // Only an unchanged save whose canvas AND metadata
+                            // were confirmed may seed the next opening's cache.
+                            if (confirmedCanvasUploadPageIds.has(page.id) && page.canvasDataPath) {
+                                void canvasReadCache.write({
+                                    userId: String(canvasCacheUser.value?.id || ''), projectId: project.id,
+                                    pageId: page.id, path: page.canvasDataPath,
+                                    savedAt: Number(page.canvasSavedAt || 0), revision: page.canvasRevision
+                                }, page.canvasData)
+                            }
+                        }
 	                    }
 	                })
 

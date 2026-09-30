@@ -4,15 +4,65 @@ const artLayerImageSrc = (layer: ArtLayer) => baseArtLayerImageSrc(layer, logoPr
 import type { ArtComposition, ArtLayer } from '~/types/art-studio'
 import { artLayerImageSrc as baseArtLayerImageSrc } from '~/utils/art-studio/logo'
 import { ART_ICONS } from '~/types/art-studio'
-const props=defineProps<{ composition: ArtComposition; label?: string }>()
+const props = withDefaults(
+  defineProps<{ composition: ArtComposition; label?: string; lazy?: boolean }>(),
+  { lazy: false }
+)
 const uid=useId()
 import { artTextArc, measureArtText } from '~/utils/art-studio/textArc'
 const fontsReady=ref(0)
 const arcGlyphs=(layer:ArtLayer)=>{void fontsReady.value;return import.meta.client?artTextArc(layer,measureArtText(layer)):[]}
 
 import { loadArtFonts } from '~/utils/art-studio/fonts'
-onMounted(()=>{void loadArtFonts(props.composition).then(()=>fontsReady.value++)})
-watch(()=>props.composition,()=>{if(import.meta.client)void loadArtFonts(props.composition).then(()=>fontsReady.value++)})
+const isVisible = ref(!props.lazy)
+const previewPlaceholder = ref<HTMLElement>()
+let previewObserver: IntersectionObserver | null = null
+
+const loadFonts = () => {
+  if (!import.meta.client || !isVisible.value) return
+  void loadArtFonts(props.composition).then(() => fontsReady.value++)
+}
+
+const observePreview = () => {
+  if (!props.lazy || isVisible.value || !previewPlaceholder.value) return
+  if (!('IntersectionObserver' in window)) {
+    isVisible.value = true
+    return
+  }
+
+  previewObserver?.disconnect()
+  previewObserver = new IntersectionObserver(
+    ([entry]) => {
+      if (!entry?.isIntersecting) return
+      isVisible.value = true
+      previewObserver?.disconnect()
+      previewObserver = null
+    },
+    { rootMargin: '240px 0px' }
+  )
+  previewObserver.observe(previewPlaceholder.value)
+}
+
+onMounted(() => {
+  observePreview()
+  loadFonts()
+})
+onBeforeUnmount(() => previewObserver?.disconnect())
+watch(isVisible, (visible) => {
+  if (visible) loadFonts()
+})
+watch(() => props.lazy, async (lazy) => {
+  previewObserver?.disconnect()
+  previewObserver = null
+  if (!lazy) {
+    isVisible.value = true
+    return
+  }
+  isVisible.value = false
+  await nextTick()
+  observePreview()
+})
+watch(() => props.composition, loadFonts)
 const paint=(layer:ArtLayer)=>layer.gradient?`url(#${uid}-${layer.id})`:layer.fill
 const lines = (layer: ArtLayer) => {
   const max = Math.max(
@@ -34,7 +84,16 @@ const lines = (layer: ArtLayer) => {
 }
 </script>
 <template>
+  <div
+    v-if="lazy && !isVisible"
+    ref="previewPlaceholder"
+    class="art-preview-placeholder"
+    role="img"
+    :aria-label="label || 'Prévia da arte'"
+    :aria-busy="true"
+  />
   <svg
+    v-else
     :viewBox="`0 0 ${composition.width} ${composition.height}`"
     role="img"
     :aria-label="label || 'Prévia da arte'"
@@ -162,5 +221,10 @@ const lines = (layer: ArtLayer) => {
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+.art-preview-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 </style>

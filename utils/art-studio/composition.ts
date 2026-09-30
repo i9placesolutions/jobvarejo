@@ -38,6 +38,52 @@ export const blankArt = (): ArtComposition => ({
   background: '#f7f4eb',
   layers: []
 })
+
+const legacyStoreLogoIds = new Set([
+  'art-logo',
+  'brand-logo',
+  'cartaz-logo',
+  'logo',
+  'logo-da-loja',
+  'logo-loja',
+  'store-logo'
+])
+
+const legacyStoreLogoNames = new Set([
+  'logo',
+  'logo da empresa',
+  'logo da loja',
+  'logo do estabelecimento',
+  'logo empresa',
+  'logo loja',
+  'store logo'
+])
+
+const normalizeLogoIdentifier = (value: unknown) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+
+/**
+ * Recognizes the store-logo slots created before `binding: 'logo'` became
+ * mandatory. Campaign seals and supplier logos intentionally do not match
+ * this conservative list.
+ */
+export const isArtStoreLogoLayer = (layer: ArtLayer): boolean => {
+  if (layer.kind !== 'image') return false
+  if (layer.binding === 'logo') return true
+  return (
+    legacyStoreLogoIds.has(normalizeLogoIdentifier(layer.id)) ||
+    legacyStoreLogoNames.has(
+      normalizeLogoIdentifier(layer.name).replace(/-/g, ' ')
+    )
+  )
+}
+
 // O documento é independente de Fabric e dos projetos de ofertas; nunca guarda URLs temporárias.
 export const resizeArt = (
   source: ArtComposition,
@@ -67,18 +113,16 @@ export const personalizeArt = (
   for (const layer of [result, ...(result.alternates || [])].flatMap(
     (page) => page.layers
   )) {
-    const value = layer.binding ? values[layer.binding] : undefined
-    if (
-      layer.kind === 'image' &&
-      layer.binding === 'logo' &&
-      Object.prototype.hasOwnProperty.call(values, 'logo')
-    ) {
+    if (isArtStoreLogoLayer(layer)) {
+      // A marca da conta substitui qualquer URL persistida por modelos ou
+      // rascunhos antigos. Sem marca cadastrada, o slot fica vazio.
+      layer.binding = 'logo'
       layer.src = values.logo || ''
       continue
     }
+    const value = layer.binding ? values[layer.binding] : undefined
     if (!value) continue
     if (layer.kind === 'text') layer.text = value
-    if (layer.kind === 'image' && layer.binding === 'logo') layer.src = value
   }
   return result
 }

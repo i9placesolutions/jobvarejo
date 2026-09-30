@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { REDESIGN_VERSION } from '~/shared/pageEnhancementVersion'
 import { latestReadyEnhancements } from '~/utils/pageEnhancementResults'
+import { runPageEnhancementBatch } from '~/utils/pageEnhancementBatch'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { Check, ChevronLeft, ChevronRight, Expand, FileArchive, FileImage, FileText, LoaderCircle, Pause, RefreshCw, ShieldCheck, Sparkles, WandSparkles, X } from 'lucide-vue-next'
 
@@ -14,16 +15,17 @@ type Receipt = {
   originalUrl?: string; resultUrl?: string; width: number; height: number
   sourceHash: string; error?: string; quality: Quality; createdAt: string
 }
-const props = defineProps<{ projectId: string; pages: Page[]; preparePage: (id: string, mode?: EnhancementMode) => Promise<Prepared> }>()
+const props = defineProps<{ projectId: string; initialPageId?: string; pages: Page[]; preparePage: (id: string, mode?: EnhancementMode, previewOnly?: boolean) => Promise<Prepared> }>()
 const emit = defineEmits<{ close: [] }>()
 const titleId = useId()
 const dialog = ref<HTMLElement>()
 const configured = ref(false)
 const scope = ref<'selected' | 'all'>('selected')
-const selectedPageIds = ref<string[]>(props.pages[0]?.id ? [props.pages[0].id] : [])
+const initialPageId = props.pages.find(p => p.id === props.initialPageId)?.id || props.pages[0]?.id || ''
+const selectedPageIds = ref<string[]>(initialPageId ? [initialPageId] : [])
 const mode: EnhancementMode = 'redesign'
 const quality: Quality = 'high'
-const pageId = ref(props.pages[0]?.id || '')
+const pageId = ref(initialPageId)
 const receipts = ref<Receipt[]>([])
 const receiptId = ref('')
 const busy = ref(false)
@@ -31,6 +33,8 @@ const loading = ref(true)
 const ready = ref(false)
 const exporting = ref(false)
 const preparingLayout = ref(false)
+const previewingCurrent = ref(true)
+let previewRequest = 0
 const localPreview = ref<{ pageId: string; original: string; productCount: number } | null>(null)
 const pause = ref(false)
 const batchTotal = ref(0)
@@ -89,12 +93,16 @@ const failure = (e: any) => String(e?.data?.statusMessage || e?.statusMessage ||
 function upsert(receipt: Receipt) {
   receipts.value = [receipt, ...receipts.value.filter(r => r.id !== receipt.id)]
   if (receipt.pageId === pageId.value && receipt.status === 'completed') {
+    previewRequest++
+    previewingCurrent.value = false
     localPreview.value = null
     receiptId.value = receipt.id
     resultRevision.value = Date.now()
   }
 }
 async function showResult(receipt: Receipt) {
+  previewRequest++
+  previewingCurrent.value = false
   localPreview.value = null
   pageId.value = receipt.pageId
   await nextTick()
@@ -122,11 +130,8 @@ function keydown(event: KeyboardEvent) {
 }
 watch(pageId, (newPageId) => {
   localPreview.value = null
-  receiptId.value = matching.value.find(r => r.pageId === newPageId)?.id || ''
+  receiptId.value = receipts.value.find(r => r.pageId === newPageId && r.status === 'completed')?.id || ''
   zoom.value = 100
-  if (ready.value && !receiptId.value && newPageId) {
-    void previewLayout()
-  }
 })
 watch(imageView, async value => { if (value) { await nextTick(); dialog.value?.querySelector<HTMLElement>('.image-viewer button')?.focus() } })
 watch(historyOpen, async value => { if (value) { await nextTick(); dialog.value?.querySelector<HTMLElement>('.history-viewer button')?.focus() } })
@@ -137,9 +142,24 @@ watch(() => props.pages.map(p => p.id), ids => {
   pickerPage.value = Math.min(pickerPage.value, Math.max(0, Math.ceil(ids.length / 3) - 1))
 })
 function togglePage(id: string) {
-  selectedPageIds.value = selectedPageIds.value.includes(id)
+  const wasSelected = selectedPageIds.value.includes(id)
+  selectedPageIds.value = wasSelected
     ? selectedPageIds.value.filter(value => value !== id)
     : [...selectedPageIds.value, id]
+  if (!wasSelected) void selectPageForPreview(id)
+  else if (pageId.value === id && selectedPageIds.value.length) void selectPageForPreview(selectedPageIds.value.at(-1)!)
+}
+async function selectPageForPreview(id: string) {
+  if (scope.value === 'selected' && selectedPageIds.value.length <= 1) selectedPageIds.value = [id]
+  pageId.value = id
+  await nextTick()
+  await previewLayout()
+}
+function selectSavedVersion() {
+  previewRequest++
+  previewingCurrent.value = false
+  localPreview.value = null
+  compareSide.value = 'result'
 }
 
 async function poll(receipt: Receipt) {
@@ -169,17 +189,8 @@ async function refresh() {
     configured.value = config.configured && config.available
     receipts.value = [...history.items].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     resultRevision.value = Date.now()
-    receiptId.value = matching.value.find(r => r.pageId === pageId.value)?.id || ''
+    receiptId.value = receipts.value.find(r => r.pageId === pageId.value && r.status === 'completed')?.id || ''
     ready.value = true
-    if (!receiptId.value) {
-      const saved = readyResults.value.find(r => r.pageId === pageId.value) || readyResults.value[0]
-      if (saved) {
-        await showResult(saved)
-      } else if (pageId.value) {
-        // Conferência automática ao abrir caso ainda não haja resultado salvo
-        void previewLayout()
-      }
-    }
     for (const r of receipts.value.filter(r => r.status === 'processing' || r.status === 'uncertain')) {
       if (disposed) break
       const updated = await $fetch<Receipt>('/api/page-enhancements/status', { query: { projectId: props.projectId, id: r.id }, credentials: 'same-origin', retry: 0, timeout: 30000, signal: controller.signal })
@@ -188,9 +199,10 @@ async function refresh() {
     }
   } catch (e) { if (!disposed) error.value = failure(e) }
   finally { loading.value = false }
+  if (ready.value && !disposed && pageId.value) await previewLayout()
 }
-async function prepareVerified(id: string) {
-  const data = await props.preparePage(id, mode)
+async function prepareVerified(id: string, previewOnly = false) {
+  const data = await props.preparePage(id, mode, previewOnly)
   // Hash decoded PNG bytes, never the data-URL text.
   let bytes: ArrayBuffer
   if (data.original.startsWith('data:')) {
@@ -206,13 +218,17 @@ async function prepareVerified(id: string) {
 }
 async function previewLayout() {
   if (locked.value || !pageId.value) return
+  const id = pageId.value
+  const request = ++previewRequest
+  previewingCurrent.value = true
+  localPreview.value = null
   preparingLayout.value = true; error.value = ''
   try {
-    const data = await props.preparePage(pageId.value, 'redesign')
-    if (!data.guide || !data.overlay || !data.productCount) throw new Error('Não foi possível montar a prévia dos produtos.')
-    localPreview.value = { pageId: pageId.value, original: data.original, productCount: data.productCount }
+    const data = await prepareVerified(id, true)
+    if (disposed || request !== previewRequest || pageId.value !== id) return
+    localPreview.value = { pageId: id, original: data.original, productCount: data.productCount || 0 }
     compareSide.value = 'original'
-  } catch (e) { error.value = failure(e) }
+  } catch (e) { if (!disposed && request === previewRequest && pageId.value === id) error.value = failure(e) }
   finally { preparingLayout.value = false }
 }
 async function submit(id: string, data: Prepared) {
@@ -263,17 +279,19 @@ async function run() {
     }
     const queue = pagesToCheck.filter(p => !completedFor(p.id) && !pendingFor(p.id))
     batchTotal.value = queue.length; batchDone.value = 0
-    for (const [index, page] of queue.entries()) {
-      if (disposed || pause.value) break
+    let active = 0
+    const updateProgress = () => { message.value = `${batchDone.value}/${queue.length} concluídas · ${active} em processamento` }
+    await runPageEnhancementBatch(queue, async page => {
       if (matching.value.some(r => r.pageId === page.id && r.status === 'uncertain')) {
         throw new Error(`A melhoria de ${page.name} ainda não foi confirmada. Consulte o histórico antes de tentar novamente.`)
       }
-      if (disposed) break
-      message.value = `${index + 1}/${queue.length} · Melhorando ${page.name}`
-      await submit(page.id, prepared.get(page.id)!)
-      batchDone.value = index + 1
-    }
-    message.value = pause.value ? 'Pausado após a página atual. Resultados salvos no histórico.' : pagesToCheck.some(p => pendingFor(p.id)) ? 'Páginas disponíveis processadas. As páginas com resultado incerto ficaram pendentes, sem novo envio.' : queue.length ? 'Processamento concluído. Resultados salvos no histórico.' : 'As páginas escolhidas já têm resultados para a arte atual.'
+      active++; updateProgress()
+      try {
+        await submit(page.id, prepared.get(page.id)!)
+        batchDone.value++
+      } finally { active--; updateProgress() }
+    }, () => disposed || pause.value)
+    message.value = pause.value ? 'Pausado após concluir as páginas em andamento. Resultados salvos no histórico.' : pagesToCheck.some(p => pendingFor(p.id)) ? 'Páginas disponíveis processadas. As páginas com resultado incerto ficaram pendentes, sem novo envio.' : queue.length ? 'Processamento concluído. Resultados salvos no histórico.' : 'As páginas escolhidas já têm resultados para a arte atual.'
   } catch (e) { if (!disposed) error.value = failure(e) }
   finally { busy.value = false }
 }
@@ -394,12 +412,11 @@ onBeforeUnmount(() => { disposed = true; controller.abort(); document.body.style
                 </fieldset>
 
                 <label v-if="pages.length > 1" class="enhancement-field">Página para conferir
-                  <select v-model="pageId" :disabled="locked || !pages.length"><option v-for="p in pages" :key="p.id" :value="p.id">{{ p.name }}</option></select>
+                  <select :value="pageId" :disabled="locked || !pages.length" @change="selectPageForPreview(($event.target as HTMLSelectElement).value)"><option v-for="p in pages" :key="p.id" :value="p.id">{{ p.name }}</option></select>
                 </label>
 
                 <p v-if="scope === 'selected' && !selectedPageIds.length" class="enhancement-alert enhancement-alert--warning">Selecione pelo menos uma página.</p>
-                <button type="button" class="enhancement-primary w-full" :disabled="!canRun || !targetPages.length || !actionablePages.length" @click="run"><LoaderCircle v-if="busy" :size="18" class="enhancement-spinner" aria-hidden="true" /><Sparkles v-else :size="18" aria-hidden="true" />{{ busy ? 'Criando melhorias…' : targetPages.length === 1 ? 'Melhorar esta página' : `Melhorar ${targetPages.length} páginas` }}</button>
-                <button v-if="!busy" type="button" class="enhancement-secondary w-full" :disabled="locked || !pageId" @click="previewLayout"><FileImage :size="16" aria-hidden="true" />Conferir produtos antes</button>
+                <button type="button" class="enhancement-primary w-full" :disabled="!canRun || !targetPages.length || !actionablePages.length" @click="run"><LoaderCircle v-if="busy" :size="18" class="enhancement-spinner" aria-hidden="true" /><Sparkles v-else :size="18" aria-hidden="true" />{{ busy ? 'Criando melhorias…' : targetPages.length === 1 ? receipts.some(r => r.pageId === targetPages[0]?.id && r.status === 'completed') ? 'Gerar novamente esta página' : 'Melhorar esta página' : `Melhorar ${targetPages.length} páginas` }}</button>
 
                 <div v-if="!busy && (receipts.some(r => r.status === 'uncertain') || unconfirmedPages.length)" class="pending-notice" role="status"><span>Uma página aguarda confirmação.</span><button type="button" :disabled="locked" @click="refresh"><RefreshCw :size="14" />Atualizar</button></div>
 
@@ -414,7 +431,7 @@ onBeforeUnmount(() => { disposed = true; controller.abort(); document.body.style
                 <progress v-if="batchTotal" class="enhancement-progress w-full" :value="batchDone" :max="batchTotal" aria-label="Progresso das páginas" />
                 <p class="helper-copy">{{ message }}</p>
                 <div class="batch-actions">
-                  <button type="button" :disabled="pause" @click="pause = true"><Pause :size="16" />{{ pause ? 'Pausa solicitada' : 'Pausar após esta página' }}</button>
+                  <button type="button" :disabled="pause" @click="pause = true"><Pause :size="16" />{{ pause ? 'Pausa solicitada' : 'Pausar após as páginas atuais' }}</button>
                   <button type="button" :disabled="locked" @click="refresh"><RefreshCw :size="16" />Atualizar resultados</button>
                 </div>
                 <p class="helper-copy">Mantenha esta janela aberta até a página atual terminar.</p>
@@ -444,19 +461,22 @@ onBeforeUnmount(() => { disposed = true; controller.abort(); document.body.style
 
               <section class="panel compare-panel">
                 <div class="section-heading section-heading--between">
-                  <div class="min-w-0"><p class="eyebrow">3 · CONFIRA E BAIXE</p><h3>{{ localPreview ? `Produtos protegidos · ${pageName(localPreview.pageId)}` : selected ? pageName(selected.pageId) : 'Compare sua arte' }}</h3></div>
+                  <div class="min-w-0"><p class="eyebrow">3 · CONFIRA E BAIXE</p><h3>{{ previewingCurrent ? `Imagem atual · ${pageName(pageId)}` : selected ? pageName(selected.pageId) : 'Compare sua arte' }}</h3></div>
                   <label v-if="selected" class="zoom-control">{{ zoom === 100 ? 'Ajustar à tela' : `Zoom ${zoom}%` }}<input v-model.number="zoom" type="range" min="100" max="250" step="25" aria-label="Zoom da comparação" /></label>
                 </div>
-                <div v-if="selected && selected.originalUrl && selected.resultUrl" class="mobile-compare-tabs" role="group" aria-label="Imagem para comparar"><button type="button" :aria-pressed="compareSide === 'original'" :class="{ 'is-selected': compareSide === 'original' }" @click="compareSide = 'original'">Original</button><button type="button" :aria-pressed="compareSide === 'result'" :class="{ 'is-selected': compareSide === 'result' }" @click="compareSide = 'result'">Com IA</button></div>
+                <div v-if="selected && selected.originalUrl && selected.resultUrl" class="mobile-compare-tabs" role="group" aria-label="Imagem para comparar"><button type="button" :aria-pressed="compareSide === 'original'" :class="{ 'is-selected': compareSide === 'original' }" @click="compareSide = 'original'">{{ previewingCurrent ? 'Imagem atual' : 'Original' }}</button><button type="button" :aria-pressed="compareSide === 'result'" :class="{ 'is-selected': compareSide === 'result' }" @click="compareSide = 'result'">{{ previewingCurrent ? 'Última melhoria' : 'Com IA' }}</button></div>
                 <label v-if="pageReceipts.length > 1" class="enhancement-field">Outra versão desta página
-                  <select v-model="receiptId"><option v-for="r in pageReceipts" :key="r.id" :value="r.id">{{ formatDate(r.createdAt) }} · {{ statusLabel(r.status) }}</option></select>
+                  <select v-model="receiptId" :disabled="locked" @change="selectSavedVersion"><option v-for="r in pageReceipts" :key="r.id" :value="r.id">{{ formatDate(r.createdAt) }} · {{ statusLabel(r.status) }}</option></select>
                 </label>
                 <template v-if="localPreview">
-                  <p class="enhancement-alert enhancement-alert--info">{{ localPreview.productCount }} produtos identificados. Esta é a arte original; a melhoria de design só aparece após clicar em “Melhorar esta página” e a API concluir.</p>
+                  <p class="enhancement-alert enhancement-alert--info">Esta é a imagem atual que será enviada para melhorar. As correções feitas no editor aparecem aqui ao selecionar a página.</p>
+                  <p v-if="selected && stale(selected)" class="enhancement-alert enhancement-alert--warning">Esta página foi alterada depois da última melhoria. Gere novamente para usar a imagem atual.</p>
                   <div class="comparison-grid">
-                    <figure class="comparison-frame"><figcaption><span>Original</span><button type="button" class="view-full" aria-label="Ver arte original inteira" @click="imageView = { url: localPreview.original, label: 'Arte original' }"><Expand :size="15" />Ver inteira</button></figcaption><div class="comparison-frame__image"><img :src="localPreview.original" alt="Arte original para comparação" /></div></figure>
+                    <figure class="comparison-frame" :class="{ 'is-mobile-hidden': compareSide !== 'original' }"><figcaption><span>Imagem atual · será melhorada</span><button type="button" class="view-full" aria-label="Ver imagem atual inteira" @click="imageView = { url: localPreview.original, label: 'Imagem atual que será melhorada' }"><Expand :size="15" />Ver inteira</button></figcaption><div class="comparison-frame__image" :style="{ '--preview-zoom': `${zoom}%` }"><img :src="localPreview.original" alt="Imagem atual que será melhorada" /></div></figure>
+                    <figure v-if="selected?.resultUrl" class="comparison-frame" :class="{ 'is-mobile-hidden': compareSide !== 'result' }"><figcaption><span>Última melhoria salva</span><button type="button" class="view-full" aria-label="Ver última melhoria inteira" @click="imageView = { url: freshResultUrl(selected.resultUrl), label: 'Última melhoria salva' }"><Expand :size="15" />Ver inteira</button></figcaption><div class="comparison-frame__image" :style="{ '--preview-zoom': `${zoom}%` }"><img :src="freshResultUrl(selected.resultUrl)" alt="Última melhoria salva desta página" /></div></figure>
                   </div>
                 </template>
+                <p v-else-if="previewingCurrent" class="empty-copy">{{ preparingLayout || loading ? 'Carregando a imagem atual desta página…' : 'A imagem atual não pôde ser carregada. Selecione a página novamente para conferir.' }}</p>
                 <template v-else-if="selected">
                   <p v-if="selected.mode !== 'redesign'" class="enhancement-alert enhancement-alert--info">Esta versão recebeu apenas acabamento leve: a composição, os produtos e os preços ficaram nas mesmas posições. Para mudar o layout, selecione a página e crie uma nova melhoria.</p>
                   <p v-if="stale(selected)" class="enhancement-alert enhancement-alert--warning">A arte original mudou depois desta melhoria. Gere uma nova versão para comparar com o conteúdo atual.</p>

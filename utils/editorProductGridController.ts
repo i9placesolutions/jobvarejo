@@ -267,7 +267,7 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             fontWeight: (effectiveStyles.prodNameWeight as any) ?? '900',
             fill: resolveProductNameColor(bg.fill, {}, effectiveStyles),
             textAlign: effectiveStyles.prodNameAlign || 'center',
-            lineHeight: typeof effectiveStyles.prodNameLineHeight === 'number' ? effectiveStyles.prodNameLineHeight : 1.16,
+            lineHeight: typeof effectiveStyles.prodNameLineHeight === 'number' ? effectiveStyles.prodNameLineHeight : 0.95,
             originX: 'center',
             originY: 'top',
             left: 0,

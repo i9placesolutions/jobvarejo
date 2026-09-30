@@ -96,6 +96,17 @@ const hydrateComposition = (source: ArtComposition): ArtComposition => {
   return hydrateCartazistaBusiness(cloneCartazista(source), brandProfile.value, logoSrc.value, doc.value.settings.showLogo)
 }
 
+const hydrateDocumentBrand = (source: CartazistaDocument): CartazistaDocument => {
+  const next = cloneCartazista(source)
+  next.composition = hydrateCartazistaBusiness(
+    next.composition,
+    brandProfile.value,
+    logoSrc.value,
+    next.settings.showLogo
+  )
+  return next
+}
+
 const replaceDocument = (next: CartazistaDocument, record = true) => {
   if (record) {
     historyPast.value = [...historyPast.value, JSON.stringify(doc.value)].slice(-60)
@@ -266,7 +277,7 @@ const removeLayer = () => {
 const orderLayer = (direction:-1|1) => {if(selectedId.value)updateComposition(moveCartazistaLayer(cloneCartazista(doc.value.composition),selectedId.value,direction))}
 const restoreDraft = () => {
   if(!recovery.value)return
-  const saved=recovery.value;replaceDocument(saved.document);revision.value=saved.revision;designId.value=saved.designId||designId.value;saveDraft();recovery.value=null
+  const saved=recovery.value;replaceDocument(hydrateDocumentBrand(saved.document));revision.value=saved.revision;designId.value=saved.designId||designId.value;saveDraft();recovery.value=null
 }
 const downloadEditable = () => {
   const url=URL.createObjectURL(new Blob([JSON.stringify(doc.value)],{type:'application/json'}));download(url,'cartaz-jobvarejo.json');setTimeout(()=>URL.revokeObjectURL(url),1000)
@@ -277,7 +288,7 @@ const importEditable = async (event:Event) => {
     if(file.size>8_000_000)throw new Error('Arquivo maior que 8 MB.')
     const parsed=cartazistaDocumentSchema.safeParse(JSON.parse(await file.text()))
     if(!parsed.success)throw new Error('Arquivo de cartaz inválido.')
-    replaceDocument(parsed.data as CartazistaDocument);creationId.value=crypto.randomUUID();designId.value='';revision.value=0;selectedId.value=null;saveDraft()
+    replaceDocument(hydrateDocumentBrand(parsed.data as CartazistaDocument));creationId.value=crypto.randomUUID();designId.value='';revision.value=0;selectedId.value=null;saveDraft()
   }catch(cause:any){error.value=cause?.message||'Não foi possível abrir o arquivo.'}
 }
 
@@ -286,7 +297,7 @@ const undo = () => {
   if (!previous) return
   historyPast.value = historyPast.value.slice(0, -1)
   historyFuture.value = [...historyFuture.value, JSON.stringify(doc.value)]
-  doc.value = JSON.parse(previous) as CartazistaDocument
+  doc.value = hydrateDocumentBrand(JSON.parse(previous) as CartazistaDocument)
   saveState.value = 'Alterações pendentes'
   saveDraft()
 }
@@ -296,7 +307,7 @@ const redo = () => {
   if (!future) return
   historyFuture.value = historyFuture.value.slice(0, -1)
   historyPast.value = [...historyPast.value, JSON.stringify(doc.value)]
-  doc.value = JSON.parse(future) as CartazistaDocument
+  doc.value = hydrateDocumentBrand(JSON.parse(future) as CartazistaDocument)
   saveState.value = 'Alterações pendentes'
   saveDraft()
 }
@@ -363,18 +374,21 @@ const save = async (asCopy = false) => {
 }
 
 const hydrateBrand = async () => {
+  let profile = normalizeBusinessProfile({})
   try {
     const response = await $fetch<{ business_profile: unknown }>('/api/profile')
-    const profile = normalizeBusinessProfile(response.business_profile)
-    brandProfile.value = profile
-    logoSrc.value = profile.logo ? '/api/art-studio/brand-logo' : ''
-    brandName.value = profile.companyName || 'SUA LOJA'
-    const next = cloneCartazista(doc.value)
-    next.composition = hydrateComposition(next.composition)
-    doc.value = next
+    profile = normalizeBusinessProfile(response.business_profile)
+  } catch { /* Sem perfil, a composição é hidratada com slots vazios. */ }
+  brandProfile.value = profile
+  logoSrc.value = profile.logo ? '/api/art-studio/brand-logo' : ''
+  brandName.value = profile.companyName || 'SUA LOJA'
+  doc.value = hydrateDocumentBrand(doc.value)
+  try {
     await nextTick()
     await canvas.value?.refreshImages()
-  } catch { /* o editor continua funcional sem dados de marca */ }
+  } catch {
+    /* A composição já está correta mesmo se a prévia ainda não estiver pronta. */
+  }
 }
 
 const load = async () => {
@@ -417,7 +431,7 @@ const load = async () => {
     historyFuture.value = []
   } catch (cause: any) {
     error.value = cause?.data?.statusMessage || cause?.statusMessage || 'Não foi possível abrir este cartaz.'
-  } finally { loading.value = false }
+  } finally { /* a tela só aparece depois de hidratar a marca da conta */ }
 }
 
 const closePrint = () => printDialog.value?.close()
@@ -425,7 +439,14 @@ const warnBeforeUnload=(event:BeforeUnloadEvent)=>{if(dirty.value){event.prevent
 onBeforeRouteLeave(()=>!dirty.value||window.confirm('Há alterações locais. Deseja sair? O rascunho ficará disponível ao voltar.'))
 onMounted(()=>window.addEventListener('beforeunload',warnBeforeUnload))
 onBeforeUnmount(()=>window.removeEventListener('beforeunload',warnBeforeUnload))
-onMounted(async () => { await load(); await hydrateBrand() })
+onMounted(async () => {
+  try {
+    await load()
+    await hydrateBrand()
+  } finally {
+    loading.value = false
+  }
+})
 onBeforeUnmount(() => { window.onafterprint = null })
 if (import.meta.client) window.onafterprint = closePrint
 </script>

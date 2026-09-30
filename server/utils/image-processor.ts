@@ -1,4 +1,4 @@
-import { removeBackgroundBiRefNet } from './birefnet'
+import { segmentProductWithBiRefNet } from './birefnet-product-preservation'
 // Lazy load both sharp and background-removal to handle installation issues
 let sharpModule: any = null;
 
@@ -489,7 +489,7 @@ export const processImageWithOptions = async (imageBuffer: Buffer, options: Proc
         // BiRefNet é o único mecanismo de remoção. A restauração apenas
         // recupera pixels internos do produto, sem remover novos pixels.
         const refinedBuffer = await restoreEnclosedProductPixels(
-            resizedBuffer, await removeBackgroundBiRefNet(resizedBuffer), sharp
+            resizedBuffer, await segmentProductWithBiRefNet(resizedBuffer, sharp), sharp
         );
 
         // 2.6. Auto-trim: recortar bordas transparentes para produto preencher a imagem

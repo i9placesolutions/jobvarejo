@@ -2,6 +2,17 @@ import { expect, it } from 'vitest'
 import { positionProductLimitBelowName } from '../../utils/productLimitLayout'
 import { fitResponsiveProductTypography, harmonizeProductCardTypography } from '../../utils/productCardResponsiveTypography'
 const node = (values: any) => ({ scaleX: 1, scaleY: 1, originX: 'center', originY: 'center', visible: true, set(values: any) { Object.assign(this, values) }, ...values })
+const relativeLuminance = (hex: string) => {
+  const normalizedHex = hex.replace('#', '')
+  const channels = [0, 2, 4].map(offset => Number.parseInt(normalizedHex.slice(offset, offset + 2), 16) / 255)
+  const [red = 0, green = 0, blue = 0] = channels.map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722
+}
+const contrastRatio = (first: string, second: string) => {
+  const values = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a)
+  const [lighter = 0, darker = 0] = values
+  return (lighter + 0.05) / (darker + 0.05)
+}
 it('posiciona o limite abaixo de um nome com duas linhas e acompanha novas alturas', () => {
   const title = node({ name: 'smart_title', text: 'LEITE PO NINHO 380G INTEGRAL', top: -120, left: 0, width: 280, height: 48 })
   const limit = node({ name: 'smart_limit', text: 'LIMITE 5 UN POR CLIENTE', top: -110, height: 16 })
@@ -40,7 +51,7 @@ it('mantém uma faixa opaca contrastante em limites antigos com preenchimento po
   const card = { getObjects: () => [title, limit] }
   positionProductLimitBelowName(card, 320, 360)
   expect(limit.backgroundColor).toBe('')
-  expect(limit.fill).toBe('#59430f')
+  expect(limit.fill).toBe('#ffffff')
   expect(limit.styles[0][0]).toEqual({})
   expect(limit.text).toBe('LIMITE 10 UN POR CLIENTE')
 })
@@ -52,6 +63,12 @@ it('reutiliza o fundo compacto e o oculta quando o limite é removido', () => {
   const card = { getObjects: () => objects, insertAt: (index: number, value: any) => objects.splice(index, 0, value) }
   positionProductLimitBelowName(card, 320, 360)
   const badge = objects.find(o => o.name === 'product_limit_badge')
+  expect(limit.fill).toBe('#ffffff')
+  expect(badge.fill).toBe('#b91c1c')
+  expect(badge.stroke).toBe('#b91c1c')
+  expect(contrastRatio(limit.fill, badge.fill)).toBeGreaterThanOrEqual(4.5)
+  expect(badge.left).toBe(limit.left)
+  expect(badge.top).toBeLessThan(limit.top)
   expect(badge.width).toBeLessThan(200)
   expect(badge.rx).toBeGreaterThan(0)
   positionProductLimitBelowName(card, 320, 360)

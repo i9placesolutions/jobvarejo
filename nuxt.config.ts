@@ -288,9 +288,18 @@ export default defineNuxtConfig({
       ssr: false,
     },
     '/videos': { ssr: false },
+    '/admin/users': { ssr: false },
+    // As galerias de modelos dependem da conta selecionada no cookie; renderizar
+    // no servidor pode misturar a sessão inicial com a conta ativa no browser.
+    '/flyer-templates': { ssr: false },
+    '/quick-editor': { ssr: false },
     '/videos/**': { ssr: false },
     '/art-studio': { ssr: false },
     '/art-studio/**': { ssr: false },
+    // A conta pode ser trocada no navegador; estas composições sempre usam a
+    // marca da sessão ativa depois do carregamento do cliente.
+    '/cartazista': { ssr: false },
+    '/cartazista/**': { ssr: false },
     '/label-templates': {
       ssr: false,
     },

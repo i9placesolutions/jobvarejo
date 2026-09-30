@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {existsSync,readFileSync} from 'node:fs'
+import {readFileSync} from 'node:fs'
 import {createHash} from 'node:crypto'
 import {REFERENCE_SOUNDS} from '../../shared/video-studio/reference-sounds'
 import {PRODUCT_ENTRANCES,CAMERA_MOVEMENTS,SCENE_TRANSITIONS,SOUND_EFFECTS,MOTION_PRESETS,DEFAULT_MOTION,PRODUCT_FINISHES,identifyMotionPreset} from '../../shared/video-studio/effect-catalog'
@@ -7,6 +7,8 @@ import {elementMotion,cameraMotion,transitionMotion} from '../../shared/video-st
 import {productEffects} from '../../shared/video-studio/native-effects'
 import {newVideoDocument,videoAudioIdentity} from '../../shared/video-studio/model'
 import {videoDocumentSchema} from '../../server/utils/video-studio/schema'
+const catalog=JSON.parse(readFileSync('shared/video-studio/catalog-assets.json','utf8'))
+const catalogAsset=(path:string)=>catalog.assets[`audio/${path}`]
 
 describe('biblioteca reutilizável de efeitos',()=>{
  it('reconhece a combinação depois de o JSONB reordenar os campos',()=>{
@@ -45,13 +47,13 @@ describe('biblioteca reutilizável de efeitos',()=>{
    expect(asset.source).toBe('https://www.youtube.com/watch?v=2aoLsF3-2gI')
    expect(asset.license).toBe('not-specified-by-source')
    expect(asset.sourceEnd-asset.sourceStart).toBeCloseTo(sound.seconds,3)
-   expect(createHash('sha256').update(readFileSync('public/video-studio/audio/'+asset.path)).digest('hex')).toBe(asset.sha256)
+   const archived=catalogAsset(asset.path);expect(archived.sha256).toBe(asset.sha256);expect(archived.key).toBe(`video-studio/catalog/${asset.sha256}/audio/${asset.path}`)
   }
  })
  it('todos os sons selecionáveis existem como WAV estéreo, com proveniência e conteúdo distinto',()=>{
   const manifest=JSON.parse(readFileSync('public/video-studio/audio/catalog-provenance.json','utf8'))
   const hashes=new Set()
-  for(const item of SOUND_EFFECTS){const path=`public/video-studio/audio/sfx/${item.id}.wav`;expect(existsSync(path)).toBe(true);const wav=readFileSync(path);expect(wav.toString('ascii',0,4)).toBe('RIFF');expect(wav.readUInt16LE(22)).toBe(2);expect(wav.readUInt32LE(24)).toBe(44100);const asset=manifest.assets.find((a:any)=>a.id===item.id);expect(['original-procedural-synthesis','cc0-adaptation','user-requested-video-extract']).toContain(asset.origin);if(asset.origin==='cc0-adaptation'){expect(asset.license).toBe('CC0-1.0');expect(asset.source).toMatch(/^https:\/\/freesound.org\//)};hashes.add(asset.sha256)}
+  for(const item of SOUND_EFFECTS){const path=`sfx/${item.id}.wav`;const asset=manifest.assets.find((a:any)=>a.id===item.id);expect(['original-procedural-synthesis','cc0-adaptation','user-requested-video-extract']).toContain(asset.origin);if(asset.origin==='cc0-adaptation'){expect(asset.license).toBe('CC0-1.0');expect(asset.source).toMatch(/^https:\/\/freesound.org\//)};const archived=catalogAsset(path);expect(archived.bytes).toBeGreaterThan(44);expect(archived.contentType).toBe('audio/wav');expect(archived.sha256).toBe(asset.sha256);expect(archived.key).toBe(`video-studio/catalog/${asset.sha256}/audio/${path}`);hashes.add(asset.sha256)}
   expect(hashes.size).toBe(SOUND_EFFECTS.length)
  })
 })

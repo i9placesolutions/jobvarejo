@@ -175,7 +175,7 @@ export const createProfileWithPassword = async (params: {
     const synchronized = (await query<ProfileRow>(
       `update public.profiles
           set email = $2, login_whatsapp = $3,
-              login_whatsapp_verified_at = case when $3 is null then null else timezone('utc', now()) end,
+              login_whatsapp_verified_at = case when $3::text is null then null else timezone('utc', now()) end,
               name = $4, role = $5::user_role, password_hash = $6,
               business_profile = $7::jsonb,
               selected_modules = $8::jsonb,
@@ -199,7 +199,7 @@ export const createProfileWithPassword = async (params: {
       `insert into public.profiles
          (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash, business_profile, selected_modules, onboarding_completed, trial_starts_at, trial_ends_at, subscription_status)
        values
-         ($1::uuid, $2, $3, case when $3 is null then null else timezone('utc', now()) end, $4, $5::user_role, $6, $7::jsonb, $8::jsonb, $9::boolean, now(), now() + interval '15 days', 'trial')
+         ($1::uuid, $2, $3, case when $3::text is null then null else timezone('utc', now()) end, $4, $5::user_role, $6, $7::jsonb, $8::jsonb, $9::boolean, now(), now() + interval '15 days', 'trial')
        returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at,
                  business_profile, selected_modules, trial_starts_at, trial_ends_at, subscription_status, onboarding_completed`,
       [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash, businessProfileJson, selectedModulesJson, onboardingCompleted]
@@ -220,7 +220,7 @@ export const createProfileWithPassword = async (params: {
       `insert into public.profiles
          (id, email, login_whatsapp, login_whatsapp_verified_at, name, role, password_hash, business_profile, selected_modules, onboarding_completed, trial_starts_at, trial_ends_at, subscription_status)
        values
-         ($1::uuid, $2, $3, case when $3 is null then null else timezone('utc', now()) end, $4, $5, $6, $7::jsonb, $8::jsonb, $9::boolean, now(), now() + interval '15 days', 'trial')
+         ($1::uuid, $2, $3, case when $3::text is null then null else timezone('utc', now()) end, $4, $5, $6, $7::jsonb, $8::jsonb, $9::boolean, now(), now() + interval '15 days', 'trial')
        returning id, email, name, avatar_url, role::text as role, password_hash, reset_token_hash, reset_token_expires_at,
                  business_profile, selected_modules, trial_starts_at, trial_ends_at, subscription_status, onboarding_completed`,
       [id, normalizedEmail, params.whatsapp || null, trimmedName, params.role, params.passwordHash, businessProfileJson, selectedModulesJson, onboardingCompleted]

@@ -15,7 +15,7 @@ describe('isolamento e proteção do modelo no servidor',()=>{
   mocks.body.mockResolvedValue({theme:'impact',userId:'account-b',brand:{name:'Loja B'},id:'master-id'})
   const result:any=await useTemplate({} as any)
   expect(mocks.brand).toHaveBeenCalledWith('account-a')
-  expect(result.project.user_id).toBe('account-a');expect(result.project.document.brand.name).toBe('Loja A')
+  expect(result.project.user_id).toBe('account-a');expect(result.project.document.brand.name).toBe('Loja A');expect(result.project.document.brand.logo).toBe('logo-a')
   expect(result.project.document.offers).toEqual([]);expect(result.project.document.scripts).toEqual([])
   expect(mocks.query.mock.calls[0]![0]).toMatch(/^INSERT/)
   expect(mocks.owned).not.toHaveBeenCalled()

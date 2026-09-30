@@ -176,7 +176,7 @@ const setStaticCanvasSize = (canvas: any, width: number, height: number): void =
   else canvas.height = height
 }
 
-export const generateThumbnailFromCanvasJson = async (
+const renderThumbnailFromCanvasJson = async (
   opts: GenerateThumbnailFromCanvasJsonOptions
 ): Promise<string> => {
   if (!opts.staticCanvasCtor || typeof document === 'undefined') return ''
@@ -275,4 +275,15 @@ export const generateThumbnailFromCanvasJson = async (
       // ignore
     }
   }
+}
+
+// A fila de histórico coalesce edições por página. Materialização/troca de
+// formato também usa este renderer; compartilhe o limite entre todos os callers.
+let pendingThumbnailRender: Promise<unknown> = Promise.resolve()
+export const generateThumbnailFromCanvasJson = (
+  opts: GenerateThumbnailFromCanvasJsonOptions
+): Promise<string> => {
+  const task = pendingThumbnailRender.then(() => renderThumbnailFromCanvasJson(opts))
+  pendingThumbnailRender = task.catch(() => undefined)
+  return task
 }

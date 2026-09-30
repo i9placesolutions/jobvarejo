@@ -1,4 +1,5 @@
 import generated from './generated-flyer-recipes.json'
+import videoSeals from './video-seals.json'
 import type {VideoMotionSettings, SceneTransition} from './effect-catalog'
 export type FlyerRecipeId = string
 export interface FlyerRecipe {
@@ -21,5 +22,9 @@ export const PILOT_RECIPES:Record<FlyerRecipeId,FlyerRecipe>={
  vertical:{seal:[80,65,920,580],logo:[65,1618,950,255],product:[135,755,810,610],name:[100,655,880,75],price:[165,1320,750,225],validity:[185,1570,710,35],condition:[150,1270,780,40]},
  horizontal:{seal:[50,45,635,620],logo:[65,705,600,325],product:[730,185,1100,750],name:[750,60,1070,100],price:[950,650,700,315],validity:[950,988,700,30],condition:[1290,165,530,25]}}
 }
-export const FLYER_RECIPES:Record<string,FlyerRecipe>=Object.fromEntries((generated as unknown as FlyerRecipe[]).map(r=>[r.id,r]))
+const preparedVideoSeals=videoSeals.seals as Record<string,{filename:string;sealAspect:number}>
+export const FLYER_RECIPES:Record<string,FlyerRecipe>=Object.fromEntries((generated as unknown as FlyerRecipe[]).map(r=>{
+ const prepared=preparedVideoSeals[r.seal]
+ return [r.id,prepared?{...r,seal:prepared.filename,sealAspect:prepared.sealAspect}:r]
+}))
 export const flyerRecipe=(id:string):FlyerRecipe|undefined=>Object.prototype.hasOwnProperty.call(FLYER_RECIPES,id)?FLYER_RECIPES[id as FlyerRecipeId]:undefined

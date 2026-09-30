@@ -17,6 +17,7 @@ export const CANVAS_CUSTOM_PROPS: ReadonlyArray<string> = [
     'id',
     '_customId',
     'productAreaBackgroundMode',
+    '_quickDefaultColors',
     'name',
     'layerName',
     'excludeFromExport',

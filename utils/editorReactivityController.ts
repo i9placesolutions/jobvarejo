@@ -1387,6 +1387,9 @@ const setupReactivity = () => {
               updateSelection();
               return;
           }
+          // O clique no mesmo texto também reabre o painel fechado, mesmo
+          // quando o Fabric não emite um novo selection:updated.
+          ctx.onQuickModeElementPointerDown?.();
           updateProductImageSelectionIntent(e);
           updatePriceGroupSelectionIntent(e);
 

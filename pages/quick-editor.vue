@@ -37,6 +37,9 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuth()
 const exitPath = computed(() => auth.user.value?.role === 'user' ? '/' : '/flyer-templates')
+const canManageTemplates = computed(() =>
+  auth.user.value?.role !== 'user' && auth.can('encartes')
+)
 const { getApiAuthHeaders } = useApiAuth()
 
 const isProjectsLoading = ref(false)
@@ -57,6 +60,8 @@ const isOpening = ref(true)
 const isPicking = ref(false)
 const errorMessage = ref('')
 const templates = ref<FlyerTemplateSummary[]>([])
+const accountPreviewProfile = ref<any>(null)
+const accountPreviewProfileReady = ref(false)
 const usingTemplateId = ref('')
 const previewTemplate = ref<FlyerTemplateSummary | null>(null)
 const previewDialog = ref<HTMLDialogElement | null>(null)
@@ -65,7 +70,7 @@ const previewImageLoading = ref(false)
 const showTemplatePreview = async (template: FlyerTemplateSummary) => {
   previewTemplate.value = template
   previewImageFailed.value = false
-  previewImageLoading.value = !!getProjectPreviewSource(template)
+  previewImageLoading.value = true
   await nextTick()
   previewDialog.value?.showModal()
 }
@@ -252,12 +257,18 @@ const loadPicker = async () => {
   isPicking.value = true
   isOpening.value = true
   errorMessage.value = ''
+  accountPreviewProfile.value = null
+  accountPreviewProfileReady.value = false
   try {
     const headers = await getApiAuthHeaders()
     // A aba inicial é a de modelos. Carregar todos os trabalhos em paralelo
     // bloqueava a primeira prévia quando a conta tinha muitos encartes.
-    const models = await listFlyerTemplates(headers, { library: true })
+    const [models, profile] = await Promise.all([
+      listFlyerTemplates(headers, { library: true }),
+      $fetch<any>('/api/profile', { headers }).catch(() => null)
+    ])
     templates.value = models
+    accountPreviewProfile.value = profile
   } catch (error: any) {
     errorMessage.value = String(
       error?.data?.statusMessage ||
@@ -265,6 +276,7 @@ const loadPicker = async () => {
       'Não foi possível carregar os encartes. Tente novamente.'
     )
   } finally {
+    accountPreviewProfileReady.value = true
     isOpening.value = false
   }
 }
@@ -342,7 +354,7 @@ onMounted(() => {
             JobVarejo · Encartes
           </NuxtLink>
         </div>
-        <nav class="flex items-center gap-2" aria-label="Atalhos da edição rápida">
+        <nav v-if="canManageTemplates" class="flex items-center gap-2" aria-label="Atalhos da edição rápida">
           <NuxtLink to="/flyer-templates" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-blue-200 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100">
             <LayoutTemplate class="h-4 w-4" />
             <span class="hidden sm:inline">Gerenciar modelos</span>
@@ -545,9 +557,9 @@ onMounted(() => {
         <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
           <LayoutTemplate class="h-7 w-7" />
         </div>
-        <h2 class="mt-4 text-lg font-bold text-slate-800">Crie um modelo primeiro</h2>
-        <p class="mt-2 max-w-md text-sm leading-6 text-slate-500">A edição rápida usa um encarte já montado. Crie o layout no modo avançado e deixe a zona de produtos pronta para receber a lista.</p>
-        <NuxtLink to="/flyer-templates" class="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500">
+        <h2 class="mt-4 text-lg font-bold text-slate-800">{{ canManageTemplates ? 'Crie um modelo primeiro' : 'Nenhum modelo disponível' }}</h2>
+        <p class="mt-2 max-w-md text-sm leading-6 text-slate-500">{{ canManageTemplates ? 'A edição rápida usa um encarte já montado. Crie o layout no modo avançado e deixe a zona de produtos pronta para receber a lista.' : 'Ainda não há um modelo preparado para a edição rápida. Peça à administração da sua conta para disponibilizar um modelo.' }}</p>
+        <NuxtLink v-if="canManageTemplates" to="/flyer-templates" class="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500">
           <Plus class="h-4 w-4" />
           Criar modelo de encarte
         </NuxtLink>
@@ -667,16 +679,17 @@ onMounted(() => {
             class="group overflow-hidden rounded-[1.25rem] border border-slate-200/90 bg-white text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/5"
           >
             <button type="button" :aria-label="`Ver prévia de ${template.name}`" class="relative flex aspect-[3/1] w-full items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc] focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:-outline-offset-2" @click="showTemplatePreview(template)">
-              <img
-                v-if="getProjectPreviewSource(template)"
-                :src="getProjectPreviewSource(template) || undefined"
-                :alt="template.name"
+              <LayoutTemplate class="h-10 w-10 text-blue-300" />
+              <AccountFlyerTemplatePreview
+                v-if="accountPreviewProfileReady"
+                :key="`${template.id}:${accountPreviewProfile?.id || 'account'}`"
+                :template-id="template.id"
+                :revision="template.updated_at"
+                :profile="accountPreviewProfile"
+                :profile-ready="accountPreviewProfileReady"
+                :eager="index < 4"
                 class="absolute inset-0 h-full w-full object-cover object-top"
-                :loading="index < 6 ? 'eager' : 'lazy'"
-                decoding="async"
-                :fetchpriority="index < 3 ? 'high' : (index < 6 ? 'auto' : 'low')"
               />
-              <LayoutTemplate v-else class="h-10 w-10 text-blue-300" />
               <span class="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-blue-600 shadow-sm">Modelo</span>
               <span v-if="getTemplateCategoryLabel(template)" class="absolute right-3 top-3 inline-flex max-w-[65%] items-center gap-1 truncate rounded-full bg-slate-900/80 px-2.5 py-1 text-[9px] font-bold text-white shadow-sm">
                 <Tag class="h-3 w-3 shrink-0" />
@@ -727,7 +740,19 @@ onMounted(() => {
         </header>
         <div class="relative flex min-h-64 items-center justify-center bg-slate-100 p-4">
           <Loader2 v-if="previewImageLoading" class="absolute h-8 w-8 animate-spin text-blue-600" aria-label="Carregando prévia" />
-          <img v-if="getProjectPreviewSource(previewTemplate) && !previewImageFailed" :key="previewTemplate.id" :src="getProjectPreviewSource(previewTemplate) || undefined" :alt="`Prévia de ${previewTemplate.name}`" class="relative max-h-[65dvh] max-w-full object-contain shadow-sm" @load="previewImageLoading = false" @error="previewImageFailed = true; previewImageLoading = false" />
+          <AccountFlyerTemplatePreview
+            v-if="accountPreviewProfileReady && !previewImageFailed"
+            :key="`${previewTemplate.id}:${accountPreviewProfile?.id || 'account'}:dialog`"
+            :template-id="previewTemplate.id"
+            :revision="previewTemplate.updated_at"
+            :profile="accountPreviewProfile"
+            :profile-ready="accountPreviewProfileReady"
+            eager
+            fit="contain"
+            class="relative max-h-[65dvh] max-w-full object-contain shadow-sm"
+            @loading-change="previewImageLoading = $event"
+            @failed="previewImageFailed = true; previewImageLoading = false"
+          />
           <p v-else class="text-center text-sm text-slate-500">Prévia indisponível para este modelo.</p>
         </div>
         <footer class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">

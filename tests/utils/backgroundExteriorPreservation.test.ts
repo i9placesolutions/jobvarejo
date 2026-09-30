@@ -25,7 +25,8 @@ it('preserva embalagem escura, amarela e impressão branca após o recorte do Bi
   }
   expect(pixels[3]).toBe(0)
   // O recorte simulado representa a resposta do modelo obrigatório.
-  vi.mocked(removeBackgroundBiRefNet).mockResolvedValueOnce(exterior!)
+  vi.mocked(removeBackgroundBiRefNet).mockImplementationOnce(async input =>
+    (await removeUniformExteriorBackground(input, sharp))!)
   const output = await processImageWithOptions(source, { outputFormat: 'png', strict: true })
   expect(removeBackgroundBiRefNet).toHaveBeenCalledTimes(1)
   const { data: result, info } = await sharp(output).ensureAlpha().raw().toBuffer({ resolveWithObject: true })

@@ -12,7 +12,6 @@ import {
   X,
   Zap
 } from 'lucide-vue-next'
-import { getProjectPreviewSource } from '~/utils/dashboardProjectPreview'
 import {
   listFlyerTemplates,
   type FlyerTemplateSummary
@@ -35,6 +34,8 @@ const { getApiAuthHeaders } = useApiAuth()
 const isLoading = ref(false)
 const errorMessage = ref('')
 const templates = ref<FlyerTemplateSummary[]>([])
+const accountPreviewProfile = ref<any>(null)
+const accountPreviewProfileReady = ref(false)
 const selectedTemplateCategory = ref<string | null>(null)
 const selectedTemplateSubcategory = ref<string | null>(null)
 const templateSearch = ref('')
@@ -145,7 +146,7 @@ const clearTemplateFilters = () => {
 const showTemplatePreview = async (template: FlyerTemplateSummary) => {
   previewTemplate.value = template
   previewImageFailed.value = false
-  previewImageLoading.value = !!getProjectPreviewSource(template)
+  previewImageLoading.value = true
   await nextTick()
   previewDialog.value?.showModal()
 }
@@ -169,9 +170,16 @@ const loadTemplates = async () => {
   if (isLoading.value) return
   isLoading.value = true
   errorMessage.value = ''
+  accountPreviewProfile.value = null
+  accountPreviewProfileReady.value = false
   try {
     const headers = await getApiAuthHeaders()
-    templates.value = await listFlyerTemplates(headers, { library: true })
+    const [models, profile] = await Promise.all([
+      listFlyerTemplates(headers, { library: true }),
+      $fetch<any>('/api/profile', { headers }).catch(() => null)
+    ])
+    templates.value = models
+    accountPreviewProfile.value = profile
   } catch (err: any) {
     errorMessage.value = String(
       err?.data?.statusMessage ||
@@ -179,6 +187,7 @@ const loadTemplates = async () => {
       'Não foi possível carregar os modelos.'
     )
   } finally {
+    accountPreviewProfileReady.value = true
     isLoading.value = false
   }
 }
@@ -342,15 +351,17 @@ onMounted(() => {
             :class="{ 'ring-2 ring-blue-500 border-blue-500': template.id === props.currentTemplateId }"
           >
             <div class="relative flex aspect-[3/1] w-full items-center justify-center overflow-hidden bg-slate-950">
-              <img
-                v-if="getProjectPreviewSource(template)"
-                :src="getProjectPreviewSource(template) || undefined"
-                :alt="template.name"
+              <LayoutTemplate class="h-10 w-10 text-slate-600" />
+              <AccountFlyerTemplatePreview
+                v-if="accountPreviewProfileReady"
+                :key="`${template.id}:${accountPreviewProfile?.id || 'account'}`"
+                :template-id="template.id"
+                :revision="template.updated_at"
+                :profile="accountPreviewProfile"
+                :profile-ready="accountPreviewProfileReady"
+                :eager="index < 4"
                 class="absolute inset-0 h-full w-full object-cover object-top"
-                :loading="index < 6 ? 'eager' : 'lazy'"
-                decoding="async"
               />
-              <LayoutTemplate v-else class="h-10 w-10 text-slate-600" />
               <span
                 v-if="template.id === props.currentTemplateId"
                 class="absolute left-2.5 top-2.5 rounded-full bg-emerald-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow"
@@ -452,14 +463,18 @@ onMounted(() => {
         </header>
         <div class="relative flex min-h-64 items-center justify-center bg-slate-950 p-4">
           <Loader2 v-if="previewImageLoading" class="absolute h-8 w-8 animate-spin text-blue-500" aria-label="Carregando prévia" />
-          <img
-            v-if="getProjectPreviewSource(previewTemplate) && !previewImageFailed"
-            :key="previewTemplate.id"
-            :src="getProjectPreviewSource(previewTemplate) || undefined"
-            :alt="`Prévia de ${previewTemplate.name}`"
+          <AccountFlyerTemplatePreview
+            v-if="accountPreviewProfileReady && !previewImageFailed"
+            :key="`${previewTemplate.id}:${accountPreviewProfile?.id || 'account'}:dialog`"
+            :template-id="previewTemplate.id"
+            :revision="previewTemplate.updated_at"
+            :profile="accountPreviewProfile"
+            :profile-ready="accountPreviewProfileReady"
+            eager
+            fit="contain"
             class="relative max-h-[65dvh] max-w-full object-contain shadow-md"
-            @load="previewImageLoading = false"
-            @error="previewImageFailed = true; previewImageLoading = false"
+            @loading-change="previewImageLoading = $event"
+            @failed="previewImageFailed = true; previewImageLoading = false"
           />
           <p v-else class="text-center text-xs text-slate-500">Prévia indisponível para este tema.</p>
         </div>

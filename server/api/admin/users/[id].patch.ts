@@ -13,13 +13,18 @@ export default defineEventHandler(async (event) => {
   const id = String(getRouterParam(event, 'id') || '')
   if (!UUID_PATTERN.test(id)) throw createError({ statusCode: 400, statusMessage: 'Usuário inválido.' })
   const current = await getProfileById(id)
-  if (!current || current.role === 'super_admin') throw createError({ statusCode: 404, statusMessage: 'Usuário não encontrado.' })
+  if (!current) throw createError({ statusCode: 404, statusMessage: 'Usuário não encontrado.' })
+  if (current.role === 'super_admin' && actorRole !== 'super_admin') throw createError({ statusCode: 403, statusMessage: 'Somente o super administrador edita super administradores.' })
   if (current.role === 'admin' && actorRole !== 'super_admin') throw createError({ statusCode: 403, statusMessage: 'Somente o super administrador gerencia administradores.' })
   const body = await readBody<Record<string, unknown>>(event)
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw createError({ statusCode: 400, statusMessage: 'Dados inválidos.' })
   if (body.is_active !== undefined && typeof body.is_active !== 'boolean') throw createError({ statusCode: 400, statusMessage: 'Status inválido.' })
   const role = String(body.role ?? current.role) as UserRole
-  if (!MANAGED_ROLES.includes(role) || (role === 'admin' && actorRole !== 'super_admin')) {
+  if (current.role === 'super_admin' && (role !== 'super_admin' || body.is_active === false)) {
+    throw createError({ statusCode: 409, statusMessage: 'O super administrador deve manter seu nível e permanecer ativo.' })
+  }
+  const preservingSuperAdmin = current.role === 'super_admin' && role === 'super_admin' && actorRole === 'super_admin'
+  if ((!MANAGED_ROLES.includes(role) && !preservingSuperAdmin) || (role === 'admin' && actorRole !== 'super_admin')) {
     throw createError({ statusCode: 403, statusMessage: 'Nível de acesso não permitido.' })
   }
   const internalOnly = current.business_profile?.internalOnly === true
@@ -41,10 +46,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Nova senha inválida (8 a 256 caracteres).' })
   }
   const active = body.is_active === undefined ? current.is_active !== false : body.is_active === true
-  const companyName = role === 'user'
+  const companyName = role === 'user' || role === 'super_admin'
     ? String(body.companyName ?? current.business_profile?.companyName ?? '').trim().replace(/\s+/g, ' ')
     : ''
-  if (role === 'user' && (companyName.length < 2 || companyName.length > 160)) {
+  const updateCompanyName = role === 'user' || (role === 'super_admin' && body.companyName !== undefined)
+  if (updateCompanyName && (role === 'user' || companyName.length > 0) && (companyName.length < 2 || companyName.length > 160)) {
     throw createError({ statusCode: 400, statusMessage: 'Nome da empresa inválido (2 a 160 caracteres).' })
   }
   if (internalOnly && body.hasPlatformAccess === true) {
@@ -89,24 +95,30 @@ export default defineEventHandler(async (event) => {
     ? normalizeEditorPermissions(body.permissions === undefined ? current.editor_permissions : body.permissions)
     : {}
   const passwordHash = password === null ? null : await hashPassword(password)
+  // O super admin conserva nível/status/permissões. Seu cadastro também deve
+  // funcionar nos bancos legados sem as colunas da migração de acessos.
+  const params: unknown[] = [id, internalOnly ? companyName : name, passwordHash, updateCompanyName ? companyName : null]
+  const accessUpdate = preservingSuperAdmin ? '' : ', role = $5::public.user_role, is_active = $6, editor_permissions = $7::jsonb'
+  if (!preservingSuperAdmin) params.push(role, active, JSON.stringify(permissions))
   const updated = await pgOneOrNull<any>(`
     UPDATE public.profiles
-       SET name = $2, role = $3::user_role, is_active = $4,
-           editor_permissions = $5::jsonb,
-           business_profile = CASE WHEN $7 <> ''
-             THEN COALESCE(business_profile, '{}'::jsonb) || jsonb_build_object('companyName', $7::text)
+       SET name = $2,
+           business_profile = CASE WHEN $4::text IS NOT NULL
+             THEN COALESCE(business_profile, '{}'::jsonb) || jsonb_build_object('companyName', $4::text)
              ELSE business_profile END,
-           password_hash = COALESCE($6, password_hash),
-           reset_token_hash = CASE WHEN $6 IS NULL THEN reset_token_hash ELSE NULL END,
-           reset_token_expires_at = CASE WHEN $6 IS NULL THEN reset_token_expires_at ELSE NULL END,
+           password_hash = COALESCE($3::text, password_hash),
+           reset_token_hash = CASE WHEN $3::text IS NULL THEN reset_token_hash ELSE NULL END,
+           reset_token_expires_at = CASE WHEN $3::text IS NULL THEN reset_token_expires_at ELSE NULL END
+           ${accessUpdate},
            updated_at = now()
      WHERE id = $1
      RETURNING id, name, email, login_whatsapp AS whatsapp, role::text AS role,
-               is_active, editor_permissions AS permissions,
+               COALESCE((to_jsonb(profiles)->>'is_active')::boolean, true) AS is_active,
+               COALESCE(to_jsonb(profiles)->'editor_permissions', '{}'::jsonb) AS permissions,
                business_profile->>'companyName' AS company_name,
                COALESCE((business_profile->>'internalOnly')::boolean, false) AS internal_only,
                created_at, last_login_at
-  `, [id, internalOnly ? companyName : name, role, active, JSON.stringify(permissions), passwordHash, companyName])
+  `, params)
   if (!updated) throw createError({ statusCode: 404, statusMessage: 'Usuário não encontrado.' })
   return { user: { ...updated, email: internalOnly ? '' : updated.email } }
 })

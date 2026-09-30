@@ -1,0 +1,1769 @@
+{
+  "version": 1,
+  "seals": {
+    "alerta-ofertas-seal.png": {
+      "filename": "video-seals/alerta-ofertas-seal-trimmed-539d9cea-v1.png",
+      "sealAspect": 1.026143790849673,
+      "source": "alerta-ofertas-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 17,
+        "top": 20,
+        "width": 1220,
+        "height": 1188
+      },
+      "cropBounds": {
+        "left": 2,
+        "top": 5,
+        "width": 1250,
+        "height": 1218
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "e5e33864af4da98d07bbd5475d683055a29920b47e97ea8d4200e1e08c658d03"
+    },
+    "aqui-mais-barato-seal.png": {
+      "filename": "video-seals/aqui-mais-barato-seal-trimmed-5062cec4-v1.png",
+      "sealAspect": 1.3873239436619718,
+      "source": "aqui-mais-barato-seal.png",
+      "sourceSize": [
+        1430,
+        1100
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 52,
+        "top": 63,
+        "width": 1339,
+        "height": 964
+      },
+      "cropBounds": {
+        "left": 35,
+        "top": 51,
+        "width": 1373,
+        "height": 988
+      },
+      "padding": {
+        "sourceX": 17,
+        "sourceY": 12,
+        "transparent": 3
+      },
+      "sha256": "095f5220e311fb14602de85dfdb43630e0b045e591380c234138a4e77a0970c4"
+    },
+    "aqui-melhores-ofertas-seal.png": {
+      "filename": "video-seals/aqui-melhores-ofertas-seal-trimmed-7267510f-v1.png",
+      "sealAspect": 1.1646951774340308,
+      "source": "aqui-melhores-ofertas-seal.png",
+      "sourceSize": [
+        1439,
+        1093
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 99,
+        "top": 13,
+        "width": 1244,
+        "height": 1070
+      },
+      "cropBounds": {
+        "left": 84,
+        "top": 0,
+        "width": 1274,
+        "height": 1093
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "8e9fb7918eff8308912296c8b9cac13cb3e3c38aefe9271480dcb68f51fc9669"
+    },
+    "aqui-menor-preco-seal.png": {
+      "filename": "video-seals/aqui-menor-preco-seal-trimmed-f25ec8e7-v1.png",
+      "sealAspect": 1.4147783251231527,
+      "source": "aqui-menor-preco-seal.png",
+      "sourceSize": [
+        1443,
+        1090
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 25,
+        "top": 57,
+        "width": 1396,
+        "height": 985
+      },
+      "cropBounds": {
+        "left": 8,
+        "top": 45,
+        "width": 1430,
+        "height": 1009
+      },
+      "padding": {
+        "sourceX": 17,
+        "sourceY": 12,
+        "transparent": 3
+      },
+      "sha256": "3c412ae92ddcd2602082535b6ecee6d17fc4198b9a776c8a0dc05f5aa25fa017"
+    },
+    "black-esquenta-friday-fogo-seal.png": {
+      "filename": "video-seals/black-esquenta-friday-fogo-seal-trimmed-b4a860e6-v1.png",
+      "sealAspect": 0.9391727493917275,
+      "source": "black-esquenta-friday-fogo-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 68,
+        "top": 15,
+        "width": 1124,
+        "height": 1197
+      },
+      "cropBounds": {
+        "left": 54,
+        "top": 0,
+        "width": 1152,
+        "height": 1227
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "c00ad2d9e2a34635344d27106b97fdd73212eab117b9360608d16007fdfd02df"
+    },
+    "black-friday-antecipado-seal.png": {
+      "filename": "video-seals/black-friday-antecipado-seal-trimmed-29c94aec-v1.png",
+      "sealAspect": 1.0250648228176318,
+      "source": "black-friday-antecipado-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 46,
+        "top": 67,
+        "width": 1152,
+        "height": 1123
+      },
+      "cropBounds": {
+        "left": 32,
+        "top": 53,
+        "width": 1180,
+        "height": 1151
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "79d6ece7fb2827d941fb51468b1b94b00f11a95bbcbfb05f3d53a0f3107840fc"
+    },
+    "black-friday-industrial-octogonal-seal.png": {
+      "filename": "video-seals/black-friday-industrial-octogonal-seal-trimmed-e75ec308-v1.png",
+      "sealAspect": 1.0915750915750915,
+      "source": "black-friday-industrial-octogonal-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 47,
+        "top": 76,
+        "width": 1158,
+        "height": 1060
+      },
+      "cropBounds": {
+        "left": 33,
+        "top": 63,
+        "width": 1186,
+        "height": 1086
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "c85df511bd95328c1409bac64b5ba6adb623668ef877cb22761b09c249741ad7"
+    },
+    "black-friday-industrial-retangular-seal.png": {
+      "filename": "video-seals/black-friday-industrial-retangular-seal-trimmed-abbb44cf-v1.png",
+      "sealAspect": 1.6871444823663253,
+      "source": "black-friday-industrial-retangular-seal.png",
+      "sourceSize": [
+        1536,
+        1024
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 41,
+        "top": 74,
+        "width": 1441,
+        "height": 851
+      },
+      "cropBounds": {
+        "left": 23,
+        "top": 63,
+        "width": 1477,
+        "height": 873
+      },
+      "padding": {
+        "sourceX": 18,
+        "sourceY": 11,
+        "transparent": 3
+      },
+      "sha256": "6ebbc000a7dfd188668e773eb0bf48fe8b843838812c028a7aff8ff5fc25ebb1"
+    },
+    "detona-precos-seal.png": {
+      "filename": "video-seals/detona-precos-seal-trimmed-6cc3ee64-v1.png",
+      "sealAspect": 1.218132854578097,
+      "source": "detona-precos-seal.png",
+      "sourceSize": [
+        1394,
+        1128
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 42,
+        "top": 34,
+        "width": 1319,
+        "height": 1092
+      },
+      "cropBounds": {
+        "left": 26,
+        "top": 20,
+        "width": 1351,
+        "height": 1108
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "787a0f270f804bcbb5f5efbf2264d2733502f02857c73787787b1680e6598bdb"
+    },
+    "economia-barato-verdade-seal.png": {
+      "filename": "video-seals/economia-barato-verdade-seal-trimmed-46e129e0-v1.png",
+      "sealAspect": 1.021523178807947,
+      "source": "economia-barato-verdade-seal.png",
+      "sourceSize": [
+        1302,
+        1208
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 50,
+        "top": 13,
+        "width": 1198,
+        "height": 1174
+      },
+      "cropBounds": {
+        "left": 35,
+        "top": 0,
+        "width": 1228,
+        "height": 1202
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "56d63805282ac0290c590de14d4633303a1194c052f55cf836456b327eab473b"
+    },
+    "economia-economizar-verdade-seal.png": {
+      "filename": "video-seals/economia-economizar-verdade-seal-trimmed-fc004f3e-v1.png",
+      "sealAspect": 1.0616554054054055,
+      "source": "economia-economizar-verdade-seal.png",
+      "sourceSize": [
+        1335,
+        1178
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 58,
+        "top": 4,
+        "width": 1221,
+        "height": 1165
+      },
+      "cropBounds": {
+        "left": 43,
+        "top": 0,
+        "width": 1251,
+        "height": 1178
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "bcf9960443dd4937ca9251a30e2645ce4f63ca6f78f0c88b97c6e9718a671f81"
+    },
+    "economia-leve-mais-azul-seal.png": {
+      "filename": "video-seals/economia-leve-mais-azul-seal-trimmed-b585d714-v1.png",
+      "sealAspect": 1.1045029736618521,
+      "source": "economia-leve-mais-azul-seal.png",
+      "sourceSize": [
+        1311,
+        1200
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 33,
+        "top": 26,
+        "width": 1263,
+        "height": 1143
+      },
+      "cropBounds": {
+        "left": 17,
+        "top": 12,
+        "width": 1294,
+        "height": 1171
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "e40b8b2f39108ef10752a8a404ca77335eb0177b0e7a4cb35da2c60f00fca234"
+    },
+    "economia-leve-mais-preto-seal.png": {
+      "filename": "video-seals/economia-leve-mais-preto-seal-trimmed-454dc143-v1.png",
+      "sealAspect": 0.9943502824858758,
+      "source": "economia-leve-mais-preto-seal.png",
+      "sourceSize": [
+        1230,
+        1278
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 17,
+        "top": 23,
+        "width": 1196,
+        "height": 1203
+      },
+      "cropBounds": {
+        "left": 2,
+        "top": 8,
+        "width": 1226,
+        "height": 1233
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "93b95dc14db8a745054a9e20538e633f1e68426d3dfe42cbbc0652279db5c977"
+    },
+    "economia-leve-mais-vermelho-seal.png": {
+      "filename": "video-seals/economia-leve-mais-vermelho-seal-trimmed-3c5ebcfd-v1.png",
+      "sealAspect": 1.0252951096121417,
+      "source": "economia-leve-mais-vermelho-seal.png",
+      "sourceSize": [
+        1303,
+        1207
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 45,
+        "top": 24,
+        "width": 1180,
+        "height": 1152
+      },
+      "cropBounds": {
+        "left": 30,
+        "top": 10,
+        "width": 1210,
+        "height": 1180
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "2f0aafcea6ae886a27b981c6732ba2cf5cdd4cd7b0cb4d3d3967af95ef7461c7"
+    },
+    "economia-oferta-dia-seal.png": {
+      "filename": "video-seals/economia-oferta-dia-seal-trimmed-9ff5fae0-v1.png",
+      "sealAspect": 1.1019283746556474,
+      "source": "economia-oferta-dia-seal.png",
+      "sourceSize": [
+        1348,
+        1167
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 93,
+        "top": 50,
+        "width": 1166,
+        "height": 1057
+      },
+      "cropBounds": {
+        "left": 79,
+        "top": 37,
+        "width": 1194,
+        "height": 1083
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "c9dde5e4be6e3e451b19b703b00c5a2fc27ffff4ae83139a027fd486b6e4f102"
+    },
+    "economia-preco-todo-dia-seal.png": {
+      "filename": "video-seals/economia-preco-todo-dia-seal-trimmed-2045efb4-v1.png",
+      "sealAspect": 1.1300174520069808,
+      "source": "economia-preco-todo-dia-seal.png",
+      "sourceSize": [
+        1380,
+        1140
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 61,
+        "top": 0,
+        "width": 1257,
+        "height": 1140
+      },
+      "cropBounds": {
+        "left": 45,
+        "top": 0,
+        "width": 1289,
+        "height": 1140
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "bf7eb273ab7842fd9d85b2fcbcaaef67d79a419a324189750389910c15408ce2"
+    },
+    "economia-semana-imbativel-seal.png": {
+      "filename": "video-seals/economia-semana-imbativel-seal-trimmed-3f72315c-v1.png",
+      "sealAspect": 1.3576222435282839,
+      "source": "economia-semana-imbativel-seal.png",
+      "sourceSize": [
+        1416,
+        1111
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 7,
+        "top": 66,
+        "width": 1386,
+        "height": 1011
+      },
+      "cropBounds": {
+        "left": 0,
+        "top": 53,
+        "width": 1410,
+        "height": 1037
+      },
+      "padding": {
+        "sourceX": 17,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "6d0e5f22c5386168af9625958aa465477a29c7724b593fa0add1d9f030806e71"
+    },
+    "economia-sempre-menor-preco-seal.png": {
+      "filename": "video-seals/economia-sempre-menor-preco-seal-trimmed-e66490ed-v1.png",
+      "sealAspect": 1.0667779632721202,
+      "source": "economia-sempre-menor-preco-seal.png",
+      "sourceSize": [
+        1291,
+        1218
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 32,
+        "top": 24,
+        "width": 1242,
+        "height": 1164
+      },
+      "cropBounds": {
+        "left": 17,
+        "top": 10,
+        "width": 1272,
+        "height": 1192
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "a58252b70a9789b276622cbcaed6c66ef7cd289fccc6bc7e99cbce8525d46ce0"
+    },
+    "economia-sempre-seal.png": {
+      "filename": "video-seals/economia-sempre-seal-trimmed-8bbfc11d-v1.png",
+      "sealAspect": 1.340566037735849,
+      "source": "economia-sempre-seal.png",
+      "sourceSize": [
+        1431,
+        1099
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 24,
+        "top": 35,
+        "width": 1381,
+        "height": 1028
+      },
+      "cropBounds": {
+        "left": 7,
+        "top": 22,
+        "width": 1415,
+        "height": 1054
+      },
+      "padding": {
+        "sourceX": 17,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "c22d77d7bba48719f262f50288b5f728f09d8a7068168ca6a0c6d2eda80f248a"
+    },
+    "economia-venha-economia-seal.png": {
+      "filename": "video-seals/economia-venha-economia-seal-trimmed-cf2fb3b6-v1.png",
+      "sealAspect": 1.0388109000825765,
+      "source": "economia-venha-economia-seal.png",
+      "sourceSize": [
+        1284,
+        1225
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 30,
+        "top": 14,
+        "width": 1222,
+        "height": 1176
+      },
+      "cropBounds": {
+        "left": 15,
+        "top": 0,
+        "width": 1252,
+        "height": 1205
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "573e71a9aa027dac505cd89e9eb850cc91d62248347ce11e61d3e1b5ff3fd212"
+    },
+    "esquenta-black-friday-escudo-seal.png": {
+      "filename": "video-seals/esquenta-black-friday-escudo-seal-trimmed-5a49851b-v1.png",
+      "sealAspect": 1.023008849557522,
+      "source": "esquenta-black-friday-escudo-seal.png",
+      "sourceSize": [
+        1369,
+        1149
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 128,
+        "top": 37,
+        "width": 1122,
+        "height": 1096
+      },
+      "cropBounds": {
+        "left": 114,
+        "top": 23,
+        "width": 1150,
+        "height": 1124
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "04f60999f946f758205be26f566e9b30d2343f4be6e88fb30371ba7dabdaba10"
+    },
+    "esquenta-black-friday-placa-seal.png": {
+      "filename": "video-seals/esquenta-black-friday-placa-seal-trimmed-f37c488e-v1.png",
+      "sealAspect": 1.1900452488687783,
+      "source": "esquenta-black-friday-placa-seal.png",
+      "sourceSize": [
+        1346,
+        1168
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 38,
+        "top": 45,
+        "width": 1277,
+        "height": 1073
+      },
+      "cropBounds": {
+        "left": 22,
+        "top": 32,
+        "width": 1309,
+        "height": 1099
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "2b137e3fadf8e26d1251d19ab15f2847c544edd6b59b11def6f19acdbc2cc3f8"
+    },
+    "esquenta-black-friday-seta-seal.png": {
+      "filename": "video-seals/esquenta-black-friday-seta-seal-trimmed-69cb50ed-v1.png",
+      "sealAspect": 1.601472134595163,
+      "source": "esquenta-black-friday-seta-seal.png",
+      "sourceSize": [
+        1536,
+        1024
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 35,
+        "top": 73,
+        "width": 1481,
+        "height": 921
+      },
+      "cropBounds": {
+        "left": 17,
+        "top": 61,
+        "width": 1517,
+        "height": 945
+      },
+      "padding": {
+        "sourceX": 18,
+        "sourceY": 12,
+        "transparent": 3
+      },
+      "sha256": "f1fbfd1f147c692fbe38935bb393d85ae7d2e12233d8466566634600eb0a5436"
+    },
+    "fecha-mes-calendario-seal.png": {
+      "filename": "video-seals/fecha-mes-calendario-seal-trimmed-a9be8b93-v1.png",
+      "sealAspect": 1.1383075523202912,
+      "source": "fecha-mes-calendario-seal.png",
+      "sourceSize": [
+        1439,
+        1093
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 111,
+        "top": 9,
+        "width": 1215,
+        "height": 1076
+      },
+      "cropBounds": {
+        "left": 96,
+        "top": 0,
+        "width": 1245,
+        "height": 1093
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "1364d5926d8c3f20791df08d197a760d748c5fd517bc9873dec5be398f898d71"
+    },
+    "fecha-mes-com-tudo-seal.png": {
+      "filename": "video-seals/fecha-mes-com-tudo-seal-trimmed-13bb69a7-v1.png",
+      "sealAspect": 1.1236363636363635,
+      "source": "fecha-mes-com-tudo-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 35,
+        "top": 86,
+        "width": 1200,
+        "height": 1068
+      },
+      "cropBounds": {
+        "left": 20,
+        "top": 73,
+        "width": 1230,
+        "height": 1094
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "7f4eb6d83953bbeb09fb9f185b3fe67a2d8f0435c8e6a52cba700e01a324bdab"
+    },
+    "fim-mes-ofertas-seal.png": {
+      "filename": "video-seals/fim-mes-ofertas-seal-trimmed-a0294974-v1.png",
+      "sealAspect": 1.0111301369863013,
+      "source": "fim-mes-ofertas-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 58,
+        "top": 64,
+        "width": 1147,
+        "height": 1134
+      },
+      "cropBounds": {
+        "left": 44,
+        "top": 50,
+        "width": 1175,
+        "height": 1162
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "7cb31b25c654b68af96647744289cf5739d8246478d0f0227bf34c3c3654e006"
+    },
+    "fim-semana-ofertas-dourado-seal.png": {
+      "filename": "video-seals/fim-semana-ofertas-dourado-seal-trimmed-a2f1e2d8-v1.png",
+      "sealAspect": 0.9975288303130149,
+      "source": "fim-semana-ofertas-dourado-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 54,
+        "top": 38,
+        "width": 1175,
+        "height": 1178
+      },
+      "cropBounds": {
+        "left": 39,
+        "top": 23,
+        "width": 1205,
+        "height": 1208
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "e094f76be71020ee1f9c8adbdd9cf2b01ccc6011be7d475324788245e56a7743"
+    },
+    "leve-mais-calculadora-seal.png": {
+      "filename": "video-seals/leve-mais-calculadora-seal-trimmed-40bb5b45-v1.png",
+      "sealAspect": 0.9282868525896414,
+      "source": "leve-mais-calculadora-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 63,
+        "top": 20,
+        "width": 1131,
+        "height": 1219
+      },
+      "cropBounds": {
+        "left": 49,
+        "top": 5,
+        "width": 1159,
+        "height": 1249
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "1146c228303c1db53d581df710ebe7739567b3e0d413325fe1762241c3d68249"
+    },
+    "leve-mais-pague-menos-azul-seal.png": {
+      "filename": "video-seals/leve-mais-pague-menos-azul-seal-trimmed-130cbedf-v1.png",
+      "sealAspect": 1.1046712802768166,
+      "source": "leve-mais-pague-menos-azul-seal.png",
+      "sourceSize": [
+        1321,
+        1191
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 45,
+        "top": 40,
+        "width": 1241,
+        "height": 1122
+      },
+      "cropBounds": {
+        "left": 30,
+        "top": 26,
+        "width": 1271,
+        "height": 1150
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "d1ef555ccf65d37de5d22e294058e927a49cf2da5d2d483949d0ca0e12c5e5ed"
+    },
+    "leve-mais-pague-menos-faixas-seal.png": {
+      "filename": "video-seals/leve-mais-pague-menos-faixas-seal-trimmed-9d1e8481-v1.png",
+      "sealAspect": 0.9991511035653651,
+      "source": "leve-mais-pague-menos-faixas-seal.png",
+      "sourceSize": [
+        1236,
+        1272
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 58,
+        "top": 56,
+        "width": 1143,
+        "height": 1144
+      },
+      "cropBounds": {
+        "left": 44,
+        "top": 42,
+        "width": 1171,
+        "height": 1172
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "d4ecb92fc0c8dcc6d6f2b4e41a9a5d603e7dd8e31fca5c243211e0bc8df2f7c9"
+    },
+    "leve-mais-pague-menos-vermelho-seal.png": {
+      "filename": "video-seals/leve-mais-pague-menos-vermelho-seal-trimmed-b33bf83c-v1.png",
+      "sealAspect": 1.087689713322091,
+      "source": "leve-mais-pague-menos-vermelho-seal.png",
+      "sourceSize": [
+        1300,
+        1210
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 26,
+        "top": 30,
+        "width": 1252,
+        "height": 1152
+      },
+      "cropBounds": {
+        "left": 10,
+        "top": 16,
+        "width": 1284,
+        "height": 1180
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "1b2eac166ec0892b94e2ccba80468920a92096c702757a018673fab3817ed55b"
+    },
+    "maior-menor-preco-seal.png": {
+      "filename": "video-seals/maior-menor-preco-seal-trimmed-ab26c1b9-v1.png",
+      "sealAspect": 1.2089136490250696,
+      "source": "maior-menor-preco-seal.png",
+      "sourceSize": [
+        1298,
+        1212
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 6,
+        "top": 99,
+        "width": 1274,
+        "height": 1045
+      },
+      "cropBounds": {
+        "left": 0,
+        "top": 86,
+        "width": 1296,
+        "height": 1071
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "ba50543cfd79e54bc1594b7f960464eadbe6dabfcc99322dfc4f73f4ecd487fa"
+    },
+    "mega-inauguracao-seal.png": {
+      "filename": "video-seals/mega-inauguracao-seal-trimmed-f91c7067-v1.png",
+      "sealAspect": 1.1044504995458675,
+      "source": "mega-inauguracao-seal.png",
+      "sourceSize": [
+        1269,
+        1239
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 42,
+        "top": 79,
+        "width": 1180,
+        "height": 1069
+      },
+      "cropBounds": {
+        "left": 27,
+        "top": 66,
+        "width": 1210,
+        "height": 1095
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "1d0fefbcc11499442c5c09cea346867bbc2ceba867d35703b95f85d2bd13d0f7"
+    },
+    "mega-oferta-azul-seal.png": {
+      "filename": "video-seals/mega-oferta-azul-seal-trimmed-ac2553c0-v1.png",
+      "sealAspect": 1.1594746716697937,
+      "source": "mega-oferta-azul-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 27,
+        "top": 121,
+        "width": 1200,
+        "height": 1034
+      },
+      "cropBounds": {
+        "left": 12,
+        "top": 108,
+        "width": 1230,
+        "height": 1060
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "992372d7575abfbaa92dfe2b15f7e5f45c40f2d50cb213430226d635742e5ad8"
+    },
+    "mega-oferta-etiqueta-seal.png": {
+      "filename": "video-seals/mega-oferta-etiqueta-seal-trimmed-72621407-v1.png",
+      "sealAspect": 1.4855371900826446,
+      "source": "mega-oferta-etiqueta-seal.png",
+      "sourceSize": [
+        1445,
+        1088
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 30,
+        "top": 79,
+        "width": 1404,
+        "height": 938
+      },
+      "cropBounds": {
+        "left": 13,
+        "top": 67,
+        "width": 1432,
+        "height": 962
+      },
+      "padding": {
+        "sourceX": 17,
+        "sourceY": 12,
+        "transparent": 3
+      },
+      "sha256": "b9888ebb26f9667cd9e2b770673900d9546fa162b72c86d5d40d94797ca60481"
+    },
+    "notificacao-ofertas-seal.png": {
+      "filename": "video-seals/notificacao-ofertas-seal-trimmed-b4da9af0-v1.png",
+      "sealAspect": 0.9552481692432873,
+      "source": "notificacao-ofertas-seal.png",
+      "sourceSize": [
+        1236,
+        1272
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 46,
+        "top": 50,
+        "width": 1140,
+        "height": 1193
+      },
+      "cropBounds": {
+        "left": 32,
+        "top": 35,
+        "width": 1168,
+        "height": 1223
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "359accedaa9a811eeca5bd30098eaa405b6c712641f6685dc786875a527df386"
+    },
+    "oferta-especial-circular-seal.png": {
+      "filename": "video-seals/oferta-especial-circular-seal-trimmed-69f068cd-v1.png",
+      "sealAspect": 1.0980902777777777,
+      "source": "oferta-especial-circular-seal.png",
+      "sourceSize": [
+        1354,
+        1161
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 63,
+        "top": 25,
+        "width": 1229,
+        "height": 1118
+      },
+      "cropBounds": {
+        "left": 48,
+        "top": 11,
+        "width": 1259,
+        "height": 1146
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "56cfbcbd8b5f4df4f02a34502cb8b5f93db21aa3897aab76c3b01a66cd2972a8"
+    },
+    "oferta-especial-escudo-seal.png": {
+      "filename": "video-seals/oferta-especial-escudo-seal-trimmed-994ac691-v1.png",
+      "sealAspect": 0.9896907216494846,
+      "source": "oferta-especial-escudo-seal.png",
+      "sourceSize": [
+        1314,
+        1197
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 98,
+        "top": 27,
+        "width": 1118,
+        "height": 1130
+      },
+      "cropBounds": {
+        "left": 84,
+        "top": 13,
+        "width": 1146,
+        "height": 1158
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "9875589ee5ca2f213469cb63b29c49d8b6db1889a20dc46376fa34be1e7f086c"
+    },
+    "oferta-garantida-seal.png": {
+      "filename": "video-seals/oferta-garantida-seal-trimmed-263ab55e-v1.png",
+      "sealAspect": 1.0313293818797629,
+      "source": "oferta-garantida-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 39,
+        "top": 63,
+        "width": 1182,
+        "height": 1147
+      },
+      "cropBounds": {
+        "left": 24,
+        "top": 49,
+        "width": 1212,
+        "height": 1175
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "22a876d6bac691795ab88aaf63789f77f92303798a0806042273e23e9ba0f252"
+    },
+    "ofertas-acougue-seal.png": {
+      "filename": "video-seals/ofertas-acougue-seal-trimmed-d3a8855b-v1.png",
+      "sealAspect": 1.0919243986254294,
+      "source": "ofertas-acougue-seal.png",
+      "sourceSize": [
+        1358,
+        1158
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 52,
+        "top": 3,
+        "width": 1235,
+        "height": 1155
+      },
+      "cropBounds": {
+        "left": 37,
+        "top": 0,
+        "width": 1265,
+        "height": 1158
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "aaec3fb29a4971f5618139d10adaf3a384d133da034251a9451274a21b3e5299"
+    },
+    "ofertas-app-azul-seal.png": {
+      "filename": "video-seals/ofertas-app-azul-seal-trimmed-d6390961-v1.png",
+      "sealAspect": 1.0508474576271187,
+      "source": "ofertas-app-azul-seal.png",
+      "sourceSize": [
+        1309,
+        1202
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 56,
+        "top": 29,
+        "width": 1204,
+        "height": 1146
+      },
+      "cropBounds": {
+        "left": 41,
+        "top": 15,
+        "width": 1234,
+        "height": 1174
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "b0f76d948b20f13ea7c126adcea0a9fad36d649177c5d7da815d6686b62deb1d"
+    },
+    "ofertas-app-vermelho-seal.png": {
+      "filename": "video-seals/ofertas-app-vermelho-seal-trimmed-8042bd38-v1.png",
+      "sealAspect": 1.135695764909248,
+      "source": "ofertas-app-vermelho-seal.png",
+      "sourceSize": [
+        1351,
+        1164
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 35,
+        "top": 27,
+        "width": 1276,
+        "height": 1130
+      },
+      "cropBounds": {
+        "left": 19,
+        "top": 13,
+        "width": 1308,
+        "height": 1151
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "ad685967cade81a4efa52f114a3cd0433d0948d6e65cbcc367bc5a3bd442a742"
+    },
+    "ofertas-dia-carrinho-seal.png": {
+      "filename": "video-seals/ofertas-dia-carrinho-seal-trimmed-25aa4a91-v1.png",
+      "sealAspect": 1.0983746792130025,
+      "source": "ofertas-dia-carrinho-seal.png",
+      "sourceSize": [
+        1306,
+        1205
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 29,
+        "top": 21,
+        "width": 1248,
+        "height": 1135
+      },
+      "cropBounds": {
+        "left": 14,
+        "top": 7,
+        "width": 1278,
+        "height": 1163
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "80ec2f3ca1085ec9d8ccfeb691d4232e62f86de927cef95111b1f02023dca26e"
+    },
+    "ofertas-novembro-seal.png": {
+      "filename": "video-seals/ofertas-novembro-seal-trimmed-da4df684-v1.png",
+      "sealAspect": 1.4165781083953242,
+      "source": "ofertas-novembro-seal.png",
+      "sourceSize": [
+        1428,
+        1101
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 66,
+        "top": 95,
+        "width": 1295,
+        "height": 913
+      },
+      "cropBounds": {
+        "left": 50,
+        "top": 84,
+        "width": 1327,
+        "height": 935
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 11,
+        "transparent": 3
+      },
+      "sha256": "18158e9a1dcb75e6cb95f9afce10e2337d024b63800d16f3f254d0dc0aade4db"
+    },
+    "ofertas-padaria-seal.png": {
+      "filename": "video-seals/ofertas-padaria-seal-trimmed-bd1f45cc-v1.png",
+      "sealAspect": 1.2180094786729858,
+      "source": "ofertas-padaria-seal.png",
+      "sourceSize": [
+        1305,
+        1206
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 34,
+        "top": 84,
+        "width": 1249,
+        "height": 1023
+      },
+      "cropBounds": {
+        "left": 19,
+        "top": 71,
+        "width": 1279,
+        "height": 1049
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "474e131779488fa5166be343bbf6ed4812dbcd8630896fef5354b7de1c48a891"
+    },
+    "operacao-bota-fora-seal.png": {
+      "filename": "video-seals/operacao-bota-fora-seal-trimmed-09070621-v1.png",
+      "sealAspect": 1.1415270018621975,
+      "source": "operacao-bota-fora-seal.png",
+      "sourceSize": [
+        1312,
+        1199
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 86,
+        "top": 75,
+        "width": 1190,
+        "height": 1042
+      },
+      "cropBounds": {
+        "left": 71,
+        "top": 62,
+        "width": 1220,
+        "height": 1068
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "d5d7b09d3ee1b465dd4939ba0bbefd2c061e153ac4350ab35d2d5dcd2bc01e5a"
+    },
+    "operacao-fecha-mes-amarela-seal.png": {
+      "filename": "video-seals/operacao-fecha-mes-amarela-seal-trimmed-e200faa9-v1.png",
+      "sealAspect": 0.9713818479149632,
+      "source": "operacao-fecha-mes-amarela-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 47,
+        "top": 16,
+        "width": 1154,
+        "height": 1187
+      },
+      "cropBounds": {
+        "left": 33,
+        "top": 1,
+        "width": 1182,
+        "height": 1217
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "2b015e4790c59a3525152e8b5c49a3b81fcc6eec1bf32130b1cf8568965391ba"
+    },
+    "operacao-fecha-mes-vermelha-seal.png": {
+      "filename": "video-seals/operacao-fecha-mes-vermelha-seal-trimmed-a73cf8d6-v1.png",
+      "sealAspect": 1.2673469387755103,
+      "source": "operacao-fecha-mes-vermelha-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 28,
+        "top": 169,
+        "width": 1206,
+        "height": 950
+      },
+      "cropBounds": {
+        "left": 13,
+        "top": 157,
+        "width": 1236,
+        "height": 974
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 12,
+        "transparent": 3
+      },
+      "sha256": "322b95aad4b49e423861c09cfd2b0ca9ce743258a3c438ff08de583b63d024fb"
+    },
+    "preco-baixo-todo-dia-seal.png": {
+      "filename": "video-seals/preco-baixo-todo-dia-seal-trimmed-0a421208-v1.png",
+      "sealAspect": 1.0473773265651438,
+      "source": "preco-baixo-todo-dia-seal.png",
+      "sourceSize": [
+        1328,
+        1184
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 71,
+        "top": 22,
+        "width": 1202,
+        "height": 1151
+      },
+      "cropBounds": {
+        "left": 56,
+        "top": 8,
+        "width": 1232,
+        "height": 1176
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "14b49abad6ace8b07ed6d427eccca42f50c14d3ed2582f5f26fc643b52163306"
+    },
+    "precos-baixos-roxo-seal.png": {
+      "filename": "video-seals/precos-baixos-roxo-seal-trimmed-b600aa43-v1.png",
+      "sealAspect": 1.0685413005272408,
+      "source": "precos-baixos-roxo-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 33,
+        "top": 88,
+        "width": 1180,
+        "height": 1104
+      },
+      "cropBounds": {
+        "left": 18,
+        "top": 74,
+        "width": 1210,
+        "height": 1132
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "b48b333e52800fff7f1623441f02161ab8432b6a71691f9897deaa72e0b370a4"
+    },
+    "promocao-quinta-feira-seal.png": {
+      "filename": "video-seals/promocao-quinta-feira-seal-trimmed-2e598eff-v1.png",
+      "sealAspect": 1.0146048109965635,
+      "source": "promocao-quinta-feira-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 54,
+        "top": 49,
+        "width": 1147,
+        "height": 1130
+      },
+      "cropBounds": {
+        "left": 40,
+        "top": 35,
+        "width": 1175,
+        "height": 1158
+      },
+      "padding": {
+        "sourceX": 14,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "d4609885530d95a7cf3292c2fe391013b2c8c11080c257b46ae33029a5958c64"
+    },
+    "quarta-hortifruti-cesta-seal.png": {
+      "filename": "video-seals/quarta-hortifruti-cesta-seal-trimmed-d11157e8-v1.png",
+      "sealAspect": 1.0106820049301561,
+      "source": "quarta-hortifruti-cesta-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 40,
+        "top": 25,
+        "width": 1194,
+        "height": 1181
+      },
+      "cropBounds": {
+        "left": 25,
+        "top": 10,
+        "width": 1224,
+        "height": 1211
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "6110afaddb83aed0043977d85aa5e7a4b95c4debf9bd4e9b95c62db9a07d2671"
+    },
+    "quarta-suina-colecao-1-seal.png": {
+      "filename": "video-seals/quarta-suina-colecao-1-seal-trimmed-2c175575-v1.png",
+      "sealAspect": 0.9587301587301588,
+      "source": "quarta-suina-colecao-1-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 47,
+        "top": 5,
+        "width": 1172,
+        "height": 1238
+      },
+      "cropBounds": {
+        "left": 32,
+        "top": 0,
+        "width": 1202,
+        "height": 1254
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "f95b3918c021d0eb5df48918e32054a0a0c3e6f5c184ed81ed8965432ddd77b5"
+    },
+    "quarta-suina-colecao-4-seal.png": {
+      "filename": "video-seals/quarta-suina-colecao-4-seal-trimmed-cea6b34c-v1.png",
+      "sealAspect": 0.9752198241406874,
+      "source": "quarta-suina-colecao-4-seal.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 36,
+        "top": 0,
+        "width": 1184,
+        "height": 1230
+      },
+      "cropBounds": {
+        "left": 21,
+        "top": 0,
+        "width": 1214,
+        "height": 1245
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 15,
+        "transparent": 3
+      },
+      "sha256": "a34a0b11129b94d701da717305e2bbeb415f755d360fa142f44220fb71b251da"
+    },
+    "quarta-suina-ouro-seal.png": {
+      "filename": "video-seals/quarta-suina-ouro-seal-trimmed-97923f20-v1.png",
+      "sealAspect": 1.535425101214575,
+      "source": "quarta-suina-ouro-seal.png",
+      "sourceSize": [
+        1536,
+        1024
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 43,
+        "top": 23,
+        "width": 1475,
+        "height": 958
+      },
+      "cropBounds": {
+        "left": 25,
+        "top": 11,
+        "width": 1511,
+        "height": 982
+      },
+      "padding": {
+        "sourceX": 18,
+        "sourceY": 12,
+        "transparent": 3
+      },
+      "sha256": "ba99281725d7d4b5e398f72c18dede143409bb1ed87c2e8a82c9f568e9711305"
+    },
+    "queima-estoque-laranja-seal.png": {
+      "filename": "video-seals/queima-estoque-laranja-seal-trimmed-a137b060-v1.png",
+      "sealAspect": 1.1534883720930234,
+      "source": "queima-estoque-laranja-seal.png",
+      "sourceSize": [
+        1274,
+        1234
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 43,
+        "top": 94,
+        "width": 1204,
+        "height": 1043
+      },
+      "cropBounds": {
+        "left": 28,
+        "top": 81,
+        "width": 1234,
+        "height": 1069
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "3378f2064c95cb87606cd5a2efb78cf6930289a6bdb8dd1683e9106795888f89"
+    },
+    "quinta-carne-faca-seal.png": {
+      "filename": "video-seals/quinta-carne-faca-seal-trimmed-292f2e87-v1.png",
+      "sealAspect": 1.298311444652908,
+      "source": "quinta-carne-faca-seal.png",
+      "sourceSize": [
+        1431,
+        1099
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 55,
+        "top": 43,
+        "width": 1344,
+        "height": 1034
+      },
+      "cropBounds": {
+        "left": 38,
+        "top": 30,
+        "width": 1378,
+        "height": 1060
+      },
+      "padding": {
+        "sourceX": 17,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "e2c3c896d7717f26b74505f7dbde0086b58a32da19b157300cc26313e71aa390"
+    },
+    "segunda-verde-seal.png": {
+      "filename": "video-seals/segunda-verde-seal-trimmed-5f0cfda5-v1.png",
+      "sealAspect": 1.0896860986547086,
+      "source": "segunda-verde-seal.png",
+      "sourceSize": [
+        1209,
+        1300
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 14,
+        "top": 105,
+        "width": 1185,
+        "height": 1083
+      },
+      "cropBounds": {
+        "left": 0,
+        "top": 92,
+        "width": 1209,
+        "height": 1109
+      },
+      "padding": {
+        "sourceX": 15,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "791e2122000b6141a4f41775c4afaa32fd4ee4effe82bd1718fc62e3a1577d7d"
+    },
+    "semana-ofertas-amarelo-seal.png": {
+      "filename": "video-seals/semana-ofertas-amarelo-seal-trimmed-9b6a9239-v1.png",
+      "sealAspect": 1.1944700460829494,
+      "source": "semana-ofertas-amarelo-seal.png",
+      "sourceSize": [
+        1433,
+        1098
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 94,
+        "top": 25,
+        "width": 1258,
+        "height": 1053
+      },
+      "cropBounds": {
+        "left": 78,
+        "top": 12,
+        "width": 1290,
+        "height": 1079
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "bb3cdf65dcd7854087c33d534c7e85c48fc421273e4337859b15a9c42266f437"
+    },
+    "semana-ofertas-preto-seal.png": {
+      "filename": "video-seals/semana-ofertas-preto-seal-trimmed-fb91622d-v1.png",
+      "sealAspect": 1.2334525939177101,
+      "source": "semana-ofertas-preto-seal.png",
+      "sourceSize": [
+        1415,
+        1112
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 44,
+        "top": 13,
+        "width": 1339,
+        "height": 1088
+      },
+      "cropBounds": {
+        "left": 27,
+        "top": 0,
+        "width": 1373,
+        "height": 1112
+      },
+      "padding": {
+        "sourceX": 17,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "8f076a356cfe3d9934c9da7d2bb3264a7b21668940b5624daaaf95f4b7d330ea"
+    },
+    "super-ofertas-moedas-seal.png": {
+      "filename": "video-seals/super-ofertas-moedas-seal-trimmed-38bc608f-v1.png",
+      "sealAspect": 1.1403508771929824,
+      "source": "super-ofertas-moedas-seal.png",
+      "sourceSize": [
+        1322,
+        1190
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 36,
+        "top": 41,
+        "width": 1262,
+        "height": 1106
+      },
+      "cropBounds": {
+        "left": 20,
+        "top": 27,
+        "width": 1294,
+        "height": 1134
+      },
+      "padding": {
+        "sourceX": 16,
+        "sourceY": 14,
+        "transparent": 3
+      },
+      "sha256": "42059703bcdec6782f461afbe14b02e4ccd8cab2c85f876664484cbcee3c6043"
+    },
+    "super-saldao-seal.png": {
+      "filename": "video-seals/super-saldao-seal-trimmed-90ab682b-v1.png",
+      "sealAspect": 1.356873822975518,
+      "source": "super-saldao-seal.png",
+      "sourceSize": [
+        1459,
+        1078
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 41,
+        "top": 28,
+        "width": 1403,
+        "height": 1030
+      },
+      "cropBounds": {
+        "left": 24,
+        "top": 15,
+        "width": 1435,
+        "height": 1056
+      },
+      "padding": {
+        "sourceX": 17,
+        "sourceY": 13,
+        "transparent": 3
+      },
+      "sha256": "f62fb9c5a6e90aeb5b459b6f5ae32671b9be0b9e6114ad2bdce3ec0b9b96354e"
+    },
+    "terca-ofertas-supermercado-seal.png": {
+      "filename": "video-seals/terca-ofertas-supermercado-seal-trimmed-f8ff6714-v1.png",
+      "sealAspect": 2.441138421733506,
+      "source": "terca-ofertas-supermercado-seal.png",
+      "sourceSize": [
+        1881,
+        836
+      ],
+      "alphaThreshold": 10,
+      "visibleBounds": {
+        "left": 18,
+        "top": 44,
+        "width": 1848,
+        "height": 749
+      },
+      "cropBounds": {
+        "left": 0,
+        "top": 35,
+        "width": 1881,
+        "height": 767
+      },
+      "padding": {
+        "sourceX": 23,
+        "sourceY": 9,
+        "transparent": 3
+      },
+      "sha256": "c10c8ec819d750651e52f9c91a5ca6154c7883a668bb6a3e57cee3c59af148cf"
+    }
+  }
+}

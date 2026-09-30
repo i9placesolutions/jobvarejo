@@ -2,11 +2,12 @@ import type {FlyerLayout,LayoutBox} from './flyer-recipes'
 
 /** Faixas comuns a todos os Reels, em 1080 × 1920. */
 export const REELS_OFFER_LAYOUT:FlyerLayout={
- seal:[80,65,920,560],
+ // Cresce para cima: o limite inferior continua em 625, preservando a área da oferta.
+ seal:[80,60,920,565],
  name:[70,649,940,100],
- product:[60,769,960,486],
- price:[90,1245,900,330],
- condition:[90,1581,900,38],
+ product:[60,769,960,611],
+ price:[90,1320,900,280],
+ condition:[90,1606,900,20],
  logo:[110,1633,860,160],
  validity:[70,1810,940,60],
 }
@@ -19,5 +20,5 @@ export function reelsOfferLayout(sealAspect?:number):FlyerLayout{
  const height=Math.min(h,w/aspect),width=height*aspect
  const seal:LayoutBox=[x+(w-width)/2,y,width,height]
  const nameY=y+height+24,productY=nameY+layout.name[3]+20
- return {...layout,seal,name:[70,nameY,940,100],product:[60,productY,960,1255-productY]}
+ return {...layout,seal,name:[70,nameY,940,100],product:[60,productY,960,1380-productY]}
 }

@@ -15,6 +15,19 @@ export const footerPaymentImageUrl = (value: string): string => {
   return /^(https?:\/\/|\/)/i.test(value) ? value : `/api/storage/p?key=${encodeURIComponent(value)}`
 }
 
+/** Compara fontes e tamanho no Fabric e no JSON, sem baixar as imagens novamente. */
+export const isFooterPaymentGroupCurrent = (slot: any, values: unknown): boolean => {
+  if (String(slot?.type || '').toLowerCase() !== 'group') return false
+  const children = slot.getObjects?.() || slot.objects || []
+  const bounds = children.find((child: any) => String(child?.type || '').toLowerCase() === 'rect')
+  if (!bounds || Number(bounds.width) !== Number(slot.footerPaymentWidth || slot.width)
+    || Number(bounds.height) !== Number(slot.footerPaymentHeight || slot.height)) return false
+  const expected = normalizeFooterPaymentImages(values).map(footerPaymentImageUrl).filter(Boolean)
+  const actual = children.filter((child: any) => String(child?.type || '').toLowerCase() === 'image')
+    .map((child: any) => String(child.__originalSrc || child.getSrc?.() || child.src || ''))
+  return expected.length === actual.length && expected.every((source, index) => source === actual[index])
+}
+
 /** Rebuild only the image row; the saved slot geometry stays stable. */
 export async function createFooterPaymentGroup(fabric: any, slot: any, values: unknown) {
   const width = Number(slot.footerPaymentWidth || slot.width)

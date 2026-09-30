@@ -23,6 +23,16 @@ export default defineEventHandler(async (event) => {
     // A identidade técnica mantém as FKs de conteúdo sem oferecer login.
     const accountEmail = data.hasPlatformAccess ? data.email : `internal-${randomUUID()}@jobvarejo.invalid`
     const updated = await pgTx(async (client) => {
+      if (data.role === 'editor') {
+        const access = await client.query<{ supported: boolean }>(`
+          SELECT EXISTS (
+            SELECT 1 FROM pg_attribute
+             WHERE attrelid = 'public.profiles'::regclass
+               AND attname = 'editor_permissions' AND NOT attisdropped
+          ) AS supported
+        `)
+        if (!access.rows[0]?.supported) throw createError({ statusCode: 503, statusMessage: 'O cadastro de editores requer a atualização do banco de acessos.' })
+      }
       const created = await createProfileWithPassword({
         name: data.name,
         email: accountEmail,
@@ -30,20 +40,24 @@ export default defineEventHandler(async (event) => {
         passwordHash,
         role: data.role
       }, client)
+      const params: unknown[] = [created.id, data.companyName, !data.hasPlatformAccess]
+      const permissionsUpdate = data.role === 'editor' ? ', editor_permissions = $4::jsonb' : ''
+      if (data.role === 'editor') params.push(JSON.stringify(data.permissions))
       const result = await client.query<any>(`
       UPDATE public.profiles
-         SET editor_permissions = $2::jsonb,
-             business_profile = CASE WHEN $3 <> ''
-               THEN COALESCE(business_profile, '{}'::jsonb) || jsonb_build_object('companyName', $3::text, 'internalOnly', $4::boolean)
-               ELSE business_profile END,
+         SET business_profile = CASE WHEN $2::text <> ''
+               THEN COALESCE(business_profile, '{}'::jsonb) || jsonb_build_object('companyName', $2::text, 'internalOnly', $3::boolean)
+               ELSE business_profile END
+             ${permissionsUpdate},
              updated_at = now()
        WHERE id = $1
        RETURNING id, name, email, login_whatsapp AS whatsapp, role::text AS role,
-                 is_active, editor_permissions AS permissions,
+                 COALESCE((to_jsonb(profiles)->>'is_active')::boolean, true) AS is_active,
+                 COALESCE(to_jsonb(profiles)->'editor_permissions', '{}'::jsonb) AS permissions,
                  business_profile->>'companyName' AS company_name,
                  COALESCE((business_profile->>'internalOnly')::boolean, false) AS internal_only,
                  created_at, last_login_at
-      `, [created.id, JSON.stringify(data.permissions), data.companyName, !data.hasPlatformAccess])
+      `, params)
       const saved = result.rows[0]
       if (!saved) throw createError({ statusCode: 500, statusMessage: 'Não foi possível concluir o cadastro.' })
       return saved

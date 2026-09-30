@@ -7,6 +7,9 @@ import type { CartazistaHeader } from '~/types/cartazista'
 import CartazistaShell from '~/components/cartazista/CartazistaShell.vue'
 import type { CartazistaDesign, CartazistaModel, CartazistaTemplateSummary } from '~/types/cartazista'
 import { createCartazistaDocument } from '~/utils/cartazista/composition'
+import type { ArtComposition } from '~/types/art-studio'
+import { normalizeBusinessProfile, type BusinessProfile } from '~/utils/businessProfile'
+import { hydrateCartazistaBusiness } from '~/utils/cartazista/business-bindings'
 
 definePageMeta({ layout: false, middleware: 'auth', ssr: false })
 useHead({ title: 'Cartazes de oferta • JobVarejo' })
@@ -25,6 +28,29 @@ const error = ref('')
 const databaseReady = ref(true)
 const picked = ref<CartazistaModel | null>(null)
 const previewDialog = ref<HTMLDialogElement>()
+const emptyBrandProfile = (): Pick<BusinessProfile, 'companyName' | 'whatsapp' | 'address' | 'instagram'> => ({
+  companyName: '',
+  whatsapp: '',
+  address: '',
+  instagram: ''
+})
+const brandProfile = ref(emptyBrandProfile())
+const logoSrc = ref('')
+const loadBrand = async () => {
+  brandProfile.value = emptyBrandProfile()
+  logoSrc.value = ''
+  try {
+    const response = await $fetch<{ business_profile: unknown }>('/api/profile')
+    const profile = normalizeBusinessProfile(response.business_profile)
+    brandProfile.value = profile
+    logoSrc.value = profile.logo ? '/api/art-studio/brand-logo' : ''
+  } catch {
+    // Prévia sem cadastro de marca fica sem logo; não reaproveita a imagem
+    // persistida por outra conta.
+  }
+}
+const previewForActiveAccount = (composition: ArtComposition, showLogo = true) =>
+  hydrateCartazistaBusiness(composition, brandProfile.value, logoSrc.value, showLogo)
 
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
 const categories = computed(() => ['Todos', ...new Set(templates.value.map((template) => template.category))])
@@ -36,16 +62,42 @@ const visibleTemplates = computed(() => templates.value.filter((template) => {
   return matchesSearch && matchesCategory && matchesFormat
 }))
 
-const previewComposition = computed(() => picked.value ? cartazistaSample(picked.value.id, headers.value) : null)
-const samples = computed(() => Object.fromEntries(templates.value.map(t=>[t.id,cartazistaSample(t.id,headers.value)])))
+const previewComposition = computed(() =>
+  picked.value
+    ? previewForActiveAccount(cartazistaSample(picked.value.id, headers.value))
+    : null
+)
+const samples = computed(() =>
+  Object.fromEntries(
+    templates.value.map((template) => [
+      template.id,
+      previewForActiveAccount(cartazistaSample(template.id, headers.value))
+    ])
+  )
+)
+const designPreviews = computed<Record<string, ArtComposition>>(() =>
+  Object.fromEntries(
+    designs.value.map((design) => [
+      design.id,
+      previewForActiveAccount(
+        design.state.composition,
+        design.state.settings.showLogo
+      )
+    ])
+  )
+)
 
 const load = async () => {
   loading.value = true
   error.value = ''
   try {
-    const result = await $fetch<{ templates: CartazistaTemplateSummary[]; databaseReady: boolean }>('/api/cartazista/templates')
+    const [result, headerResult] = await Promise.all([
+      $fetch<{ templates: CartazistaTemplateSummary[]; databaseReady: boolean }>('/api/cartazista/templates'),
+      $fetch<{ headers: CartazistaHeader[] }>('/api/cartazista/headers'),
+      loadBrand()
+    ])
     templates.value = result.templates
-    headers.value = (await $fetch<{ headers: CartazistaHeader[] }>('/api/cartazista/headers')).headers
+    headers.value = headerResult.headers
     databaseReady.value = result.databaseReady
     if (active.value === 'mine') designs.value = await $fetch<CartazistaDesign[]>('/api/cartazista/designs')
   } catch (cause: any) {
@@ -177,7 +229,7 @@ const modelById = (id: string) => templates.value.find((template) => template.id
           <section v-else class="cartazista-model-grid">
             <article v-for="template in visibleTemplates" :key="template.id" class="cartazista-card">
               <button class="cartazista-card-preview" :aria-label="`Pré-visualizar ${template.name}`" @click="openPreview(template)">
-                <ArtPreview :composition="samples[template.id]!" :label="template.name" />
+                <ArtPreview :composition="samples[template.id]!" :label="template.name" lazy />
                 <div class="cartazista-card-hover-action" aria-hidden="true">
                   <span>Ver detalhes e usar</span>
                 </div>
@@ -227,7 +279,7 @@ const modelById = (id: string) => templates.value.find((template) => template.id
           <section v-else class="cartazista-model-grid">
             <article v-for="design in designs" :key="design.id" class="cartazista-card">
               <NuxtLink class="cartazista-card-preview" :to="`/cartazista/editor/${design.id}`">
-                <ArtPreview :composition="design.state.composition" :label="design.name" />
+                <ArtPreview :composition="designPreviews[design.id] || design.state.composition" :label="design.name" lazy />
                 <div class="cartazista-card-hover-action" aria-hidden="true">
                   <span>Abrir no editor</span>
                 </div>

@@ -4,7 +4,7 @@ export function fullVoiceTimeline(doc:VideoDocument,voice:FullVideoVoice):VideoS
  const ids=['intro',...doc.offers.map(o=>o.id),'outro'],budget=doc.duration*VIDEO_FPS-2
  if(!Number.isFinite(voice.duration)||voice.duration<=0)throw Error('Duração da locução inválida.')
  const rate=doc.autoFitVoice!==false?Math.max(1,Math.ceil(voice.duration*VIDEO_FPS/budget*1000)/1000):1
- if(rate>2||Math.ceil(voice.duration/rate*VIDEO_FPS)>budget)throw Error('A locução completa ultrapassa o limite. Encurte o texto; o áudio gerado está salvo.')
+ if(Math.ceil(voice.duration/rate*VIDEO_FPS)>budget)throw Error('Ative o ajuste automático para adaptar a locução completa à duração do vídeo. O áudio gerado está salvo.')
  const total=Math.ceil(voice.duration/rate*VIDEO_FPS)
  const boundaries=voice.boundaries
  if(boundaries.length!==ids.length+1||boundaries[0]!==0||Math.abs(boundaries.at(-1)!-voice.duration)>.01||boundaries.some((n,i)=>!Number.isFinite(n)||(i>0&&n<=boundaries[i-1]!)))throw Error('Sincronização da locução inválida.')

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  resolvePageUpdateDirtyPolicy,
   getAdaptiveCoalesceDelayMs,
   shouldSkipLifecycleSave,
   shouldRunHeavySanitizeForReason,
@@ -12,6 +13,23 @@ import {
   isDuplicateHistoryEntry,
   PERIODIC_SAVE_INTERVAL_MS
 } from '~/utils/editorSavePolicy'
+
+describe('política de edição pendente após sincronização automática', () => {
+  it('preserva edição pendente e sinaliza nova revisão mesmo no sync silencioso', () => {
+    expect(resolvePageUpdateDirtyPolicy({ wasDirty: true, source: 'system', markUnsaved: false }))
+      .toEqual({ dirty: true, markUnsaved: true })
+  })
+  it('hidratação de página limpa continua sem disparar gravação', () => {
+    expect(resolvePageUpdateDirtyPolicy({ wasDirty: false, source: 'system', markUnsaved: false }))
+      .toEqual({ dirty: false, markUnsaved: false })
+  })
+  it('edições do usuário e reparos duráveis continuam pendentes', () => {
+    expect(resolvePageUpdateDirtyPolicy({ wasDirty: false, source: 'user' }))
+      .toEqual({ dirty: true, markUnsaved: true })
+    expect(resolvePageUpdateDirtyPolicy({ wasDirty: false, source: 'system', markUnsaved: true }))
+      .toEqual({ dirty: true, markUnsaved: true })
+  })
+})
 
 describe('getAdaptiveCoalesceDelayMs — coalesce dinamico por carga', () => {
   it('reason fora de object:* nao coalesce (retorna 0)', () => {

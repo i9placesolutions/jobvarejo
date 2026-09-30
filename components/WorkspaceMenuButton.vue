@@ -3,17 +3,29 @@ import { Menu } from 'lucide-vue-next'
 
 const auth = useAuth()
 withDefaults(defineProps<{ theme?: 'dark' | 'light' }>(), { theme: 'dark' })
-const links = [
-  { to: '/', label: 'Central administrativa' },
-  { to: '/flyer-templates', label: 'Encartes' },
-  { to: '/quick-editor', label: 'Edição rápida' },
-  { to: '/card-configurations', label: 'Configuração de cards' },
-  { to: '/zone-structures', label: 'Estrutura de zonas' },
-  { to: '/art-studio', label: 'Estúdio de Artes' },
-  { to: '/cartazista', label: 'Cartazes' },
-  { to: '/videos', label: 'Vídeos' },
-  { to: '/radio-indoor', label: 'Rádio Indoor' }
-]
+const links = computed(() => {
+  const role = auth.user.value?.role
+  const canManageEncartes = auth.isAdmin.value || (role === 'editor' && auth.can('encartes'))
+  const items = [{ to: '/', label: auth.isAdmin.value ? 'Central administrativa' : 'Início' }]
+
+  if (auth.can('encartes')) {
+    items.push({
+      to: role === 'user' ? '/quick-editor' : '/flyer-templates',
+      label: role === 'user' ? 'Edição rápida' : 'Encartes'
+    })
+    if (role !== 'user') items.push({ to: '/quick-editor', label: 'Edição rápida' })
+  }
+  if (canManageEncartes) {
+    items.push({ to: '/card-configurations', label: 'Configuração de cards' })
+    items.push({ to: '/zone-structures', label: 'Estrutura de zonas' })
+  }
+  if (auth.can('artes')) items.push({ to: '/art-studio', label: 'Estúdio de Artes' })
+  if (auth.can('cartazes')) items.push({ to: '/cartazista', label: 'Cartazes' })
+  if (auth.can('videos')) items.push({ to: '/videos', label: 'Vídeos' })
+  if (auth.can('radio')) items.push({ to: '/radio-indoor', label: 'Rádio Indoor' })
+
+  return items
+})
 </script>
 
 <template>

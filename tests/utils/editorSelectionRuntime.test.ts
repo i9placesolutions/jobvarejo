@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyViewportTransformToRect, getSelectedObjectFloatingPos } from '~/utils/editorSelectionRuntime'
+import { applyViewportTransformToRect, getCanvasObjectFloatingPos, getSelectedObjectFloatingPos } from '~/utils/editorSelectionRuntime'
 
 describe('applyViewportTransformToRect', () => {
   it('nao altera o retangulo com vpt identidade', () => {
@@ -37,5 +37,19 @@ describe('getSelectedObjectFloatingPos', () => {
 
   it('esconde quando o alvo nao e zona', () => {
     expect(getSelectedObjectFloatingPos({ getBoundingRect: () => ({ left: 0, top: 0, width: 10, height: 10 }) }, () => false).visible).toBe(false)
+  })
+})
+
+describe('posição do painel do elemento', () => {
+  it('abre junto ao texto filho de um card com zoom e pan, sem depender da zona', () => {
+    const text = { type: 'textbox', getBoundingRect: () => ({ left: 100, top: 200, width: 300, height: 60 }) }
+    expect(getCanvasObjectFloatingPos(text, [0.5, 0, 0, 0.5, 220, 40])).toEqual({
+      left: 270, top: 140, width: 150, height: 30, visible: true
+    })
+  })
+  it('esconde ao limpar a seleção, em objeto invisível ou geometria inválida', () => {
+    expect(getCanvasObjectFloatingPos(null).visible).toBe(false)
+    expect(getCanvasObjectFloatingPos({ visible: false }).visible).toBe(false)
+    expect(getCanvasObjectFloatingPos({ getBoundingRect: () => ({ left: Infinity, top: 0, width: 3, height: 5 }) }).visible).toBe(false)
   })
 })

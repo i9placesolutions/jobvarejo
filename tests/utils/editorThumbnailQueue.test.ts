@@ -51,3 +51,37 @@ it('não publica uma miniatura após encerrar o editor', async () => {
   await vi.runAllTimersAsync()
   expect(apply).not.toHaveBeenCalled()
 })
+
+it('serializa páginas e usa a última edição da página que espera na fila', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(100000)
+  let finish!: (value: string) => void
+  const render = vi.fn(async (id, data: string) => id === 'A' ? new Promise<string>(r => { finish = r }) : data)
+  const apply = vi.fn()
+  const queue = createEditorThumbnailQueue<string>(render, apply)
+  queue.schedule('A', 'primeira', 100)
+  queue.schedule('B', 'antiga', 100)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(render).toHaveBeenCalledTimes(1)
+  queue.schedule('B', 'última', 100)
+  finish('primeira')
+  await vi.advanceTimersByTimeAsync(1)
+  expect(render).toHaveBeenCalledTimes(2)
+  expect(apply).toHaveBeenLastCalledWith('B', 'última', 'última')
+  queue.dispose()
+})
+
+it('encerrar durante uma renderização não inicia as páginas que ainda esperam', async () => {
+  vi.useFakeTimers()
+  let finish!: (value: string) => void
+  const render = vi.fn(() => new Promise<string>(r => { finish = r }))
+  const apply = vi.fn()
+  const queue = createEditorThumbnailQueue<string>(render, apply)
+  queue.schedule('A', 'primeira', 100)
+  queue.schedule('B', 'segunda', 100)
+  await vi.advanceTimersByTimeAsync(1)
+  queue.dispose()
+  finish('primeira')
+  await vi.runAllTimersAsync()
+  expect(render).toHaveBeenCalledTimes(1)
+  expect(apply).not.toHaveBeenCalled()
+})

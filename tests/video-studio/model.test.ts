@@ -24,9 +24,9 @@ describe('vídeos: preços, revisões e isolamento do contrato',()=>{
   d.offers[0]!.price='20,90'
   expect(videoAudioIdentityMatches(identity,d)).toBe(false)
  })
- it('um único campo mantém o roteiro associado às cenas e bloqueia linhas faltantes',()=>{const d=fixture();d.narrationText='Abertura da loja.\nCafé por dezenove reais e noventa centavos a unidade.\nAproveite hoje.';const mapped=narrationScripts(d,d.narrationText);expect(mapped?.map(s=>s.id)).toEqual(['intro',d.offers[0]!.id,'outro']);d.scripts=mapped!;expect(videoNarrationText(d)).toBe(d.narrationText);expect(validateVideoForGeneration(d)).toEqual([]);d.narrationText='Abertura.\nEncerramento.';expect(validateVideoForGeneration(d)).toContain('Mantenha 3 linhas no roteiro: abertura, uma por produto e encerramento.')})
+ it('um único campo mantém o roteiro associado às cenas e exige confirmar alterações',()=>{const d=fixture();d.narrationText='Abertura da loja.\nCafé por dezenove reais e noventa centavos a unidade.\nAproveite hoje.';const mapped=narrationScripts(d,d.narrationText);expect(mapped?.map(s=>s.id)).toEqual(['intro',d.offers[0]!.id,'outro']);d.scripts=mapped!;expect(videoNarrationText(d)).toBe(d.narrationText);expect(validateVideoForGeneration(d)).toEqual([]);d.narrationText='Abertura.\nEncerramento.';expect(validateVideoForGeneration(d)).toContain('Confira o texto completo da locução antes de gerar o áudio.')})
  it('recusa URLs arbitrárias e efeitos inválidos',()=>{const d=fixture();expect(videoDocumentSchema.safeParse(d).success).toBe(true);d.offers[0]!.image='http://127.0.0.1/secret';expect(videoDocumentSchema.safeParse(d).success).toBe(false)})
- it('não permite formatos duplicados ou mais de seis produtos',()=>{const d=fixture();d.formats=['vertical','vertical'];expect(videoDocumentSchema.safeParse(d).success).toBe(false)})
+ it('não permite formatos duplicados',()=>{const d=fixture();d.formats=['vertical','vertical'];expect(videoDocumentSchema.safeParse(d).success).toBe(false)})
  it('permite cadastro sem nome comercial sem inventar nome na locução',()=>{const d=fixture();d.brand.name='';d.scripts=suggestVideoScripts(d);expect(d.scripts[0]!.text).toBe(`${d.campaign}!`);expect(d.scripts.at(-1)!.text).toBe('Aproveite as ofertas!');expect(validateVideoForGeneration(d)).toEqual([]);expect(videoDocumentSchema.safeParse(d).success).toBe(true)})
  it('bloqueia preço inválido e imagem faltante',()=>{const d=fixture();d.brand.name='';d.offers[0]!.price='errado';d.offers[0]!.image='';expect(validateVideoForGeneration(d)).toHaveLength(2)})
 })
@@ -45,8 +45,8 @@ describe('ajuste automático da duração da voz',()=>{
   expect(scenes[0]!.playbackRate).toBeGreaterThan(1)
   for(const scene of scenes){expect(scene.speechFrames).toBe(Math.ceil(durations[scene.id]!/scene.playbackRate!*30));expect(scene.frames).toBeGreaterThanOrEqual(scene.speechFrames!)}
  })
- it('mantém a voz normal quando já cabe e recusa velocidade acima de 2x',()=>{
+ it('mantém a voz normal quando já cabe e acelera acima de 2x quando necessário',()=>{
   const d=fixture();expect(buildVideoTimeline(d,{intro:2,[d.offers[0]!.id]:4,outro:2})[0]!.playbackRate).toBe(1)
-  expect(()=>buildVideoTimeline(d,{intro:20,[d.offers[0]!.id]:80,outro:20})).toThrow('2×')
+  const scenes=buildVideoTimeline(d,{intro:20,[d.offers[0]!.id]:80,outro:20});expect(scenes[0]!.playbackRate).toBeGreaterThan(2);expect(scenes.at(-1)!.from+scenes.at(-1)!.frames).toBeLessThanOrEqual(898)
  })
 })

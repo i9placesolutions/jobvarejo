@@ -29,14 +29,17 @@ const error = ref('')
 const notice = ref('')
 const editingId = ref<string | null>(null)
 const editingInternalOnly = ref(false)
+const editingSuperAdmin = ref(false)
 const form = reactive({ name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user' as UserRole, hasPlatformAccess: false, is_active: true })
 const requiresLogin = computed(() => form.role !== 'user' || form.hasPlatformAccess)
 const permissions = reactive<Record<AccessArea, Record<AccessAction, boolean>>>(Object.fromEntries(
   ACCESS_AREAS.map(area => [area.id, Object.fromEntries(ACCESS_ACTIONS.map(action => [action.id, false]))])
 ) as Record<AccessArea, Record<AccessAction, boolean>>)
 
-const canManage = (user: ManagedUser) => user.role !== 'super_admin' && (auth.isSuperAdmin.value || user.role !== 'admin')
-const roles = computed(() => auth.isSuperAdmin.value
+const canManage = (user: ManagedUser) => auth.isSuperAdmin.value || (auth.isAdmin.value && user.role !== 'super_admin' && user.role !== 'admin')
+const roles = computed(() => editingSuperAdmin.value
+  ? [{ value: 'super_admin', label: 'Super admin' }]
+  : auth.isSuperAdmin.value
   ? [{ value: 'user', label: 'Usuário comum' }, { value: 'editor', label: 'Editor' }, { value: 'admin', label: 'Administrador' }]
   : [{ value: 'user', label: 'Usuário comum' }, { value: 'editor', label: 'Editor' }])
 
@@ -46,13 +49,16 @@ const clearPermissions = () => {
 const resetForm = () => {
   editingId.value = null
   editingInternalOnly.value = false
+  editingSuperAdmin.value = false
   Object.assign(form, { name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user', hasPlatformAccess: false, is_active: true })
   clearPermissions()
   error.value = ''
 }
 const editUser = (user: ManagedUser) => {
+  if (!canManage(user)) return
   editingId.value = user.id
   editingInternalOnly.value = user.internal_only === true
+  editingSuperAdmin.value = user.role === 'super_admin'
   Object.assign(form, { name: user.internal_only ? '' : user.name, companyName: user.company_name || '', email: user.email, whatsapp: user.whatsapp || '', password: '', role: user.role, hasPlatformAccess: !user.internal_only, is_active: user.is_active })
   clearPermissions()
   for (const area of ACCESS_AREAS) for (const action of ACCESS_ACTIONS) {
@@ -111,6 +117,7 @@ const save = async () => {
           ...(form.password ? { password: form.password } : {})
         }
       })
+      if (editingId.value === auth.user.value?.id) await auth.getSession()
       notice.value = editingInternalOnly.value && form.hasPlatformAccess ? 'Acesso à plataforma habilitado.' : 'Cadastro atualizado.'
     } else {
       await $fetch('/api/admin/users', {
@@ -151,9 +158,9 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
           <button v-if="editingId" type="button" @click="resetForm">Cancelar edição</button>
         </div>
         <form class="users-form" @submit.prevent="save">
-          <label v-if="form.role === 'user'">Nome da empresa <input v-model="form.companyName" required minlength="2" maxlength="160" autocomplete="organization" placeholder="Ex.: Mercado Central"></label>
+          <label v-if="form.role === 'user' || editingSuperAdmin">Nome da empresa <input v-model="form.companyName" :required="form.role === 'user'" minlength="2" maxlength="160" autocomplete="organization" placeholder="Ex.: Mercado Central"></label>
           <label>Nível de acesso
-            <select v-model="form.role" :disabled="editingInternalOnly">
+            <select v-model="form.role" :disabled="editingInternalOnly || editingSuperAdmin">
               <option v-for="role in roles" :key="role.value" :value="role.value">{{ role.label }}</option>
             </select>
           </label>
@@ -168,7 +175,7 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
             <label>WhatsApp para entrar <input v-model="form.whatsapp" required type="tel" :disabled="!!editingId && !editingInternalOnly" placeholder="(64) 99999-9999" autocomplete="off"></label>
             <label>{{ editingId && !editingInternalOnly ? 'Nova senha (opcional)' : 'Senha inicial' }} <input v-model="form.password" type="password" :required="!editingId || editingInternalOnly" minlength="8" autocomplete="new-password"></label>
           </template>
-          <label v-if="editingId" class="users-checkbox"><input v-model="form.is_active" type="checkbox" :disabled="editingId === auth.user.value?.id"> Usuário ativo</label>
+          <label v-if="editingId" class="users-checkbox"><input v-model="form.is_active" type="checkbox" :disabled="editingSuperAdmin || editingId === auth.user.value?.id"> Usuário ativo</label>
 
           <fieldset v-if="form.role === 'editor'" class="users-permissions">
             <legend>Permissões do editor</legend>
@@ -218,8 +225,9 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
 .users-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .users-form > label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
 .users-help { grid-column: 1 / -1; margin: -4px 0 0; color: #64748b; font-size: 13px; }
-.users-form input:not([type=checkbox]), .users-form select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; font-size: 14px; }
-.users-form input:disabled { background: #f1f5f9; }
+.users-form input:not([type=checkbox]), .users-form select, .users-search { box-sizing: border-box; width: 100%; height: 42px; min-height: 42px; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; font-size: 14px; line-height: 20px; }
+.users-form select { appearance: none; padding-right: 36px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 11px center; background-size: 16px 16px; }
+.users-form input:disabled, .users-form select:disabled { background-color: #f1f5f9; }
 .users-form .users-checkbox { flex-direction: row; align-items: center; }
 .users-permissions { grid-column: 1 / -1; min-width: 0; padding: 16px; border: 1px solid #dbe5f0; border-radius: 12px; }
 .users-permissions legend { padding: 0 5px; font-size: 15px; font-weight: 800; }
@@ -233,7 +241,7 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
 .users-save { grid-column: 1 / -1; justify-self: start; min-height: 42px; padding: 0 20px; border-radius: 10px; background: #2563eb; color: white; font-weight: 800; }
 .users-save:disabled { opacity: .6; }
 .users-list-item { display: grid; grid-template-columns: minmax(0, 1fr) 130px 100px 60px; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid #e2e8f0; }
-.users-search { width: 100%; min-height: 42px; margin-bottom: 15px; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 9px; }
+.users-search { margin-bottom: 15px; }
 .users-list-item div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .users-list-item small { color: #64748b; overflow-wrap: anywhere; }
 .users-role, .users-active, .users-inactive { font-size: 12px; font-weight: 800; }

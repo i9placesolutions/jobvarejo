@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ART_STARTER_TEMPLATES } from '~/utils/art-studio/catalog'
 import { artCompositionSchema } from '~/server/utils/art-studio-schema'
+import { normalizeArtTemplateBindings } from '~/server/utils/art-studio'
 import {
   artImageCrop,
   cloneArt,
@@ -38,6 +39,41 @@ describe('Estúdio de Artes — contrato independente', () => {
     )
     expect(b.layers.find((l) => l.binding === 'logo')?.src).toBe('')
     expect(JSON.stringify(template)).toBe(original)
+  })
+  it('substitui uma logo legada pela marca da conta ativa e limpa o slot sem cadastro', () => {
+    const source = cloneArt(ART_STARTER_TEMPLATES[0]!.composition)
+    const legacy = source.layers.find((layer) => layer.binding === 'logo')!
+    legacy.binding = ''
+    legacy.id = 'legacy-store-image'
+    legacy.name = 'Logo da loja'
+    legacy.src = '/api/art-studio/assets/11111111-1111-4111-8111-111111111111'
+
+    const branded = personalizeArt(source, {
+      logo: '/api/art-studio/brand-logo'
+    })
+    const logo = branded.layers.find(
+      (layer) => layer.id === legacy.id
+    )!
+    expect(logo.binding).toBe('logo')
+    expect(logo.src).toBe('/api/art-studio/brand-logo')
+    expect(
+      personalizeArt(source, { logo: '' }).layers.find(
+        (layer) => layer.id === legacy.id
+      )?.src
+    ).toBe('')
+  })
+  it('remove URLs de logo legadas quando um modelo é publicado', () => {
+    const source = cloneArt(ART_STARTER_TEMPLATES[0]!.composition)
+    const legacy = source.layers.find((layer) => layer.binding === 'logo')!
+    legacy.binding = ''
+    legacy.id = 'store-logo'
+    legacy.src = '/api/art-studio/assets/11111111-1111-4111-8111-111111111111'
+
+    normalizeArtTemplateBindings(source)
+    expect(source.layers.find((layer) => layer.id === 'store-logo')).toMatchObject({
+      binding: 'logo',
+      src: ''
+    })
   })
   it('redimensiona sem perder vínculo, rotação, imagens ou posição proporcional', () => {
     const source = cloneArt(ART_STARTER_TEMPLATES[0]!.composition),

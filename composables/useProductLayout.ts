@@ -102,6 +102,7 @@ export const useProductLayout = () => {
       fontSize: styles.prodNameSize ?? 24,
       fontFamily: styles.prodNameFont ?? DEFAULT_EDITOR_FONT_FAMILY,
       fontWeight: styles.prodNameWeight ?? 'bold',
+      lineHeight: styles.prodNameLineHeight ?? 0.95,
       textAlign: styles.prodNameAlign ?? 'center',
       fill: prod.nameColor ?? styles.prodNameColor ?? '#000000',
       top: -cardHeight/2 + padding + (styles.prodNameOffsetY ?? 0),

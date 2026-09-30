@@ -1,3 +1,4 @@
+import {resolveCatalogAsset} from '../../workers/video-studio/catalog-assets.mjs'
 import{readFile,writeFile}from'node:fs/promises'
 import sharp from 'sharp'
 import{register}from'../../workers/video-studio/node_modules/tsx/dist/esm/api/index.mjs'
@@ -14,7 +15,7 @@ const palettes=new Map()
 for(const asset of assets){
  let base=asset.gradient?.at(-1)?.color,accent=asset.gradient?.[0]?.color
  if(asset.background){
-  const {data,info}=await sharp('public/video-studio/templates/'+asset.background).resize(96,96,{fit:'fill'}).removeAlpha().raw().toBuffer({resolveWithObject:true})
+  const {data,info}=await sharp(await resolveCatalogAsset('templates/'+asset.background)).resize(96,96,{fit:'fill'}).removeAlpha().raw().toBuffer({resolveWithObject:true})
   const bins=new Map()
   for(let p=0;p<data.length;p+=info.channels){const rgb=[data[p],data[p+1],data[p+2]],key=rgb.map(v=>Math.floor(v/24)).join(',');const b=bins.get(key)||{sum:[0,0,0],count:0};rgb.forEach((v,i)=>b.sum[i]+=v);b.count++;bins.set(key,b)}
   const colors=[...bins.values()].sort((a,b)=>b.count-a.count).map(b=>({rgb:b.sum.map(v=>Math.round(v/b.count)),count:b.count}))

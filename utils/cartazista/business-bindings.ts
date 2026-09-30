@@ -8,6 +8,7 @@ export function hydrateCartazistaBusiness(source: ArtComposition, profile: Pick<
   for (const layer of next.layers) {
     if(layer.id==='cartaz-logo-backdrop'){layer.visible=showLogo&&!!logoSrc;continue}
     if (layer.binding === 'logo' || layer.id === 'cartaz-logo') {
+      layer.binding = 'logo'
       layer.src = showLogo ? logoSrc : ''
       layer.visible = !!layer.src
     } else {

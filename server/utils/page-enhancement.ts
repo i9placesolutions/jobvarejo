@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
 import { REDESIGN_VERSION } from '../../shared/pageEnhancementVersion'
+import { PAGE_ENHANCEMENT_CONCURRENCY, PAGE_ENHANCEMENT_ACTIVE_TIMEOUT_MS } from '../../shared/pageEnhancementPolicy'
 import { getS3Client } from './s3'
 import { pgOneOrNull, pgTx } from './postgres'
 
@@ -15,8 +16,16 @@ export const enhancementAspectRatio = (width: number, height: number) => {
   const closest = supported.reduce((best, current) => Math.abs(current[1] - ratio) < Math.abs(best[1] - ratio) ? current : best)
   return Math.abs(closest[1] - ratio) / ratio < 0.025 ? closest[0] : 'auto'
 }
-export const ENHANCEMENT_PROMPT = `Refine o acabamento visual deste encarte de supermercado sem mudar sua composição. Melhore exclusivamente fundos, texturas, efeitos decorativos, profundidade e harmonia visual. Preserve rigorosamente posições, proporções e paleta. NÃO adicione, reescreva, mova ou remova textos, preços, datas, contatos, marcas, logotipos, embalagens ou produtos. Não invente produtos nem ofertas. Não adicione letras ou números. A segunda imagem é a máscara: áreas brancas são protegidas e devem permanecer intocadas; trabalhe somente nas áreas pretas. Produza uma única página completa no mesmo enquadramento da referência. As áreas protegidas serão recompostas a partir da imagem original pelo sistema.`
-export const REDESIGN_PROMPT = `Transforme esta imagem em uma arte promocional de alto padrão para grandes redes de supermercado e atacarejo. A área de produtos contém o grid com as fotos reais, nomes e preços originais; a moldura externa mantém a identidade do encarte. Crie uma direção de arte visualmente marcante, sofisticada, com acabamento 3D, contrastes poderosos e estética promocional de elite que gere impacto imediato.
+export const ENHANCEMENT_PROMPT = `Refine o acabamento visual deste encarte de supermercado sem mudar sua composição. A primeira imagem é a única fonte de conteúdo desta página; cada pedido é independente. Use somente os produtos e informações visíveis nela, sem misturar páginas ou recuperar conteúdo oculto. Melhore exclusivamente fundos, texturas, efeitos decorativos, profundidade e harmonia visual. Preserve rigorosamente posições, proporções e paleta. NÃO adicione, reescreva, mova ou remova textos, preços, datas, contatos, marcas, logotipos, embalagens ou produtos. Não invente produtos nem ofertas. Não adicione letras ou números. A segunda imagem é apenas a máscara técnica, nunca outra arte ou fonte de produtos: áreas brancas são protegidas e devem permanecer intocadas; trabalhe somente nas áreas pretas. Produza uma única página completa no mesmo enquadramento da referência. As áreas protegidas serão recompostas a partir da imagem original pelo sistema.`
+export const REDESIGN_PROMPT = `Melhore exclusivamente a imagem original anexada. Esta imagem é a ÚNICA fonte de conteúdo e este pedido é independente de qualquer outra página ou geração. Cada imagem é única: a saída deve conter somente esta página e exatamente o que está visível nela.
+
+ISOLAMENTO OBRIGATÓRIO DA PÁGINA:
+- Não junte, combine ou misture esta arte com outra imagem, página, encarte ou campanha.
+- Não recupere produtos de camadas ocultas, templates, referências anteriores ou conteúdo que não esteja visível na imagem anexada.
+- Preserve exatamente a quantidade de ofertas e de embalagens/fotos visíveis em cada oferta. Não crie novos cards nem preencha espaços vazios com outros produtos.
+- Preserve o grid, a ordem, as posições e as proporções das ofertas originais. Melhore o acabamento dentro dessa mesma composição.
+
+Transforme esta imagem em uma arte promocional de alto padrão para grandes redes de supermercado e atacarejo. A área de produtos contém o grid com as fotos reais, nomes e preços originais; a moldura externa mantém a identidade do encarte. Crie uma direção de arte visualmente marcante, sofisticada, com acabamento 3D, contrastes poderosos e estética promocional de elite que gere impacto imediato.
 
 REGRAS DE CONTEÚDO (NÃO ALTERAR INFORMAÇÃO COMERCIAL):
 - Mantenha exatamente os mesmos produtos, mesmas fotografias, mesmas embalagens, nomes e marcas.
@@ -59,7 +68,7 @@ export const compositeCommercialOverlay = async (generated: Buffer, overlay: Buf
   // partir dos objetos Fabric originais, fixa cada foto, nome, preço e marca.
   return sharp(candidate).composite([{ input: overlay, left: 0, top: 0, blend: 'over' }]).png().toBuffer()
 }
-export type EnhancementReceipt = { pipelineVersion?: string; redesignArea?: RedesignArea; mode?: 'finish'|'redesign'; id: string; sourceHash: string; projectId: string; pageId: string; model: string; quality: string; width: number; height: number; status: 'processing'|'completed'|'failed'|'uncertain'; costUsd: number|null; createdAt: string; updatedAt: string; originalKey: string; referenceKey?: string; resultKey?: string; error?: string; usage?: Record<string, unknown> }
+export type EnhancementReceipt = { prompt?: string; pipelineVersion?: string; redesignArea?: RedesignArea; mode?: 'finish'|'redesign'; id: string; sourceHash: string; projectId: string; pageId: string; model: string; quality: string; width: number; height: number; status: 'processing'|'completed'|'failed'|'uncertain'; costUsd: number|null; createdAt: string; updatedAt: string; originalKey: string; referenceKey?: string; resultKey?: string; error?: string; usage?: Record<string, unknown> }
 const bucket = () => String(useRuntimeConfig().wasabiBucket || process.env.WASABI_BUCKET || '')
 const prefix = (userId: string, projectId: string) => `projects/${userId}/${projectId}/enhancements/`
 const path = (userId: string, projectId: string, id: string) => `${prefix(userId, projectId)}${id}/receipt.json`
@@ -98,7 +107,7 @@ export const readEnhancement = async (userId: string, projectId: string, id: str
 }
 const writeReceipt = async (userId: string, r: EnhancementReceipt) => { r.updatedAt = new Date().toISOString(); await put(path(userId,r.projectId,r.id),JSON.stringify(r),'application/json') }
 export const publicReceipt = (r: EnhancementReceipt) => {
-  const expired = r.status === 'processing' && Date.now()-Date.parse(r.updatedAt)>7*60_000
+  const expired = r.status === 'processing' && Date.now()-Date.parse(r.updatedAt)>PAGE_ENHANCEMENT_ACTIVE_TIMEOUT_MS
   const status = expired ? 'uncertain' : r.status
   return {
     id: r.id,
@@ -183,9 +192,9 @@ export const startEnhancement = async (userId: string, body: any) => {
     const alpha = await sharp(overlay).extractChannel('alpha').raw().toBuffer()
   if (!alpha.some(v => v > 0) || !alpha.some(v => v < 255)) throw createError({statusCode:422,statusMessage:'Não foi possível separar o conteúdo e o design desta página. Revise a arte e tente novamente.'})
   }
-  const reference = mode === 'redesign'
-    ? await buildEnhancementReference(original, guide!, overlay!, redesignArea!, meta.width!, meta.height!)
-    : undefined
+  // A exportação visível é a única fonte comercial. Reconstruir a referência
+  // com cards do canvas recuperava produtos antigos encobertos por outros.
+  const reference = mode === 'redesign' ? original : undefined
   // Só o acabamento leve usa a máscara para limitar os pixels editáveis.
   // No redesign, a imagem gerada é usada por inteiro; a máscara participa
   // apenas da identidade do pedido e pode cobrir quase toda a página.
@@ -193,7 +202,8 @@ export const startEnhancement = async (userId: string, body: any) => {
     const pixels=await sharp(mask).removeAlpha().greyscale().raw().toBuffer();const coverage=pixels.reduce((n,v)=>n+(v>=128?1:0),0)/pixels.length
     if(coverage<=0||coverage>=0.995)throw createError({statusCode:422,statusMessage:'Não há áreas decorativas suficientes para melhorar esta página. Revise a arte e tente novamente.'})
   }
-  const id=createHash('sha256').update(mode === 'redesign' ? REDESIGN_VERSION : 'v2').update(guide || '').update(mode).update(overlay || '').update(JSON.stringify(redesignArea || '')).update(projectId).update(pageId).update(model).update(quality).update(original).update(mask).digest('hex').slice(0,32)
+  const prompt = mode === 'redesign' ? REDESIGN_PROMPT : ENHANCEMENT_PROMPT
+  const id=createHash('sha256').update(mode === 'redesign' ? REDESIGN_VERSION : 'v2').update(prompt).update(guide || '').update(mode).update(overlay || '').update(JSON.stringify(redesignArea || '')).update(projectId).update(pageId).update(model).update(quality).update(original).update(mask).digest('hex').slice(0,32)
   let created=false
   const receipt=await pgTx(async client=>{
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`${userId}:enhancement`])
@@ -203,18 +213,22 @@ export const startEnhancement = async (userId: string, body: any) => {
     let ledger: {day:string; attempts:Array<{projectId:string;id:string}>}={day:new Date().toISOString().slice(0,10),attempts:[]}
     try {const saved=await getS3Client().send(new GetObjectCommand({Bucket:bucket(),Key:ledgerKey}));const parsed=JSON.parse(await saved.Body!.transformToString());if(parsed.day===ledger.day)ledger=parsed} catch(e:any){if(e?.$metadata?.httpStatusCode!==404&&e?.name!=='NoSuchKey')throw e}
     if(ledger.attempts.length>=20)throw createError({statusCode:429,statusMessage:'Limite de 20 páginas por dia atingido para esta conta.'})
-    for(const previous of ledger.attempts.slice(-2)){const prior=await readEnhancement(userId,previous.projectId,previous.id);if(prior?.status==='processing'&&Date.now()-Date.parse(prior.updatedAt)<7*60_000)throw createError({statusCode:409,statusMessage:'Aguarde a página em processamento antes de iniciar outra.'})}
+    // Examinar todos os pedidos únicos: com paralelismo, um pedido antigo pode
+    // continuar ativo mesmo quando os mais recentes já terminaram.
+    const uniqueAttempts = [...new Map(ledger.attempts.map(attempt => [`${attempt.projectId}:${attempt.id}`, attempt])).values()]
+    const priorReceipts = await Promise.all(uniqueAttempts.map(previous => readEnhancement(userId,previous.projectId,previous.id)))
+    const active = priorReceipts.filter(prior => prior?.status === 'processing' && Date.now()-Date.parse(prior.updatedAt)<PAGE_ENHANCEMENT_ACTIVE_TIMEOUT_MS)
+    if(active.length>=PAGE_ENHANCEMENT_CONCURRENCY)throw createError({statusCode:409,statusMessage:`Já há ${PAGE_ENHANCEMENT_CONCURRENCY} páginas em processamento. Aguarde uma delas antes de iniciar outra.`})
     const root=`${prefix(userId,projectId)}${id}`;const now=new Date().toISOString()
-    const r:EnhancementReceipt={id,mode,pipelineVersion:mode === 'redesign' ? REDESIGN_VERSION : undefined,redesignArea,sourceHash:createHash('sha256').update(original).digest('hex'),projectId,pageId,model,quality,width:meta.width!,height:meta.height!,status:'processing',costUsd:null,createdAt:now,updatedAt:now,originalKey:root+'/original.png',referenceKey:mode === 'redesign' ? root+'/reference.png' : undefined}
+    const r:EnhancementReceipt={id,mode,prompt,pipelineVersion:mode === 'redesign' ? REDESIGN_VERSION : undefined,redesignArea,sourceHash:createHash('sha256').update(original).digest('hex'),projectId,pageId,model,quality,width:meta.width!,height:meta.height!,status:'processing',costUsd:null,createdAt:now,updatedAt:now,originalKey:root+'/original.png',referenceKey:mode === 'redesign' ? root+'/reference.png' : undefined}
     await put(r.originalKey,original,'image/png');await put(root+'/mask.png',mask,'image/png');if(overlay)await put(root+'/overlay.png',overlay,'image/png');if(guide)await put(root+'/guide.png',guide,'image/png');if(reference&&r.referenceKey)await put(r.referenceKey,reference,'image/png');await writeReceipt(userId,r);ledger.attempts.push({projectId,id});await put(ledgerKey,JSON.stringify(ledger),'application/json');created=true;return r
   })
-  return {receipt,run:created?()=>runEnhancement(userId,receipt,original,mask,reference):null}
+  return {receipt,run:created?()=>runEnhancement(userId,receipt,original,mask):null}
 }
-const runEnhancement = async (userId: string, receipt: EnhancementReceipt, original: Buffer, mask: Buffer, reference?: Buffer) => {
+const runEnhancement = async (userId: string, receipt: EnhancementReceipt, original: Buffer, mask: Buffer) => {
   try {
-    if (receipt.mode === 'redesign' && !reference) throw new Error('missing_redesign_reference')
-    const references = receipt.mode === 'redesign' ? [reference!] : [original, mask]
-    const response=await fetch('https://openrouter.ai/api/v1/images',{method:'POST',headers:{Authorization:`Bearer ${enhancementApiKey()}`,'Content-Type':'application/json','X-Title':'JobVarejo'},body:JSON.stringify({model:receipt.model,prompt:receipt.mode === 'redesign' ? REDESIGN_PROMPT : ENHANCEMENT_PROMPT,quality:receipt.quality,n:1,output_format:'png',aspect_ratio:enhancementAspectRatio(receipt.width,receipt.height),input_references:references.map(b=>({type:'image_url',image_url:{url:'data:image/png;base64,'+b.toString('base64')}}))}),signal:AbortSignal.timeout(300_000)})
+    const references = receipt.mode === 'redesign' ? [original] : [original, mask]
+    const response=await fetch('https://openrouter.ai/api/v1/images',{method:'POST',headers:{Authorization:`Bearer ${enhancementApiKey()}`,'Content-Type':'application/json','X-Title':'JobVarejo'},body:JSON.stringify({model:receipt.model,prompt:receipt.prompt ?? (receipt.mode === 'redesign' ? REDESIGN_PROMPT : ENHANCEMENT_PROMPT),quality:receipt.quality,n:1,output_format:'png',aspect_ratio:enhancementAspectRatio(receipt.width,receipt.height),input_references:references.map(b=>({type:'image_url',image_url:{url:'data:image/png;base64,'+b.toString('base64')}}))}),signal:AbortSignal.timeout(300_000)})
     if(!response.ok){receipt.status=[400,401,402,403,404,422,429].includes(response.status)?'failed':'uncertain';receipt.costUsd=receipt.status==='failed'?0:null;receipt.error=receipt.status==='failed'?'Não foi possível concluir esta melhoria.':'A geração não foi confirmada. Consulte o histórico antes de tentar novamente.';await writeReceipt(userId,receipt);return}
     const data=await response.json() as any
     receipt.costUsd=typeof data.usage?.cost==='number'&&Number.isFinite(data.usage.cost)?data.usage.cost:null

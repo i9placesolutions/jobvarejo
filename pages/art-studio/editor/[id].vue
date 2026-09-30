@@ -40,6 +40,7 @@ import {
   artError,
   blankArt,
   cloneArt,
+  isArtStoreLogoLayer,
   newArtLayer,
   personalizeArt,
   resizeArt,
@@ -107,7 +108,9 @@ const importComposition = async (event: Event) => {
       method: 'POST',
       body: JSON.parse(await file.text())
     })
-    doc.value = validated
+    doc.value = managing.value
+      ? validated
+      : personalizeArt(validated, profile.value)
     selectedId.value = null
   } catch (e) {
     error.value = artError(e)
@@ -116,7 +119,7 @@ const importComposition = async (event: Event) => {
   }
 }
 const mobilePanel = ref<'layers' | 'properties'>('properties')
-const profile = ref<Record<string, string>>({}),
+const profile = ref<Record<string, string>>({ logo: '' }),
   hasLogo = ref(false)
 const history = ref<string[]>([]),
   historyIndex = ref(-1),
@@ -362,7 +365,9 @@ async function save(asCopy = false) {
 const restoreDraft = () => {
   if (!recovery.value) return
   name.value = recovery.value.name
-  doc.value = cloneArt(recovery.value.composition)
+  doc.value = managing.value
+    ? cloneArt(recovery.value.composition)
+    : personalizeArt(recovery.value.composition, profile.value)
   if (recovery.value.revision && recovery.value.revision !== revision.value) {
     conflict.value = true
     error.value =
@@ -619,7 +624,10 @@ const saveTemplate = async () => {
   ;[composition, ...(composition.alternates || [])]
     .flatMap((page) => page.layers)
     .forEach((l) => {
-      if (l.binding === 'logo' && l.kind === 'image') l.src = ''
+      if (isArtStoreLogoLayer(l)) {
+        l.binding = 'logo'
+        l.src = ''
+      }
       if (l.binding && l.kind === 'text')
         l.text =
           {
@@ -780,11 +788,15 @@ onMounted(async () => {
           doc.value = { ...results[0], alternates: results.slice(1) }
       }
     }
-    for (const layer of [doc.value, ...(doc.value.alternates || [])].flatMap(
-      (page) => page.layers
-    ))
-      if (layer.kind === 'image' && layer.binding === 'logo')
-        layer.src = managing.value ? '' : profile.value.logo || ''
+    if (!managing.value) doc.value = personalizeArt(doc.value, profile.value)
+    else
+      for (const layer of [doc.value, ...(doc.value.alternates || [])].flatMap(
+        (page) => page.layers
+      ))
+        if (isArtStoreLogoLayer(layer)) {
+          layer.binding = 'logo'
+          layer.src = ''
+        }
     const raw = localStorage.getItem(draftKey.value)
     if (raw) {
       try {

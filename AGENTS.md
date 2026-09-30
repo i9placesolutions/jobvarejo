@@ -206,7 +206,9 @@ Para desenvolvimento minimo funcional:
 ## Jev no Codex
 
 - Neste ambiente, o Jev está disponível pelo servidor MCP global `jev_openrouter`, ferramenta `jev_decide`. A credencial fica fora deste repositório.
-- Use `jev_decide` nas tarefas deste projeto somente para decisões curtas e fechadas, como classificar solicitações, escolher entre opções definidas, pontuar prioridade ou responder sim/não. Agrupe perguntas relacionadas e envie apenas o contexto necessário.
+- O Sol atua como orquestrador e revisa o resultado; encaminhe implementação delimitada, com escopo e critérios fechados, ao `i9_executor` (Luna, esforço high). Consultas simples, microedições e tarefas em que o custo do repasse supere o benefício podem ser executadas diretamente pelo principal.
+- O Jev é opcional: use `jev_decide` somente para uma decisão estruturada ainda ambígua que traga benefício concreto para a rota. Não é necessário chamá-lo em toda demanda, para status, perguntas triviais ou roteamento já definido.
+- Use o Jev para decisões curtas e fechadas, como classificar solicitações, escolher entre opções definidas, pontuar prioridade ou responder sim/não. Agrupe perguntas relacionadas e envie apenas o contexto necessário.
 - Para escolhas, passe `criteria` como objeto de opções nomeadas. Se a confiança for baixa ou a decisão tiver alto impacto, confira o caso diretamente antes de agir.
 - Não use Jev para escrever código ou texto, raciocínio aberto ou regras determinísticas. Não envie segredos, dados pessoais ou arquivos `.env` à ferramenta.
 

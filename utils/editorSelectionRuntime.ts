@@ -136,6 +136,23 @@ export const applyViewportTransformToRect = (
   }
 }
 
+export const getCanvasObjectFloatingPos = (
+  active: any,
+  viewportTransform?: number[] | null,
+  sceneRect?: { left: number; top: number; width: number; height: number } | null
+): { top: number; left: number; width: number; height: number; visible: boolean } => {
+  if (active && active.visible !== false) {
+    try {
+      const boundingRect = sceneRect || active.getBoundingRect?.()
+      if (boundingRect && Number(boundingRect.width) > 0 && Number(boundingRect.height) > 0) {
+        const projected = applyViewportTransformToRect(boundingRect, viewportTransform || active?.canvas?.viewportTransform)
+        if (Object.values(projected).every(Number.isFinite)) return { ...projected, visible: true }
+      }
+    } catch { /* Objeto removido ou transformação ainda incompleta. */ }
+  }
+  return { top: 0, left: 0, width: 0, height: 0, visible: false }
+}
+
 export const getSelectedObjectFloatingPos = (
   active: any,
   isLikelyProductZone: (obj: any) => boolean,
