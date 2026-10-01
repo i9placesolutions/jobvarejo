@@ -1630,7 +1630,7 @@ const fetchReviewSuggestionsForRow = async (
     if (sameQuery && reviewSuggestionLoadingMap.value[productId]) return
     if (sameQuery && !options.force && reviewSuggestionMap.value[productId]?.length) return
     reviewSuggestionQueries.set(productId, query)
-    if (!sameQuery || options.force) reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: [] }
+    if (!sameQuery) reviewSuggestionMap.value = { ...reviewSuggestionMap.value, [productId]: [] }
 
     reviewSuggestionLoadingMap.value = { ...reviewSuggestionLoadingMap.value, [productId]: true }
     reviewSuggestionErrorMap.value = { ...reviewSuggestionErrorMap.value, [productId]: null }
@@ -1671,10 +1671,15 @@ const fetchReviewSuggestionsForRow = async (
         }
         const results = await Promise.allSettled(searches)
         if (!isCurrent()) return
-        const failed = results.some(result => result.status === 'rejected')
-        if (failed) reviewSuggestionErrorMap.value = {
+        const failedSources = results.flatMap((result, index) => {
+            if (result.status !== 'rejected') return []
+            const source = index === 0 ? 'biblioteca' : 'busca externa'
+            const cause = String(result.reason?.data?.data?.reason || '').trim()
+            return [cause ? `${source}: ${cause}` : source]
+        })
+        if (failedSources.length) reviewSuggestionErrorMap.value = {
             ...reviewSuggestionErrorMap.value,
-            [productId]: 'Parte da busca não respondeu. As imagens encontradas continuam disponíveis; tente atualizar para buscar as restantes.'
+            [productId]: `Parte da busca não respondeu (${failedSources.join(', ')}). As imagens encontradas continuam disponíveis; tente atualizar para buscar as restantes.`
         }
     } catch (error: any) {
         if (isCurrent()) reviewSuggestionErrorMap.value = {
@@ -2924,7 +2929,9 @@ const uploadManualImageForProduct = async (
             )
         } catch (primaryErr) {
             if (options.removeBackground !== false) {
-                throw new Error('Não foi possível concluir a remoção do fundo. Tente enviar novamente. A imagem anterior foi mantida.')
+                const uploadError = primaryErr as { data?: { statusMessage?: string; data?: { message?: string } } }
+                const message = String(uploadError?.data?.statusMessage || uploadError?.data?.data?.message || '')
+                throw new Error(message || 'Não foi possível concluir a remoção do fundo. Tente enviar novamente. A imagem anterior foi mantida.')
             }
             if (isAuthFailureError(primaryErr)) {
                 console.warn('[Upload Manual] Upload remoto bloqueado por autenticação. Aplicando fallback local.', primaryErr)
@@ -4005,7 +4012,7 @@ const getAssetDisplayName = (asset: any): string => {
 
                                     <!-- Motivo -->
                                     <p v-if="activeReviewDecisionState === 'blocked'" class="text-[10px] text-zinc-400 leading-relaxed">
-                                        Não foi possível encontrar uma imagem adequada. Busque novamente ou envie uma imagem do produto.
+                                        {{ activeReviewRowMeta.product.error || activeReviewRowMeta.product.imageReviewReason || 'Não foi possível encontrar uma imagem adequada. Busque novamente ou envie uma imagem do produto.' }}
                                     </p>
                                 </div>
                             </div>
@@ -4337,7 +4344,7 @@ const getAssetDisplayName = (asset: any): string => {
                             <input v-model="removeBackgroundOnUpload" type="checkbox" :disabled="isReviewUploadSubmitting" class="accent-emerald-500" />
                             Remover fundo ao enviar
                         </label>
-                        <p v-if="activeReviewDecisionState === 'blocked'" role="alert" class="text-xs text-rose-300">Não foi possível encontrar uma imagem adequada. Busque novamente ou envie uma imagem do produto.</p>
+                        <p v-if="activeReviewDecisionState === 'blocked'" role="alert" class="text-xs text-rose-300">{{ activeReviewRowMeta.product.error || activeReviewRowMeta.product.imageReviewReason || 'Não foi possível encontrar uma imagem adequada. Busque novamente ou envie uma imagem do produto.' }}</p>
                         <div class="flex flex-wrap gap-1.5">
                             <button
                                 type="button"

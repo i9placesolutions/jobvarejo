@@ -140,5 +140,11 @@ if __name__ == '__main__':
     try:
         print(json.dumps({'candidates': search_images(sys.argv[1])}))
     except Exception as exc:
-        print(json.dumps({'candidates': [], 'error': str(exc)}))
+        message = str(exc).lower()
+        safe_error = (
+            'A busca pública foi bloqueada temporariamente pelo provedor.'
+            if any(token in message for token in ('captcha', 'sorry', 'blocked', 'bloqueou'))
+            else 'A consulta de imagens pelo Chromium falhou.'
+        )
+        print(json.dumps({'candidates': [], 'error': safe_error}))
         sys.exit(1)

@@ -53,6 +53,7 @@ MAX_EXTERNAL_URL_LENGTH = 2048
 MAX_EXTERNAL_IMAGE_BYTES = 12 * 1024 * 1024
 GOOGLE_CSE_TIMEOUT_SECONDS = 12
 EXTERNAL_IMAGE_TIMEOUT_SECONDS = 15
+_BIREFNET_SESSION: Any = None
 
 UNIT_MAP = {
     "mililitros": "ml",
@@ -589,8 +590,92 @@ def rank_google_image_candidates(
     return ranked[:limit]
 
 
-def download_and_convert_external_image(url: str) -> bytes:
-    """Baixa uma imagem candidata com limites e grava um WebP normalizado."""
+def _apply_background_mask(source: Any, prediction: Any) -> Any:
+    """Apply semantic alpha while keeping source RGB and guarding light packshots."""
+    source = source.convert("RGBA")
+    prediction = prediction.convert("RGBA")
+    if source.size != prediction.size:
+        raise WorkerError("BiRefNet retornou dimensoes incompativeis")
+
+    corners = [source.getpixel((0, 0)), source.getpixel((source.width - 1, 0)),
+               source.getpixel((0, source.height - 1)), source.getpixel((source.width - 1, source.height - 1))]
+    background = tuple(sum(pixel[channel] for pixel in corners) / 4 for channel in range(3))
+    light_uniform_background = all(value >= 225 for value in background) and all(
+        max(abs(pixel[channel] - background[channel]) for channel in range(3)) <= 12
+        for pixel in corners
+    )
+    visible = transparent = opaque = product_pixels = lost_product_pixels = 0
+    output_pixels = bytearray(source.width * source.height * 4)
+    for index, (source_pixel, prediction_pixel) in enumerate(zip(source.getdata(), prediction.getdata())):
+        alpha = min(source_pixel[3], prediction_pixel[3])
+        offset = index * 4
+        output_pixels[offset:offset + 4] = bytes((*source_pixel[:3], alpha))
+        if alpha < 8:
+            transparent += 1
+        elif alpha < 250:
+            visible += 1
+        else:
+            visible += 1
+            opaque += 1
+        if light_uniform_background and max(abs(source_pixel[channel] - background[channel]) for channel in range(3)) > 60:
+            product_pixels += 1
+            if alpha < 128:
+                lost_product_pixels += 1
+
+    total = max(1, source.width * source.height)
+    if transparent / total < 0.02:
+        raise WorkerError("BiRefNet nao removeu fundo suficiente")
+    if visible / total < 0.07 or opaque / total < 0.02:
+        raise WorkerError("BiRefNet recortou o produto; imagem nao foi salva")
+    if light_uniform_background and lost_product_pixels > 32 and lost_product_pixels / max(1, product_pixels) > 0.04:
+        raise WorkerError("Recorte rejeitado para preservar partes claras da embalagem")
+
+    from PIL import Image  # type: ignore
+    return Image.frombytes("RGBA", source.size, bytes(output_pixels))
+
+
+def remove_external_image_background(image: Any) -> Any:
+    """Run BiRefNet and fail closed when removal or package preservation is uncertain."""
+    global _BIREFNET_SESSION
+    try:
+        from PIL import Image  # type: ignore
+    except ImportError as exc:
+        raise ConfigurationError("Pillow nao esta instalado; use pip install -r workers/requirements.txt") from exc
+    source = image.convert("RGBA")
+    alpha = source.getchannel("A")
+    alpha_values = list(alpha.getdata())
+    if alpha_values and min(alpha_values) < 255:
+        total = len(alpha_values)
+        transparent = sum(value < 8 for value in alpha_values)
+        visible = sum(value >= 8 for value in alpha_values)
+        opaque = sum(value >= 250 for value in alpha_values)
+        if transparent / total >= 0.02 and visible / total >= 0.07 and opaque / total >= 0.02:
+            return source
+
+    try:
+        from rembg import new_session, remove  # type: ignore
+    except ImportError as exc:
+        raise ConfigurationError("rembg nao esta instalado; use pip install -r workers/requirements.txt") from exc
+    if _BIREFNET_SESSION is None:
+        model = os.environ.get("BIREFNET_MODEL", "birefnet-general-lite")
+        if model not in {"birefnet-general", "birefnet-general-lite"}:
+            raise ConfigurationError("Modelo BiRefNet nao suportado")
+        _BIREFNET_SESSION = new_session(model, providers=["CPUExecutionProvider"])
+    source_buffer = io.BytesIO()
+    source.save(source_buffer, format="PNG")
+    try:
+        predicted_bytes = remove(source_buffer.getvalue(), session=_BIREFNET_SESSION,
+                                 alpha_matting=False, post_process_mask=False)
+        with Image.open(io.BytesIO(predicted_bytes)) as predicted:
+            return _apply_background_mask(source, predicted)
+    except WorkerError:
+        raise
+    except Exception as exc:
+        raise WorkerError("BiRefNet nao conseguiu remover o fundo") from exc
+
+
+def download_and_convert_external_image(url: str, remove_background: bool = True) -> bytes:
+    """Baixa, remove o fundo por padrao e grava WebP somente apos validar o recorte."""
 
     safe_url = assert_safe_external_http_url(url)
     request = urllib.request.Request(
@@ -621,6 +706,8 @@ def download_and_convert_external_image(url: str) -> bytes:
             resampling = getattr(Image, "Resampling", Image).LANCZOS
             image.thumbnail((800, 800), resampling)
             normalized = image.convert("RGBA")
+            if remove_background:
+                normalized = remove_external_image_background(normalized)
             output = io.BytesIO()
             normalized.save(output, format="WEBP", quality=85, method=6)
             payload = output.getvalue()
@@ -633,10 +720,11 @@ def download_and_convert_external_image(url: str) -> bytes:
     return payload
 
 
-def external_image_storage_key(url: str) -> str:
+def external_image_storage_key(url: str, remove_background: bool = True) -> str:
     safe_url = assert_safe_external_http_url(url)
     digest = hashlib.sha256(safe_url.encode("utf-8")).hexdigest()[:32]
-    return "imagens/google-cse-%s.webp" % digest
+    variant = "birefnet-v1" if remove_background else "original"
+    return "imagens/google-cse-%s-%s.webp" % (variant, digest)
 
 
 def product_identity_key(product: Mapping[str, Any], normalized_term: str) -> str:
@@ -1083,6 +1171,7 @@ def process_product(
     google_api_key: str = "",
     google_cx: str = "",
     max_external_candidates: int = 6,
+    remove_background: bool = True,
 ) -> Dict[str, Any]:
     """Resolve no Wasabi/cache e consulta Google apenas quando nao ha match interno."""
 
@@ -1199,9 +1288,9 @@ def process_product(
         result["attempts"] = index + 1
         source_url = text(candidate.get("url"))
         try:
-            target_key = external_image_storage_key(source_url)
+            target_key = external_image_storage_key(source_url, remove_background=remove_background)
             if not s3.exists(target_key):
-                processed_body = download_and_convert_external_image(source_url)
+                processed_body = download_and_convert_external_image(source_url, remove_background=remove_background)
                 s3.put_webp(target_key, processed_body)
             image_url = s3.public_url(target_key)
             confidence = float(candidate.get("confidence") or 0.42)
@@ -1305,6 +1394,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--persist-db", action="store_true", help="tambem grava product_image_cache e registry")
     parser.add_argument("--dry-run", action="store_true", help="valida a lista sem chamar Wasabi ou PostgreSQL")
     parser.add_argument("--force", action="store_true", help="reprocessa e substitui imagem ja informada na lista")
+    parser.add_argument("--keep-background", action="store_true", help="mantem o fundo original (padrao remove com BiRefNet)")
     parser.add_argument("--max-products", type=int, default=0, help="limita a quantidade processada (0 = todos)")
     parser.add_argument("--max-candidates", type=int, default=6, help="quantidade maxima de imagens Google tentadas por produto (1-6)")
     parser.add_argument("--query-delay", type=float, default=0.35, help="pausa entre produtos em segundos")
@@ -1395,6 +1485,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     google_api_key=google_api_key,
                     google_cx=google_cx,
                     max_external_candidates=max_external_candidates,
+                    remove_background=not args.keep_background,
                 )
             results.append(item)
             if args.query_delay > 0 and index < len(products) - 1:

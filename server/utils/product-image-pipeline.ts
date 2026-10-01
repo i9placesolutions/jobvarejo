@@ -1,5 +1,5 @@
 import { HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
-import { downloadImage, processImage, processImageStrict } from './image-processor'
+import { downloadImage, processImageStrict } from './image-processor'
 import { saveProductImageCache } from './product-image-cache'
 import { getPublicUrl } from './s3'
 import {
@@ -55,10 +55,6 @@ const inFlightBgRemoval = new Map<string, Promise<{ key: string; processed: bool
 
 export async function ensureBgRemoved(opts: EnsureBgRemovedOpts): Promise<{ key: string; processed: boolean } | null> {
   const { s3, bucketName, sourceKey, deterministicKey, normalizedTerm, term, brand, flavor, weight } = opts
-
-  if (sourceKey === deterministicKey) {
-    return { key: sourceKey, processed: false }
-  }
 
   if (isProcessedSmartKey(sourceKey)) {
     console.log(`♻️ [ensureBgRemoved] Reusando key processada existente: "${sourceKey}"`)
@@ -187,7 +183,7 @@ export const runExternalPipelineOnce = async (opts: {
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 32) || 'external'
-  const externalSourceKey = buildExternalSourceDerivedS3Key(safeSelectedImageUrl)
+  const externalSourceKey = buildExternalSourceDerivedS3Key(safeSelectedImageUrl, opts.bgPolicy)
   const targetUploadKey = externalSourceKey || opts.deterministicKey
   const lockKey = `${opts.bucketName}:${targetUploadKey}`
   const ongoing = inFlightExternalPipeline.get(lockKey)
@@ -223,14 +219,10 @@ export const runExternalPipelineOnce = async (opts: {
       processedBuffer = await optimizeImageWithoutBg(rawBuffer)
       processingMode = 'optimized-no-bg-removal'
     } else if (opts.bgPolicy === 'always') {
-      try {
-        processedBuffer = await processImageStrict(rawBuffer)
-        processingMode = 'bg-removed-strict'
-      } catch (bgErr: any) {
-        console.warn('⚠️ [Serper] processImageStrict falhou no modo always, fallback processImage:', bgErr?.message)
-        processedBuffer = await processImage(rawBuffer)
-        processingMode = 'bg-removed-fallback-auto'
-      }
+      // A strict failure must reject this candidate. Persisting the original
+      // as a successful result would silently violate the requested policy.
+      processedBuffer = await processImageStrict(rawBuffer)
+      processingMode = 'bg-removed-strict'
     } else {
       processedBuffer = await optimizeImageWithoutBg(rawBuffer)
       processingMode = 'auto-preserve'

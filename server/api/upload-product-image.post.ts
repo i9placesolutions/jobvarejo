@@ -48,6 +48,17 @@ const getAbortSignal = (timeoutMs: number): AbortSignal | undefined => {
     return timeoutFactory(timeoutMs);
 };
 
+const getBackgroundRemovalFailureMessage = (error: unknown): string => {
+    const message = String((error as any)?.message || '').toLowerCase();
+    if (message.includes('apagaria partes da embalagem')) {
+        return 'A remoção foi interrompida para preservar detalhes da embalagem. A imagem anterior foi mantida.';
+    }
+    if (message.includes('não gerou transparência') || message.includes('nao gerou transparencia')) {
+        return 'A imagem continuou sem transparência suficiente após o processamento. A imagem anterior foi mantida.';
+    }
+    return 'Não foi possível remover o fundo com segurança. A imagem anterior foi mantida.';
+};
+
 export default defineEventHandler(async (event) => {
     const user = await requireAuthenticatedUser(event);
     await enforceRateLimit(event, `upload-product-image:${user.id}`, 40, 60_000)
@@ -107,9 +118,8 @@ export default defineEventHandler(async (event) => {
         const originalHash = createHash('sha256').update(fileBuffer).digest('hex');
         const originalKey = `imagens/originals/${originalHash}`;
         await s3.send(new PutObjectCommand({ Bucket: bucketName, Key: originalKey, Body: fileBuffer, ContentType: mime || 'application/octet-stream' }));
-        // Processamento automático para upload manual: remoção de fundo +
-        // recorte/otimização. O utilitário tem fallback seguro para a imagem
-        // original caso o modelo não esteja disponível ou seja inconclusivo.
+        // Processamento automático para upload manual: remoção estrita de
+        // fundo + recorte/otimização. Uma falha não pode salvar o original.
         let processedBuffer: Buffer = fileBuffer as Buffer;
         let contentType = mime || 'image/png';
         const canRemoveBackground = shouldRemoveBackground && !['image/gif', 'image/svg+xml'].includes(mime);
@@ -123,7 +133,9 @@ export default defineEventHandler(async (event) => {
                 contentType = 'image/webp';
                 console.log('✅ [Manual Upload] Fundo removido e imagem otimizada');
             } catch (err) {
-                throw createError({ statusCode: 422, statusMessage: 'Não foi possível remover o fundo com segurança. A imagem não foi alterada.' });
+                const statusMessage = getBackgroundRemovalFailureMessage(err);
+                console.warn('[Manual Upload] Remoção de fundo recusada:', (err as any)?.message || err);
+                throw createError({ statusCode: 422, statusMessage });
             }
         }
 
@@ -229,6 +241,11 @@ export default defineEventHandler(async (event) => {
 
     } catch (err: any) {
         console.error("Upload failed:", err);
-        throw createError({ statusCode: err?.statusCode || 500, statusMessage: "Failed to upload image: " + (err?.message || String(err)) });
+        throw createError({
+            statusCode: err?.statusCode || 500,
+            statusMessage: err?.statusCode === 422
+                ? err.statusMessage
+                : "Failed to upload image: " + (err?.message || String(err))
+        });
     }
 });

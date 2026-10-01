@@ -22,7 +22,10 @@ export const searchChromiumImageCandidates = async (query: string): Promise<{ ca
     })
     const result = JSON.parse(stdout)
     return { candidates: Array.isArray(result.candidates) ? result.candidates : [], ...(result.error ? { error: { message: result.error } } : {}) }
-  } catch {
-    return { candidates: [], error: { message: 'Não foi possível consultar imagens pelo Chromium.' } }
+  } catch (error: any) {
+    const message = error?.killed || error?.code === 'ETIMEDOUT'
+      ? 'A consulta de imagens pelo Chromium excedeu o tempo limite.'
+      : 'Não foi possível consultar imagens pelo Chromium.'
+    return { candidates: [], error: { message } }
   } finally { release() }
 }

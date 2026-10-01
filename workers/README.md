@@ -6,7 +6,7 @@ O acervo interno continua prioritário. Somente quando falta imagem a busca púb
 
 Para validar somente a consulta: `$PRODUCT_IMAGE_PYTHON workers/chromium_image_search.py "Arroz Tio João 1kg"`.
 
-Para processar lote: `$PRODUCT_IMAGE_PYTHON workers/product_image_worker.py --input produtos.json --output manifesto.json --persist-db`.
+Para processar lote: `$PRODUCT_IMAGE_PYTHON workers/product_image_worker.py --input produtos.json --output manifesto.json --persist-db`. O worker baixa as candidatas externas, remove o fundo com BiRefNet e só grava quando a saída tem transparência e preserva conteúdo suficiente do produto. Use `--keep-background` para manter explicitamente o fundo original; cada modo grava em uma chave separada.
 
 No servidor, instale Python, as dependências de `requirements.txt`, Chromium e suas bibliotecas do sistema antes de habilitar o endpoint. `CHROMIUM_EXECUTABLE_PATH` permite usar um Chromium instalado pelo sistema. O Docker inclui o runtime Python, Chromium, os scripts e os pesos BiRefNet pré-carregados. O build falha se a instalação do modelo falhar, evitando baixar os pesos na primeira solicitação.
 

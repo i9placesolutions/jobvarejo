@@ -13,7 +13,11 @@ export default defineEventHandler(async (event) => {
     }
     const result = await searchChromiumImageCandidates(term)
     if (result.error && !result.candidates.length) {
-        throw createError({ statusCode: 502, statusMessage: 'Não foi possível buscar mais imagens. Tente novamente.' })
+        throw createError({
+            statusCode: 502,
+            statusMessage: 'Não foi possível buscar mais imagens. Tente novamente.',
+            data: { reason: result.error.message }
+        })
     }
     const seen = new Set<string>()
     const candidates = result.candidates.flatMap((candidate, index) => {

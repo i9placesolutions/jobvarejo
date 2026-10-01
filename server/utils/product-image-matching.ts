@@ -428,7 +428,9 @@ const termHash = (normalizedTerm: string): string => {
   return createHash('sha256').update(normalizedTerm).digest('hex').substring(0, 12)
 }
 
-const PROCESS_VERSION = 'v2'
+// v2 also contained auto-preserved external downloads. A new version ensures
+// those opaque WebPs cannot be mistaken for confirmed background-removed files.
+const PROCESS_VERSION = 'v3'
 
 export const buildDeterministicS3Key = (normalizedTerm: string): string => {
   const safeName = normalizedTerm.replace(/[^a-z0-9]/g, '-').substring(0, 50)
@@ -460,20 +462,21 @@ const normalizeExternalImageUrl = (rawUrl: string): string => {
   }
 }
 
-export const buildExternalSourceDerivedS3Key = (imageUrl: string): string => {
+export const buildExternalSourceDerivedS3Key = (imageUrl: string, bgPolicy: 'auto' | 'never' | 'always' = 'auto'): string => {
   const normalizedExternal = normalizeExternalImageUrl(imageUrl)
   const sourceHash = createHash('sha256')
     .update(normalizedExternal || imageUrl)
     .digest('hex')
     .substring(0, 16)
-  return `imagens/smart-ext-${sourceHash}-${PROCESS_VERSION}.webp`
+  return `imagens/smart-ext-${bgPolicy}-${sourceHash}-${PROCESS_VERSION}.webp`
 }
 
 export const isProcessedSmartKey = (key: string): boolean => {
   const k = String(key || '').trim().toLowerCase()
-  if (!k.startsWith('imagens/')) return false
-  if (!k.includes('/smart-') && !k.startsWith('imagens/smart-')) return false
-  return k.includes(`-${PROCESS_VERSION}.webp`) || k.includes(`-${PROCESS_VERSION}.png`)
+  // Only `smart-src` keys are produced by ensureBgRemoved's strict pipeline.
+  // `smart-ext` is keyed by policy because auto/never deliberately keep alpha opaque.
+  if (!k.startsWith('imagens/smart-src-') && !k.startsWith('imagens/smart-ext-always-')) return false
+  return k.endsWith(`-${PROCESS_VERSION}.webp`) || k.endsWith(`-${PROCESS_VERSION}.png`)
 }
 
 const GENERIC_PATH_SEGMENTS = new Set([
