@@ -55,12 +55,23 @@ const TOKEN_ALIASES: Record<string, string> = {
 const normalizeQueryPhrases = (value: string): string => {
   let text = String(value || '')
   text = text
+    // Listas de oferta abreviam achocolatado e podem informar a linha e a
+    // fabricante juntas; o catálogo usa Pirakids como identidade da linha.
+    .replace(/\bachoc(?:\.|\b)/gi, ' achocolatado ')
+    .replace(/\bpirakides\b/gi, ' pirakids ')
+    .replace(/\bpirakids\s+piracanjuba\b|\bpiracanjuba\s+pirakids\b/gi, ' pirakids ')
     // Keep strong brand identity in one token.
     .replace(/\bcoca[\s-]*cola\b/gi, ' cocacola ')
+    // "Refresco em pó" e "suco" são nomes comerciais equivalentes para a
+    // mesma categoria e costumam aparecer de formas diferentes nas keys.
+    .replace(/\brefresco\s+em\s+p[oó](?:\s|$)/gi, ' suco ')
     // Canonical variant synonyms.
     .replace(/\b(zero\s+acucar|sem\s+acucar|sugar\s*free)\b/gi, ' zero ')
     .replace(/\b(tradicional|classico|classic|regular)\b/gi, ' original ')
     // Canonical unit expressions with quantity.
+    .replace(/(\d+(?:[.,]\d+)?)\s*(quilos?|quilogramas?|kgs?)\b/gi, '$1kg')
+    .replace(/(\d+(?:[.,]\d+)?)\s*(gramas?|grs?|g)\b/gi, '$1g')
+    .replace(/(\d+(?:[.,]\d+)?)\s*(mgs?)\b/gi, '$1mg')
     .replace(/(\d+(?:[.,]\d+)?)\s*(litros?|lts?|lt)\b/gi, '$1l')
     .replace(/(\d+(?:[.,]\d+)?)\s*(mililitros?|mls?)\b/gi, '$1ml')
   return text
@@ -146,7 +157,6 @@ const WEIGHT_TOKENS = new Set(['kg', 'kgs', 'g', 'gr', 'grs', 'mg', 'ml', 'mls',
 const BUCKET_SEARCH_NOISE_TOKENS = new Set([
   'sabor', 'sabores', 'sortido', 'sortidos', 'variado', 'variados', 'diverso', 'diversos',
   'produto', 'produtos', 'embalagem', 'embalagens',
-  'energetico', 'refrigerante', 'bebida', 'suco',
   'lata', 'latinha', 'garrafa', 'pet', 'pack'
 ])
 
@@ -262,6 +272,20 @@ const isFuzzyMatchValid = (
 }
 
 const tokenSet = (normalized: string): Set<string> => new Set(normalized.split(' ').filter(Boolean))
+
+// Reconhece marcas compostas separadas no nome do arquivo (ex.: "Joy Colate"
+// para "Joycolate") sem transformar uma sobreposição parcial em match.
+const addAdjacentCompoundTokens = (tokens: Set<string>): Set<string> => {
+  const values = [...tokens]
+  const expanded = new Set(values)
+  for (let index = 0; index < values.length - 1; index++) {
+    const left = values[index] || ''
+    const right = values[index + 1] || ''
+    if (left.length >= 2 && right.length >= 2) expanded.add(`${left}${right}`)
+  }
+  if (tokens.has('joy') && tokens.has('colate')) expanded.add('joycolate')
+  return expanded
+}
 
 // Distancia de Levenshtein com cap (corta cedo se passar do limite).
 const levenshteinCapped = (a: string, b: string, cap: number): number => {
@@ -709,7 +733,14 @@ export const findBestS3Match = async (opts: {
     const normalizedKeyPath = getNormalizedS3KeyPathForMatch(key)
     const aliasNormalized = alias ? normalizeAliasForMatch(alias) : ''
     const normalizedKey = mergeNormalizedSearchTexts(normalizedKeyBase, normalizedKeyPath, aliasNormalized)
-    const exactKeyTokens = tokenSet(normalizedKey || aliasNormalized || normalizedKeyPath || normalizedKeyBase)
+    const exactKeyTokens = addAdjacentCompoundTokens(tokenSet(normalizedKey || aliasNormalized || normalizedKeyPath || normalizedKeyBase))
+    const exactKeyWeightTokens = extractWeightTokens(exactKeyTokens)
+    const exactKeyWeightSet = new Set(exactKeyWeightTokens)
+    const exactBrandPresent = requiredBrandTokens.every((token) => exactKeyTokens.has(token))
+    const exactFlavorPresent = requiredFlavorTokens.every((token) => exactKeyTokens.has(token))
+    const exactWeightPresent = requiredWeightTokens.length === 0 || requiredWeightTokens.some((token) => exactKeyWeightSet.has(token))
+    const exactWeightConflict = requiredWeightTokens.length > 0 && exactKeyWeightTokens.length > 0 && !exactWeightPresent
+    const exactCodePresent = requiredProductCodeTokens.length === 0 || requiredProductCodeTokens.some((token) => exactKeyTokens.has(token))
 
     const exactVariant = queryVariants.find(({ normalized }) =>
       normalized === normalizedKeyBase ||
@@ -718,6 +749,13 @@ export const findBestS3Match = async (opts: {
       normalized === normalizedKey
     )
     if (exactVariant) {
+      if (exactWeightConflict || !exactCodePresent) continue
+      if (opts.strictOnly && requiredWeightTokens.length > 0 && !exactWeightPresent) continue
+      if (opts.strictOnly && !exactBrandPresent) continue
+      if (opts.strictOnly && !exactFlavorPresent) continue
+      if (!isFuzzyMatchValid(exactVariant.normalized, normalizedKey || aliasNormalized || normalizedKeyPath || normalizedKeyBase, undefined, {
+        requireWeightInKey: !!opts.strictOnly
+      })) continue
       let exactScore = 3
       if (exactVariant.normalized === aliasNormalized) exactScore += 1.35
       if (exactVariant.normalized === normalizedKeyBase) exactScore += 0.95
@@ -740,7 +778,7 @@ export const findBestS3Match = async (opts: {
     }
 
     if (!normalizedKey) continue
-    const keyTokens = tokenSet(normalizedKey)
+    const keyTokens = addAdjacentCompoundTokens(tokenSet(normalizedKey))
     if (keyTokens.size < 1) continue
     const aliasTokens = tokenSet(aliasNormalized)
 
@@ -990,7 +1028,7 @@ export const findTopS3Matches = async (opts: {
     const normalizedKeyPath = getNormalizedS3KeyPathForMatch(key)
     const aliasNormalized = alias ? normalizeAliasForMatch(alias) : ''
     const normalizedKey = mergeNormalizedSearchTexts(normalizedKeyBase, normalizedKeyPath, aliasNormalized)
-    const keyTokens = tokenSet(normalizedKey || aliasNormalized || normalizedKeyPath || normalizedKeyBase)
+    const keyTokens = addAdjacentCompoundTokens(tokenSet(normalizedKey || aliasNormalized || normalizedKeyPath || normalizedKeyBase))
 
     const exactVariant = queryVariants.find(({ normalized }) =>
       normalized === normalizedKeyBase ||
@@ -999,6 +1037,19 @@ export const findTopS3Matches = async (opts: {
       normalized === normalizedKey
     )
     if (exactVariant) {
+      const exactKeyWeights = extractWeightTokens(keyTokens)
+      const exactWeightPresent = requiredWeightTokens.length === 0 || requiredWeightTokens.some((token) => exactKeyWeights.includes(token))
+      const exactWeightConflict = requiredWeightTokens.length > 0 && exactKeyWeights.length > 0 && !exactWeightPresent
+      const exactBrandPresent = requiredBrandTokens.every((token) => keyTokens.has(token))
+      const exactFlavorPresent = requiredFlavorTokens.every((token) => keyTokens.has(token))
+      const exactCodePresent = requiredProductCodeTokens.length === 0 || requiredProductCodeTokens.some((token) => keyTokens.has(token))
+      if (exactWeightConflict || !exactCodePresent) continue
+      if (opts.strictOnly && requiredWeightTokens.length > 0 && !exactWeightPresent) continue
+      if (opts.strictOnly && !exactBrandPresent) continue
+      if (opts.strictOnly && !exactFlavorPresent) continue
+      if (!isFuzzyMatchValid(exactVariant.normalized, normalizedKey || aliasNormalized || normalizedKeyPath || normalizedKeyBase, undefined, {
+        requireWeightInKey: !!opts.strictOnly
+      })) continue
       let exactScore = 400
       if (exactVariant.normalized === aliasNormalized) exactScore += 12
       if (exactVariant.normalized === normalizedKeyBase) exactScore += 9

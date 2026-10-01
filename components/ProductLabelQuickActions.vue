@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { Check, ChevronDown, DollarSign, ListChecks, MousePointer2, Move, Tag } from 'lucide-vue-next'
+import { Check, ChevronDown, DollarSign, ListChecks, MousePointer2, Move, Palette, Tag } from 'lucide-vue-next'
 
 type LabelInteractionMode = 'move' | 'edit'
 
@@ -19,6 +19,9 @@ const props = withDefaults(defineProps<{
   mode?: LabelInteractionMode
   templates?: TemplateOption[]
   selectedTemplateId?: string
+  canEditColor?: boolean
+  canApplyToFlyer?: boolean
+  busy?: boolean
 }>(), {
   mode: 'move',
   templates: () => [],
@@ -30,13 +33,17 @@ const emit = defineEmits<{
   (e: 'select-all'): void
   (e: 'edit-price'): void
   (e: 'template', templateId: string): void
+  (e: 'template-all', templateId: string): void
   (e: 'manage-templates'): void
+  (e: 'edit-color'): void
+  (e: 'templates-open'): void
 }>()
 
 const rootEl = ref<HTMLElement | null>(null)
 const templateMenuEl = ref<HTMLElement | null>(null)
 const templateMenuOpen = ref(false)
 const templateMenuReady = ref(false)
+const applyToFlyer = ref(false)
 const templateMenuPlacement = ref({
   top: 4,
   left: 4,
@@ -45,7 +52,7 @@ const templateMenuPlacement = ref({
 
 const MENU_EDGE_GAP = 8
 const MENU_MIN_HEIGHT = 160
-const TOOLBAR_WIDTH = 132
+const TOOLBAR_WIDTH = computed(() => props.canEditColor ? 158 : 132)
 const TOOLBAR_OFFSET_TOP = 34
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max))
@@ -76,7 +83,7 @@ const repositionTemplateMenu = async () => {
   const selectionTop = Number(props.top) || 0
   const selectionWidth = Math.max(0, Number(props.width) || 0)
   const selectionHeight = Math.max(0, Number(props.height) || 0)
-  const toolbarLeft = selectionLeft + Math.max(0, (selectionWidth - TOOLBAR_WIDTH) / 2)
+  const toolbarLeft = selectionLeft + Math.max(0, (selectionWidth - TOOLBAR_WIDTH.value) / 2)
   const toolbarTop = Math.max(MENU_EDGE_GAP, selectionTop - TOOLBAR_OFFSET_TOP)
 
   type Candidate = {
@@ -129,7 +136,7 @@ const repositionTemplateMenu = async () => {
 }
 
 const toolbarStyle = computed(() => {
-  const toolbarWidth = 132
+  const toolbarWidth = TOOLBAR_WIDTH.value
   const width = Math.max(0, Number(props.width) || 0)
   const left = Number(props.left) || 0
   const top = Number(props.top) || 0
@@ -159,6 +166,13 @@ watch(() => props.visible, (visible) => {
   }
 })
 
+watch(templateMenuOpen, open => {
+  if (open) {
+    applyToFlyer.value = false
+    emit('templates-open')
+  }
+})
+
 watch(
   [templateMenuOpen, () => props.top, () => props.left, () => props.width, () => props.height, () => props.templates?.length || 0],
   () => {
@@ -175,6 +189,8 @@ watch(
     v-if="visible"
     ref="rootEl"
     class="pointer-events-none absolute inset-0 z-[117]"
+    :inert="busy"
+    :aria-busy="busy"
     @keydown.esc="templateMenuOpen = false"
   >
     <div
@@ -230,6 +246,17 @@ watch(
       <span class="mx-0.5 h-4 w-px bg-white/10" aria-hidden="true" />
 
       <button
+        v-if="canEditColor"
+        type="button"
+        class="flex h-6 w-6 items-center justify-center rounded-md text-white/65 transition hover:bg-violet-500/25 hover:text-white"
+        title="Cor da etiqueta"
+        aria-label="Cor da etiqueta"
+        @click="templateMenuOpen = false; emit('edit-color')"
+      >
+        <Palette class="h-3 w-3" />
+      </button>
+
+      <button
         type="button"
         class="flex h-6 w-6 items-center justify-center rounded-md text-white/65 transition hover:bg-amber-500/25 hover:text-amber-100 active:bg-amber-500/40"
         title="Trocar etiqueta de preço"
@@ -252,7 +279,12 @@ watch(
       @click.stop
     >
       <div class="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/45">
-        Etiqueta do card
+        {{ canApplyToFlyer ? 'Etiqueta do card ou do encarte' : 'Etiqueta do card' }}
+      </div>
+
+      <div v-if="canApplyToFlyer" class="mb-1 grid grid-cols-2 gap-1 rounded-md bg-white/5 p-1 text-[10px]">
+        <button type="button" class="rounded px-1.5 py-1 text-center" :class="!applyToFlyer ? 'bg-violet-500/25 font-medium text-violet-100' : 'text-white/60 hover:bg-white/10'" @click="applyToFlyer = false">Só este produto</button>
+        <button type="button" class="rounded px-1.5 py-1 text-center" :class="applyToFlyer ? 'bg-violet-500/25 font-medium text-violet-100' : 'text-white/60 hover:bg-white/10'" @click="applyToFlyer = true">Todo o encarte</button>
       </div>
 
       <button
@@ -262,9 +294,9 @@ watch(
         class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-white/75 transition hover:bg-white/10 hover:text-white"
         :class="template.id === selectedTemplateId ? 'bg-violet-500/20 text-violet-100' : ''"
         role="menuitem"
-        @click="selectTemplate(template.id)"
+        @click="applyToFlyer ? (templateMenuOpen = false, templateMenuReady = false, emit('template-all', template.id)) : selectTemplate(template.id)"
       >
-        <span class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/10">
+        <span class="flex h-12 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/10">
           <img
             v-if="template.previewDataUrl"
             :src="template.previewDataUrl"

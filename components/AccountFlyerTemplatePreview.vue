@@ -77,6 +77,7 @@ const loadPreview = async (requestGeneration: number): Promise<string> => {
   const headers = await getApiAuthHeaders()
   const project = await $fetch<any>('/api/projects', {
     headers,
+    timeout: 15_000,
     query: { id: props.templateId, library: '1' }
   })
   if (requestGeneration !== generation || disposed) return ''
@@ -114,8 +115,10 @@ const loadPreview = async (requestGeneration: number): Promise<string> => {
   const { StaticCanvas, FabricImage } = await import('fabric')
   let logoSize: { width: number; height: number; cropX: number; cropY: number } | null = null
   if (logoSource) {
+    const logoAbort = new AbortController()
+    const logoTimeout = setTimeout(() => logoAbort.abort(), 8_000)
     try {
-      const logo = await FabricImage.fromURL(logoSource, { crossOrigin: 'anonymous' })
+      const logo = await FabricImage.fromURL(logoSource, { crossOrigin: 'anonymous', signal: logoAbort.signal })
       await autoTrimFabricImageAsync(logo, { preserveVisualPosition: false })
       logoSize = {
         width: Number(logo.width || 0),
@@ -128,6 +131,8 @@ const loadPreview = async (requestGeneration: number): Promise<string> => {
       // A galeria continua sem logo da conta; nunca volta à miniatura persistida do modelo.
       logoSource = ''
       logoSize = null
+    } finally {
+      clearTimeout(logoTimeout)
     }
   }
   if (requestGeneration !== generation || disposed) return ''

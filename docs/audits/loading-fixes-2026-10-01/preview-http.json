@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-01T15:54:15.912679+00:00",
+  "url": "http://localhost:3001/flyer-templates",
+  "htmlStatus": 200,
+  "assets": [
+    {
+      "asset": "/_nuxt/BnRqIy4o.js",
+      "status": 200,
+      "bytes": 83207
+    },
+    {
+      "asset": "/_nuxt/PPVm8Dsz.js",
+      "status": 200,
+      "bytes": 1232
+    },
+    {
+      "asset": "/_nuxt/entry.DRbB2tUc.css",
+      "status": 200,
+      "bytes": 239077
+    }
+  ],
+  "allOk": true
+}

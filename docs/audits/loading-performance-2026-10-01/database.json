@@ -1,0 +1,121 @@
+{
+  "connectMs": 753,
+  "roundTrips": [
+    184,
+    180,
+    167,
+    164,
+    289
+  ],
+  "summaryExplainMs": 442,
+  "summaryServerMs": 64.559,
+  "summaryPlanningMs": 6.414,
+  "summaryRows": 182,
+  "planNodes": [
+    {
+      "node": "Sort",
+      "actualRows": 182,
+      "loops": 1,
+      "totalTime": 64.14
+    },
+    {
+      "node": "Nested Loop",
+      "actualRows": 182,
+      "loops": 1,
+      "totalTime": 63.581
+    },
+    {
+      "node": "Nested Loop",
+      "actualRows": 182,
+      "loops": 1,
+      "totalTime": 10.167
+    },
+    {
+      "node": "Nested Loop",
+      "actualRows": 182,
+      "loops": 1,
+      "totalTime": 6.401
+    },
+    {
+      "node": "Nested Loop",
+      "actualRows": 182,
+      "loops": 1,
+      "totalTime": 1.216
+    },
+    {
+      "node": "Seq Scan",
+      "relation": "projects",
+      "actualRows": 182,
+      "loops": 1,
+      "totalTime": 0.716
+    },
+    {
+      "node": "Memoize",
+      "actualRows": 1,
+      "loops": 182,
+      "totalTime": 0.001
+    },
+    {
+      "node": "Index Scan",
+      "relation": "profiles",
+      "actualRows": 1,
+      "loops": 1,
+      "totalTime": 0.015
+    },
+    {
+      "node": "Limit",
+      "actualRows": 1,
+      "loops": 182,
+      "totalTime": 0.028
+    },
+    {
+      "node": "Function Scan",
+      "actualRows": 1,
+      "loops": 182,
+      "totalTime": 0.025
+    },
+    {
+      "node": "Limit",
+      "actualRows": 1,
+      "loops": 182,
+      "totalTime": 0.019
+    },
+    {
+      "node": "Function Scan",
+      "actualRows": 1,
+      "loops": 182,
+      "totalTime": 0.018
+    },
+    {
+      "node": "Aggregate",
+      "actualRows": 1,
+      "loops": 182,
+      "totalTime": 0.049
+    },
+    {
+      "node": "Sort",
+      "actualRows": 5,
+      "loops": 182,
+      "totalTime": 0.033
+    },
+    {
+      "node": "Function Scan",
+      "actualRows": 5,
+      "loops": 182,
+      "totalTime": 0.022
+    }
+  ],
+  "templateRows": 182,
+  "manifestTopKeys": [
+    "version",
+    "assets"
+  ],
+  "manifestEntries": 181,
+  "catalogMatched": 179,
+  "catalogLookupMs": 193,
+  "ownerAggregate": {
+    "projects": 128,
+    "stored_canvas_bytes": "3190414",
+    "max_canvas_bytes": "3099215"
+  }
+}

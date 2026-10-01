@@ -61,3 +61,11 @@ it('substitui a logo legada do cartaz pela conta ativa em vez de reaproveitar a 
  expect(branded.layers.find(layer=>layer.id==='cartaz-logo')).toMatchObject({binding:'logo',src:'/api/art-studio/brand-logo',visible:true})
  expect(hydrateCartazistaBusiness(source,profile,'').layers.find(layer=>layer.id==='cartaz-logo')).toMatchObject({binding:'logo',src:'',visible:false})
 })
+
+ it('preserva o enquadramento superior do fundo na serialização do cabeçalho',()=>{
+  const d=createCartazistaDocument();
+  d.settings.header={id:'00000000-0000-4000-8000-000000000001',name:'Campanha',background:'/video-studio/templates/bg.png',seal:'/video-studio/templates/seal.png',color:'#111111',layout:'thematic-seal',backgroundCropY:0};
+  const parsed=cartazistaDocumentSchema.parse(rebuildCartazistaComposition(d));
+  expect(parsed.settings.header?.backgroundCropY).toBe(0);
+  expect(parsed.composition.layers.find(l=>l.id==='cartaz-campaign-background')?.cropY).toBe(0);
+ });

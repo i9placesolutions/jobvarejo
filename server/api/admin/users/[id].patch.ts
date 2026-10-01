@@ -1,6 +1,6 @@
 import { requireAdminUser } from '../../../utils/auth'
 import { getProfileById } from '../../../utils/auth-db'
-import { MANAGED_ROLES, UUID_PATTERN, parseManagedUserInput } from '../../../utils/admin-users'
+import { isTechnicalAdminEmail, MANAGED_ROLES, UUID_PATTERN, parseManagedUserInput } from '../../../utils/admin-users'
 import { hashPassword } from '../../../utils/password'
 import { enforceRateLimit } from '../../../utils/rate-limit'
 import { pgOneOrNull, pgTx } from '../../../utils/postgres'
@@ -55,12 +55,15 @@ export default defineEventHandler(async (event) => {
   }
   if (internalOnly && body.hasPlatformAccess === true) {
     const access = parseManagedUserInput({ ...body, role: 'user', companyName, hasPlatformAccess: true }, actorRole)
+    // A identidade interna já tem um email técnico único; promovê-la não deve
+    // exigir nem substituir esse valor por um email inexistente.
+    const accountEmail = access.email || current.email
     const passwordHash = await hashPassword(access.password)
     try {
       const promoted = await pgTx(async (client) => {
         const relation = await client.query<{ relation: string | null }>("SELECT to_regclass('auth.users')::text AS relation")
         if (relation.rows[0]?.relation) {
-          await client.query(`UPDATE auth.users SET email = $2, raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('name', $3::text, 'email', $2::text), updated_at = now() WHERE id = $1`, [id, access.email, access.name])
+          await client.query(`UPDATE auth.users SET email = $2, raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('name', $3::text, 'email', $2::text), updated_at = now() WHERE id = $1`, [id, accountEmail, access.name])
         }
         const result = await client.query<any>(`
           UPDATE public.profiles
@@ -73,16 +76,16 @@ export default defineEventHandler(async (event) => {
                      is_active, editor_permissions AS permissions,
                      business_profile->>'companyName' AS company_name,
                      false AS internal_only, created_at, last_login_at
-        `, [id, access.name, access.email, access.whatsapp, passwordHash, companyName, active])
+        `, [id, access.name, accountEmail, access.whatsapp, passwordHash, companyName, active])
         if (!result.rows[0]) throw createError({ statusCode: 404, statusMessage: 'Empresa não encontrada.' })
         const builder = await client.query<{ relation: string | null }>("SELECT to_regclass('public.builder_tenants')::text AS relation")
         if (builder.rows[0]?.relation) {
           // O Builder usa a sessão principal; não duplicar o hash evita senha antiga após reset.
-          await client.query(`UPDATE public.builder_tenants SET email = $2, name = $3, is_active = $4, updated_at = now() WHERE id = $1`, [id, access.email, companyName, active])
+          await client.query(`UPDATE public.builder_tenants SET email = $2, name = $3, is_active = $4, updated_at = now() WHERE id = $1`, [id, accountEmail, companyName, active])
         }
         return result.rows[0]
       })
-      return { user: promoted }
+      return { user: { ...promoted, email: isTechnicalAdminEmail(promoted.email) ? '' : promoted.email } }
     } catch (error: any) {
       if (String(error?.code || '') === '23505') throw createError({ statusCode: 409, statusMessage: 'E-mail ou WhatsApp já cadastrado.' })
       throw error

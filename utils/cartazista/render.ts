@@ -40,7 +40,7 @@ async function renderCartazista(source: ArtComposition, raster = false): Promise
         const scale=layer.fit==='cover'?Math.max(layer.width/object.width,layer.height/object.height):Math.min(layer.width/object.width,layer.height/object.height)
         if(layer.fit==='cover') {
           const w=layer.width/scale,h=layer.height/scale
-          object.set({cropX:(object.width-w)/2,cropY:(object.height-h)/2,width:w,height:h})
+          object.set({cropX:(object.width-w)*(layer.cropX??.5),cropY:(object.height-h)*(layer.cropY??.5),width:w,height:h})
         }
         object.set({...options,scaleX:scale,scaleY:scale,left:layer.x+(layer.width-object.width*scale)/2,top:layer.y+(layer.height-object.height*scale)/2});canvas.add(object)
       }

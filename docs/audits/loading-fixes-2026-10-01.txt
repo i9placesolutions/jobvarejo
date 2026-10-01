@@ -1,0 +1,66 @@
+Correções do carregamento — JobVarejo — 2026-10-01
+
+Status: implementado e validado no preview local http://localhost:3001.
+Sem commit, push, deploy ou migração de banco. Edições preexistentes e concorrentes preservadas.
+
+Correções realizadas
+
+1. Galeria /flyer-templates recebe gallery-preview-url e a revisão atual. Usa miniaturas neutras do catálogo em vez de baixar JSONs e renderizar canvases por card. A consulta de categorias ocorre em paralelo sem bloquear a grade, com proteção contra respostas antigas. A sincronização legada de categorias compartilha chamadas simultâneas por usuário e reutiliza sucesso por 60 segundos.
+2. Perfil comercial: leituras compartilham requisição/cache de 5 segundos por conta e por Nuxt app. Troca de conta limpa o cache, eventos de atualização aceitam o estado novo e respostas atrasadas não o sobrescrevem. ClientWorkspace, logo e editor usam esse caminho. O dashboard evita uma segunda sessão quando já autenticado pelo middleware.
+3. Fontes do editor: carregamento das famílias/pesos presentes nos textos, estilos individuais e grupos, em paralelo ao loadFromJSON. Novos textos/fontes/páginas disparam descoberta posterior com debounce. Requisições pendentes são compartilhadas e falhas podem ser repetidas. Mantido recálculo de métricas Fabric e ajuste de etiquetas/campos dinâmicos.
+4. NuxtLink da navegação e dos cards usa prefetch por interação. Elimina o download antecipado de editor/vídeo/etiquetas causado apenas pela visibilidade dos links.
+5. Cartazista respeita a visibilidade para prévias lazy, descarta resultados antigos, compartilha prévias idênticas, limita renderizações concorrentes a 2 e mantém até 30 SVGs em cache.
+6. Vídeo: alterações que mantêm a mesma mídia não reiniciam preparação; mídia obsoleta é cancelada e blobs liberados. Recursos compartilhados são mantidos, com proteção contra resolução atrasada de requisição cancelada.
+7. Fallback da galeria tem timeout de 15 segundos para metadados e 8 segundos para logo. Nenhuma redução geral de timeout do storage/canvas foi aplicada.
+8. npm run preview copia .output para uma pasta temporária própria e serve esse snapshot. Builds posteriores deixam de trocar os chunks de um processo ativo. Os dois previews antigos que compartilhavam .output foram encerrados; novo preview isolado está ativo na porta 3001.
+9. Catálogo regenerado pelo script existente: 9 miniaturas novas/desatualizadas enviadas e confirmadas por HEAD. Consulta somente leitura às 15:30:24 UTC confirmou 188 modelos, 188 entradas, 188 revisões correspondentes. A biblioteca cresceu de 182 para 188 modelos por outra tarefa concorrente; esta correção não criou modelos.
+
+Evidência autenticada no navegador
+
+Galeria:
+- Antes: 179 URLs disponíveis, zero requisições às miniaturas catalogadas e 4 leituras/renderizações de canvas na entrada. Na medição aquecida, 4 cards prontos em 3,869 s.
+- Depois: medição final aquecida com 12 cards prontos em 2,9365 s, zero leituras de detalhe/canvas para montar a grade. Redução observada de aproximadamente 24%; não é um SLA nem ensaio estatístico.
+- Primeira navegação após correção: 4 primeiras imagens terminaram na rede em 3,591 s e 12 em 3,938 s; categorias terminaram em 4,075 s, sem bloquear as imagens. Esses tempos de rede não representam pintura completa.
+- A primeira versão corrigida ainda antecipava rotas: 73 JS / 2.270.657 bytes decodificados. Após prefetch por interação, medição final: 34 JS / 1.263.391 bytes.
+
+Editor, mesmo projeto eec3e2b1-51fc-4d5c-bd76-9cbdd5e7161e:
+- /api/profile: 3 requisições antes, 1 depois. /api/profiles é outro endpoint e permanece.
+- Fontes: 118 recursos / 2.643.524 bytes decodificados antes; 5 / 89.084 depois. Os recursos anteriores estavam em cache, portanto não equivalem a 2,6 MB transferidos pela rede em cada abertura.
+- CSS adicional do WebFontLoader: 497.974 bytes antes; 1.183 bytes depois (Barlow 800). CSS global existente foi preservado.
+- Fontes confirmadas loaded; canvas assentado com 29 objetos no nível superior e sem aviso de imagens. Inspeção visual em editor.jpg.
+- O marcador de interface em 4,501 s ocorreu com canvas ainda sem objetos; não foi usado como tempo de primeiro canvas utilizável.
+- Caches persistentes do usuário não foram apagados. Biblioteca e alterações concorrentes mudaram durante o ensaio. Comparações descrevem as passagens registradas, sem inferir percentuais gerais para todos os projetos.
+
+Validações
+
+- Vitest dirigido: 12 arquivos / 49 testes passaram na execução final às 12:53:59.
+- npm run typecheck: exit 0; apenas aviso DEP0205.
+- npm run build: exit 0 no build final.
+- npm run check:client-chunk: 455 KB, limite 500 KB.
+- git diff --check: passou.
+- GET /flyer-templates e todos os 3 assets _nuxt referenciados no HTML: HTTP 200 no preview isolado após o build.
+- Catálogo: consulta somente leitura ao banco e verificação das revisões; upload e HEAD das miniaturas preparados pelo script.
+- Testes cobrem deduplicação/isolamento/invalidação do cache, fontes usadas e variantes novas, fila/cache/lazy de Cartazista, cancelamento de mídia de vídeo, catálogo e proteção de storage.
+
+Limites e pendências
+
+- Produção autenticada não foi medida nem recebeu as correções de aplicação.
+- Cartazista/vídeo têm testes dirigidos, sem benchmark visual completo de projetos reais neste turno.
+- Exportação PNG: o botão abriu performShare, que tenta navigator.share antes do download. A espera de download expirou em 60 segundos e a interface continuou preparando compartilhamento. A inspeção do aplicativo nativo foi bloqueada pela ferramenta; nenhum destinatário foi selecionado. A página foi recarregada para encerrar a espera. Não há confirmação de arquivo exportado nem evidência que estabeleça regressão de exportação ou de fontes.
+- Autosave não foi desativado. Auditoria do código confirmou fingerprint e skipIfUnchanged existentes; reparos reais de zonas/campos podem alterar o estado e persistir. A causa exata de cada save observado continua sem correlação. Ao abrir o projeto foi necessário confirmar a validade já selecionada (enquanto houver estoque), causando persistência normal do próprio app.
+- Originais decorativos de aproximadamente 2,4 MB e JSON de canvas de aproximadamente 1 MB continuam no caminho do editor. Não foram recomprimidos/substituídos para evitar alterar a arte ou qualidade de exportação. Variantes próprias para preview seguem como possível etapa posterior.
+
+Arquivos deste trabalho
+
+components/AccountFlyerTemplatePreview.vue; components/AdminWorkspaceShell.vue;
+components/ClientWorkspace.vue; components/EditorCanvas.vue; components/EncartesWorkspaceNav.vue;
+components/cartazista/CartazistaPreview.vue; components/video-studio/Preview.client.vue;
+composables/useBusinessProfile.ts; composables/useLogoPreference.ts;
+pages/flyer-templates.vue; pages/index.vue; package.json; scripts/preview-isolated.mjs;
+server/utils/flyer-template-categories.ts; server/data/flyer-gallery-previews.json;
+shared/video-studio/preview-media.ts; utils/scopedRequestCache.ts; utils/editorFontLoading.ts;
+utils/cartazista/preview.ts; tests/utils/scopedRequestCache.test.ts;
+tests/utils/editorFontLoading.test.ts; tests/server/flyerTemplateCategorySync.test.ts;
+tests/utils/cartazistaPreview.test.ts; tests/components/cartazistaPreviewLazy.test.ts;
+tests/video-studio/preview-media.test.ts; este relatório e diretório de evidências.
+Arquivos compartilhados também contêm mudanças de outras tarefas; o diff completo não é exclusivo desta correção.

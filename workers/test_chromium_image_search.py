@@ -15,6 +15,12 @@ class SearchTest(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertIn('27g', result[0]['title'])
 
+    def test_catalog_rejects_partial_brand_and_leaves_search_fallback_available(self):
+        products = [{'productName': 'Arroz Branco Tio Urbano 1Kg', 'link': 'https://www.bretas.com.br/arroz-tio-urbano', 'items': [{'images': [{'imageUrl': 'https://example.com/arroz.png'}]}]}]
+        with patch('chromium_image_search.urlopen', return_value=io.BytesIO(json.dumps(products).encode())):
+            result = search_retailer_catalog('Arroz Tio João 1kg')
+        self.assertEqual(result, [])
+
     def test_catalog_unavailable_keeps_search_fallback(self):
         with patch('chromium_image_search.urlopen', side_effect=OSError('offline')):
             self.assertEqual(search_retailer_catalog('Sanditos 27g'), [])

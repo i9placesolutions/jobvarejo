@@ -37,6 +37,18 @@ const expectInside = (field: any, band: any) => {
 }
 
 describe('faixa de validade no cabeçalho', () => {
+  it.each(['inline', 'stacked', 'card'])('preserva composição %s com data longa dentro da faixa', style => {
+    const { objects, band, heading, date, stock } = fixture()
+    date.quickValidityReferenceStyle = style
+    date.text = '30 DE DEZEMBRO DE 2026 A 2 DE JANEIRO DE 2027'
+    layoutOfferValidityBanner(objects)
+    for (const field of [heading, date, ...(style === 'card' ? [stock] : [])]) expectInside(field, band)
+    if (style === 'inline') expect(date.left).toBeGreaterThan(heading.left)
+    else expect(date.top).toBeGreaterThan(heading.top)
+    expect(stock.visible).toBe(style === 'card')
+    expect(date.fill).toBe('#ffe000')
+    expect(layoutOfferValidityBanner(objects)).toBe(false)
+  })
   it.each([1, 1.5, .6])('acomoda período e estoque no espaço reservado em escala %s', scale => {
     const { objects, band, heading, date, stock, zone } = fixture(scale)
     const geometry = JSON.stringify([band, zone])
@@ -111,6 +123,29 @@ describe('faixa de validade no cabeçalho', () => {
     expect(date.styles[0][0]).toEqual({ fill: '#11bbcc', fontWeight: 900 })
     expectInside(date, band)
     expect(layoutOfferValidityBanner(objects)).toBe(false)
+  })
+
+  it.each(['stack-pill', 'inline-pill'])('centraliza o estoque na pílula do modelo no estilo %s', style => {
+    const { objects, band, heading, date, stock } = fixture()
+    const pill = object({ name: 'reference-validity-stock-band', left: 120, top: 410, width: 600, height: 30 })
+    objects.push(pill)
+    date.quickValidityReferenceStyle = style
+    date.text = '30 DE DEZEMBRO DE 2026 A 2 DE JANEIRO DE 2027'
+    layoutOfferValidityBanner(objects)
+    expectInside(heading, band)
+    expectInside(date, band)
+    expectInside(stock, pill)
+    expect(stock.textAlign).toBe('center')
+    if (style === 'inline-pill') {
+      expect(date.left).toBeGreaterThan(heading.left)
+      expect(Math.abs(date.top + date.height / 2 - (heading.top + heading.height / 2))).toBeLessThan(2)
+    } else expect(date.top).toBeGreaterThan(heading.top)
+    expect(layoutOfferValidityBanner(objects)).toBe(false)
+    stock.text = ''
+    layoutOfferValidityBanner(objects)
+    expect(stock.visible).toBe(false)
+    expect(pill.visible).toBe(false)
+    expectInside(date, band)
   })
 
   it('usa a chamada correspondente a dia único, intervalo e somente estoques', () => {

@@ -1,0 +1,2263 @@
+{
+  "galleryFirst": {
+    "route": "/flyer-templates",
+    "resources": [
+      {
+        "path": "/api/auth/session",
+        "start": 396.10000002384186,
+        "duration": 215.0999999642372,
+        "bytes": 194
+      },
+      {
+        "path": "/api/access/accounts?search",
+        "start": 629.9000000357628,
+        "duration": 392.7999999523163,
+        "bytes": 369
+      },
+      {
+        "path": "/api/flyer-template-categories",
+        "start": 631.8000000119209,
+        "duration": 3443.100000023842,
+        "bytes": 16663
+      },
+      {
+        "path": "/api/profile",
+        "start": 631.9000000357628,
+        "duration": 1294.5999999642372,
+        "bytes": 1451
+      },
+      {
+        "path": "/api/projects?templates=1&summary=1&library=1",
+        "start": 632,
+        "duration": 1918.300000011921,
+        "bytes": 165173
+      },
+      {
+        "path": "catalog-image",
+        "start": 2599.699999988079,
+        "duration": 932.8000000119209,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2599.699999988079,
+        "duration": 941,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2599.699999988079,
+        "duration": 943.1000000238419,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2599.699999988079,
+        "duration": 991.4000000357628,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2679.400000035763,
+        "duration": 948.7999999523163,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2679.5,
+        "duration": 1045.6000000238419,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2679.5,
+        "duration": 1050.5,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2679.5,
+        "duration": 1103.300000011921,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2679.5,
+        "duration": 1162.699999988079,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2679.5,
+        "duration": 1242.1000000238419,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2679.5,
+        "duration": 1244.6000000238419,
+        "bytes": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2679.5,
+        "duration": 1258.4000000357628,
+        "bytes": 0
+      }
+    ],
+    "catalogImages": [
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 270
+      },
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 384
+      },
+      {
+        "complete": true,
+        "width": 384
+      }
+    ],
+    "jsCount": 73,
+    "jsBytes": 2270657
+  },
+  "galleryFinalWarm": {
+    "readyAt": 2936.5,
+    "ready": 12,
+    "resources": [
+      {
+        "path": "/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Barlow:wght@100;200;300;400;500;600;700;800;900&family=Barlow+Condensed:wght@400;600;700;800;900&family=Oswald:wght@400;600;700&family=Anton&display=swap",
+        "start": 22.69999998807907,
+        "duration": 0,
+        "decoded": 33698,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/entry.DRbB2tUc.css",
+        "start": 22.69999998807907,
+        "duration": 0,
+        "decoded": 239077,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/BnRqIy4o.js",
+        "start": 22.69999998807907,
+        "duration": 0,
+        "decoded": 83207,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/PPVm8Dsz.js",
+        "start": 22.69999998807907,
+        "duration": 0,
+        "decoded": 1232,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/SK32rjIg.js",
+        "start": 48.799999952316284,
+        "duration": 0,
+        "decoded": 120323,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/BawGkZ9V.js",
+        "start": 50.39999997615814,
+        "duration": 0,
+        "decoded": 36457,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/cVYOYeV4.js",
+        "start": 50.5,
+        "duration": 0,
+        "decoded": 5131,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/DBzUzcmH.js",
+        "start": 50.59999996423721,
+        "duration": 0,
+        "decoded": 2512,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/BVZRQgZO.js",
+        "start": 50.59999996423721,
+        "duration": 0,
+        "decoded": 4839,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/CmlP5slk.js",
+        "start": 50.59999996423721,
+        "duration": 0,
+        "decoded": 660,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/CMloKSgs.js",
+        "start": 50.69999998807907,
+        "duration": 0,
+        "decoded": 551,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/LYT_Ejr0.js",
+        "start": 50.69999998807907,
+        "duration": 0,
+        "decoded": 45382,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/EncartesWorkspaceNav.DukARbQt.css",
+        "start": 50.799999952316284,
+        "duration": 0,
+        "decoded": 3009,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/CXoapu6H.js",
+        "start": 50.799999952316284,
+        "duration": 0,
+        "decoded": 13279,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/BFj6iPdz.js",
+        "start": 50.89999997615814,
+        "duration": 0,
+        "decoded": 15727,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/C3B-E_CN.js",
+        "start": 51,
+        "duration": 0,
+        "decoded": 2352,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/3uC4XfWb.js",
+        "start": 51,
+        "duration": 0,
+        "decoded": 5394,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/BsKlfImK.js",
+        "start": 51,
+        "duration": 0,
+        "decoded": 465039,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/7S9UI8_A.js",
+        "start": 51.09999996423721,
+        "duration": 0,
+        "decoded": 5145,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/-WG4Fo_d.js",
+        "start": 51.09999996423721,
+        "duration": 0,
+        "decoded": 466,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/C02sxioD.js",
+        "start": 51.09999996423721,
+        "duration": 0,
+        "decoded": 169,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/CtE1VEwP.js",
+        "start": 51.09999996423721,
+        "duration": 0,
+        "decoded": 4072,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/CenH-YR7.js",
+        "start": 51.09999996423721,
+        "duration": 0,
+        "decoded": 4369,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/Bh3BjpvW.js",
+        "start": 51.19999998807907,
+        "duration": 0,
+        "decoded": 109767,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/Dwo6NHN5.js",
+        "start": 51.19999998807907,
+        "duration": 0,
+        "decoded": 3122,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/BYexcgVV.js",
+        "start": 51.299999952316284,
+        "duration": 0,
+        "decoded": 64,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/DMdAPlg-.js",
+        "start": 51.299999952316284,
+        "duration": 0,
+        "decoded": 308373,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/Bzc9QvQ0.js",
+        "start": 51.299999952316284,
+        "duration": 0,
+        "decoded": 603,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/Cjuf_OWZ.js",
+        "start": 51.299999952316284,
+        "duration": 0,
+        "decoded": 1063,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/C1Zix7Ek.js",
+        "start": 51.39999997615814,
+        "duration": 0,
+        "decoded": 1225,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/C0KPRigU.js",
+        "start": 51.39999997615814,
+        "duration": 0,
+        "decoded": 382,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/fRqpeIwi.js",
+        "start": 51.39999997615814,
+        "duration": 0,
+        "decoded": 249,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/AccountFlyerTemplatePreview.wBVwgixZ.css",
+        "start": 51.39999997615814,
+        "duration": 0,
+        "decoded": 556,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/BCxeMSMh.js",
+        "start": 51.5,
+        "duration": 0,
+        "decoded": 12309,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/DNvaiujW.js",
+        "start": 51.5,
+        "duration": 0,
+        "decoded": 4726,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/DashboardMobileDrawer.RL-ceG_1.css",
+        "start": 51.5,
+        "duration": 0,
+        "decoded": 4943,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/y3rfbhtv.js",
+        "start": 51.59999996423721,
+        "duration": 0,
+        "decoded": 92,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/AdminWorkspaceShell.SUFUkua0.css",
+        "start": 51.69999998807907,
+        "duration": 0,
+        "decoded": 4679,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/flyer-templates.CgPCFZP4.css",
+        "start": 51.69999998807907,
+        "duration": 0,
+        "decoded": 233,
+        "transfer": 0
+      },
+      {
+        "path": "/s/barlow/v13/7cHpv4kjgoGqM7E_DMs5ynghnQ.woff2",
+        "start": 52.69999998807907,
+        "duration": 0,
+        "decoded": 15656,
+        "transfer": 0
+      },
+      {
+        "path": "/s/barlow/v13/7cHqv4kjgoGqM7E3q-0s51ostz0rdg.woff2",
+        "start": 52.69999998807907,
+        "duration": 0,
+        "decoded": 15652,
+        "transfer": 0
+      },
+      {
+        "path": "/s/barlow/v13/7cHqv4kjgoGqM7E3j-ws51ostz0rdg.woff2",
+        "start": 52.69999998807907,
+        "duration": 0,
+        "decoded": 14852,
+        "transfer": 0
+      },
+      {
+        "path": "/s/plusjakartasans/v12/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yygg_vb.woff2",
+        "start": 52.799999952316284,
+        "duration": 0,
+        "decoded": 27272,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/builds/meta/1a6f99a1-a649-47b3-81f4-7cae0912480c.json",
+        "start": 59.39999997615814,
+        "duration": 3.800000011920929,
+        "decoded": 139,
+        "transfer": 0
+      },
+      {
+        "path": "/favicon.ico",
+        "start": 62.69999998807907,
+        "duration": 4.199999988079071,
+        "decoded": 4286,
+        "transfer": 4586
+      },
+      {
+        "path": "/_nuxt/Be3GxAei.js",
+        "start": 64,
+        "duration": 0,
+        "decoded": 1668,
+        "transfer": 0
+      },
+      {
+        "path": "/_nuxt/CMz3gR42.js",
+        "start": 64,
+        "duration": 0,
+        "decoded": 3442,
+        "transfer": 0
+      },
+      {
+        "path": "/api/auth/session",
+        "start": 64.69999998807907,
+        "duration": 907.0999999642372,
+        "decoded": 194,
+        "transfer": 494
+      },
+      {
+        "path": "/img/jobvarejo-logo-trim.png",
+        "start": 975.6999999880791,
+        "duration": 0,
+        "decoded": 310868,
+        "transfer": 300
+      },
+      {
+        "path": "/api/access/accounts?search",
+        "start": 980.8999999761581,
+        "duration": 377.10000002384186,
+        "decoded": 369,
+        "transfer": 669
+      },
+      {
+        "path": "/api/flyer-template-categories",
+        "start": 981.6999999880791,
+        "duration": 1148.199999988079,
+        "decoded": 16663,
+        "transfer": 16963
+      },
+      {
+        "path": "/api/profile",
+        "start": 981.7999999523163,
+        "duration": 1159.9000000357628,
+        "decoded": 1451,
+        "transfer": 1751
+      },
+      {
+        "path": "/api/projects?templates=1&summary=1&library=1",
+        "start": 981.7999999523163,
+        "duration": 1814,
+        "decoded": 165173,
+        "transfer": 165473
+      },
+      {
+        "path": "catalog-image",
+        "start": 2810.399999976158,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2811.2999999523163,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2811.899999976158,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2812.2999999523163,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2812.599999964237,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2812.899999976158,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2813.399999976158,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2813.7999999523163,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2814.199999988079,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2814.599999964237,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2815,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      },
+      {
+        "path": "catalog-image",
+        "start": 2815.2999999523163,
+        "duration": 0,
+        "decoded": 0,
+        "transfer": 0
+      }
+    ]
+  },
+  "editorObserved": {
+    "uiObservedAt": 4500.600000023842,
+    "ready": true,
+    "fontsStatus": "loaded",
+    "warning": false,
+    "resources": [
+      {
+        "path": "/css2",
+        "start": 23.200000047683716,
+        "duration": 0,
+        "decoded": 33698,
+        "transfer": 0,
+        "host": "fonts.googleapis.com"
+      },
+      {
+        "path": "/_nuxt/entry.DRbB2tUc.css",
+        "start": 23.30000001192093,
+        "duration": 0,
+        "decoded": 239077,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BnRqIy4o.js",
+        "start": 23.30000001192093,
+        "duration": 0,
+        "decoded": 83207,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/PPVm8Dsz.js",
+        "start": 23.30000001192093,
+        "duration": 0,
+        "decoded": 1232,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/SK32rjIg.js",
+        "start": 53.200000047683716,
+        "duration": 0,
+        "decoded": 120323,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CgOqDzmz.js",
+        "start": 56,
+        "duration": 3.900000035762787,
+        "decoded": 14658,
+        "transfer": 5556,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BYToFttn.js",
+        "start": 56.10000002384186,
+        "duration": 3.699999988079071,
+        "decoded": 1846,
+        "transfer": 1154,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/cVYOYeV4.js",
+        "start": 56.30000001192093,
+        "duration": 0,
+        "decoded": 5131,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BVZRQgZO.js",
+        "start": 56.30000001192093,
+        "duration": 0,
+        "decoded": 4839,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CmlP5slk.js",
+        "start": 56.30000001192093,
+        "duration": 0,
+        "decoded": 660,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CMloKSgs.js",
+        "start": 56.40000003576279,
+        "duration": 0,
+        "decoded": 551,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/LYT_Ejr0.js",
+        "start": 56.40000003576279,
+        "duration": 0,
+        "decoded": 45382,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/WorkspaceMenuButton.BqcUd3Z5.css",
+        "start": 56.60000002384186,
+        "duration": 0,
+        "decoded": 1330,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BsKlfImK.js",
+        "start": 56.80000001192093,
+        "duration": 0,
+        "decoded": 465039,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/7S9UI8_A.js",
+        "start": 56.80000001192093,
+        "duration": 0,
+        "decoded": 5145,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/-WG4Fo_d.js",
+        "start": 56.80000001192093,
+        "duration": 0,
+        "decoded": 466,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/3uC4XfWb.js",
+        "start": 56.90000003576279,
+        "duration": 0,
+        "decoded": 5394,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BFj6iPdz.js",
+        "start": 57,
+        "duration": 0,
+        "decoded": 15727,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C02sxioD.js",
+        "start": 57,
+        "duration": 0,
+        "decoded": 169,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CtE1VEwP.js",
+        "start": 57.10000002384186,
+        "duration": 0,
+        "decoded": 4072,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CenH-YR7.js",
+        "start": 57.200000047683716,
+        "duration": 0,
+        "decoded": 4369,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Bh3BjpvW.js",
+        "start": 57.30000001192093,
+        "duration": 0,
+        "decoded": 109767,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Dwo6NHN5.js",
+        "start": 57.30000001192093,
+        "duration": 0,
+        "decoded": 3122,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BYexcgVV.js",
+        "start": 57.700000047683716,
+        "duration": 0,
+        "decoded": 64,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DMdAPlg-.js",
+        "start": 57.80000001192093,
+        "duration": 0,
+        "decoded": 308373,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Bzc9QvQ0.js",
+        "start": 57.80000001192093,
+        "duration": 0,
+        "decoded": 603,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Cjuf_OWZ.js",
+        "start": 57.80000001192093,
+        "duration": 0,
+        "decoded": 1063,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C1Zix7Ek.js",
+        "start": 57.80000001192093,
+        "duration": 0,
+        "decoded": 1225,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C0KPRigU.js",
+        "start": 58.10000002384186,
+        "duration": 0,
+        "decoded": 382,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/fRqpeIwi.js",
+        "start": 58.10000002384186,
+        "duration": 0,
+        "decoded": 249,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CznsVQrG.js",
+        "start": 58.10000002384186,
+        "duration": 2.800000011920929,
+        "decoded": 441,
+        "transfer": 741,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/_id_.CO8t1Sw7.css",
+        "start": 58.200000047683716,
+        "duration": 0,
+        "decoded": 307,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/s/barlow/v13/7cHpv4kjgoGqM7E_DMs5ynghnQ.woff2",
+        "start": 59.60000002384186,
+        "duration": 0,
+        "decoded": 15656,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/s/barlow/v13/7cHqv4kjgoGqM7E3q-0s51ostz0rdg.woff2",
+        "start": 59.700000047683716,
+        "duration": 0,
+        "decoded": 15652,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/s/barlow/v13/7cHqv4kjgoGqM7E3j-ws51ostz0rdg.woff2",
+        "start": 59.80000001192093,
+        "duration": 0,
+        "decoded": 14852,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/s/plusjakartasans/v12/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yygg_vb.woff2",
+        "start": 59.80000001192093,
+        "duration": 0,
+        "decoded": 27272,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/_nuxt/builds/meta/1a6f99a1-a649-47b3-81f4-7cae0912480c.json",
+        "start": 66.40000003576279,
+        "duration": 2.899999976158142,
+        "decoded": 139,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Be3GxAei.js",
+        "start": 70.5,
+        "duration": 0,
+        "decoded": 1668,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CMz3gR42.js",
+        "start": 70.5,
+        "duration": 0,
+        "decoded": 3442,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/auth/session",
+        "start": 71.20000004768372,
+        "duration": 898.5999999642372,
+        "decoded": 194,
+        "transfer": 494,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/xtOneerj.js",
+        "start": 976.6000000238419,
+        "duration": 25.5,
+        "decoded": 457096,
+        "transfer": 114689,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C3B-E_CN.js",
+        "start": 976.8000000119209,
+        "duration": 0,
+        "decoded": 2352,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DlG0c2Kz.js",
+        "start": 976.8000000119209,
+        "duration": 26.30000001192093,
+        "decoded": 59262,
+        "transfer": 16617,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DlywN2KB.js",
+        "start": 976.9000000357628,
+        "duration": 27.899999976158142,
+        "decoded": 11989,
+        "transfer": 4650,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/3jYwJQyV.js",
+        "start": 976.9000000357628,
+        "duration": 28,
+        "decoded": 71729,
+        "transfer": 20915,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DxVY7jvu.js",
+        "start": 977,
+        "duration": 0,
+        "decoded": 28796,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BGyL7KZD.js",
+        "start": 977.1000000238419,
+        "duration": 29.80000001192093,
+        "decoded": 34211,
+        "transfer": 10107,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/ByN4_w5G.js",
+        "start": 977.3000000119209,
+        "duration": 30,
+        "decoded": 3869,
+        "transfer": 1648,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DD9yGPwa.js",
+        "start": 977.3000000119209,
+        "duration": 28.900000035762787,
+        "decoded": 10581,
+        "transfer": 3831,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BHBql2k_.js",
+        "start": 977.4000000357628,
+        "duration": 32.39999997615814,
+        "decoded": 2819,
+        "transfer": 1445,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DhmIWf13.js",
+        "start": 977.4000000357628,
+        "duration": 33.09999996423721,
+        "decoded": 2579,
+        "transfer": 1329,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DPLOS1g-.js",
+        "start": 977.5,
+        "duration": 32.700000047683716,
+        "decoded": 42070,
+        "transfer": 11181,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/aX5kLwbA.js",
+        "start": 977.6000000238419,
+        "duration": 0,
+        "decoded": 6596,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/B-9SeuZl.js",
+        "start": 977.7000000476837,
+        "duration": 0,
+        "decoded": 7673,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Dip_aCqW.js",
+        "start": 977.8000000119209,
+        "duration": 33.19999998807907,
+        "decoded": 1120,
+        "transfer": 804,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Bb3duoGr.js",
+        "start": 977.9000000357628,
+        "duration": 33.39999997615814,
+        "decoded": 1385,
+        "transfer": 933,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BEjlWzmZ.js",
+        "start": 978,
+        "duration": 33.60000002384186,
+        "decoded": 1614,
+        "transfer": 1026,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/editor-canvas.BPzPPVGT.css",
+        "start": 979.1000000238419,
+        "duration": 0,
+        "decoded": 3011,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/projects",
+        "start": 981.6000000238419,
+        "duration": 411.19999998807907,
+        "decoded": 8395,
+        "transfer": 8695,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C7gV3Nsz.js",
+        "start": 1455.7000000476837,
+        "duration": 2.899999976158142,
+        "decoded": 13726,
+        "transfer": 4706,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/LayersPanel.BF9n6Awd.css",
+        "start": 1456,
+        "duration": 0,
+        "decoded": 366,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BAFHewvL.js",
+        "start": 1456.2000000476837,
+        "duration": 2.799999952316284,
+        "decoded": 6738,
+        "transfer": 2606,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CbVYRofi.js",
+        "start": 1456.4000000357628,
+        "duration": 3.5,
+        "decoded": 1851,
+        "transfer": 1230,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CuGojJ0H.js",
+        "start": 1456.5,
+        "duration": 3.600000023841858,
+        "decoded": 1267,
+        "transfer": 879,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/7db9dSJr.js",
+        "start": 1456.7000000476837,
+        "duration": 4.699999988079071,
+        "decoded": 7761,
+        "transfer": 1653,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BxaIuxFe.js",
+        "start": 1456.7000000476837,
+        "duration": 3.699999988079071,
+        "decoded": 3702,
+        "transfer": 1272,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DMMBhzCu.js",
+        "start": 1457.2000000476837,
+        "duration": 5.599999964237213,
+        "decoded": 8436,
+        "transfer": 2131,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DuhDCgT2.js",
+        "start": 1457.2000000476837,
+        "duration": 6.5,
+        "decoded": 158472,
+        "transfer": 29082,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Dao61Ohl.js",
+        "start": 1457.300000011921,
+        "duration": 7,
+        "decoded": 3846,
+        "transfer": 1986,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CKoFBgLL.js",
+        "start": 1457.300000011921,
+        "duration": 7.5,
+        "decoded": 16409,
+        "transfer": 5258,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/ArtworkEyedropper.Bg80k2AP.css",
+        "start": 1457.5,
+        "duration": 0,
+        "decoded": 1246,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/ColorPicker.DroIn3L2.css",
+        "start": 1457.7000000476837,
+        "duration": 0,
+        "decoded": 272,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BX2jNh8a.js",
+        "start": 1457.7000000476837,
+        "duration": 7.599999964237213,
+        "decoded": 2359,
+        "transfer": 1339,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/PropertiesPanel.BWk-xqRc.css",
+        "start": 1457.9000000357628,
+        "duration": 0,
+        "decoded": 23755,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/jtiOXMH0.js",
+        "start": 1458,
+        "duration": 7.5,
+        "decoded": 10872,
+        "transfer": 2957,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/UktC-8aX.js",
+        "start": 1458,
+        "duration": 14.400000035762787,
+        "decoded": 7937,
+        "transfer": 2875,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DU2qlwPl.js",
+        "start": 1458.1000000238419,
+        "duration": 0,
+        "decoded": 617,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/profiles",
+        "start": 1458.300000011921,
+        "duration": 1099,
+        "decoded": 389,
+        "transfer": 689,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/jobvarejo/projects/eb847e8e-7c19-4bee-8042-376528ce6192/eec3e2b1-51fc-4d5c-bd76-9cbdd5e7161e/thumb_17f33304-edb4-4b0b-928c-676c81b6736b_1790864707480.png",
+        "start": 1462.1000000238419,
+        "duration": 682.3999999761581,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "s3.wasabisys.com"
+      },
+      {
+        "path": "/api/profile",
+        "start": 1462.4000000357628,
+        "duration": 1110.0999999642372,
+        "decoded": 1451,
+        "transfer": 1751,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/j_7R6nNk.js",
+        "start": 1500,
+        "duration": 0,
+        "decoded": 12742,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CqkleIqs.js",
+        "start": 1500.1000000238419,
+        "duration": 0,
+        "decoded": 116,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.1000000238419,
+        "duration": 2741,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.1000000238419,
+        "duration": 2857.100000023842,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.2000000476837,
+        "duration": 1110.199999988079,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.2000000476837,
+        "duration": 1853.699999988079,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.2000000476837,
+        "duration": 2047.0999999642372,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.300000011921,
+        "duration": 1696.300000011921,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.300000011921,
+        "duration": 1713.6000000238419,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.300000011921,
+        "duration": 1729.4000000357628,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.300000011921,
+        "duration": 1773.4000000357628,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/css",
+        "start": 1517.300000011921,
+        "duration": 0,
+        "decoded": 1183,
+        "transfer": 0,
+        "host": "fonts.googleapis.com"
+      },
+      {
+        "path": "/s/barlow/v13/7cHqv4kjgoGqM7E3q-0s51ostz0rdg.woff2",
+        "start": 1518.1000000238419,
+        "duration": 0,
+        "decoded": 15652,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/_nuxt/BLliw-td.js",
+        "start": 4495.100000023842,
+        "duration": 1.899999976158142,
+        "decoded": 7633,
+        "transfer": 2517,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/OfferValidityPrompt.onYsjaHn.css",
+        "start": 4495.400000035763,
+        "duration": 0,
+        "decoded": 7582,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      }
+    ],
+    "fontCss": [
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Barlow:wght@100;200;300;400;500;600;700;800;900&family=Barlow+Condensed:wght@400;600;700;800;900&family=Oswald:wght@400;600;700&family=Anton&display=swap",
+        "bytes": 33698
+      },
+      {
+        "url": "https://fonts.googleapis.com/css?family=Barlow:800",
+        "bytes": 1183
+      }
+    ],
+    "bridge": {
+      "enabled": true,
+      "cullRuns": 2,
+      "cullReason": "objects-sync",
+      "objectCount": 0,
+      "visibleObjects": 0,
+      "culledObjects": 0,
+      "changedObjects": 0,
+      "restoredObjects": 0,
+      "cullDurationMs": 0,
+      "cullAvgMs": 0.05,
+      "cullMaxMs": 0.1,
+      "fps": 23.92,
+      "fpsAvg": 23.92,
+      "fpsMin": 23.92,
+      "fpsMax": 23.92,
+      "renderFrames": 1,
+      "updatedAt": 1790869149373
+    }
+  },
+  "editorSettled": {
+    "now": 55873.40000003576,
+    "warning": false,
+    "resources": [
+      {
+        "path": "/css2",
+        "start": 23.200000047683716,
+        "duration": 0,
+        "decoded": 33698,
+        "transfer": 0,
+        "host": "fonts.googleapis.com"
+      },
+      {
+        "path": "/_nuxt/entry.DRbB2tUc.css",
+        "start": 23.30000001192093,
+        "duration": 0,
+        "decoded": 239077,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BnRqIy4o.js",
+        "start": 23.30000001192093,
+        "duration": 0,
+        "decoded": 83207,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/PPVm8Dsz.js",
+        "start": 23.30000001192093,
+        "duration": 0,
+        "decoded": 1232,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/SK32rjIg.js",
+        "start": 53.200000047683716,
+        "duration": 0,
+        "decoded": 120323,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CgOqDzmz.js",
+        "start": 56,
+        "duration": 3.900000035762787,
+        "decoded": 14658,
+        "transfer": 5556,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BYToFttn.js",
+        "start": 56.10000002384186,
+        "duration": 3.699999988079071,
+        "decoded": 1846,
+        "transfer": 1154,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/cVYOYeV4.js",
+        "start": 56.30000001192093,
+        "duration": 0,
+        "decoded": 5131,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BVZRQgZO.js",
+        "start": 56.30000001192093,
+        "duration": 0,
+        "decoded": 4839,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CmlP5slk.js",
+        "start": 56.30000001192093,
+        "duration": 0,
+        "decoded": 660,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CMloKSgs.js",
+        "start": 56.40000003576279,
+        "duration": 0,
+        "decoded": 551,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/LYT_Ejr0.js",
+        "start": 56.40000003576279,
+        "duration": 0,
+        "decoded": 45382,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/WorkspaceMenuButton.BqcUd3Z5.css",
+        "start": 56.60000002384186,
+        "duration": 0,
+        "decoded": 1330,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BsKlfImK.js",
+        "start": 56.80000001192093,
+        "duration": 0,
+        "decoded": 465039,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/7S9UI8_A.js",
+        "start": 56.80000001192093,
+        "duration": 0,
+        "decoded": 5145,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/-WG4Fo_d.js",
+        "start": 56.80000001192093,
+        "duration": 0,
+        "decoded": 466,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/3uC4XfWb.js",
+        "start": 56.90000003576279,
+        "duration": 0,
+        "decoded": 5394,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BFj6iPdz.js",
+        "start": 57,
+        "duration": 0,
+        "decoded": 15727,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C02sxioD.js",
+        "start": 57,
+        "duration": 0,
+        "decoded": 169,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CtE1VEwP.js",
+        "start": 57.10000002384186,
+        "duration": 0,
+        "decoded": 4072,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CenH-YR7.js",
+        "start": 57.200000047683716,
+        "duration": 0,
+        "decoded": 4369,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Bh3BjpvW.js",
+        "start": 57.30000001192093,
+        "duration": 0,
+        "decoded": 109767,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Dwo6NHN5.js",
+        "start": 57.30000001192093,
+        "duration": 0,
+        "decoded": 3122,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BYexcgVV.js",
+        "start": 57.700000047683716,
+        "duration": 0,
+        "decoded": 64,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DMdAPlg-.js",
+        "start": 57.80000001192093,
+        "duration": 0,
+        "decoded": 308373,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Bzc9QvQ0.js",
+        "start": 57.80000001192093,
+        "duration": 0,
+        "decoded": 603,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Cjuf_OWZ.js",
+        "start": 57.80000001192093,
+        "duration": 0,
+        "decoded": 1063,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C1Zix7Ek.js",
+        "start": 57.80000001192093,
+        "duration": 0,
+        "decoded": 1225,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C0KPRigU.js",
+        "start": 58.10000002384186,
+        "duration": 0,
+        "decoded": 382,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/fRqpeIwi.js",
+        "start": 58.10000002384186,
+        "duration": 0,
+        "decoded": 249,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CznsVQrG.js",
+        "start": 58.10000002384186,
+        "duration": 2.800000011920929,
+        "decoded": 441,
+        "transfer": 741,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/_id_.CO8t1Sw7.css",
+        "start": 58.200000047683716,
+        "duration": 0,
+        "decoded": 307,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/s/barlow/v13/7cHpv4kjgoGqM7E_DMs5ynghnQ.woff2",
+        "start": 59.60000002384186,
+        "duration": 0,
+        "decoded": 15656,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/s/barlow/v13/7cHqv4kjgoGqM7E3q-0s51ostz0rdg.woff2",
+        "start": 59.700000047683716,
+        "duration": 0,
+        "decoded": 15652,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/s/barlow/v13/7cHqv4kjgoGqM7E3j-ws51ostz0rdg.woff2",
+        "start": 59.80000001192093,
+        "duration": 0,
+        "decoded": 14852,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/s/plusjakartasans/v12/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yygg_vb.woff2",
+        "start": 59.80000001192093,
+        "duration": 0,
+        "decoded": 27272,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/_nuxt/builds/meta/1a6f99a1-a649-47b3-81f4-7cae0912480c.json",
+        "start": 66.40000003576279,
+        "duration": 2.899999976158142,
+        "decoded": 139,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Be3GxAei.js",
+        "start": 70.5,
+        "duration": 0,
+        "decoded": 1668,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CMz3gR42.js",
+        "start": 70.5,
+        "duration": 0,
+        "decoded": 3442,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/auth/session",
+        "start": 71.20000004768372,
+        "duration": 898.5999999642372,
+        "decoded": 194,
+        "transfer": 494,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/xtOneerj.js",
+        "start": 976.6000000238419,
+        "duration": 25.5,
+        "decoded": 457096,
+        "transfer": 114689,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C3B-E_CN.js",
+        "start": 976.8000000119209,
+        "duration": 0,
+        "decoded": 2352,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DlG0c2Kz.js",
+        "start": 976.8000000119209,
+        "duration": 26.30000001192093,
+        "decoded": 59262,
+        "transfer": 16617,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DlywN2KB.js",
+        "start": 976.9000000357628,
+        "duration": 27.899999976158142,
+        "decoded": 11989,
+        "transfer": 4650,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/3jYwJQyV.js",
+        "start": 976.9000000357628,
+        "duration": 28,
+        "decoded": 71729,
+        "transfer": 20915,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DxVY7jvu.js",
+        "start": 977,
+        "duration": 0,
+        "decoded": 28796,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BGyL7KZD.js",
+        "start": 977.1000000238419,
+        "duration": 29.80000001192093,
+        "decoded": 34211,
+        "transfer": 10107,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/ByN4_w5G.js",
+        "start": 977.3000000119209,
+        "duration": 30,
+        "decoded": 3869,
+        "transfer": 1648,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DD9yGPwa.js",
+        "start": 977.3000000119209,
+        "duration": 28.900000035762787,
+        "decoded": 10581,
+        "transfer": 3831,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BHBql2k_.js",
+        "start": 977.4000000357628,
+        "duration": 32.39999997615814,
+        "decoded": 2819,
+        "transfer": 1445,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DhmIWf13.js",
+        "start": 977.4000000357628,
+        "duration": 33.09999996423721,
+        "decoded": 2579,
+        "transfer": 1329,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DPLOS1g-.js",
+        "start": 977.5,
+        "duration": 32.700000047683716,
+        "decoded": 42070,
+        "transfer": 11181,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/aX5kLwbA.js",
+        "start": 977.6000000238419,
+        "duration": 0,
+        "decoded": 6596,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/B-9SeuZl.js",
+        "start": 977.7000000476837,
+        "duration": 0,
+        "decoded": 7673,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Dip_aCqW.js",
+        "start": 977.8000000119209,
+        "duration": 33.19999998807907,
+        "decoded": 1120,
+        "transfer": 804,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Bb3duoGr.js",
+        "start": 977.9000000357628,
+        "duration": 33.39999997615814,
+        "decoded": 1385,
+        "transfer": 933,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BEjlWzmZ.js",
+        "start": 978,
+        "duration": 33.60000002384186,
+        "decoded": 1614,
+        "transfer": 1026,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/editor-canvas.BPzPPVGT.css",
+        "start": 979.1000000238419,
+        "duration": 0,
+        "decoded": 3011,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/projects",
+        "start": 981.6000000238419,
+        "duration": 411.19999998807907,
+        "decoded": 8395,
+        "transfer": 8695,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/C7gV3Nsz.js",
+        "start": 1455.7000000476837,
+        "duration": 2.899999976158142,
+        "decoded": 13726,
+        "transfer": 4706,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/LayersPanel.BF9n6Awd.css",
+        "start": 1456,
+        "duration": 0,
+        "decoded": 366,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BAFHewvL.js",
+        "start": 1456.2000000476837,
+        "duration": 2.799999952316284,
+        "decoded": 6738,
+        "transfer": 2606,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CbVYRofi.js",
+        "start": 1456.4000000357628,
+        "duration": 3.5,
+        "decoded": 1851,
+        "transfer": 1230,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CuGojJ0H.js",
+        "start": 1456.5,
+        "duration": 3.600000023841858,
+        "decoded": 1267,
+        "transfer": 879,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/7db9dSJr.js",
+        "start": 1456.7000000476837,
+        "duration": 4.699999988079071,
+        "decoded": 7761,
+        "transfer": 1653,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BxaIuxFe.js",
+        "start": 1456.7000000476837,
+        "duration": 3.699999988079071,
+        "decoded": 3702,
+        "transfer": 1272,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DMMBhzCu.js",
+        "start": 1457.2000000476837,
+        "duration": 5.599999964237213,
+        "decoded": 8436,
+        "transfer": 2131,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DuhDCgT2.js",
+        "start": 1457.2000000476837,
+        "duration": 6.5,
+        "decoded": 158472,
+        "transfer": 29082,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/Dao61Ohl.js",
+        "start": 1457.300000011921,
+        "duration": 7,
+        "decoded": 3846,
+        "transfer": 1986,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CKoFBgLL.js",
+        "start": 1457.300000011921,
+        "duration": 7.5,
+        "decoded": 16409,
+        "transfer": 5258,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/ArtworkEyedropper.Bg80k2AP.css",
+        "start": 1457.5,
+        "duration": 0,
+        "decoded": 1246,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/ColorPicker.DroIn3L2.css",
+        "start": 1457.7000000476837,
+        "duration": 0,
+        "decoded": 272,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/BX2jNh8a.js",
+        "start": 1457.7000000476837,
+        "duration": 7.599999964237213,
+        "decoded": 2359,
+        "transfer": 1339,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/PropertiesPanel.BWk-xqRc.css",
+        "start": 1457.9000000357628,
+        "duration": 0,
+        "decoded": 23755,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/jtiOXMH0.js",
+        "start": 1458,
+        "duration": 7.5,
+        "decoded": 10872,
+        "transfer": 2957,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/UktC-8aX.js",
+        "start": 1458,
+        "duration": 14.400000035762787,
+        "decoded": 7937,
+        "transfer": 2875,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/DU2qlwPl.js",
+        "start": 1458.1000000238419,
+        "duration": 0,
+        "decoded": 617,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/profiles",
+        "start": 1458.300000011921,
+        "duration": 1099,
+        "decoded": 389,
+        "transfer": 689,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/jobvarejo/projects/eb847e8e-7c19-4bee-8042-376528ce6192/eec3e2b1-51fc-4d5c-bd76-9cbdd5e7161e/thumb_17f33304-edb4-4b0b-928c-676c81b6736b_1790864707480.png",
+        "start": 1462.1000000238419,
+        "duration": 682.3999999761581,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "s3.wasabisys.com"
+      },
+      {
+        "path": "/api/profile",
+        "start": 1462.4000000357628,
+        "duration": 1110.0999999642372,
+        "decoded": 1451,
+        "transfer": 1751,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/j_7R6nNk.js",
+        "start": 1500,
+        "duration": 0,
+        "decoded": 12742,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/CqkleIqs.js",
+        "start": 1500.1000000238419,
+        "duration": 0,
+        "decoded": 116,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.1000000238419,
+        "duration": 2741,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.1000000238419,
+        "duration": 2857.100000023842,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.2000000476837,
+        "duration": 1110.199999988079,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.2000000476837,
+        "duration": 1853.699999988079,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.2000000476837,
+        "duration": 2047.0999999642372,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.300000011921,
+        "duration": 1696.300000011921,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.300000011921,
+        "duration": 1713.6000000238419,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.300000011921,
+        "duration": 1729.4000000357628,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/p",
+        "start": 1500.300000011921,
+        "duration": 1773.4000000357628,
+        "decoded": 0,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/css",
+        "start": 1517.300000011921,
+        "duration": 0,
+        "decoded": 1183,
+        "transfer": 0,
+        "host": "fonts.googleapis.com"
+      },
+      {
+        "path": "/s/barlow/v13/7cHqv4kjgoGqM7E3q-0s51ostz0rdg.woff2",
+        "start": 1518.1000000238419,
+        "duration": 0,
+        "decoded": 15652,
+        "transfer": 0,
+        "host": "fonts.gstatic.com"
+      },
+      {
+        "path": "/_nuxt/BLliw-td.js",
+        "start": 4495.100000023842,
+        "duration": 1.899999976158142,
+        "decoded": 7633,
+        "transfer": 2517,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/_nuxt/OfferValidityPrompt.onYsjaHn.css",
+        "start": 4495.400000035763,
+        "duration": 0,
+        "decoded": 7582,
+        "transfer": 0,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/label-templates",
+        "start": 4497.800000011921,
+        "duration": 541.4000000357628,
+        "decoded": 19169,
+        "transfer": 19469,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/product-card-configuration",
+        "start": 5045.900000035763,
+        "duration": 542.5,
+        "decoded": 3793,
+        "transfer": 4093,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/product-zone-structures",
+        "start": 5045.900000035763,
+        "duration": 907,
+        "decoded": 177950,
+        "transfer": 178250,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/upload",
+        "start": 7682.100000023842,
+        "duration": 1341.699999988079,
+        "decoded": 153,
+        "transfer": 453,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/storage/history-snapshot",
+        "start": 7682.5,
+        "duration": 1363.2000000476837,
+        "decoded": 375,
+        "transfer": 675,
+        "host": "127.0.0.1"
+      },
+      {
+        "path": "/api/projects",
+        "start": 9026.700000047684,
+        "duration": 741.5,
+        "decoded": 7402,
+        "transfer": 7702,
+        "host": "127.0.0.1"
+      }
+    ],
+    "fontCss": [
+      {
+        "url": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Barlow:wght@100;200;300;400;500;600;700;800;900&family=Barlow+Condensed:wght@400;600;700;800;900&family=Oswald:wght@400;600;700&family=Anton&display=swap",
+        "bytes": 33698
+      },
+      {
+        "url": "https://fonts.googleapis.com/css?family=Barlow:800",
+        "bytes": 1183
+      }
+    ],
+    "fontsStatus": "loaded",
+    "bridge": {
+      "enabled": true,
+      "cullRuns": 4,
+      "cullReason": "objects-sync",
+      "objectCount": 29,
+      "visibleObjects": 28,
+      "culledObjects": 0,
+      "changedObjects": 0,
+      "restoredObjects": 0,
+      "cullDurationMs": 0.1,
+      "cullAvgMs": 0.05,
+      "cullMaxMs": 0.1,
+      "fps": 2.75,
+      "fpsAvg": 95.35,
+      "fpsMin": 1.01,
+      "fpsMax": 526.32,
+      "renderFrames": 8,
+      "updatedAt": 1790869153719
+    }
+  }
+}

@@ -223,8 +223,9 @@ export const handleFileUpload = async (
     }
 
     try {
-        const mode = ctx.pendingLocalImageActionMode.value
-        const replaceTargetId = ctx.pendingImageReplaceTargetId.value
+        // Preserve o alvo do modal mesmo quando o input perde o estado local.
+        const mode = ctx.pendingLocalImageActionMode.value || (ctx.showProductImageUploadPicker.value ? ctx.productImagePickerMode.value : null)
+        const replaceTargetId = ctx.pendingImageReplaceTargetId.value || (mode === 'replace' ? ctx.productImagePickerTargetImageId.value : null)
         if (mode === 'replace' && !replaceTargetId) throw new Error('Selecione novamente a imagem que deseja substituir.')
 
         if (mode === 'replace' && replaceTargetId) {

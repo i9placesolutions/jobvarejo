@@ -13,7 +13,7 @@ const player=createRef<PlayerRef>()
 const seekEdit=()=>{if(props.editingFrame!==undefined){player.current?.pause();player.current?.seekTo(props.editingFrame)}}
 let lastPreviewNonce=-1
 const seekRequested=()=>{const request=props.previewRequest;if(request&&player.current&&request.nonce!==lastPreviewNonce){player.current.pause();player.current.seekTo(request.frame);lastPreviewNonce=request.nonce}}
-let root:Root|undefined,generation=0,disposed=false,loadedKey='',media:Record<string,string>={}
+let root:Root|undefined,generation=0,disposed=false,loadedKey='',preparingKey='',media:Record<string,string>={}
 const render=()=>{
  if(!root||preparing.value||loadError.value)return
  const c={...props.composition,fastPreview:true,document:JSON.parse(JSON.stringify(props.composition.document)),media},size=VIDEO_FORMATS[c.format],duration=c.scenes.reduce((n,s)=>Math.max(n,s.from+s.frames),1)
@@ -22,14 +22,17 @@ const render=()=>{
 }
 async function prepare(){
  const key=JSON.stringify(props.composition.media)
- if(key===loadedKey){render();return}
+ if(preparing.value&&key===preparingKey)return
  const request=++generation
- preparing.value=true;loadError.value='';root?.render(null)
+ preparingKey=key
+ cache.retain(Object.values(props.composition.media))
+ if(key===loadedKey){preparing.value=false;loadError.value='';render();return}
+ loadedKey='';preparing.value=true;loadError.value='';root?.render(null)
  try{
   const decoded=await Promise.all(Object.entries(props.composition.media).map(async([id,src])=>[id,await cache.get(src)] as const))
   if(disposed||request!==generation)return
   media=Object.fromEntries(decoded);loadedKey=key;preparing.value=false;render()
- }catch(error){if(!disposed&&request===generation){preparing.value=false;loadError.value='Não foi possível preparar as imagens. Tente carregar novamente.'}}
+ }catch(error){if(!disposed&&request===generation){preparing.value=false;preparingKey='';loadError.value='Não foi possível preparar as imagens. Tente carregar novamente.'}}
 }
 onMounted(()=>{if(host.value){root=createRoot(host.value);prepare()}})
 watch(()=>props.composition,prepare,{deep:true})

@@ -24,7 +24,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "preview": "nuxt preview",
+    "preview": "node scripts/preview-isolated.mjs",
     "postinstall": "patch-package && nuxt prepare"
   },
   "dependencies": {

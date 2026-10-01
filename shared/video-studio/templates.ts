@@ -9,7 +9,11 @@ export function applyVideoTemplate(doc: VideoDocument, id: VideoDocument['theme'
   doc.campaign = template.title
   const recipe=flyerRecipe(id)
   if(recipe?.preferSingleProduct) doc.duplicateProducts=false
-  if(recipe){doc.templateRevision=recipe.revision||1;doc.layoutVersion=2;doc.intensity=.85;doc.effects=['shake','zoom','glow','rays','pulse'];doc.transition=recipe.transition;doc.motion=structuredClone(recipe.motion);doc.priceLabel='';doc.audio.music=recipe.music;return}
+  if(recipe){
+    doc.templateRevision=recipe.revision||1;doc.layoutVersion=2;doc.intensity=.85;doc.effects=['shake','zoom','glow','rays','pulse'];doc.transition=recipe.transition;doc.motion=structuredClone(recipe.motion);doc.priceLabel='';doc.audio.music=recipe.music
+    if(recipe.appearanceDefaults)doc.appearance={...recipe.appearanceDefaults,...doc.appearance}
+    return
+  }
   doc.effects = id === 'grill' ? ['smoke','embers','fire','zoom']
     : id === 'party' ? ['confetti','glow','bounce']
     : id === 'fresh' ? ['glow','rays','zoom']

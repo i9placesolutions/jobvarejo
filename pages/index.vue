@@ -301,7 +301,7 @@ const markAllAsRead = async () => {
 // Load data on mount
 onMounted(async () => {
   isMounted.value = true
-  await auth.getSession()
+  if (!auth.isAuthenticated.value) await auth.getSession()
   
   // Global click handlers
   if (process.client && auth.isAdmin.value) {

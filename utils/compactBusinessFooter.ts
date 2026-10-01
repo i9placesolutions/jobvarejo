@@ -1,4 +1,5 @@
 import { layoutReferenceFooter, layoutHeaderInstagram } from './referenceFlyerLayout'
+import { layoutCampaignSocial, layoutCampaignRetailFooter } from './campaignRetailLayout'
 import { fitQuickBusinessFooterText } from './quickBusinessFooterTypography'
 
 const FOOTER_FIELDS = ['instagram', 'facebook', 'whatsapp', 'phone', 'address', 'footerPaymentImages'] as const
@@ -62,9 +63,12 @@ const active = (object: any): boolean => !!object && object.visible !== false &&
  */
 export const compactBusinessFooter = (objects: any[]): boolean => {
   let changed = layoutHeaderInstagram(objects)
+  changed = layoutCampaignSocial(objects) || changed
+  changed = layoutCampaignRetailFooter(objects) || changed
   const patch = (object: any, values: Record<string, any>) => { changed = setObject(object, values) || changed }
   for (const background of objects.filter(object => object?.name === 'footer-premium-background')) {
     if (background.footerLayout === 'reference-contacts') { changed = layoutReferenceFooter(background, objects) || changed; continue }
+    if (background.footerLayout === 'campaign-retail') continue
     const footer = bounds(background)
     const scale = Math.max(.25, footer.width / 1080)
     const inset = Math.min(24 * scale, footer.height * .08)

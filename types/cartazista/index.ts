@@ -100,6 +100,7 @@ export type CartazistaSettings = {
 }
 
 export type CartazistaHeader = {
+  backgroundCropY?: number
   tagline?: string
   retailFinish?: { decoration?: string; labelFill: string; labelInk: string; labelEdge: string }
   priceCornerRadius?: number

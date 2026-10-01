@@ -17,11 +17,11 @@ function toggle(key: string) {
 </script>
 <template>
   <section class="footer-payment-picker">
-    <h3>Cartões aceitos no rodapé <small>{{ modelValue.length }}/5</small></h3>
-    <p>Escolha até cinco imagens da biblioteca. A seleção será reutilizada nos encartes.</p>
+    <h3>Cartões aceitos no rodapé <small>{{ modelValue.length }}/{{ MAX_FOOTER_PAYMENT_IMAGES }}</small></h3>
+    <p>Escolha até {{ MAX_FOOTER_PAYMENT_IMAGES }} imagens da biblioteca. A seleção será reutilizada nos encartes.</p>
     <div class="selected-cards"><button v-for="key in modelValue" :key="key" type="button" aria-label="Remover cartão" @click="toggle(key)"><img :src="footerPaymentImageUrl(key)" alt="Cartão selecionado" /><span>×</span></button></div>
     <div class="search"><input v-model="search" placeholder="Buscar bandeira ou cartão" aria-label="Buscar imagens de cartões" @keydown.enter.prevent /></div>
-    <div class="catalog"><button v-for="item in items" :key="item.key" type="button" :aria-pressed="modelValue.includes(item.key || item.url)" :disabled="!modelValue.includes(item.key || item.url) && modelValue.length >= 5" @click="toggle(item.key || item.url)"><img :src="item.url" :alt="item.name" loading="lazy" /><span>{{ item.name }}</span></button></div>
+    <div class="catalog"><button v-for="item in items" :key="item.key" type="button" :aria-pressed="modelValue.includes(item.key || item.url)" :disabled="!modelValue.includes(item.key || item.url) && modelValue.length >= MAX_FOOTER_PAYMENT_IMAGES" @click="toggle(item.key || item.url)"><img :src="item.url" :alt="item.name" loading="lazy" /><span>{{ item.name }}</span></button></div>
     <p v-if="!items.length">Nenhuma imagem encontrada. Busque pelo nome da bandeira.</p>
   </section>
 </template>

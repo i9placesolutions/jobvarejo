@@ -17,6 +17,7 @@ import {
   formatBusinessAddressValues,
   formatBusinessContactValues,
 } from '~/utils/businessProfile'
+import { MAX_FOOTER_PAYMENT_IMAGES, normalizeFooterPaymentImages } from '~/utils/footerPaymentImages'
 
 type SetupField =
   | 'logo'
@@ -111,7 +112,7 @@ const FIELD_DEFINITIONS: Record<SetupField, SetupFieldDefinition> = {
     kind: 'text',
     icon: Building2,
   },
-  footerPaymentImages: { label: 'Cartões aceitos', hint: 'Escolha até cinco imagens do sistema.', kind: 'footerCards', icon: WalletCards },
+  footerPaymentImages: { label: 'Cartões aceitos', hint: `Escolha até ${MAX_FOOTER_PAYMENT_IMAGES} imagens do sistema.`, kind: 'footerCards', icon: WalletCards },
   paymentMethods: {
     label: 'Formas de pagamento',
     hint: 'Marque o que sua loja realmente aceita.',
@@ -222,7 +223,7 @@ const hydrate = () => {
   const profile = props.businessProfile || {}
   const fallbackCompanyName = profile.__companyNameFromAccountFallback === true
   fields.value.forEach(field => {
-    if (field === 'footerPaymentImages') { form.footerPaymentImages = [...(profile.footerPaymentImages || [])].slice(0, 5); return }
+    if (field === 'footerPaymentImages') { form.footerPaymentImages = normalizeFooterPaymentImages(profile.footerPaymentImages); return }
     if (field === 'paymentMethods') {
       const hasConfirmedPaymentMethods = profile.__paymentMethodsConfigured !== false
       form.paymentMethods = hasConfirmedPaymentMethods && Array.isArray(profile.paymentMethods ?? profile.payment_methods)

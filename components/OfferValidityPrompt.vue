@@ -171,19 +171,6 @@ const confirm = () => {
         <button
           type="button"
           role="radio"
-          :aria-checked="dateFormat === 'hidden'"
-          :class="['offer-validity-prompt__option', dateFormat === 'hidden' ? 'offer-validity-prompt__option--active' : '']"
-          @click="dateFormat = 'hidden'; errorMessage = ''"
-        >
-          <span class="offer-validity-prompt__option-radio" aria-hidden="true"></span>
-          <span class="offer-validity-prompt__option-copy">
-            <strong>Sem data</strong>
-            <small>Não mostrar validade no encarte</small>
-          </span>
-        </button>
-        <button
-          type="button"
-          role="radio"
           :aria-checked="dateFormat !== 'hidden' && mode === 'while_stocks'"
           :class="['offer-validity-prompt__option', dateFormat !== 'hidden' && mode === 'while_stocks' ? 'offer-validity-prompt__option--active' : '']"
           @click="selectMode('while_stocks')"

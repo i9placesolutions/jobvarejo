@@ -31,6 +31,12 @@ describe('logo e elementos fixos na edição rápida', () => {
 
 
 describe('restrição de movimento no editor rápido', () => {
+    it('permite remover um upload solto sem liberar o fundo do modelo', () => {
+        const frame = { left: 0, top: 0, width: 1080, height: 1920 }
+        const image = { type: 'image', width: 1080, height: 1920, data: { quickEditableUpload: true } }
+        expect(isQuickModeFixedArtwork(image, frame)).toBe(false)
+        expect(isQuickModeFixedArtwork({ ...image, data: {} }, frame)).toBe(true)
+    })
     it('mantém imagens editáveis enquanto o Fabric as coloca na seleção múltipla', () => {
         const card = { type: 'group', isProductCard: true, parentZoneId: 'zone-1' }
         const selection = { type: 'activeselection' }
@@ -42,6 +48,26 @@ describe('restrição de movimento no editor rápido', () => {
     })
     it.each(['image', 'rect', 'path', 'group', 'textbox'])('bloqueia %s sem vínculo editável', type => {
         expect(isQuickModeFixedArtwork({ type, name: 'elemento-do-modelo' })).toBe(true)
+    })
+    it.each([
+        { type: 'rect', name: 'mes-do-consumidor-cabecalho-amarelo' },
+        { type: 'textbox', layerName: 'Forma nativa — cabeçalho' },
+        { type: 'path', name: 'footer-social-divider' },
+        { type: 'image', name: 'header-logo' },
+        { type: 'group', name: 'rodapé da oferta' }
+    ])('libera elementos identificados semanticamente no cabeçalho/rodapé: %j', object => {
+        expect(isQuickModeFixedArtwork(object)).toBe(false)
+    })
+    it('libera objetos sem nome semântico posicionados no cabeçalho e rodapé', () => {
+        const frame = { left: 0, top: 0, width: 1000, height: 1000 }
+        expect(isQuickModeFixedArtwork({ type: 'rect', left: 80, top: 60, width: 840, height: 160 }, frame)).toBe(false)
+        expect(isQuickModeFixedArtwork({ type: 'textbox', left: 100, top: 850, width: 800, height: 90 }, frame)).toBe(false)
+    })
+    it('mantém fundos que cobrem a página bloqueados no fallback por posição', () => {
+        const frame = { left: 0, top: 0, width: 1000, height: 1000 }
+        expect(isQuickModeFixedArtwork({ type: 'image', left: 0, top: 0, width: 1000, height: 1000 }, frame)).toBe(true)
+        expect(isQuickModeFixedArtwork({ type: 'rect', left: 0, top: 0, width: 1000, height: 900 }, frame)).toBe(true)
+        expect(isQuickModeFixedArtwork({ type: 'image', name: 'header-background', left: 0, top: 0, width: 1000, height: 1000 }, frame)).toBe(true)
     })
     it.each(['address', 'instagram', 'whatsapp', 'validity'])('libera texto dinâmico %s mesmo em grupo fixo', field => {
         const group = { type: 'group', name: 'rodape' }

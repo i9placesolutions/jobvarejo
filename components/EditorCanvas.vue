@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { patchInactiveCardLabels } from '~/utils/inactiveCardLabelPatch'
 import { hasProductPricingChanges, preserveUneditedProductData } from '~/utils/productEditPatch'
 import { positionProductLimitBelowName } from '~/utils/productLimitLayout'
 import { prepareProductCollectionRelayout } from '~/utils/productCollectionRelayout'
 import { captureFormatDynamicContent, restoreFormatDynamicContent } from '~/utils/quickFormatContent'
+import { normalizeFabricTextStylesForSerialization } from '~/utils/fabricTextStyleSerialization'
 import { LOGO_STYLE_PROPERTIES, logoPreferenceFromFabric, applyLogoPreferenceToFabric } from "~/utils/logoPreference"
 import { createIsolatedDynamicTextbox } from '~/utils/isolatedDynamicTextbox'
 import { applyDynamicBusinessTextColor } from '~/utils/dynamicBusinessFields'
@@ -4305,7 +4307,7 @@ import {
     type OfferValidityScope
 } from '~/utils/offerValidity'
 
-import { GOOGLE_WEBFONT_FAMILIES } from '~/utils/font-catalog'
+import { collectEditorWebFonts, createEditorFontLoader } from '~/utils/editorFontLoading'
 import {
     collectQuickEditableColorTargets,
     groupQuickGlobalColorTargets,
@@ -4482,12 +4484,20 @@ const QuickModeThemeSwitchModal = defineAsyncComponent(() => import('./QuickMode
 const showQuickThemeSwitchModal = ref(false)
 const isSwitchingTheme = ref(false)
 
+const getQuickModeArtworkFrameBounds = (obj: any) => {
+    if (!isQuickMode.value || !canvas.value) return null
+    const parentFrameId = String(obj?.parentFrameId || '').trim()
+    const frame = (parentFrameId ? getFrameById(parentFrameId) : null) ||
+        getQuickModePrimaryFrame(canvas.value.getObjects?.() || [])
+    return frame ? getFrameBounds(frame) : null
+}
+
 const isQuickModeLockedObject = (obj: any): boolean => {
     if (!isQuickMode.value || !obj) return false
     if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
         return (obj.getObjects() || []).some((member: any) => isQuickModeLockedObject(member))
     }
-    return isLikelyProductZone(obj) || isQuickModeFixedArtwork(obj)
+    return isLikelyProductZone(obj) || isQuickModeFixedArtwork(obj, getQuickModeArtworkFrameBounds(obj))
 }
 const mobilePanel = ref<MobilePanel | null>(null)
 const mobileNavRef = ref<InstanceType<typeof import('./EditorMobileNav.vue').default> | null>(null)
@@ -5883,6 +5893,10 @@ const handleQuickModeThemeSwitch = async (targetTheme: FlyerTemplateSummary) => 
     cancelQuickTemplateMaintenance()
 
     try {
+        // Corrige estilos inline sem valor antes tanto do snapshot de histórico
+        // quanto do snapshot visual dos cards, que também chama Fabric toObject().
+        normalizeFabricTextStylesForSerialization(canvas.value?.getObjects?.() || [])
+
         const templateId = String(targetTheme.id).trim()
         const headers = await getApiAuthHeaders()
         const fullProject = await $fetch<any>('/api/projects', {
@@ -6394,6 +6408,7 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     const timeoutMs = getCanvasLoadTimeoutMs(sessionId)
     try {
         sanitizeCanvasJsonBeforeLoad(json)
+        loadFonts(json)
         if (isQuickMode.value && Array.isArray(json?.objects)) upgradeProductNameLineHeightDefaults(json.objects)
         // Fabric carrega as imagens com CORS; um preloader paralelo duplicava as requisições.
         if (sessionId !== activePageLoadSessionId || isCanvasDestroyed.value) {
@@ -7767,8 +7782,25 @@ const quickModeSelectedText = computed(() => {
     return isQuickNativeTextObject(canvas.value?.getActiveObject?.())
 })
 const quickModeElementColorDismissed = ref(false)
+const quickEntryFormatRequired = computed(() => {
+    void isFabricReady.value
+    void productZoneUiVersion.value
+    void activePage.value?.id
+    if (project.templateConfig?.quickFormatConfirmed === true || project.pages.length > 1) return false
+    if (collectObjectsDeep(canvas.value).some((object: any) => isLikelyProductCard(object))) return false
+    return true
+})
+const confirmQuickEntryFormat = () => {
+    project.templateConfig = { ...(project.templateConfig || {}), quickFormatConfirmed: true }
+    hasUnsavedChanges.value = true
+    triggerAutoSave()
+}
+const quickLabelColorRequested = ref(false)
 const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
-watch(() => selectedObjectRef.value?._customId, () => { quickModeElementColorDismissed.value = false })
+watch(() => selectedObjectRef.value?._customId, () => {
+    quickModeElementColorDismissed.value = false
+    quickLabelColorRequested.value = false
+})
 
 const quickModeAllColorTargets = computed(() => [
     ...quickModeColorTargets.value,
@@ -8003,6 +8035,9 @@ const quickModeElementColorPosition = computed(() => {
 const priceGroupsWithDeepSelect = new Set<any>()
 const priceGroupUiVersion = ref(0)
 const selectedPriceGroupSubTarget = shallowRef<any>(null)
+watch(selectedPriceGroupSubTarget, () => {
+    quickLabelColorRequested.value = false
+})
 const selectedPriceGroupSelectionKind = ref<'label' | 'card' | 'other' | 'none'>('none')
 
 const isPriceGroupObject = (obj: any): boolean => (
@@ -10933,7 +10968,7 @@ onMounted(async () => {
       // --- Frame Labels: update HTML overlay positions on every render ---
       // FIX #5: store the anonymous handler so we can call canvas.off() on unmount.
       // Previously, an anonymous arrow function was passed — impossible to remove.
-      const afterRenderFrameLabels = () => { throttledUpdateFrameLabels() }
+      const afterRenderFrameLabels = () => { throttledUpdateFrameLabels(); scheduleCanvasFontLoad() }
       canvas.value.on('after:render', handleAfterRenderPerf);
       // Snapshots antigos / loadFromJSON podem repor a cor da arte no canvas.
       // Mantém o workspace neutro; no editor completo respeita pageSettings.
@@ -14340,7 +14375,6 @@ const removePathPoint = (pathObj: any, index: number) => {
     }
 }
 
-let didLoadFonts = false
 
 // When webfonts finish loading, Fabric's previous measurements may have been done with fallback fonts.
 // Refresh text metrics, but do not destructively re-layout persisted manual labels on load:
@@ -14415,63 +14449,77 @@ const refreshManualLabelTemplateMetricsAfterFontLoad = (canvasInstance: any) => 
     }
 };
 
-const loadFonts = () => {
-    if (didLoadFonts) return
-    didLoadFonts = true
+const ensureEditorFonts = createEditorFontLoader(async families => {
+    const WebFontModule = await import('webfontloader');
+    const WebFont = WebFontModule.default || WebFontModule;
+    await new Promise<void>((resolve, reject) => {
+        WebFont.load({
+            google: { families },
+            active: () => {
+                if (!isCanvasDestroyed.value) refreshLoadedFontMetrics();
+                resolve();
+            },
+            inactive: () => reject(new Error('Fontes temporariamente indisponíveis.'))
+        });
+    });
+});
 
-    // Only load WebFont on client-side (not during SSR)
-    if (import.meta.client) {
-        import('webfontloader').then((WebFontModule) => {
-            const WebFont = WebFontModule.default || WebFontModule
-            WebFont.load({
-                google: {
-                    families: GOOGLE_WEBFONT_FAMILIES
-                },
-                active: () => {
-                    console.log("Fonts loaded!");
-                    // CRITICAL: Clear Fabric's character-width cache so initDimensions()
-                    // re-measures every glyph with the REAL font instead of reusing stale
-                    // widths that were measured with the browser's fallback font.
-                    try {
-                        const fabricCache = (fabric as any)?.cache;
-                        if (fabricCache && typeof fabricCache.clearFontCache === 'function') {
-                            fabricCache.clearFontCache(); // wipe ALL font families
-                        }
-                    } catch (_e) { /* ignore */ }
+const refreshLoadedFontMetrics = () => {
+    // CRITICAL: Clear Fabric's character-width cache so initDimensions()
+    // re-measures every glyph with the REAL font instead of reusing stale
+    // widths that were measured with the browser's fallback font.
+    try {
+        const fabricCache = (fabric as any)?.cache;
+        if (fabricCache && typeof fabricCache.clearFontCache === 'function') {
+            fabricCache.clearFontCache(); // wipe ALL font families
+        }
+    } catch (_e) { /* ignore */ }
 
-                    if (canvas.value) {
-                        const recalcText = (obj: any) => {
-                            if (!obj) return;
-                            const t = String(obj.type || '').toLowerCase();
-                            if (t === 'i-text' || t === 'textbox' || t === 'text') {
-                                if (isDynamicBusinessFieldObject(obj)) {
-                                    captureDynamicBusinessTextBaseline(obj);
-                                }
-                                if (typeof obj.initDimensions === 'function') obj.initDimensions();
-                                if (isDynamicBusinessFieldObject(obj)) {
-                                    fitDynamicBusinessTextObject(obj);
-                                    syncDynamicBusinessTextHeight(obj);
-                                }
-                                obj.set('dirty', true);
-                                if (typeof obj.setCoords === 'function') obj.setCoords();
-                            }
-                            // Recurse into groups (product cards, etc.)
-                            if (typeof obj.getObjects === 'function') {
-                                obj.getObjects().forEach(recalcText);
-                                obj.set('dirty', true);
-                            }
-                        };
-                        canvas.value.getObjects().forEach(recalcText);
-                        // Re-run manual template fitting now that real font metrics are available.
-                        // This is what keeps the product card label identical to the mini editor.
-                        refreshManualLabelTemplateMetricsAfterFontLoad(canvas.value);
-                        safeRequestRenderAll();
-                    }
+    if (canvas.value) {
+        const recalcText = (obj: any) => {
+            if (!obj) return;
+            const t = String(obj.type || '').toLowerCase();
+            if (t === 'i-text' || t === 'textbox' || t === 'text') {
+                if (isDynamicBusinessFieldObject(obj)) {
+                    captureDynamicBusinessTextBaseline(obj);
                 }
-            });
-        })
+                if (typeof obj.initDimensions === 'function') obj.initDimensions();
+                if (isDynamicBusinessFieldObject(obj)) {
+                    fitDynamicBusinessTextObject(obj);
+                    syncDynamicBusinessTextHeight(obj);
+                }
+                obj.set('dirty', true);
+                if (typeof obj.setCoords === 'function') obj.setCoords();
+            }
+            // Recurse into groups (product cards, etc.)
+            if (typeof obj.getObjects === 'function') {
+                obj.getObjects().forEach(recalcText);
+                obj.set('dirty', true);
+            }
+        };
+        canvas.value.getObjects().forEach(recalcText);
+        // Re-run manual template fitting now that real font metrics are available.
+        // This is what keeps the product card label identical to the mini editor.
+        refreshManualLabelTemplateMetricsAfterFontLoad(canvas.value);
+        safeRequestRenderAll();
     }
-}
+};
+
+const loadFonts = (source: any = canvas.value?.getObjects?.() || []) => {
+    if (!import.meta.client || isCanvasDestroyed.value) return;
+    const families = collectEditorWebFonts(source);
+    if (families.length) void ensureEditorFonts(families).catch(() => {
+        // Mantém as fontes de fallback; uma atualização futura pode tentar novamente.
+    });
+};
+
+let fontScanTimer: ReturnType<typeof setTimeout> | null = null;
+const scheduleCanvasFontLoad = () => {
+    if (fontScanTimer) clearTimeout(fontScanTimer);
+    // Reunir os cards/textos de uma mesma operação; evitar percorrer a árvore em cada frame.
+    fontScanTimer = setTimeout(() => { fontScanTimer = null; loadFonts(); }, 200);
+};
+onBeforeUnmount(() => { if (fontScanTimer) clearTimeout(fontScanTimer); });
 
 // --- User Guides (persistent, draggable via rulers) ---
 // USER_GUIDE_COLOR, USER_GUIDE_EXTENT extraidos para utils/snapConstants.ts.
@@ -14879,7 +14927,10 @@ const getEditorReactivityContext = () => ({
     updateScrollbars,
     updateSelection,
     onQuickModeElementPointerDown: () => {
-        if (isQuickMode.value) quickModeElementColorDismissed.value = false;
+        if (isQuickMode.value) {
+            quickModeElementColorDismissed.value = false;
+            quickLabelColorRequested.value = false;
+        }
     },
     getReactivityBoundCanvas: () => reactivityBoundCanvas,
     setReactivityBoundCanvas: (value: any) => { reactivityBoundCanvas = value },
@@ -16689,6 +16740,7 @@ const insertAssetToCanvas = async (asset: any, opts?: { pos?: { x: number; y: nu
             scaleX: scale,
             scaleY: scale,
             name: (asset.name || 'Imagem').toString(),
+            data: { quickEditableUpload: true },
             selectable: true,
             evented: true
         });
@@ -19867,7 +19919,7 @@ const persistInactiveQuickBusinessFields = async () => {
         if (!page?.canvasData) continue
         const pageObjects = page.canvasData.objects || []
         const splitValidity = pageObjects.find((object: any) => isSplitFooterValidity(object) && hasSplitFooterValidityCompanions(object, pageObjects))
-        const splitText = validity ? splitFooterValidityText({ ...validity, layout: splitValidity?.quickValidityLayout }) : null
+        const splitText = validity ? splitFooterValidityText({ ...validity, layout: splitValidity?.quickValidityLayout, copyStyle: splitValidity?.quickValidityCopyStyle }) : null
         const footerChanged = compactBusinessFooter(pageObjects)
         let updated = updateIsolatedPageFields(page.canvasData, object => {
             if (object?.quickTemplateSample === true) {
@@ -19932,7 +19984,7 @@ const persistInactiveQuickBusinessFields = async () => {
             if (isFooterPaymentGroupCurrent(slot, profile.footerPaymentImages)) continue
             const group = await createFooterPaymentGroup(fabric, slot, profile.footerPaymentImages)
             group.set({ visible: !!profile.footerPaymentImages?.length && (overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false), quickFieldEnabled: overrides.footerPaymentImages ?? slot.quickFieldEnabled !== false })
-            paymentData.objects[slotIndex] = group.toObject(['_customId', 'parentFrameId', 'name', 'layerName', 'businessProfileField', 'quickFieldEnabled', 'footerPaymentWidth', 'footerPaymentHeight'])
+            paymentData.objects[slotIndex] = group.toObject(['_customId', 'parentFrameId', 'name', 'layerName', 'businessProfileField', 'quickFieldEnabled', 'footerPaymentWidth', 'footerPaymentHeight', 'footerPaymentColumns', 'footerPaymentTile'])
             group.dispose()
             paymentChanged = true
         }
@@ -20084,7 +20136,7 @@ const handleQuickModeValidityUpdate = (payload: {
             visible: quickShowValidity.value && !!nextText
         })
         const split = isSplitFooterValidity(object)
-        const splitText = splitFooterValidityText({ startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value, dateFormat: quickValidityDateFormat.value, layout: object.quickValidityLayout })
+        const splitText = splitFooterValidityText({ startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value, dateFormat: quickValidityDateFormat.value, layout: object.quickValidityLayout, copyStyle: object.quickValidityCopyStyle })
         const siblings = canvas.value?.getObjects() || []
         const separateFields = split && hasSplitFooterValidityCompanions(object, siblings)
         setQuickDynamicTextValue(object, split ? resolveSplitFooterValidityText(object, siblings, { startDate: quickValidityStartDate.value, endDate: quickValidityEndDate.value, mode: quickValidityMode.value, whileStocks: quickValidityWhileStocks.value, dateFormat: quickValidityDateFormat.value }) : nextText)
@@ -20236,7 +20288,10 @@ const handleQuickModeBusinessSetup = async (payload: {
     }
 }
 
+const sharedBusinessProfile = useBusinessProfile()
+
 const handleBusinessProfileUpdated = (event: Event) => {
+    sharedBusinessProfile.accept((event as CustomEvent)?.detail)
     void applyQuickBusinessProfileBindings((event as CustomEvent)?.detail, { persist: isQuickMode.value }).catch(error => {
         console.warn('[quick-editor] Falha ao reaplicar cadastro comercial:', error)
     })
@@ -20245,8 +20300,7 @@ const handleBusinessProfileUpdated = (event: Event) => {
 const refreshBusinessProfile = async () => {
     if (typeof window === 'undefined') return
     try {
-        const headers = await getApiAuthHeaders()
-        const response = await $fetch<any>('/api/profile', { headers })
+        const response = await sharedBusinessProfile.load()
         const profile = getQuickBusinessProfilePayload(response)
         quickBusinessProfile.value = { ...profile }
         for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -21529,8 +21583,19 @@ const resolveSelectedProductLabelActionContext = (active?: any): ProductLabelAct
     const target = active || canvas.value?.getActiveObject?.()
     let priceGroup = resolvePriceGroupAncestor(target)
     if (!priceGroup && selectedPriceGroupSelectionKind.value === 'label') {
-        priceGroup = resolvePriceGroupAncestor(selectedPriceGroupSubTarget.value)
+        const rememberedPriceGroup = resolvePriceGroupAncestor(selectedPriceGroupSubTarget.value)
             || selectedPriceGroupSubTarget.value
+        const rememberedCard = isPriceGroupObject(rememberedPriceGroup)
+            ? (getCardHostForPriceGroup(rememberedPriceGroup) || getCardGroupFromAny(rememberedPriceGroup))
+            : null
+        const activeCard = target ? getCardGroupFromAny(target) : null
+        // A replaced price group may remain in this UI intent briefly after
+        // Fabric has moved selection to a different product card. Only reuse
+        // that intent while it still belongs to the card that is actually
+        // active (or when Fabric temporarily has no active object).
+        if (!target || (!!rememberedCard && activeCard === rememberedCard)) {
+            priceGroup = rememberedPriceGroup
+        }
     }
     if (!isPriceGroupObject(priceGroup)) return null
 
@@ -21623,6 +21688,27 @@ const selectedProductLabelQuickActionsPos = computed(() => {
         ? getPriceGroupFloatingPos(selected.priceGroup)
         : { top: 0, left: 0, width: 0, height: 0, visible: false }
 })
+
+const pendingQuickLabelPreviews = new Set<string>()
+const prepareQuickLabelPreviews = async () => {
+    const options = selectedProductLabelQuickActions.value?.templates || []
+    for (const option of options) {
+        if (isCanvasDestroyed.value) return
+        const template = labelTemplates.value.find(item => item.id === option.id)
+        if (!template || template.previewDataUrl || pendingQuickLabelPreviews.has(option.id)) continue
+        pendingQuickLabelPreviews.add(option.id)
+        try {
+            const previewDataUrl = await renderLabelTemplatePreview(template)
+            if (!previewDataUrl || isCanvasDestroyed.value) continue
+            // Prévia só em memória: não altera a etiqueta nem a arte aberta.
+            labelTemplates.value = labelTemplates.value.map(item => item === template
+                ? { ...item, previewDataUrl, __previewRenderVersion: LABEL_TEMPLATE_PREVIEW_RENDER_VERSION }
+                : item)
+        } finally {
+            pendingQuickLabelPreviews.delete(option.id)
+        }
+    }
+}
 
 const showProductLabelQuickActions = computed(() => {
     if (!selectedProductLabelQuickActions.value) return false
@@ -22134,7 +22220,9 @@ const handleProductPriceEditorSave = async (payload: Record<string, any>) => {
     }
 }
 
+const isProductLabelApplying = ref(false)
 const handleProductLabelTemplateChange = async (templateId: string) => {
+    if (isProductLabelApplying.value) return
     const context = resolveSelectedProductLabelActionContext()
     const id = String(templateId || '').trim()
     if (!context || !id) return
@@ -22149,6 +22237,7 @@ const handleProductLabelTemplateChange = async (templateId: string) => {
         return
     }
 
+    isProductLabelApplying.value = true
     const previousTemplateId = String((context.card as any).__cardLabelTemplateId || '').trim()
     const hadPreviousTemplateId = Object.prototype.hasOwnProperty.call(context.card, '__cardLabelTemplateId')
     const previousTemplateOverride = (context.card as any).__cardLabelTemplateOverride
@@ -22164,10 +22253,14 @@ const handleProductLabelTemplateChange = async (templateId: string) => {
         const nextPriceGroup = getPriceGroupFromAny(context.card)
         if (nextPriceGroup) {
             setPriceGroupInteractionMode(nextPriceGroup, 'move')
-            selectedPriceGroupSubTarget.value = null
-            selectedPriceGroupSelectionKind.value = 'label'
             canvas.value?.discardActiveObject?.()
             canvas.value?.setActiveObject?.(nextPriceGroup)
+            // The replacement group is nested inside the card. Fabric can
+            // leave the top-level card as active and emit selection events
+            // without a nested subTarget, so restore this explicit intent
+            // after those synchronous events have settled.
+            selectedPriceGroupSubTarget.value = nextPriceGroup
+            selectedPriceGroupSelectionKind.value = 'label'
         }
         refreshSelectedRef()
         updateSelection()
@@ -22184,6 +22277,148 @@ const handleProductLabelTemplateChange = async (templateId: string) => {
         else delete (context.card as any).__cardLabelTemplateOverride
         console.warn('[product-label-actions] Falha ao trocar etiqueta do card', error)
         notifyEditorError('Não foi possível trocar a etiqueta deste card.')
+    } finally {
+        isProductLabelApplying.value = false
+    }
+}
+
+const handleProductLabelTemplateChangeAll = async (templateId: string) => {
+    const id = String(templateId || '').trim()
+    if (!isQuickMode.value || !id || !canvas.value || !fabric || isProductLabelApplying.value) return
+    const template = labelTemplates.value.find((item: any) => String(item?.id || '').trim() === id)
+    if (!template) {
+        notifyEditorError('A etiqueta selecionada não está disponível.')
+        return
+    }
+
+    const projectId = String(project.id || '')
+    const activePageId = getActiveProjectPageId()
+    const selectedCard = resolveSelectedProductLabelActionContext()?.card
+    isProductLabelApplying.value = true
+    let applied = 0
+    let incompatible = 0
+    let failedProducts = 0
+    let failedPages = 0
+    const applyToCards = async (cards: any[]) => {
+        for (const card of cards) {
+            if (!card || !getPriceGroupFromAny(card)) continue
+            if (!isProductLabelTemplateCompatible(card, template)) {
+                incompatible += 1
+                continue
+            }
+            const previousTemplateId = String(card.__cardLabelTemplateId || '').trim()
+            const hadPreviousTemplateId = Object.prototype.hasOwnProperty.call(card, '__cardLabelTemplateId')
+            const previousTemplateOverride = card.__cardLabelTemplateOverride
+            const hadPreviousTemplateOverride = Object.prototype.hasOwnProperty.call(card, '__cardLabelTemplateOverride')
+            try {
+                setCardLabelTemplateMetadata(card, id, true)
+                await applyLabelTemplateToCard(card, id)
+                setCardLabelTemplateMetadata(card, id, true)
+                card.set?.({ dirty: true })
+                card.setCoords?.()
+                applied += 1
+            } catch (error) {
+                if (hadPreviousTemplateId) card.__cardLabelTemplateId = previousTemplateId
+                else delete card.__cardLabelTemplateId
+                if (hadPreviousTemplateOverride) card.__cardLabelTemplateOverride = previousTemplateOverride
+                else delete card.__cardLabelTemplateOverride
+                failedProducts += 1
+                console.warn('[quick-editor] Falha ao trocar etiqueta em um produto do encarte', error)
+            }
+        }
+    }
+
+    try {
+        // Capture current edits before visiting cached/offline page JSON.
+        await Promise.resolve(saveCurrentState({
+            reason: 'quick-label-before-flyer-bulk',
+            source: 'user',
+            skipCoalesce: true,
+            skipIfUnchanged: true
+        }))
+        if (String(project.id || '') !== projectId || isCanvasDestroyed.value) return
+        canvas.value.discardActiveObject?.()
+        selectedPriceGroupSubTarget.value = null
+
+        for (let index = 0; index < project.pages.length; index += 1) {
+            if (String(project.id || '') !== projectId || getActiveProjectPageId() !== activePageId || isCanvasDestroyed.value) {
+                throw new Error('A página aberta mudou durante a aplicação das etiquetas')
+            }
+            const page = project.pages[index]
+            if (!page?.id) continue
+            if (String(page.id) === activePageId) {
+                const cards = collectObjectsDeep(canvas.value).filter((object: any) => isLikelyProductCard(object))
+                await applyToCards(cards)
+                continue
+            }
+
+            let offscreen: any = null
+            try {
+                const loaded = await ensurePageCanvasDataLoaded(page.id, { triggerSync: false })
+                const data = loaded?.canvasData || page.canvasData
+                if (!data) throw new Error('Dados da página indisponíveis')
+                offscreen = new fabric.StaticCanvas(document.createElement('canvas'), {
+                    width: Number(page.width) || 1080,
+                    height: Number(page.height) || 1350,
+                    renderOnAddRemove: false
+                })
+                await offscreen.loadFromJSON(prepareCanvasDataForLoad(data, { silent: true }))
+                const cards = collectObjectsDeep(offscreen).filter((object: any) => isLikelyProductCard(object))
+                const before = applied
+                await applyToCards(cards)
+                if (applied !== before) {
+                    const changes = new Map<string, any>()
+                    for (const card of cards) {
+                        if (card.__cardLabelTemplateId !== id || !isProductLabelTemplateCompatible(card, template)) continue
+                        const label = getPriceGroupFromAny(card)
+                        if (label) changes.set(String(card._customId || ''), { label: label.toObject([...CANVAS_CUSTOM_PROPS]), templateId: id })
+                    }
+                    // O round-trip do Fabric recalcula layout de grupos em páginas
+                    // fechadas. Gravar só a etiqueta preserva a geometria original.
+                    const updated = patchInactiveCardLabels(data, changes)
+                    updatePageData(index, updated, {
+                        source: 'user',
+                        markUnsaved: true,
+                        reason: 'quick-label-flyer-bulk'
+                    })
+                }
+            } catch (error) {
+                failedPages += 1
+                console.warn('[quick-editor] Falha ao carregar/aplicar etiqueta em página inativa', page.id, error)
+            } finally {
+                try { await offscreen?.dispose?.() } catch {}
+            }
+        }
+
+        if (!applied) {
+            notifyEditorError(incompatible
+                ? 'Nenhum produto compatível recebeu essa etiqueta; os demais foram preservados.'
+                : 'Não foi possível aplicar essa etiqueta nos produtos do encarte.')
+            return
+        }
+        const nextPriceGroup = selectedCard ? getPriceGroupFromAny(selectedCard) : null
+        if (nextPriceGroup) {
+            canvas.value.setActiveObject?.(nextPriceGroup)
+            selectedPriceGroupSubTarget.value = nextPriceGroup
+            selectedPriceGroupSelectionKind.value = 'label'
+        }
+        refreshSelectedRef()
+        updateSelection()
+        safeRequestRenderAll()
+        await persistQuickModeDataChange('quick-label-flyer-bulk', activePageId)
+        const details = [
+            `${applied} produto${applied === 1 ? '' : 's'} atualizado${applied === 1 ? '' : 's'}`,
+            incompatible ? `${incompatible} incompatível${incompatible === 1 ? '' : 'eis'} preservado${incompatible === 1 ? '' : 's'}` : '',
+            failedProducts ? `${failedProducts} produto${failedProducts === 1 ? '' : 's'} com falha` : '',
+            failedPages ? `${failedPages} página${failedPages === 1 ? '' : 's'} não processada${failedPages === 1 ? '' : 's'}` : ''
+        ].filter(Boolean).join('; ')
+        if (incompatible || failedProducts || failedPages) notifyEditorInfo(`Aplicação parcial no encarte: ${details}.`)
+        else notifyEditorInfo(`Etiqueta aplicada em todo o encarte: ${details}.`)
+    } catch (error) {
+        console.warn('[quick-editor] Falha ao trocar etiqueta em todo o encarte', error)
+        notifyEditorError('Não foi possível aplicar a etiqueta em todo o encarte.')
+    } finally {
+        isProductLabelApplying.value = false
     }
 }
 
@@ -30617,6 +30852,10 @@ const handleAutoOfferLayout = async () => {
           <main :class="['editor-canvas-stage flex-1 min-w-0 min-h-0 relative bg-[#1a1a1a] flex items-center justify-center overflow-hidden', isQuickMode ? 'quick-mode-stage' : 'cursor-grab active:cursor-grabbing']" :style="isMobile && !isQuickMode ? ((project.pages?.length || 0) > 1 ? 'padding-bottom: calc(var(--editor-mobile-nav-h) + var(--editor-mobile-pages-h))' : 'padding-bottom: var(--editor-mobile-nav-h)') : ''">
               <QuickModePageToolbar
                 v-if="isQuickMode && project.pages?.length"
+                :entry-project-id="String(project.id || '')"
+                :entry-required="quickEntryFormatRequired"
+                @confirm-entry-format="confirmQuickEntryFormat"
+                :entry-ready="isFabricReady && !isParsingProducts && !isProcessing && !isQuickModePageResizeInFlight && !isSwitchingTheme"
                 :current-page-id="currentPageId"
                 :page-number="Number(project.activePageIndex || 0) + 1"
                 :page-count="project.pages.length"
@@ -30669,7 +30908,7 @@ const handleAutoOfferLayout = async () => {
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
                   <QuickModeElementColorMenu
-                    v-if="isQuickMode && quickModeSelectedColorTargets.length && quickModeElementAnchor.visible && !quickModeElementColorDismissed && !isDesignLoading && !figmaCrop.isCropActive.value"
+                    v-if="isQuickMode && (!showProductLabelQuickActions || quickLabelColorRequested) && quickModeSelectedColorTargets.length && quickModeElementAnchor.visible && !quickModeElementColorDismissed && !isDesignLoading && !figmaCrop.isCropActive.value"
                     :key="selectedObjectRef?._customId || quickModeSelectedColorTargets[0]?.id"
                     :targets="quickModeSelectedColorTargets"
                     :recent-colors="recentColors"
@@ -30686,7 +30925,7 @@ const handleAutoOfferLayout = async () => {
                     @apply-font="applyQuickModeNativeFont"
                     @apply-font-size="applyQuickFontSize"
                     @apply-typography="applyQuickTypography"
-                    @close="quickModeElementColorDismissed = true"
+                    @close="quickModeElementColorDismissed = true; quickLabelColorRequested = false"
                   />
                    <label
                      v-if="quickSelectedCardConfiguration && quickCardConfigurationOptions.length > 1 && selectedObjectPos.visible && !showProductImageQuickActions && !isDesignLoading && !figmaCrop.isCropActive.value"
@@ -30865,7 +31104,8 @@ const handleAutoOfferLayout = async () => {
 
                     <ProductLabelQuickActions
                       v-if="selectedProductLabelQuickActions"
-                      :visible="showProductLabelQuickActions"
+                      :visible="showProductLabelQuickActions && !quickLabelColorRequested"
+                      :can-edit-color="isQuickMode && quickModeSelectedColorTargets.length > 0"
                       :top="selectedProductLabelQuickActionsPos.top"
                       :left="selectedProductLabelQuickActionsPos.left"
                       :width="selectedProductLabelQuickActionsPos.width"
@@ -30873,11 +31113,16 @@ const handleAutoOfferLayout = async () => {
                       :mode="selectedProductLabelQuickActions.mode"
                       :templates="selectedProductLabelQuickActions.templates"
                       :selected-template-id="selectedProductLabelQuickActions.selectedTemplateId"
+                      :can-apply-to-flyer="isQuickMode"
+                      :busy="isProductLabelApplying"
                       @mode="handleProductLabelModeChange"
                       @select-all="handleProductLabelSelectAll"
                       @edit-price="handleProductLabelEditPrice"
                       @template="handleProductLabelTemplateChange"
+                      @template-all="handleProductLabelTemplateChangeAll"
                       @manage-templates="openGlobalLabelTemplates"
+                      @edit-color="quickModeElementColorDismissed = false; quickLabelColorRequested = true"
+                      @templates-open="prepareQuickLabelPreviews"
                     />
 
 

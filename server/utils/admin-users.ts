@@ -7,6 +7,8 @@ import { createError } from 'h3'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const MANAGED_ROLES: UserRole[] = ['admin', 'editor', 'user']
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+export const isTechnicalAdminEmail = (value: unknown): boolean =>
+  /^internal-(?:[0-9a-f-]+|whatsapp-\d+)@jobvarejo\.invalid$/i.test(String(value || '').trim())
 
 export function parseManagedUserInput(body: Record<string, unknown> | null, actorRole: UserRole): {
   name: string
@@ -35,7 +37,8 @@ export function parseManagedUserInput(body: Record<string, unknown> | null, acto
   }
   if (hasPlatformAccess) {
     if (name.length < 2 || name.length > 120) throw createError({ statusCode: 400, statusMessage: 'Nome inválido (2 a 120 caracteres).' })
-    if (!EMAIL_PATTERN.test(email) || email.length > 255) throw createError({ statusCode: 400, statusMessage: 'E-mail inválido.' })
+    if (role !== 'user' && (!EMAIL_PATTERN.test(email) || email.length > 255)) throw createError({ statusCode: 400, statusMessage: 'E-mail inválido.' })
+    if (role === 'user' && email && (!EMAIL_PATTERN.test(email) || email.length > 255)) throw createError({ statusCode: 400, statusMessage: 'E-mail inválido.' })
     if (!whatsapp) throw createError({ statusCode: 400, statusMessage: 'WhatsApp de login inválido.' })
     if (password.length < 8 || password.length > 256) throw createError({ statusCode: 400, statusMessage: 'Senha inicial inválida (8 a 256 caracteres).' })
   }

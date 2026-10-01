@@ -21,7 +21,11 @@ export default defineEventHandler(async (event) => {
   try {
     const passwordHash = data.hasPlatformAccess ? await hashPassword(data.password) : null
     // A identidade técnica mantém as FKs de conteúdo sem oferecer login.
-    const accountEmail = data.hasPlatformAccess ? data.email : `internal-${randomUUID()}@jobvarejo.invalid`
+    // O schema exige email, mas o acesso da empresa é feito pelo WhatsApp.
+    // O endereço técnico não recebe mensagens e não aparece na interface.
+    const accountEmail = data.hasPlatformAccess
+      ? (data.email || `internal-whatsapp-${data.whatsapp.replace(/\D/g, '')}@jobvarejo.invalid`)
+      : `internal-${randomUUID()}@jobvarejo.invalid`
     const updated = await pgTx(async (client) => {
       if (data.role === 'editor') {
         const access = await client.query<{ supported: boolean }>(`
@@ -62,7 +66,7 @@ export default defineEventHandler(async (event) => {
       if (!saved) throw createError({ statusCode: 500, statusMessage: 'Não foi possível concluir o cadastro.' })
       return saved
     })
-    return { user: { ...updated, email: data.hasPlatformAccess ? updated.email : '' } }
+    return { user: { ...updated, email: data.hasPlatformAccess && data.email ? updated.email : '' } }
   } catch (error: any) {
     if (String(error?.code || '') === '23505') throw createError({ statusCode: 409, statusMessage: 'E-mail ou WhatsApp já cadastrado.' })
     throw error

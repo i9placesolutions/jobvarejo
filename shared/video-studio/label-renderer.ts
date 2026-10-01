@@ -11,6 +11,7 @@ export function VideoPriceLabel({label,price,unit,colors}:{label:VideoLabel;pric
   const x=n.originX==='center'?-n.width/2:n.originX==='right'?-n.width:0,y=n.originY==='center'?-n.height/2:n.originY==='bottom'?-n.height:0
   const common={fill:n.fill,stroke:n.stroke,strokeWidth:n.strokeWidth,opacity:n.opacity};let child
   if(n.type==='rect')child=h('rect',{...common,x,y,width:n.width,height:n.height,rx:n.rx})
+  else if(n.type==='ellipse')child=h('ellipse',{...common,cx:x+n.width/2,cy:y+n.height/2,rx:n.rx||n.width/2,ry:n.ry||n.height/2})
   else if(n.type==='circle')child=h('circle',{...common,cx:x+n.radius,cy:y+n.radius,r:n.radius})
   else if(n.type==='image')child=h('image',{href:n.src,x,y,width:n.width,height:n.height})
   else{let text=n.text;if(n.name==='price_integer_text')text=integer||'';if(n.name==='price_decimal_text')text=','+cents;if(n.name==='price_value_text')text=displayPrice(price);if(/price_.*unit_text/.test(n.name))text=unit

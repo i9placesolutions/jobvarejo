@@ -13,6 +13,9 @@ const props = defineProps<{
   width: number
   height: number
   busy?: boolean
+  entryProjectId?: string
+  entryReady?: boolean
+  entryRequired?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -20,10 +23,34 @@ const emit = defineEmits<{
   (event: 'add-page', formatId: FlyerTemplateFormatId): void
   (event: 'resize-page', formatId: FlyerTemplateFormatId): void
   (event: 'switch-theme'): void
+  (event: 'confirm-entry-format'): void
 }>()
 
 const addMenuOpen = ref(false)
 const resizeMenuOpen = ref(false)
+const entryDialog = ref<HTMLDialogElement | null>(null)
+let promptedProjectId = ''
+
+watch(() => [props.entryProjectId, props.entryReady, props.entryRequired, entryDialog.value] as const, ([projectId, ready, required, dialog]) => {
+  if (!projectId || !ready || !required || !dialog || promptedProjectId === projectId) return
+  promptedProjectId = projectId
+  dialog.showModal()
+}, { flush: 'post' })
+
+const confirmEntryFormat = () => {
+  if (!props.entryReady || props.busy) return
+  entryDialog.value?.close()
+  emit('confirm-entry-format')
+}
+
+const chooseEntryFormat = (formatId: FlyerTemplateFormatId) => {
+  if (!props.currentPageId || !props.entryReady || props.busy) return
+  confirmEntryFormat()
+  // Manter o formato atual não precisa reorganizar a composição salva.
+  const format = FLYER_TEMPLATE_FORMATS.find(item => item.id === formatId)
+  if (format?.width === props.width && format.height === props.height) return
+  resizePage(formatId)
+}
 
 const pageLabel = computed(() => `Página ${Math.max(1, props.pageNumber)} de ${Math.max(1, props.pageCount)}`)
 const dimensionsLabel = computed(() => {
@@ -70,6 +97,20 @@ watch(() => props.currentPageId, closeMenus)
 </script>
 
 <template>
+  <Teleport to="body">
+    <dialog ref="entryDialog" class="quick-entry-format" aria-labelledby="quick-entry-format-title" @cancel.prevent>
+      <h2 id="quick-entry-format-title">Qual formato você quer editar?</h2>
+      <p>Escolha o formato do seu encarte para continuar.</p>
+      <div class="quick-entry-format__grid">
+        <button v-for="format in FLYER_TEMPLATE_FORMATS" :key="format.id" type="button" :disabled="!props.entryReady || props.busy" @click="chooseEntryFormat(format.id)">
+          <strong>{{ format.label }}</strong>
+          <small>{{ format.width }}×{{ format.height }}</small>
+          <span v-if="format.width === props.width && format.height === props.height">Formato atual</span>
+        </button>
+      </div>
+      <button type="button" class="quick-entry-format__keep" :disabled="!props.entryReady || props.busy" @click="confirmEntryFormat">Continuar no formato atual · {{ props.formatLabel }}</button>
+    </dialog>
+  </Teleport>
   <div
     class="quick-mode-page-toolbar"
     :data-mobile-expanded="mobileOptionsOpen"
@@ -164,6 +205,18 @@ watch(() => props.currentPageId, closeMenus)
 </template>
 
 <style scoped>
+.quick-entry-format { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; margin: auto; padding: 24px; border: 1px solid #ffffff24; border-radius: 18px; background: #18181b; color: #fafafa; }
+.quick-entry-format::backdrop { background: #000a; backdrop-filter: blur(4px); }
+.quick-entry-format h2 { font-size: 21px; font-weight: 700; }
+.quick-entry-format p { margin: 8px 0 20px; color: #a1a1aa; font-size: 14px; }
+.quick-entry-format__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.quick-entry-format__grid button { display: grid; gap: 5px; padding: 16px; border: 1px solid #ffffff24; border-radius: 12px; background: #ffffff08; text-align: left; }
+.quick-entry-format button:focus-visible { outline: 2px solid #a78bfa; outline-offset: 3px; }
+.quick-entry-format__grid button:hover:not(:disabled) { border-color: #a78bfa; background: #8b5cf61a; }
+.quick-entry-format small { color: #a1a1aa; }
+.quick-entry-format span { color: #c4b5fd; font-size: 12px; }
+.quick-entry-format__keep { margin-top: 18px; width: 100%; min-height: 44px; color: #c4b5fd; font-size: 13px; }
+.quick-entry-format button:disabled { opacity: .5; }
 .quick-mode-page-toolbar {
   position: relative;
   z-index: 240;

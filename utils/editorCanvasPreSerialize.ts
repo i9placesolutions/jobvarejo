@@ -1,3 +1,5 @@
+import { normalizeFabricTextStylesForSerialization } from './fabricTextStyleSerialization'
+
 type PrepareCanvasForSerializationOptions = {
   canvasInstance: any
   isValidFabricCanvasObject: (obj: any) => boolean
@@ -59,6 +61,8 @@ export const prepareCanvasForSerialization = (
   }
 
   topLevelCanvasObjects.forEach((obj: any) => visit(obj))
+
+  normalizeFabricTextStylesForSerialization(topLevelCanvasObjects)
 
   allCanvasObjects.forEach((obj: any) => {
     // Sanitização preventiva: qualquer clipPath que não tenha toObject ou não seja válido Fabric

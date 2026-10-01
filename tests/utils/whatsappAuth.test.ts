@@ -6,6 +6,7 @@ import { formatBrazilWhatsApp, normalizeBrazilWhatsApp } from '~/utils/whatsapp-
 describe('formatBrazilWhatsApp', () => {
   it('aplica máscara de celular e telefone fixo enquanto digita', () => {
     expect(formatBrazilWhatsApp('11987654321')).toBe('(11) 98765-4321')
+    expect(formatBrazilWhatsApp('6935442251')).toBe('(69) 3544-2251')
     expect(formatBrazilWhatsApp('1133334444')).toBe('(11) 3333-4444')
     expect(formatBrazilWhatsApp('+55 (21) 98765-4321')).toBe('(21) 98765-4321')
   })

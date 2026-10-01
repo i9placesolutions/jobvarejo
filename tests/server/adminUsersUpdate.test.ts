@@ -44,6 +44,34 @@ describe('PATCH /api/admin/users/:id — edição do super admin', () => {
     expect(mocks.update.mock.calls[0]![0]).toContain('reset_token_expires_at = CASE WHEN $3::text IS NULL THEN reset_token_expires_at ELSE NULL END')
   })
 
+  it('preserva o email atual ao editar uma empresa sem enviar email', async () => {
+    mocks.profile.mockResolvedValue({ id: targetId, name: 'Responsável', email: 'atual@example.com', role: 'user', is_active: true, business_profile: { companyName: 'Mercado Central' } })
+    mocks.body.mockResolvedValue({ name: 'Responsável atualizado' })
+    await handler({} as any)
+    expect(mocks.update.mock.calls[0]![0]).not.toMatch(/\bemail\s*=/i)
+    expect(mocks.update.mock.calls[0]![1]).toEqual([targetId, 'Responsável atualizado', null, 'Mercado Central', 'user', true, '{}'])
+  })
+
+  it('habilita acesso de empresa interna sem email e preserva a identidade técnica', async () => {
+    const accountEmail = `internal-${targetId}@jobvarejo.invalid`
+    mocks.profile.mockResolvedValue({ id: targetId, name: 'Mercado Central', email: accountEmail, role: 'user', is_active: true, business_profile: { companyName: 'Mercado Central', internalOnly: true } })
+    mocks.body.mockResolvedValue({ name: 'Maria Silva', whatsapp: '(69) 99999-1234', password: 'senha-inicial-forte', role: 'user', companyName: 'Mercado Central', hasPlatformAccess: true })
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ relation: 'auth.users' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: targetId, email: accountEmail, internal_only: false }] })
+      .mockResolvedValueOnce({ rows: [{ relation: 'public.builder_tenants' }] })
+      .mockResolvedValueOnce({ rows: [] })
+    mocks.tx.mockImplementation(async (run: any) => run({ query }))
+
+    const result = await handler({} as any)
+
+    expect(query.mock.calls[1]![1]).toEqual([targetId, accountEmail, 'Maria Silva'])
+    expect(query.mock.calls[2]![1]).toEqual([targetId, 'Maria Silva', accountEmail, '+5569999991234', 'hash-de-teste', 'Mercado Central', true])
+    expect(query.mock.calls[4]![1]).toEqual([targetId, accountEmail, 'Mercado Central', true])
+    expect(result.user.email).toBe('')
+  })
+
   it('permite um super admin editar outro super admin', async () => {
     mocks.auth.mockResolvedValue({ user: { actorId: otherId }, role: 'super_admin' })
     await handler({} as any)

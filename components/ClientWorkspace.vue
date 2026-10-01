@@ -24,6 +24,7 @@ import { formatHistoryDateTime } from '~/utils/dateTimeFormat'
 
 const auth = useAuth()
 const { getApiAuthHeaders } = useApiAuth()
+const businessProfile = useBusinessProfile()
 
 const profile = ref<any>(null)
 const isProfileLoading = ref(true)
@@ -31,15 +32,15 @@ const isProfileLoading = ref(true)
 const projects = ref<any[]>([])
 const isProjectsLoading = ref(true)
 
-const customerFirstName = computed(() => {
+const customerName = computed(() => {
   const name = String(profile.value?.name || auth.user.value?.name || '').trim()
-  if (name) return name.split(/\s+/)[0] || 'por aqui'
+  if (name) return name
 
   const emailName = String(auth.user.value?.email || '').split('@')[0]?.trim() || ''
   return emailName || 'por aqui'
 })
 
-const customerInitial = computed(() => customerFirstName.value.charAt(0).toLocaleUpperCase('pt-BR') || 'J')
+const customerInitial = computed(() => customerName.value.charAt(0).toLocaleUpperCase('pt-BR') || 'J')
 
 // Trial status
 const trialDaysLeft = computed(() => {
@@ -65,7 +66,7 @@ const allWorkspaces = [
     id: 'encartes',
     icon: LayoutTemplate,
     eyebrow: 'Ofertas da loja',
-    title: 'Encartes & Redes',
+    title: 'Encartes',
     description: 'Escolha um modelo, monte a campanha com sua lista e deixe a sua marca pronta para divulgar.',
     href: auth.user.value?.role === 'editor' ? '/flyer-templates' : '/quick-editor',
     action: 'Criar encarte',
@@ -138,8 +139,7 @@ const workspaces = computed(() => {
 const loadProfile = async () => {
   isProfileLoading.value = true
   try {
-    const headers = await getApiAuthHeaders()
-    profile.value = await $fetch('/api/profile', { headers, query: { self: '1' } })
+    profile.value = await businessProfile.load()
   } catch (err) {
     console.warn('Erro ao obter perfil no ClientWorkspace:', err)
   } finally {
@@ -206,7 +206,7 @@ onMounted(() => {
                 <span v-else>{{ customerInitial }}</span>
               </span>
               <span class="client-workspace__account-copy">
-                <strong>{{ customerFirstName }}</strong>
+                <strong>{{ customerName }}</strong>
                 <small>Minha conta</small>
               </span>
               <ChevronDown :size="16" aria-hidden="true" />
@@ -262,7 +262,7 @@ onMounted(() => {
       <section class="client-workspace__hero" aria-labelledby="client-workspace-title">
         <div class="client-workspace__hero-copy">
           <p class="client-workspace__eyebrow"><Sparkles :size="15" /> Seu espaço de criação</p>
-          <h1 id="client-workspace-title">Olá, {{ customerFirstName }}.<br>O que vamos criar hoje?</h1>
+          <h1 id="client-workspace-title">Olá, {{ customerName }}.<br>O que vamos criar hoje?</h1>
           <p>
             Escolha uma ferramenta para começar. Cada caminho já leva você direto ao que precisa, sem ter que procurar entre configurações.
           </p>

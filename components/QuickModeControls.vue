@@ -1189,7 +1189,6 @@ const useTemplateModel = (modelId: string) => {
             <select :value="validityFormatRequired ? validityMode : (!showValidity || validityDateFormat === 'hidden' ? 'none' : validityMode)" @change="handleValidityModeChange">
               <option value="single_day">Só em um dia</option>
               <option value="date_range">Por um período</option>
-              <option value="none">Sem data · não exibir validade</option>
               <option value="while_stocks">Enquanto houver estoque</option>
             </select>
           </label>

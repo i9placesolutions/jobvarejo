@@ -3349,6 +3349,150 @@
       "bytes": 1585855,
       "contentType": "image/png"
     },
+    "templates/collection-20261001-01-background.png": {
+      "key": "video-studio/catalog/7c5cb485b755bfa20f9063a1c5f4e577925b126926c1af164555f6723f82c3cb/templates/collection-20261001-01-background.png",
+      "sha256": "7c5cb485b755bfa20f9063a1c5f4e577925b126926c1af164555f6723f82c3cb",
+      "bytes": 1997499,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-01-seal.png": {
+      "key": "video-studio/catalog/cbc74ebd9ebec91c804e8227daed7d40a7cede4dd40949fa196f5eb3ea81cc76/templates/collection-20261001-01-seal.png",
+      "sha256": "cbc74ebd9ebec91c804e8227daed7d40a7cede4dd40949fa196f5eb3ea81cc76",
+      "bytes": 1569187,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-02-background.png": {
+      "key": "video-studio/catalog/57f0de71d4492297395e3611867bd8f3415f33a46a785e1b07bd775baecc7ece/templates/collection-20261001-02-background.png",
+      "sha256": "57f0de71d4492297395e3611867bd8f3415f33a46a785e1b07bd775baecc7ece",
+      "bytes": 1615731,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-02-seal.png": {
+      "key": "video-studio/catalog/a63affdd5e5f1664af9ee4e2a34be4f7817db12f5f33716883843c17fa9849f9/templates/collection-20261001-02-seal.png",
+      "sha256": "a63affdd5e5f1664af9ee4e2a34be4f7817db12f5f33716883843c17fa9849f9",
+      "bytes": 2031636,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-03-background.png": {
+      "key": "video-studio/catalog/758349b492af79bb7ebdb9aa57ee54d7d6b3b2e28c1d88835f4abcc4c57db60d/templates/collection-20261001-03-background.png",
+      "sha256": "758349b492af79bb7ebdb9aa57ee54d7d6b3b2e28c1d88835f4abcc4c57db60d",
+      "bytes": 1488270,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-03-seal.png": {
+      "key": "video-studio/catalog/3ba798127204a0b0fd4123ff6b62d58493757bd60512d7aa086578401989abba/templates/collection-20261001-03-seal.png",
+      "sha256": "3ba798127204a0b0fd4123ff6b62d58493757bd60512d7aa086578401989abba",
+      "bytes": 1890285,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-04-background.png": {
+      "key": "video-studio/catalog/7747b34ad0bb6630cc6faf02805c812646e521b332a7b004dd7b0b997081308d/templates/collection-20261001-04-background.png",
+      "sha256": "7747b34ad0bb6630cc6faf02805c812646e521b332a7b004dd7b0b997081308d",
+      "bytes": 1446706,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-04-seal.png": {
+      "key": "video-studio/catalog/d121e915f99da97f6fcfeea55bed1798bb132e710b7675aa19b4e85d6a46884d/templates/collection-20261001-04-seal.png",
+      "sha256": "d121e915f99da97f6fcfeea55bed1798bb132e710b7675aa19b4e85d6a46884d",
+      "bytes": 1771116,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-05-background.png": {
+      "key": "video-studio/catalog/44050c714f16a1523670efe8118403bfb59b5970bd99b5268cc07c6248bff3d4/templates/collection-20261001-05-background.png",
+      "sha256": "44050c714f16a1523670efe8118403bfb59b5970bd99b5268cc07c6248bff3d4",
+      "bytes": 1512996,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-05-seal.png": {
+      "key": "video-studio/catalog/b6641a0a3202bcc788bd370567975e99b7c518ef77e509014f5688913f3b1754/templates/collection-20261001-05-seal.png",
+      "sha256": "b6641a0a3202bcc788bd370567975e99b7c518ef77e509014f5688913f3b1754",
+      "bytes": 1556740,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-06-background.png": {
+      "key": "video-studio/catalog/212281a3aca9deab07e16404e8571a7250525977d2e62bb2f97de4e244349114/templates/collection-20261001-06-background.png",
+      "sha256": "212281a3aca9deab07e16404e8571a7250525977d2e62bb2f97de4e244349114",
+      "bytes": 1468624,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-06-seal.png": {
+      "key": "video-studio/catalog/6479bdb488efe309b942aa010efc57a7eb78838d31d8bee15aee781c868160c2/templates/collection-20261001-06-seal.png",
+      "sha256": "6479bdb488efe309b942aa010efc57a7eb78838d31d8bee15aee781c868160c2",
+      "bytes": 1465018,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-07-background.png": {
+      "key": "video-studio/catalog/1ed0a2e65e265cec3f560a97e0ba099474ffcad68b2fd5193b1630a3b6a9770c/templates/collection-20261001-07-background.png",
+      "sha256": "1ed0a2e65e265cec3f560a97e0ba099474ffcad68b2fd5193b1630a3b6a9770c",
+      "bytes": 1446095,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-07-seal.png": {
+      "key": "video-studio/catalog/f70f5f68df604e505ad674b088f18bf1dc6c8cb11fcc2586cfe9c8e3fb298415/templates/collection-20261001-07-seal.png",
+      "sha256": "f70f5f68df604e505ad674b088f18bf1dc6c8cb11fcc2586cfe9c8e3fb298415",
+      "bytes": 2043218,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-08-background.png": {
+      "key": "video-studio/catalog/a4a39b646f7f312238bf575e3105747190b2cc20defcd4a38d3c3e3ab674f569/templates/collection-20261001-08-background.png",
+      "sha256": "a4a39b646f7f312238bf575e3105747190b2cc20defcd4a38d3c3e3ab674f569",
+      "bytes": 1559201,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-08-seal.png": {
+      "key": "video-studio/catalog/1b4ec5471125f6bc254650f1640cfc0a26b63426a17d4d19dd7e5ed1146f1a1d/templates/collection-20261001-08-seal.png",
+      "sha256": "1b4ec5471125f6bc254650f1640cfc0a26b63426a17d4d19dd7e5ed1146f1a1d",
+      "bytes": 1911389,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-09-background.png": {
+      "key": "video-studio/catalog/f36929c5c0d0a30809b0c2a4cb79b4d76a7b549f20d58c528e6886eebddfd6fe/templates/collection-20261001-09-background.png",
+      "sha256": "f36929c5c0d0a30809b0c2a4cb79b4d76a7b549f20d58c528e6886eebddfd6fe",
+      "bytes": 1409983,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-09-seal.png": {
+      "key": "video-studio/catalog/6db334fc27a0fa38623240928caa0ca29537102d74f12f5d80f7d5fe5d5fff95/templates/collection-20261001-09-seal.png",
+      "sha256": "6db334fc27a0fa38623240928caa0ca29537102d74f12f5d80f7d5fe5d5fff95",
+      "bytes": 1601822,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-10-background.png": {
+      "key": "video-studio/catalog/8dc4e4a7529afdd860a7b95aebf790109a8d0b524afe7c8f1c3214b5ea5f69a5/templates/collection-20261001-10-background.png",
+      "sha256": "8dc4e4a7529afdd860a7b95aebf790109a8d0b524afe7c8f1c3214b5ea5f69a5",
+      "bytes": 1402895,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-10-seal.png": {
+      "key": "video-studio/catalog/81c062c406d0698a0034bfe208cca716313f2e455269b54b1562f81a68820a9d/templates/collection-20261001-10-seal.png",
+      "sha256": "81c062c406d0698a0034bfe208cca716313f2e455269b54b1562f81a68820a9d",
+      "bytes": 1475786,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-11-background.png": {
+      "key": "video-studio/catalog/7fb2427a47f90065cac671eae17ae0c62ec7cc5f8f62cc06448df626ea9fd73c/templates/collection-20261001-11-background.png",
+      "sha256": "7fb2427a47f90065cac671eae17ae0c62ec7cc5f8f62cc06448df626ea9fd73c",
+      "bytes": 1390803,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-11-seal.png": {
+      "key": "video-studio/catalog/d9b5af8ba8acf3481d649e981412d7e80bf64d8d684e3b129da26d4ccd37994e/templates/collection-20261001-11-seal.png",
+      "sha256": "d9b5af8ba8acf3481d649e981412d7e80bf64d8d684e3b129da26d4ccd37994e",
+      "bytes": 1491733,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-12-background.png": {
+      "key": "video-studio/catalog/88cc26551ec59045ea39213a89ee71f9fc89aeccfcd57a88084d2115690a4f76/templates/collection-20261001-12-background.png",
+      "sha256": "88cc26551ec59045ea39213a89ee71f9fc89aeccfcd57a88084d2115690a4f76",
+      "bytes": 1348858,
+      "contentType": "image/png"
+    },
+    "templates/collection-20261001-12-seal.png": {
+      "key": "video-studio/catalog/512ff25fcbbf6a94c5dd03c13ed26573b88bc9034a79a7408a2120397f010d85/templates/collection-20261001-12-seal.png",
+      "sha256": "512ff25fcbbf6a94c5dd03c13ed26573b88bc9034a79a7408a2120397f010d85",
+      "bytes": 1715495,
+      "contentType": "image/png"
+    },
     "templates/detona-precos-background.png": {
       "key": "video-studio/catalog/d925044e5a35e2db951ab6e285869c7d7dfbb03b5438115f2bebd28721c79557/templates/detona-precos-background.png",
       "sha256": "d925044e5a35e2db951ab6e285869c7d7dfbb03b5438115f2bebd28721c79557",
@@ -4159,6 +4303,18 @@
       "bytes": 1613420,
       "contentType": "image/png"
     },
+    "templates/operacao-fecha-mes-reference-20261001-background.png": {
+      "key": "video-studio/catalog/55ad98985c22c85825f8b02a94b783ab0d8d72be42272bd49667a78a16923ce9/templates/operacao-fecha-mes-reference-20261001-background.png",
+      "sha256": "55ad98985c22c85825f8b02a94b783ab0d8d72be42272bd49667a78a16923ce9",
+      "bytes": 1894873,
+      "contentType": "image/png"
+    },
+    "templates/operacao-fecha-mes-reference-20261001-seal.png": {
+      "key": "video-studio/catalog/b9a41ffdf95e8fb17a5da8b48310a387debc45922d0d3a992a24ff239cb846f3/templates/operacao-fecha-mes-reference-20261001-seal.png",
+      "sha256": "b9a41ffdf95e8fb17a5da8b48310a387debc45922d0d3a992a24ff239cb846f3",
+      "bytes": 1846673,
+      "contentType": "image/png"
+    },
     "templates/operacao-fecha-mes-vermelha-background.png": {
       "key": "video-studio/catalog/934754cdcc94001e9a0c9ae39b020ef9e38ed472e9cf76e7de74968ac081a4dd/templates/operacao-fecha-mes-vermelha-background.png",
       "sha256": "934754cdcc94001e9a0c9ae39b020ef9e38ed472e9cf76e7de74968ac081a4dd",
@@ -4505,6 +4661,132 @@
       "key": "video-studio/catalog/0bcafd93411e584694b64db3dffc92aab265dbe03f74adbfb62360afa03871d1/templates/retail-fire-curtain-v1.png",
       "sha256": "0bcafd93411e584694b64db3dffc92aab265dbe03f74adbfb62360afa03871d1",
       "bytes": 1513928,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-48h-background-wide.png": {
+      "key": "video-studio/catalog/e13232d7ebb7f3806b76b37b2429c09adb7ef1a4d4ab81a748ea03d57afd8dd5/templates/rodrigues-20261001-48h-background-wide.png",
+      "sha256": "e13232d7ebb7f3806b76b37b2429c09adb7ef1a4d4ab81a748ea03d57afd8dd5",
+      "bytes": 2546575,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-48h-background.png": {
+      "key": "video-studio/catalog/1574286326ae4a860b572d8287cad1e51ae68479059b9f49a55c815c4bd533fa/templates/rodrigues-20261001-48h-background.png",
+      "sha256": "1574286326ae4a860b572d8287cad1e51ae68479059b9f49a55c815c4bd533fa",
+      "bytes": 2338205,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-48h-seal.png": {
+      "key": "video-studio/catalog/202e5c5bea29299dd9fbd6d4bee9046fd044c5fc9df594b3fcaf79f9429a08d7/templates/rodrigues-20261001-48h-seal.png",
+      "sha256": "202e5c5bea29299dd9fbd6d4bee9046fd044c5fc9df594b3fcaf79f9429a08d7",
+      "bytes": 1095770,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-detona-preco-background-wide.png": {
+      "key": "video-studio/catalog/1e35e6aa19e870e6ec8de0b6393ad1def681b189a1e653b52e9ce892fe737713/templates/rodrigues-20261001-detona-preco-background-wide.png",
+      "sha256": "1e35e6aa19e870e6ec8de0b6393ad1def681b189a1e653b52e9ce892fe737713",
+      "bytes": 3265211,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-detona-preco-background.png": {
+      "key": "video-studio/catalog/59702de8c5cc5823a588933b690e8f7392d3fd9b8e05a34a9b7c2420778ead90/templates/rodrigues-20261001-detona-preco-background.png",
+      "sha256": "59702de8c5cc5823a588933b690e8f7392d3fd9b8e05a34a9b7c2420778ead90",
+      "bytes": 1942998,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-detona-preco-seal.png": {
+      "key": "video-studio/catalog/c81a00c5acfee3d083b4bb87130b461d72ae41242b5a988575392bfb124a75eb/templates/rodrigues-20261001-detona-preco-seal.png",
+      "sha256": "c81a00c5acfee3d083b4bb87130b461d72ae41242b5a988575392bfb124a75eb",
+      "bytes": 970074,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-limpa-estoque-background-wide.png": {
+      "key": "video-studio/catalog/d7a4dad50ab90ceab4005be017e0dab92f0c6867f7f9d448f6bee3ce1d1e305a/templates/rodrigues-20261001-limpa-estoque-background-wide.png",
+      "sha256": "d7a4dad50ab90ceab4005be017e0dab92f0c6867f7f9d448f6bee3ce1d1e305a",
+      "bytes": 3592027,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-limpa-estoque-background.png": {
+      "key": "video-studio/catalog/67278b580a5d6fe14dddc023b19f230077ac3f4e5a7b707515e4ab9b219bd74b/templates/rodrigues-20261001-limpa-estoque-background.png",
+      "sha256": "67278b580a5d6fe14dddc023b19f230077ac3f4e5a7b707515e4ab9b219bd74b",
+      "bytes": 2745125,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-limpa-estoque-seal.png": {
+      "key": "video-studio/catalog/7734493f70ebce2eab67b420b0ded31477374444f90a70aab0e7cf334c47e801/templates/rodrigues-20261001-limpa-estoque-seal.png",
+      "sha256": "7734493f70ebce2eab67b420b0ded31477374444f90a70aab0e7cf334c47e801",
+      "bytes": 1096958,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-queima-estoque-background-wide.png": {
+      "key": "video-studio/catalog/1ad53832ea99ff07c9416981deba224693dd7e198471572c82ce4f6854f8763d/templates/rodrigues-20261001-queima-estoque-background-wide.png",
+      "sha256": "1ad53832ea99ff07c9416981deba224693dd7e198471572c82ce4f6854f8763d",
+      "bytes": 1945709,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-queima-estoque-background.png": {
+      "key": "video-studio/catalog/929afe9d2b96163c0c3138c7bc0349b43d4703f4750c0684d7f1cbe6890ef393/templates/rodrigues-20261001-queima-estoque-background.png",
+      "sha256": "929afe9d2b96163c0c3138c7bc0349b43d4703f4750c0684d7f1cbe6890ef393",
+      "bytes": 2316773,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-queima-estoque-seal.png": {
+      "key": "video-studio/catalog/a41058984e7192e69ad3a59ade45006313d88416b362c83a20add667549d91c1/templates/rodrigues-20261001-queima-estoque-seal.png",
+      "sha256": "a41058984e7192e69ad3a59ade45006313d88416b362c83a20add667549d91c1",
+      "bytes": 932266,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-super-desconto-background-wide.png": {
+      "key": "video-studio/catalog/926383bf3e765a32ad3c9c456d4a9e7bfa9e8897fb25567a998f0b4dabd2cd4e/templates/rodrigues-20261001-super-desconto-background-wide.png",
+      "sha256": "926383bf3e765a32ad3c9c456d4a9e7bfa9e8897fb25567a998f0b4dabd2cd4e",
+      "bytes": 1928130,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-super-desconto-background.png": {
+      "key": "video-studio/catalog/698633b64b2d726c95a7682b618c16be8d96dfb308f825b4971baa9259b5886e/templates/rodrigues-20261001-super-desconto-background.png",
+      "sha256": "698633b64b2d726c95a7682b618c16be8d96dfb308f825b4971baa9259b5886e",
+      "bytes": 1295087,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-super-desconto-seal.png": {
+      "key": "video-studio/catalog/f17be7d470aedad6807e316259e991fe7348dc97acfce21e31590e718d24822f/templates/rodrigues-20261001-super-desconto-seal.png",
+      "sha256": "f17be7d470aedad6807e316259e991fe7348dc97acfce21e31590e718d24822f",
+      "bytes": 810248,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-ultima-chance-background-wide.png": {
+      "key": "video-studio/catalog/96521297d6a8f2b30cfed0de268ea3b578a11168474a976d2cdebe245dda396f/templates/rodrigues-20261001-ultima-chance-background-wide.png",
+      "sha256": "96521297d6a8f2b30cfed0de268ea3b578a11168474a976d2cdebe245dda396f",
+      "bytes": 1478046,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-ultima-chance-background.png": {
+      "key": "video-studio/catalog/41e846607e92c1ff752d6c5f04829cfa0e658228eb4f9229af78ba240e93bdeb/templates/rodrigues-20261001-ultima-chance-background.png",
+      "sha256": "41e846607e92c1ff752d6c5f04829cfa0e658228eb4f9229af78ba240e93bdeb",
+      "bytes": 1063418,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-ultima-chance-seal.png": {
+      "key": "video-studio/catalog/7f29b19b10632c55e32e1869a6fbfe1aee6ded0cdfb5ec952e63b1f6cca4aea9/templates/rodrigues-20261001-ultima-chance-seal.png",
+      "sha256": "7f29b19b10632c55e32e1869a6fbfe1aee6ded0cdfb5ec952e63b1f6cca4aea9",
+      "bytes": 936783,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-vem-pagar-menos-background-wide.png": {
+      "key": "video-studio/catalog/5f82916b424522490e5ca649163aae19e0d022f3e355599aef27140e2f5064da/templates/rodrigues-20261001-vem-pagar-menos-background-wide.png",
+      "sha256": "5f82916b424522490e5ca649163aae19e0d022f3e355599aef27140e2f5064da",
+      "bytes": 2633323,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-vem-pagar-menos-background.png": {
+      "key": "video-studio/catalog/438efa5c9712b961eaf9f8008c24173c2a6d3b9c1b3890917fa0339963341d0a/templates/rodrigues-20261001-vem-pagar-menos-background.png",
+      "sha256": "438efa5c9712b961eaf9f8008c24173c2a6d3b9c1b3890917fa0339963341d0a",
+      "bytes": 872164,
+      "contentType": "image/png"
+    },
+    "templates/rodrigues-20261001-vem-pagar-menos-seal.png": {
+      "key": "video-studio/catalog/77c7ce2cfd8466f102091bd28d6fbeb543984e75e8e92a3548d1577a3f849bba/templates/rodrigues-20261001-vem-pagar-menos-seal.png",
+      "sha256": "77c7ce2cfd8466f102091bd28d6fbeb543984e75e8e92a3548d1577a3f849bba",
+      "bytes": 840106,
       "contentType": "image/png"
     },
     "templates/saldao-background.png": {

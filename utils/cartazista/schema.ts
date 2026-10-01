@@ -27,6 +27,7 @@ const settings = z.object({
   foldGuide: z.boolean().optional(),
   removeBackground: z.boolean().optional(),
   header: z.object({
+    backgroundCropY: z.number().min(0).max(1).optional(),
     retailFinish: z.object({ decoration: headerAsset.optional(), labelFill: z.string().regex(/^#[0-9a-fA-F]{6}$/), labelInk: z.string().regex(/^#[0-9a-fA-F]{6}$/), labelEdge: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
     tagline: z.string().max(100).optional(),
     priceCornerRadius: z.number().min(0).max(0.15).optional(),
@@ -64,6 +65,7 @@ const composition = z.object({
     fontScaleX:z.number().positive().max(10).optional(),lineHeight:z.number().positive().max(10).optional(),
     align:z.enum(['left','center','right']).optional(),shape:z.enum(['rect','ellipse','path']).optional(),
     pathData:z.string().max(30000).optional(),src:z.string().max(1_400_000).regex(/^(?:|\/(?!\/)[^\s]*|data:image\/(?:png|jpeg|webp);base64,[a-zA-Z0-9+/=]+)$/).optional(),
+    cropX:z.number().min(0).max(1).optional(),cropY:z.number().min(0).max(1).optional(),
     fit:z.enum(['cover','contain']).optional(),binding:z.string().max(40).optional(),autoTrim:z.boolean().optional(),cornerRadius:z.number().min(0).max(4000).optional(),
     cartazistaHidden:z.boolean().optional()
   })).max(80)

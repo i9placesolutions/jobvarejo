@@ -39,7 +39,9 @@ def search_retailer_catalog(query, limit=10):
         for product in products:
             title = str(product.get('productName', ''))
             tokens = {t.rstrip('s') for t in query_tokens(title)}
-            if not requested or len(requested & tokens) / len(requested) < 0.6:
+            # Um catálogo parcial não pode afirmar que encontrou o produto:
+            # continue para Bing/Google se faltar marca ou qualquer termo-chave.
+            if not requested or not requested.issubset(tokens):
                 continue
             title_sizes = set(re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:kg|ml|g|l)\b', title.lower()))
             if sizes and not {v.replace(' ', '') for v in sizes}.issubset({v.replace(' ', '') for v in title_sizes}):

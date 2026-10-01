@@ -2,6 +2,9 @@ import { ensureProjectTemplateColumn } from './project-templates'
 import { pgQuery } from './postgres'
 
 let ensurePromise: Promise<void> | null = null
+const LEGACY_CATEGORY_SYNC_TTL_MS = 60_000
+const legacyCategorySyncs = new Map<string, Promise<void>>()
+const legacyCategorySyncedUntil = new Map<string, number>()
 
 /**
  * Mantém o catálogo de categorias disponível inclusive em instalações que
@@ -93,6 +96,35 @@ export const syncLegacyFlyerTemplateCategories = async (userId: string): Promise
   await ensureProjectTemplateColumn()
   await ensureFlyerTemplateCategoriesTable()
 
+  const now = Date.now()
+  const cachedUntil = legacyCategorySyncedUntil.get(userId) || 0
+  if (cachedUntil > now) return
+
+  const pending = legacyCategorySyncs.get(userId)
+  if (pending) return pending
+
+  const syncPromise = syncLegacyFlyerTemplateCategoriesForUser(userId)
+    .then(() => {
+      legacyCategorySyncedUntil.set(userId, Date.now() + LEGACY_CATEGORY_SYNC_TTL_MS)
+      // Keep this process-local cache bounded when many accounts visit the library.
+      if (legacyCategorySyncedUntil.size > 500) {
+        const currentTime = Date.now()
+        for (const [cachedUserId, expiresAt] of legacyCategorySyncedUntil) {
+          if (expiresAt <= currentTime || legacyCategorySyncedUntil.size > 400) {
+            legacyCategorySyncedUntil.delete(cachedUserId)
+          }
+        }
+      }
+    })
+    .finally(() => {
+      if (legacyCategorySyncs.get(userId) === syncPromise) legacyCategorySyncs.delete(userId)
+    })
+
+  legacyCategorySyncs.set(userId, syncPromise)
+  return syncPromise
+}
+
+const syncLegacyFlyerTemplateCategoriesForUser = async (userId: string): Promise<void> => {
   await pgQuery(`
     insert into public.flyer_template_categories (user_id, name, normalized_name)
     select $1, legacy.name, legacy.normalized_name

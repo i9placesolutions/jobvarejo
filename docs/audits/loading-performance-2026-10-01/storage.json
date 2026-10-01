@@ -1,0 +1,38 @@
+{
+  "pages": 1,
+  "pageMeta": [
+    {
+      "width": 1080,
+      "height": 1920,
+      "inline": false,
+      "remote": true
+    }
+  ],
+  "canvasGetMs": 1318,
+  "canvasStoredBytes": 135594,
+  "canvasDecodedBytes": 1004871,
+  "objectNodes": 469,
+  "imageNodes": 15,
+  "dataImages": 2,
+  "embeddedImageChars": 119232,
+  "projectImages": [
+    {
+      "asset": "background-stories.png",
+      "bytes": 872164,
+      "contentType": "image/png",
+      "headMs": 176
+    },
+    {
+      "asset": "coin.png",
+      "bytes": 696865,
+      "contentType": "image/png",
+      "headMs": 175
+    },
+    {
+      "asset": "seal.png",
+      "bytes": 839086,
+      "contentType": "image/png",
+      "headMs": 171
+    }
+  ]
+}

@@ -1,0 +1,211 @@
+AUDITORIA DE CARREGAMENTO — JOBVAREJO
+Data: 01/10/2026. Medições realizadas entre aproximadamente 11:35 e 11:58, America/Sao_Paulo.
+Solicitação: pente fino para descobrir por que editor e previews carregam lentamente.
+Status: auditoria concluída com causas confirmadas; correções de código não executadas.
+
+Conclusão
+A lentidão tem causas acumuladas. A falha mais clara é a galeria administrativa ignorar miniaturas prontas e reconstruir previews no navegador. O carregamento dessa galeria também espera categorias, cujo GET faz manutenção de banco. No editor, a sequência metadados -> canvas -> imagens, assets originais grandes, fontes excessivas e consultas repetidas aumentam a demora. Há ainda um preview local antigo servindo HTML incompatível com os arquivos atuais.
+
+1. Escopo e limites da evidência
+- Código atual e alterações locais preexistentes foram lidos sem edição de aplicação.
+- Preview autenticado: http://127.0.0.1:3001. Rotas: dashboard, editor de projeto real, /flyer-templates, /quick-editor e modal de prévia.
+- PostgreSQL configurado no ambiente: SELECT e EXPLAIN ANALYZE em transação READ ONLY; nenhuma migration executada pelo auditor.
+- Wasabi: GET de um canvas salvo e HEAD dos três assets decorativos; sem upload feito pelo auditor.
+- O próprio app disparou autosave/upload/history-snapshot durante a abertura sem edição humana. Essas chamadas fazem parte da evidência e não foram iniciadas manualmente.
+- Produção: shell e assets públicos examinados. Navegador de medição redirecionou para login. Tempos de editor/galeria autenticados em produção não foram obtidos.
+- Cartazista e Video Studio tiveram leitura estática; não tiveram benchmark de interação/render/export.
+- Cold aqui significa primeira passagem desta auditoria pelo caminho respectivo. Não foram apagados caches persistentes do usuário. A segunda passagem tem caches preenchidos; não é comparação controlada entre máquinas.
+- ResourceTiming de imagens redirecionadas pode reportar 0 bytes por restrições de observabilidade de origem. Isso não prova imagem vazia nem download gratuito.
+- Os buffers de eventos CDP truncaram parte da primeira captura. Os tempos de recursos ficaram disponíveis; não atribuir métodos HTTP aos dois requests iniciais de /api/projects sem evento correspondente.
+- A instrumentação temporária não produziu uma marca confiável de primeiro canvas utilizável; foi removida. O relatório usa tempos de recursos e marcos amostrados, sem inventar um tempo exato de spinner/FPS.
+
+2. Baseline medido
+Dashboard:
+- HTML local: aproximadamente 0,004 s na porta 3001.
+- /api/auth/session: 0,932 s; outra chamada após montar o dashboard: 0,941 s.
+- /api/projects?summary=dashboard: 1,691 s; 65.792 bytes de corpo.
+- A pequena resposta HTML não representa o tempo de abrir dados/previews autenticados.
+
+Galeria /flyer-templates, primeira passagem:
+- /api/auth/session: 1,263 s.
+- Lista de 182 modelos: 2,279 s; corpo de 160.076 bytes.
+- /api/profile: 1,537 s.
+- /api/flyer-template-categories: 4,684 s.
+- Primeiros dois GETs de detalhe só começaram em aproximadamente 6,264 s após navegação.
+- Outros dois começaram em 13,123 s e 14,172 s: a fila global aceita duas tarefas por vez.
+- Leitura de canvases: entre 0,858 s e 1,572 s nesta amostra.
+- Imagens do canvas: até 4,843 s; atividade de imagem foi observada até aproximadamente 22,802 s após navegação.
+- Este último número é fim de recurso observado, não tempo exato do primeiro preview ou de todos os 182 cards.
+- Resultado da API: 179 dos 182 modelos tinham gallery_preview_url. Zero pedidos às imagens de catalogo-encartes nesta rota.
+- Quatro imagens finais de preview eram data URLs geradas no navegador.
+- 47 recursos JS, aproximadamente 1,47 MB descomprimidos, durante essa passagem.
+
+Galeria /flyer-templates, reabertura:
+- Quatro previews prontos observados até 3,869 s no relógio da página.
+- Mesmo com thumbnail em cache, quatro GETs de detalhe continuaram ocorrendo, em pares, com 0,364–0,375 s cada.
+- Sessão: 0,899 s; lista: 1,695 s; categorias: 1,603 s; perfil: 1,098 s.
+- Não houve nova leitura de canvas nessa passagem: confirma benefício do cache e custo restante da ligação incompleta dos cards.
+
+Galeria /quick-editor:
+- Sessão: 0,967 s; lista: 1,734 s; perfil: 1,182 s.
+- Miniatura catalogada observada nessa rota. Primeiros modelos sem miniatura válida puderam aproveitar os renders feitos na passagem anterior.
+- Modal do primeiro modelo chegou a uma imagem carregada 384x480 em data URL. Era cache aquecido; não usar como prova de modal frio rápido.
+
+Editor, primeira abertura a partir do dashboard:
+- GET do projeto: 1,150 s.
+- GET do canvas remoto: 1,434 s, após o GET de metadados.
+- Imagens: até 3,053 s.
+- Quatro chamadas de /api/profile foram observadas, entre aproximadamente 0,378 s e 1,182 s.
+- Apareceu o aviso “Algumas imagens não carregaram; o conteúdo continua sendo salvo”.
+- Biblioteca de etiquetas e configuração/estruturas de zona foram carregadas após o canvas inicial.
+- Foram observados POSTs automáticos de storage/upload, storage/history-snapshot e projects.
+- A ação de abertura foi um duplo clique. Os dois requests iniciais de /api/projects podem corresponder ao PATCH last_viewed de cada clique; não foram classificados como dois autosaves de boot.
+
+Editor, segunda abertura direta com cache:
+- Sessão: 1,023 s; GET do projeto: 0,366 s.
+- Não houve fetch do canvas remoto nesta passagem; cache de canvas foi efetivo.
+- Três /api/profile nesta passagem direta: 1,227 / 1,623 / 2,034 s. O dashboard/ClientWorkspace não estava no caminho.
+- Imagens: até aproximadamente 1,930 s.
+- Etiquetas: 0,591 s; estruturas de zona: 0,771 s; configuração de card: 0,395 s.
+- Upload automático iniciou em aproximadamente 6,867 s; atualização de projeto em 8,456 s.
+- 57 recursos JS, aproximadamente 2,00 MB descomprimidos na navegação completa.
+- 118 recursos de fontes registrados, 2.643.524 bytes descomprimidos; todos vieram do cache nesta segunda passagem.
+- CSS do WebFontLoader: 497.974 bytes descomprimidos, além do CSS global de 33.698 bytes.
+- O snapshot de perf mostrou 29 objetos de topo. Isso não inclui a contagem total de nós do JSON e não é benchmark de FPS.
+
+PostgreSQL:
+- Conexão nova: aproximadamente 753 ms.
+- Cinco SELECT 1 em conexão aberta: 184, 180, 167, 164 e 289 ms.
+- EXPLAIN ANALYZE da consulta equivalente à biblioteca, sem filtro de categoria/limite: 64,559 ms no servidor; planejamento 6,414 ms; 182 linhas.
+- Não foi identificado SQL de segundos nessa consulta. Chamadas em série, viagens de rede, autenticação e cold setup continuam somando tempo.
+- A medição é do trajeto deste computador ao banco configurado. Não representa a latência Coolify -> PostgreSQL.
+
+Canvas e assets do projeto testado:
+- Uma página 1080x1920.
+- Canvas armazenado: 135.594 bytes comprimidos; 1.004.871 bytes após descompressão.
+- 469 nós com propriedade type; 15 imagens; duas embutidas em data URL, somando 119.232 caracteres.
+- Fundo: 872.164 bytes; moeda: 696.865 bytes; selo: 839.086 bytes. Total: 2.408.115 bytes.
+- GET direto do canvas no Wasabi: 1,318 s. HEAD dos assets: aproximadamente 171–176 ms.
+- Na segunda abertura capturada, os três assets de projeto responderam HTTP 200. A causa específica do aviso transitório da primeira abertura não foi fechada.
+
+3. Achados em ordem de correção
+
+P1 — A galeria /flyer-templates ignora a otimização já existente.
+Arquivo: pages/flyer-templates.vue, linhas 628–635.
+AccountFlyerTemplatePreview recebe template-id, perfil, readiness e eager; não recebe gallery-preview-url nem revision.
+A API oferece esses campos em server/api/projects.get.ts:509–524.
+Sem galleryPreviewUrl, utils/accountFlyerTemplatePreview.ts:40 permite render de canvas. components/AccountFlyerTemplatePreview.vue:77–148 faz GET de detalhe, busca canvas remoto, importa Fabric, carrega logo/assets e gera thumbnail.
+Confirmação: API tinha 179 miniaturas válidas; rede usou zero miniaturas catalogadas e quatro canvases.
+Ação mínima: conectar gallery-preview-url e revision aos cards, mantendo personalização no detalhe; conservar fallback para os três modelos sem catálogo.
+Critério: os cards catalogados pintam imagem pronta, sem GET de detalhe/canvas/Fabric apenas para a grade. Cache e revisão continuam isolados por conta.
+
+P1 — Categorias bloqueiam a grade e fazem manutenção no caminho de leitura.
+Arquivos: pages/flyer-templates.vue:347–369; server/api/flyer-template-categories.get.ts:21; server/utils/flyer-template-categories.ts:15–179.
+A lista e o perfil ficam prontos antes, mas isLoading/profileReady só são liberados depois de await categoriesRequest.
+O GET chama syncLegacyFlyerTemplateCategories. No primeiro acesso por processo, o guard de categorias pode executar nove consultas de DDL; depois ainda executa dois INSERTs idempotentes e o SELECT de categorias em cada leitura.
+Confirmação: 4,684 s na primeira passagem, 1,603 s na segunda; render dos primeiros cards começa só após a categoria.
+Não houve medição de lock que permita atribuir os 4,684 s especificamente a bloqueio de tabela.
+Ação mínima: não prender pintura dos modelos ao resultado das categorias; retirar manutenção recorrente do caminho GET quando o schema estiver migrado e controlar sincronização de legados por necessidade.
+Critério: lista pronta libera grade mesmo se categorias atrasarem; filtros preservam comportamento e migrações são tratadas pelo processo de deploy autorizado.
+
+P1 no ambiente local — Preview antigo compartilha .output com outro build.
+Processos observados: porta 3000 PID 31081; porta 3001 PID 86035, ambos com cwd na mesma .output.
+HTML 3000: build 22636810-f426-49b1-9489-888c160eb6e8, referência /_nuxt/BLyeLg10.js ausente no disco atual.
+HTML/disco 3001: build 521fd51c-6651-4ffa-8c0a-6990b0903cfc, referências presentes.
+GET do chunk antigo retornou HTTP 500 e encerrou a transferência incompleta após aproximadamente 6,009 s.
+Ação mínima: reiniciar ou encerrar o preview antigo autorizado e usar uma saída de build completa por processo, com validação de todos os assets referenciados.
+Critério: HTML, buildId, assets e servidor pertencem ao mesmo build.
+Não foi encerrado nenhum processo nesta auditoria.
+
+P2 — Imagens originais e canvas pesado fazem parte do caminho crítico.
+Arquivos: composables/useProject.ts:2487, 2614–2630, 2681; components/EditorCanvas.vue:6380–6436; components/AccountFlyerTemplatePreview.vue:104–148.
+Editor só monta após a página inicial ser hidratada. Fabric aguarda imagens para desserializar.
+Assets de fundo/moeda/selo totalizam 2,4 MB; JSON descomprimido supera 1 MB e contém 469 nós.
+Ação: variants de preview adequadas à resolução da grade/modal, dedupe de assets e prefetch delimitado; manter originais para edição/exportação. Para o editor, medir processamento do JSON e etapa de imagem separadamente antes de alterar a ordem de inicialização.
+Critério: reduzir transferência e tempo até primeiro canvas preservando proporções, imagens reais, textos nativos, preços e exportação.
+
+P2 — Fontes solicitadas em excesso competem com a abertura.
+Arquivos: utils/font-catalog.ts:11–56; components/EditorCanvas.vue:14452–14505; nuxt.config.ts:25–37.
+loadFonts solicita 39 famílias com muitos pesos/itálicos em todo editor. CSS global já carrega outras famílias/pesos.
+Quando todas ficam prontas, limpa o cache de métricas Fabric, percorre textos/grupos, refaz dimensões e ajuste de etiquetas.
+Confirmação: 118 recursos de fontes e aproximadamente 2,64 MB descomprimidos, além de quase 498 KB de CSS do loader. Na segunda passagem, fontes estavam em cache; não atribuir esse volume a transferência de rede nessa passagem.
+Ação: carregar primeiro famílias/pesos usados no canvas atual; demais sob demanda nos seletores, com promessa deduplicada por família/peso.
+Critério: métricas finais e ajuste das etiquetas preservados; medir cache frio, payload e correção visual tardia.
+
+P2 — Perfil e sessão fazem viagens duplicadas.
+Arquivos: composables/useLogoPreference.ts:39–52; components/EditorCanvas.vue:20768–20774; components/ClientWorkspace.vue:138–147; pages/index.vue:302–304; middleware/auth.ts:31–35.
+useLogoPreference faz refresh pelo watcher imediato e pelo onMounted. Editor faz seu refreshBusinessProfile. ClientWorkspace também busca perfil quando montado. Dashboard pede sessão de novo após o middleware.
+API de perfil também lê identidade para autorização antes de consultar dados do perfil (server/utils/auth.ts:52–111; server/api/profile.get.ts:7–29).
+Confirmação: quatro perfis na abertura pelo dashboard e três na abertura direta; duas sessões no dashboard.
+Ação: compartilhar/deduplicar leituras em andamento no cliente por conta ativa e invalidar por troca de conta/evento. Reaproveitar sessão já verificada pelo middleware na mesma inicialização.
+Preservar leitura de permissões/is_active no servidor; não trocar segurança de revogação por cache amplo de autorização.
+Critério: uma leitura de perfil por necessidade, sem atravessar contas; sessão sem duplicação no mesmo bootstrap.
+
+P2 — Fallbacks acumulam esperas longas quando rede/imagens falham.
+Arquivos: composables/useStorage.ts:334–401, 807–870; utils/canvasImageLoadSession.ts:35–69; components/EditorCanvas.vue:6175–6188; utils/editorThumbnail.ts:32–37, 207–228.
+Storage usa proxy, retries, presigned e outro fallback. Proxy pode tentar três vezes com 15 s por tentativa e backoff; obter presigned também pode repetir.
+Cada imagem do editor pode tentar duas vezes com 30 s por tentativa; canvas tem deadline de 70–80 s. Thumbnail aplica timeout de 6–18 s após chegar à etapa Fabric, e o componente pode tentar novamente.
+Logo no AccountFlyerTemplatePreview usa FabricImage.fromURL antes do timeout do thumbnail; não há um deadline global claro para toda a tarefa.
+Esses máximos são contratos do código, não uma espera de dois minutos reproduzida nesta auditoria.
+Ação: deadline global por operação, timeout por fase, retry apenas transitório e cancelamento de trabalho obsoleto; preservar placeholders/URL original e salvamento seguro.
+Critério: recuperação previsível sem descartar conteúdo ou trocar imagem real por placeholder persistente.
+
+P2 — Autosave e bibliotecas podem adicionar trabalho sem edição humana.
+Arquivos: components/EditorCanvas.vue:10457–10477, 9621–9631, 9733–9749, 30176–30226, 30406–30434; composables/useStorage.ts:474–519, 692; server/api/projects.post.ts:185–219.
+Reparos de URL/geometria e aplicação/reconciliação de estilos/etiquetas podem marcar dirty e salvar.
+Confirmação: em duas aberturas sem edição, app enviou upload, history snapshot e atualização do projeto. Não foi fechado qual reason exato disparou cada save.
+Mudanças persistidas alteram updated_at e podem invalidar caches baseados em revisão quando ocorrerem em modelos. Alterações concorrentes no template observado impedem atribuir sua revisão a esta auditoria.
+Ação: correlacionar save reason/fingerprint com as aplicações iniciais e coalescer alterações reais; não desligar autosave/histórico.
+Critério: abrir projeto já normalizado não deve reenviar conteúdo sem diferença; reparos necessários continuam persistindo com segurança.
+
+P3 — Cobertura do catálogo cai nas revisões recentes.
+Arquivo: server/utils/flyer-gallery-previews.ts:8–18.
+Manifesto: 181 entradas; banco/lista: 182 templates; apenas 179 revisões coincidem na amostra. Exigência de updated_at exato é proteção contra miniatura obsoleta.
+Ação: preparar thumbnails das revisões novas após persistência e automatizar a atualização no ponto apropriado; não afrouxar a comparação só para parecer rápido.
+Critério: cobertura das revisões presentes e readback de thumbnails no Wasabi; galeria mantém fallback para falhas.
+
+P3 — Gate de um único chunk não mede o peso de abrir uma rota.
+Gate atual passou: maior JS 453 KB / limite 500 KB. Entretanto a navegação completa do editor envolveu aproximadamente 2 MB descomprimidos em 57 JS.
+nuxt.config.ts já usa onlyExplicitManualChunks, imports lazy e separação de editor/Fabric/video; não há justificativa para reescrever o bundling inteiro sem medir.
+Ação: adicionar orçamento por rota para bytes/conjunto de dependências, além do maior arquivo.
+Critério: comparar o grafo realmente usado pelo editor/galeria, CPU de parse e requisições, em build consistente.
+
+P3, estático — Cartazista passa lazy sem implementar lazy loading.
+Arquivos: pages/cartazista/index.vue:229–233; components/cartazista/CartazistaPreview.vue:4–14; utils/cartazista/render.ts:21–48.
+Card chama render ao montar e a prop lazy não é declarada/consumida. Render importa Fabric, espera fontes e lê camadas de imagem sequencialmente. Token generation descarta resultado obsoleto, mas não cancela o trabalho.
+Ação: observer real de visibilidade/cache e limite de concorrência; medir os cards reais antes/depois.
+> ⚠️ Precisa ser confirmado: impacto quantitativo no Cartazista, sem benchmark realizado.
+
+P3, estático — Preview de vídeo aguarda o conjunto completo de imagens.
+Arquivos: components/video-studio/Preview.client.vue:23–38; shared/video-studio/preview-media.ts:7–36; shared/video-studio/font-readiness.ts:3–17.
+Player só é montado após Promise.all de mídia baixada/decodificada. Troca de composition descarta resultados antigos, mas fetches anteriores são abortados só ao desmontar o componente. Uma falha rejeita a preparação.
+Mitigações existentes: fastPreview, dedupe por URL, variantes ?preview=1, abort/revoke no unmount e cache/promessas de fontes.
+Ação: medir cold/warm com composição real, cancelar mídia que ficou obsoleta e avaliar preparação das cenas necessárias sem afetar render final.
+> ⚠️ Precisa ser confirmado: peso desses pontos no preview de vídeo afetado; nenhum render ou export foi iniciado.
+
+4. Verificações e arquivos produzidos
+Executado:
+- npm run typecheck: exit 0. Apenas aviso de depreciação DEP0205 do Node.
+- Vitest: 6 arquivos / 33 testes passaram (catálogo, proteção de storage, account preview, composição neutra, read cache e image-load session).
+- npm run check:client-chunk: passou, 453 KB / 500 KB, no build já existente.
+- git diff --check: passou no estado local observado.
+- Validações de API/rede/DOM autenticadas, leitura de armazenamento, consultas read-only e comparação de HTML/asset/buildId.
+Os testes existentes cobrem helpers, mas não a passagem das props de miniatura pela página /flyer-templates; por isso passaram mesmo com a falha de integração reproduzida.
+Não executado:
+- Build novo: auditoria não alterou aplicação; build compartilhado está em uso por previews e não foi substituído.
+- Auditoria completa de todos os testes; deploy; commit/push; mutações manuais de banco; exclusão/reinício de processos.
+- SLA de produção autenticada, benchmark mobile/rede limitada, CPU/FPS durante interação prolongada, cold start de Cartazista/vídeo.
+Produção pública tinha build 5f19692f-273e-41a3-a869-e643166d855e, diferente do local. Assets HTML consultados responderam 200; health respondeu 200 em aproximadamente 219 ms. Isso comprova resposta pública, não abertura rápida de projeto.
+Relatório: docs/audits/loading-performance-2026-10-01.txt.
+Métricas e logs pertinentes: docs/audits/loading-performance-2026-10-01/.
+Registro cronológico anexado ao Vault; notas temáticas preservadas.
+
+5. Sequência recomendada e critérios de fechamento das correções
+1) Corrigir ligação das miniaturas na galeria e liberar lista antes de categorias.
+2) Usar um preview consistente e validar o build medido.
+3) Deduplicar perfil/sessão e carregar fontes usadas sob demanda.
+4) Preparar variants de imagem para preview e limitar/cancelar operações caras por deadline.
+5) Rastrear autosaves de boot e atualizar thumbnails de revisões novas.
+6) Medir cada correção com a mesma rota/projeto e caches explicitados; validar isolamento de conta, persistência, etiquetas/fontes, reload e export.
+Nenhum ganho após correção é declarado aqui, pois esta etapa foi de auditoria.
+

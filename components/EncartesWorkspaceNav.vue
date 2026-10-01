@@ -69,7 +69,7 @@ const isActive = (tool: WorkspaceTool) => route.path === (tool.activePath || too
     </div>
 
     <nav class="encarte-workspace-nav__items" :class="{ 'encarte-workspace-nav__items--single': isCommonUser }" aria-label="Ferramentas de encartes">
-      <NuxtLink
+      <NuxtLink prefetch-on="interaction"
         v-for="tool in visibleTools"
         :key="tool.title"
         :to="tool.to"

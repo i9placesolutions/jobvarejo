@@ -621,8 +621,41 @@ export default defineEventHandler(async (event) => {
 
         const redisCacheKey = `img:${normalizedTerm}`
 
-        // Redis cache — evita pipeline completo para o mesmo produto
+        // A key do Redis/registry pode ser opaca (smart-src-*). Antes de
+        // aceitá-la, dê prioridade a um match semântico estrito ainda presente
+        // no Wasabi; isso evita que um cache antigo cubra uma imagem nomeada.
+        let hasVerifiedNamedInternalMatch = false
         if (!selectedCandidateInput) {
+            try {
+                for (const candidateKey of candidateKeys) {
+                    if (await s3KeyExists(s3, bucketName, candidateKey)) {
+                        hasVerifiedNamedInternalMatch = true
+                        break
+                    }
+                }
+                if (!hasVerifiedNamedInternalMatch) {
+                    const preflightAliases = await getUserAssetNamesMap(String(user.id || ''))
+                    hasVerifiedNamedInternalMatch = !!(await findBestS3Match({
+                        s3,
+                        bucketName,
+                        prefixes: ['uploads/', 'imagens/'],
+                        normalizedCandidates: candidateNormalizedTerms,
+                        brand,
+                        flavor,
+                        weight,
+                        productCode,
+                        strictOnly: true,
+                        keyAliases: preflightAliases,
+                        cacheNamespace: String(user.id || '')
+                    }))
+                }
+            } catch (preflightError: any) {
+                console.warn('⚠️ [S3 Match:preflight] Falha ao conferir match semântico:', preflightError?.message || String(preflightError))
+            }
+        }
+
+        // Redis cache — evita pipeline completo para o mesmo produto
+        if (!selectedCandidateInput && !hasVerifiedNamedInternalMatch) {
             const cachedS3Key = await redisGet(redisCacheKey)
             if (cachedS3Key) {
                 const exists = await s3KeyExists(s3, bucketName, cachedS3Key)
@@ -650,7 +683,7 @@ export default defineEventHandler(async (event) => {
     // ========================================
     // -1. REGISTRY DETERMÍNISTICO (productCode/meta identity)
     // ========================================
-    try {
+    if (!hasVerifiedNamedInternalMatch) try {
         const registryHit = await findRegistryApprovedImage(identityKey);
         const registryKey = String(registryHit?.s3_key || '').trim();
         if (registryKey) {
@@ -1021,6 +1054,15 @@ export default defineEventHandler(async (event) => {
                 seenGoogleUrls.add(url);
                 rawGoogleCandidates.push(candidate);
             }
+            // Pare assim que houver identidade suficiente para automatizar; as
+            // demais opções da mesma consulta continuam visíveis na revisão.
+            if (rankGoogleCseImageCandidates(rawGoogleCandidates, {
+                query: primarySearchInput,
+                brand,
+                flavor,
+                weight,
+                productCode
+            }).some(candidate => candidate.autoApplyEligible)) break;
             if (rawGoogleCandidates.length >= 10) break;
         }
 
@@ -1034,6 +1076,7 @@ export default defineEventHandler(async (event) => {
         googleReviewCandidates.push(...buildGoogleReviewCandidates(rankedGoogleCandidates));
 
         for (const candidate of rankedGoogleCandidates) {
+            if (!candidate.autoApplyEligible || googleAttempts >= 2) continue;
             googleAttempts += 1;
             try {
                 const processed = await runExternalPipelineOnce({

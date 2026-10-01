@@ -14,6 +14,7 @@ export type RankedGoogleCseImageCandidate = GoogleCseImageCandidate & {
   confidence: number
   reason: string
   recommended?: boolean
+  autoApplyEligible: boolean
 }
 
 type GoogleCseSearchError =
@@ -46,17 +47,25 @@ const normalizeText = (value: string): string => String(value || '')
   .replace(/[\u0300-\u036f]/g, '')
   .replace(/[^a-z0-9\s]/g, ' ')
   .replace(/\s+/g, ' ')
+  .replace(/\brefresco\s+em\s+po\b/g, 'suco')
+  .replace(/(\d+(?:\.\d+)?)\s+(kg|g|mg|ml|l|un)\b/g, '$1$2')
   .trim()
 
 const tokenize = (value: string): string[] => normalizeText(value)
   .split(' ')
-  .filter(token => token.length >= 3)
+  .filter(token => token.length >= 2)
 
 const QUERY_NOISE_TOKENS = new Set([
   'produto', 'produtos', 'imagem', 'imagens', 'foto', 'fotos', 'embalagem',
-  'embalagens', 'frente', 'packshot', 'supermercado', 'original', 'lata',
-  'garrafa', 'caixa', 'frasco', 'pacote'
+  'embalagens', 'frente', 'packshot', 'supermercado', 'de', 'do', 'da', 'dos', 'das', 'em',
+  'sabor', 'sabores', 'sortido', 'sortidos'
 ])
+
+const PRODUCT_VARIANT_GROUPS = [
+  new Set(['morango', 'limao', 'uva', 'manga', 'abacaxi', 'maracuja', 'laranja', 'pessego', 'goiaba', 'caju', 'acerola']),
+  new Set(['original', 'zero', 'light', 'diet']),
+  new Set(['integral', 'desnatado', 'semidesnatado'])
+]
 
 const BAD_HINTS_RE = /(logo|vetor|vector|icone|icon|clipart|mockup|banner|wallpaper|papel parede|sticker|figurinha|svg|eps|cdr|psd|adesivo)/i
 const BAD_DOMAIN_RE = /(pinterest|pinimg|freepik|wikimedia|wikipedia|shutterstock|depositphotos|istockphoto|vectorstock)/i
@@ -77,6 +86,19 @@ const normalizeCandidateText = (candidate: GoogleCseImageCandidate): string => [
   extractDomain(candidate.url)
 ].filter(Boolean).join(' ')
 
+const identityPath = (value: string | undefined): string => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  try { return new URL(raw).pathname.replace(/[-_]+/g, ' ') } catch { return raw }
+}
+
+const variantsAreCompatible = (requested: Set<string>, candidate: Set<string>): boolean =>
+  PRODUCT_VARIANT_GROUPS.every((group) => {
+    const requestedVariants = [...requested].filter(token => group.has(token))
+    const candidateVariants = [...candidate].filter(token => group.has(token))
+    return requestedVariants.length === candidateVariants.length && requestedVariants.every(token => candidate.has(token))
+  })
+
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
 /**
@@ -96,6 +118,7 @@ export const rankGoogleCseImageCandidates = (
     ...tokenize(opts.productCode || '')
   ].filter(token => !QUERY_NOISE_TOKENS.has(token)))]
   if (!queryTokens.length) return []
+  const requiredIdentityTokens = new Set(queryTokens)
 
   const ranked = (Array.isArray(candidates) ? candidates : [])
     .map((candidate) => {
@@ -105,6 +128,13 @@ export const rankGoogleCseImageCandidates = (
       const urlText = normalizeText(candidate.url || '')
       const domainText = normalizeText(domain)
       const haystack = normalizeCandidateText(candidate)
+      const identityTokens = new Set(tokenize([
+        candidate.title,
+        identityPath(candidate.source),
+        identityPath(candidate.url)
+      ].filter(Boolean).join(' ')).filter(token => !QUERY_NOISE_TOKENS.has(token)))
+      const autoApplyEligible = queryTokens.every(token => identityTokens.has(token)) &&
+        variantsAreCompatible(requiredIdentityTokens, identityTokens)
       let score = 0
       let hits = 0
 
@@ -150,13 +180,19 @@ export const rankGoogleCseImageCandidates = (
         confidence: Number(confidence.toFixed(3)),
         reason: hits > 0
           ? `${hits}/${queryTokens.length} termos encontrados; resultado filtrado por produto/embalagem`
-          : 'Nenhum termo relevante encontrado'
+          : 'Nenhum termo relevante encontrado',
+        autoApplyEligible
       }
     })
     .filter(candidate => candidate.score > 0 && !!candidate.domain && !BAD_HINTS_RE.test(normalizeCandidateText(candidate)))
     .sort((a, b) => b.score - a.score)
 
-  return ranked.map((candidate, index) => ({ ...candidate, recommended: index === 0 }))
+  let recommendedAssigned = false
+  return ranked.map((candidate) => {
+    const recommended = candidate.autoApplyEligible && !recommendedAssigned
+    if (recommended) recommendedAssigned = true
+    return { ...candidate, recommended }
+  })
 }
 
 export const searchGoogleCseImageCandidates = async (opts: {

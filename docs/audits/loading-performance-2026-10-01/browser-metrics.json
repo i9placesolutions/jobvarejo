@@ -1,0 +1,141 @@
+{
+  "date": "2026-10-01",
+  "timezone": "America/Sao_Paulo",
+  "environment": "authenticated local preview 127.0.0.1:3001",
+  "method": "Aggregated ResourceTiming, CDP/DOM observations, read-only PostgreSQL and storage inspections. No raw request headers/cookies saved.",
+  "limitations": [
+    "First pass was first audit visit, not a cleared persistent cache",
+    "No reliable first usable canvas marker",
+    "No authenticated production timings",
+    "Cartazista/video findings are static, not benchmarked",
+    "First CDP event buffer truncated; initial projects requests not classified as autosaves"
+  ],
+  "dashboard": {
+    "htmlMs": 4.317,
+    "sessionMs": [
+      932,
+      941.1
+    ],
+    "projectsMs": 1690.7,
+    "projectsBodyBytes": 65792
+  },
+  "galleryFirst": {
+    "templates": 182,
+    "catalogUrls": 179,
+    "catalogImageRequests": 0,
+    "sessionMs": 1263,
+    "listMs": 2279,
+    "listBodyBytes": 160076,
+    "profileMs": 1537,
+    "categoriesMs": 4684,
+    "detailStartMs": [
+      6264,
+      6264,
+      13123,
+      14172
+    ],
+    "canvasFetchMs": [
+      1485,
+      1315,
+      1572,
+      858
+    ],
+    "maxImageMs": 4843,
+    "lastObservedImageEndMs": 22802,
+    "jsResources": 47,
+    "decodedJsBytes": 1465721
+  },
+  "galleryWarm": {
+    "sampledReady": [
+      {
+        "pageMs": 326,
+        "previews": 0
+      },
+      {
+        "pageMs": 3486,
+        "previews": 2
+      },
+      {
+        "pageMs": 3869,
+        "previews": 4
+      }
+    ],
+    "sessionMs": 899,
+    "listMs": 1695,
+    "categoriesMs": 1603,
+    "profileMs": 1098,
+    "detailFetchMs": [
+      375,
+      370,
+      372,
+      364
+    ],
+    "canvasFetches": 0
+  },
+  "quickEditor": {
+    "sessionMs": 967,
+    "listMs": 1734,
+    "profileMs": 1182,
+    "catalogImageMs": 813,
+    "modal": "384x480 data URL, warm cache"
+  },
+  "editorFirst": {
+    "projectMs": 1150,
+    "canvasMs": 1434,
+    "maxImageMs": 3053,
+    "profileRequests": 4,
+    "imageWarning": true,
+    "automaticPosts": [
+      "storage/upload",
+      "storage/history-snapshot",
+      "projects"
+    ]
+  },
+  "editorSecond": {
+    "sessionMs": 1023,
+    "projectMs": 366,
+    "canvasFetches": 0,
+    "profileMs": [
+      1227,
+      1623,
+      2034
+    ],
+    "maxImageMs": 1930,
+    "labelsMs": 591,
+    "zonesMs": 771,
+    "cardsMs": 395,
+    "automaticUploadStartMs": 6867,
+    "projectUpdateStartMs": 8456,
+    "jsResources": 57,
+    "decodedJsBytes": 2003785,
+    "fontResources": 118,
+    "decodedFontBytes": 2643524,
+    "fontTransferredBytes": 0,
+    "loaderCssDecodedBytes": 497974,
+    "globalFontCssDecodedBytes": 33698,
+    "topLevelObjects": 29
+  },
+  "localBuilds": {
+    "port3000": {
+      "pid": 31081,
+      "buildId": "22636810-f426-49b1-9489-888c160eb6e8",
+      "missingChunk": "/_nuxt/BLyeLg10.js",
+      "chunkHttp": 500,
+      "incompleteTransferMs": 6009
+    },
+    "port3001": {
+      "pid": 86035,
+      "buildId": "521fd51c-6651-4ffa-8c0a-6990b0903cfc",
+      "htmlAssetsPresent": true
+    }
+  },
+  "validations": {
+    "typecheckExitCode": 0,
+    "testsFiles": 6,
+    "testsPassed": 33,
+    "largestClientChunkKB": 453,
+    "clientChunkLimitKB": 500,
+    "newBuildRun": false,
+    "applicationEdits": false
+  }
+}

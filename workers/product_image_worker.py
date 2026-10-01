@@ -101,6 +101,8 @@ TOKEN_ALIASES = {
     "regular": "original",
     "zeroacucar": "zero",
     "semacucar": "zero",
+    # Categorias equivalentes usadas em títulos de produtos brasileiros.
+    "refresco": "suco",
 }
 
 STOP_WORDS = {
@@ -130,7 +132,6 @@ QUERY_NOISE = {
     "foto",
     "frente",
     "supermercado",
-    "original",
     "imagem",
     "imagens",
     "packshot",
@@ -222,7 +223,11 @@ def assert_safe_external_http_url(raw_url: Any) -> str:
         raise WorkerError("URL externa bloqueada")
     if port is not None and not 1 <= port <= 65535:
         raise WorkerError("URL externa invalida")
-    return parsed._replace(fragment="").geturl()
+    # URLs de imagens de varejistas podem conter espacos ou caracteres UTF-8
+    # crus no caminho. Codifique-os antes de passar o endereco ao urllib.
+    path = urllib.parse.quote(parsed.path, safe="/%:@!$&'()*+,;=-._~%")
+    query = urllib.parse.quote(parsed.query, safe="/?@!$&'()*+,;=:-._~%")
+    return parsed._replace(path=path, query=query, fragment="").geturl()
 
 
 def normalize_text(value: Any) -> str:
@@ -247,6 +252,7 @@ def normalize_search_term(value: Any) -> str:
     """Replica a normalizacao usada no matching TypeScript do projeto."""
 
     raw = normalize_text(value)
+    raw = re.sub(r"\brefresco\s+em\s+po\b", " suco ", raw)
     raw = re.sub(r"\bcoca\s*-?\s*cola\b", " cocacola ", raw)
     raw = re.sub(r"\b(zero\s+acucar|sem\s+acucar|sugar\s*free)\b", " zero ", raw)
     raw = re.sub(r"\b(tradicional|classico|classic|regular)\b", " original ", raw)
@@ -263,12 +269,43 @@ def normalize_search_term(value: Any) -> str:
     return " ".join(sorted(set(tokens)))
 
 
+def _compound_adjacent_tokens(tokens: Iterable[str]) -> set[str]:
+    values = list(tokens)
+    expanded = set(values)
+    for index in range(len(values) - 1):
+        left, right = values[index], values[index + 1]
+        if len(left) >= 2 and len(right) >= 2:
+            expanded.add(left + right)
+    if {"joy", "colate"}.issubset(expanded):
+        expanded.add("joycolate")
+    return expanded
+
+
+def _weight_tokens(value: str) -> set[str]:
+    normalized = normalize_text(value)
+    matches = re.findall(r"(?<![a-z0-9])\d+(?:\.\d+)?\s*(?:x\s*\d+(?:\.\d+)?\s*)?(?:kg|g|mg|ml|l|un)(?![a-z])", normalized)
+    return {_normalize_weight_token(match) for match in matches}
+
+
+KNOWN_PRODUCT_VARIANTS = {
+    "morango", "moranguinho", "limao", "uva", "manga", "abacaxi", "maracuja",
+    "laranja", "pessego", "goiaba", "caju", "acerola", "framboesa", "cereja",
+    "original", "zero", "light", "diet", "integral", "desnatado", "semidesnatado",
+}
+
+
 def _query_token_set(value: str) -> List[str]:
-    return [
+    normalized_value = re.sub(
+        r"(?<![a-z0-9])(\d+(?:\.\d+)?)\s+(kg|g|mg|ml|l|un)\b",
+        r"\1\2",
+        normalize_text(value),
+    )
+    tokens = [
         token
-        for token in normalize_search_term(value).split()
+        for token in normalize_search_term(normalized_value).split()
         if token not in QUERY_NOISE and len(token) >= 2
     ]
+    return tokens
 
 
 def _field(record: Mapping[str, Any], *names: str) -> str:
@@ -506,6 +543,11 @@ def rank_google_image_candidates(
         return []
 
     ranked: List[Dict[str, Any]] = []
+    variant_groups = [
+        {"morango", "moranguinho", "limao", "uva", "manga", "abacaxi", "maracuja", "laranja", "pessego", "goiaba", "caju", "acerola", "framboesa", "cereja"},
+        {"original", "zero", "light", "diet"},
+        {"integral", "desnatado", "semidesnatado"},
+    ]
     for candidate in candidates:
         try:
             safe_url = assert_safe_external_http_url(candidate.get("url"))
@@ -522,6 +564,18 @@ def rank_google_image_candidates(
         source_text = normalize_text(source)
         url_text = normalize_text(safe_url)
         domain_text = normalize_text(domain)
+        # Domínio da loja não é evidência de identidade do produto.
+        identity_paths = [title]
+        for value in (source, safe_url):
+            parsed = urllib.parse.urlparse(value)
+            identity_paths.append(parsed.path.replace("-", " ").replace("_", " "))
+        identity_tokens = set(_query_token_set(" ".join(identity_paths)))
+        requested_tokens = set(query_tokens)
+        auto_apply_eligible = requested_tokens.issubset(identity_tokens) and all(
+            {token for token in requested_tokens if token in group}
+            == {token for token in identity_tokens if token in group}
+            for group in variant_groups
+        )
         score = 0.0
         hits = 0
         for token in query_tokens:
@@ -580,13 +634,16 @@ def rank_google_image_candidates(
                 "confidence": round(confidence, 3),
                 "reason": "%s/%s termos encontrados; resultado filtrado por produto/embalagem"
                 % (hits, len(query_tokens)),
+                "autoApplyEligible": auto_apply_eligible,
             }
         )
 
-    ranked.sort(key=lambda item: float(item.get("score") or 0), reverse=True)
+    ranked.sort(key=lambda item: (bool(item.get("autoApplyEligible")), float(item.get("score") or 0)), reverse=True)
     limit = max(1, min(6, int(max_candidates or 6)))
     for index, candidate in enumerate(ranked[:limit]):
-        candidate["recommended"] = index == 0
+        candidate["recommended"] = bool(candidate.get("autoApplyEligible")) and not any(
+            item.get("recommended") for item in ranked[:index]
+        )
     return ranked[:limit]
 
 
@@ -852,26 +909,48 @@ class StorageImageIndex:
     def find(self, product: Mapping[str, Any]) -> Optional[Tuple[str, float]]:
         query_tokens = _query_token_set(product_search_text(product))
         name_tokens = set(_query_token_set(text(product.get("name"))))
-        weight = _normalize_weight_token(text(product.get("weight")))
+        brand_tokens = set(_query_token_set(text(product.get("brand"))))
+        flavor_tokens = set(_query_token_set(text(product.get("flavor"))))
+        product_code_tokens = set(_query_token_set(text(product.get("productCode"))))
+        weight_values = _weight_tokens(" ".join((text(product.get("name")), text(product.get("weight")))))
+        non_weight_name_tokens = {
+            token for token in name_tokens
+            if not token.isdigit() and token not in {"kg", "g", "mg", "ml", "l", "un"}
+        }
+        required_identity = non_weight_name_tokens | brand_tokens | flavor_tokens | product_code_tokens
         if not query_tokens:
             return None
         best: Optional[Tuple[str, float]] = None
         for key, _display_name, target_tokens in self.entries:
-            target_set = set(target_tokens)
-            name_hits = len(name_tokens.intersection(target_set))
-            if name_tokens and name_hits == 0:
+            target_set = _compound_adjacent_tokens(target_tokens)
+            target_set.discard("kg")
+            target_set.discard("g")
+            target_set.discard("mg")
+            target_set.discard("ml")
+            target_set.discard("l")
+            target_set.discard("un")
+            target_set = {token for token in target_set if not token.isdigit()}
+            # Nao permita que um unico token compartilhado (como a marca) faça
+            # uma embalagem de outro produto virar match automático.
+            if required_identity and not required_identity.issubset(target_set):
+                continue
+            target_weight_values = _weight_tokens(_display_name)
+            if weight_values and target_weight_values and not weight_values.intersection(target_weight_values):
+                continue
+            query_variants = set(query_tokens) & KNOWN_PRODUCT_VARIANTS
+            target_variants = target_set & KNOWN_PRODUCT_VARIANTS
+            if query_variants and not query_variants.issubset(target_variants):
+                continue
+            if target_variants and not query_variants:
                 continue
             query_hits = len(set(query_tokens).intersection(target_set))
-            if query_hits == 0:
+            if query_hits < len(required_identity):
                 continue
-            score = float(name_hits * 3.0 + query_hits * 1.5)
-            if name_tokens and name_hits == len(name_tokens):
-                score += 3.0
-            if weight:
-                score += 2.0 if weight in target_set else -1.5
+            score = float(query_hits * 3.0 + len(required_identity) * 2.0)
+            if weight_values and target_weight_values:
+                score += 2.0
             if best is None or score > best[1]:
                 best = (key, round(score, 3))
-        # A match de uma palavra generica nao deve preencher automaticamente.
         return best if best and best[1] >= 5.0 else None
 
 
@@ -1221,29 +1300,6 @@ def process_product(
     if text(product.get("name")):
         lookup_terms.append(normalize_search_term(text(product.get("name"))))
 
-    if db:
-        for row in [db.lookup_registry(identity_key), db.lookup_cache(lookup_terms)]:
-            cache_key = _cache_key_from_row(row)
-            if not cache_key:
-                continue
-            try:
-                cache_key = assert_safe_storage_key(cache_key)
-                if s3.exists(cache_key):
-                    result.update(
-                        {
-                            "status": "success",
-                            "imageSource": "wasabi-storage",
-                            "s3Key": cache_key,
-                            "imageUrl": s3.public_url(cache_key),
-                            "confidence": 0.99,
-                            "attempts": 0,
-                            "error": None,
-                        }
-                    )
-                    return result
-            except (WorkerError, StorageError) as exc:
-                LOGGER.info("Cache ignorado para %s: %s", result["name"], exc)
-
     if storage_index:
         internal_match = storage_index.find(product)
         if internal_match:
@@ -1270,6 +1326,31 @@ def process_product(
             except (WorkerError, StorageError) as exc:
                 LOGGER.info("Match interno ignorado para %s: %s", result["name"], exc)
 
+    # O índice semântico do Wasabi tem prioridade sobre registry/cache com key
+    # opaca: entradas antigas podem ter sido gravadas por um match aproximado.
+    if db:
+        for row in [db.lookup_registry(identity_key), db.lookup_cache(lookup_terms)]:
+            cache_key = _cache_key_from_row(row)
+            if not cache_key:
+                continue
+            try:
+                cache_key = assert_safe_storage_key(cache_key)
+                if s3.exists(cache_key):
+                    result.update(
+                        {
+                            "status": "success",
+                            "imageSource": "wasabi-storage",
+                            "s3Key": cache_key,
+                            "imageUrl": s3.public_url(cache_key),
+                            "confidence": 0.99,
+                            "attempts": 0,
+                            "error": None,
+                        }
+                    )
+                    return result
+            except (WorkerError, StorageError) as exc:
+                LOGGER.info("Cache ignorado para %s: %s", result["name"], exc)
+
     from chromium_image_search import search_images
     try:
         raw_candidates = search_images(_google_query(product), limit=10)
@@ -1284,7 +1365,8 @@ def process_product(
     result["imageSource"] = "chromium-search"
     result["candidateCount"] = len(ranked_candidates)
 
-    for index, candidate in enumerate(ranked_candidates):
+    eligible_candidates = [candidate for candidate in ranked_candidates if candidate.get("autoApplyEligible")][:2]
+    for index, candidate in enumerate(eligible_candidates):
         result["attempts"] = index + 1
         source_url = text(candidate.get("url"))
         try:

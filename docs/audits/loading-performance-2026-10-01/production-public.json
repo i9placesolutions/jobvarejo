@@ -1,0 +1,57 @@
+[
+  {
+    "asset": "/_nuxt/entry.jSxiOaMQ.css",
+    "status": 200,
+    "totalMs": 361,
+    "bytes": 238771,
+    "localMatch": false
+  },
+  {
+    "asset": "/_nuxt/onBonbSO.js",
+    "status": 200,
+    "totalMs": 206,
+    "bytes": 83169,
+    "localMatch": false
+  },
+  {
+    "asset": "/_nuxt/DAlSYdt8.js",
+    "status": 200,
+    "totalMs": 180,
+    "bytes": 120323,
+    "localMatch": false
+  },
+  {
+    "asset": "/_nuxt/PPVm8Dsz.js",
+    "status": 200,
+    "totalMs": 189,
+    "bytes": 1232,
+    "localMatch": true
+  },
+  {
+    "asset": "/_nuxt/onBonbSO.js",
+    "status": 200,
+    "totalMs": 223,
+    "bytes": 83169,
+    "localMatch": false
+  },
+  {
+    "path": "/quick-editor",
+    "status": 200,
+    "totalMs": 1298,
+    "bytes": 1386,
+    "buildId": "5f19692f-273e-41a3-a869-e643166d855e",
+    "assets": [
+      "/_nuxt/entry.jSxiOaMQ.css",
+      "/_nuxt/onBonbSO.js",
+      "/_nuxt/DAlSYdt8.js",
+      "/_nuxt/PPVm8Dsz.js",
+      "/_nuxt/onBonbSO.js"
+    ]
+  },
+  {
+    "path": "/api/health",
+    "status": 200,
+    "totalMs": 219,
+    "bytes": 92
+  }
+]

@@ -72,6 +72,8 @@ const subcategoryDraftId = ref('')
 const savingCategory = ref(false)
 const selectedCategory = ref<string | null>(null)
 const selectedSubcategory = ref<string | null>(null)
+let templateLoadGeneration = 0
+let categoryListMutationGeneration = 0
 const showCategoryDialog = ref(false)
 const categoryDialogName = ref('')
 const categoryDialogTarget = ref<'create' | 'edit' | null>(null)
@@ -249,6 +251,7 @@ const createCatalogCategory = async () => {
       name,
       parentId: categoryDialogParentId.value || null
     })
+    categoryListMutationGeneration++
     categories.value = [
       ...categories.value.filter(item => item.id !== category.id),
       category
@@ -345,27 +348,42 @@ const formatTemplateStructure = (template: FlyerTemplateSummary): string => {
 }
 
 const loadTemplates = async () => {
+  const requestGeneration = ++templateLoadGeneration
   isLoading.value = true
   loadError.value = ''
   accountPreviewProfile.value = null
   accountPreviewProfileReady.value = false
   try {
     const headers = await getApiAuthHeaders()
+    const categoryMutationAtLoad = categoryListMutationGeneration
     const categoriesRequest = listFlyerTemplateCategories(headers).catch(() => [])
+    void categoriesRequest.then((loadedCategories) => {
+      if (requestGeneration !== templateLoadGeneration) return
+      if (categoryMutationAtLoad === categoryListMutationGeneration) {
+        categories.value = loadedCategories
+        return
+      }
+      const mergedCategories = new Map(loadedCategories.map(category => [category.id, category]))
+      categories.value.forEach(category => mergedCategories.set(category.id, category))
+      categories.value = [...mergedCategories.values()]
+    })
     const profileRequest = $fetch<any>('/api/profile', { headers }).catch(() => null)
     const [models, profile] = await Promise.all([
       listFlyerTemplates(headers, { library: true }),
       profileRequest
     ])
+    if (requestGeneration !== templateLoadGeneration) return
     templates.value = models
     accountPreviewProfile.value = profile
-    categories.value = await categoriesRequest
   } catch (error: any) {
+    if (requestGeneration !== templateLoadGeneration) return
     loadError.value = String(error?.data?.statusMessage || error?.message || 'Não foi possível carregar os modelos.')
     templates.value = []
   } finally {
-    accountPreviewProfileReady.value = true
-    isLoading.value = false
+    if (requestGeneration === templateLoadGeneration) {
+      accountPreviewProfileReady.value = true
+      isLoading.value = false
+    }
   }
 }
 
@@ -499,7 +517,7 @@ onUnmounted(() => {
     <header class="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <div class="flex min-w-0 items-center gap-3">
-          <NuxtLink to="/" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600">
+          <NuxtLink prefetch-on="interaction" to="/" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600">
             <ArrowLeft class="h-4 w-4" />
           </NuxtLink>
           <div class="min-w-0">
@@ -629,6 +647,8 @@ onUnmounted(() => {
                 v-if="accountPreviewProfileReady"
                 :key="`${template.id}:${accountPreviewProfile?.id || 'account'}`"
                 :template-id="template.id"
+                :gallery-preview-url="template.gallery_preview_url"
+                :revision="template.updated_at"
                 :profile="accountPreviewProfile"
                 :profile-ready="accountPreviewProfileReady"
                 :eager="index < 4"
@@ -695,7 +715,7 @@ onUnmounted(() => {
                   <Zap v-else class="h-3.5 w-3.5" />
                   Usar rápido
                 </button>
-                <NuxtLink :to="`/editor/${template.id}`" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" title="Editar no modo avançado">
+                <NuxtLink prefetch-on="interaction" :to="`/editor/${template.id}`" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" title="Editar no modo avançado">
                   <Pencil class="h-4 w-4" />
                 </NuxtLink>
                 <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" title="Duplicar modelo" @click="duplicateTemplate(template)">

@@ -5,7 +5,7 @@ export const isSplitFooterValidity = (object: any): boolean =>
   ['split-footer', 'calendar-card', 'inline-footer', 'offer-banner', 'reference-ribbon'].includes(object?.quickValidityLayout) ||
   (object?.name === 'dynamic-validity' && object?.quickDataField === 'validity')
 
-export const splitFooterValidityText = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; layout?: string; dateFormat?: OfferDateFormat }) => {
+export const splitFooterValidityText = (value: { startDate?: string; endDate?: string; mode?: string; whileStocks?: boolean; layout?: string; dateFormat?: OfferDateFormat; copyStyle?: string }) => {
   if (value.dateFormat === 'hidden') return { heading: '', period: '', stock: '' }
   if (value.layout === 'reference-ribbon') return referenceValidityCopy(value)
   const parse = (raw?: string) => {
@@ -43,8 +43,11 @@ export const splitFooterValidityText = (value: { startDate?: string; endDate?: s
   }
   if (value.layout === 'offer-banner') {
     const singleDay = value.mode === 'single_day' || !start || !end || value.startDate === value.endDate
-    return { heading: stocksOnly ? 'OFERTAS VÁLIDAS' : singleDay ? 'OFERTAS VÁLIDAS NO DIA' : 'OFERTAS VÁLIDAS DE', period,
-      stock: !stocksOnly && value.whileStocks !== false ? 'OU ENQUANTO DURAREM OS ESTOQUES' : '' }
+    // Estilo "padded": dias com dois dígitos e aviso de estoque sem o "OU", como em artes de referência.
+    const padded = value.copyStyle === 'padded'
+    return { heading: stocksOnly ? 'OFERTAS VÁLIDAS' : singleDay ? 'OFERTAS VÁLIDAS NO DIA' : 'OFERTAS VÁLIDAS DE',
+      period: padded && !stocksOnly && value.dateFormat !== 'long' ? period.replace(/\b(\d)\b/g, '0$1') : period,
+      stock: !stocksOnly && value.whileStocks !== false ? `${padded ? '' : 'OU '}ENQUANTO DURAREM OS ESTOQUES` : '' }
   }
   return { heading: stocksOnly ? 'OFERTA VÁLIDA' : 'OFERTA VÁLIDA DE', period,
     stock: !stocksOnly && value.whileStocks !== false ? 'OU ENQUANTO DURAREM OS ESTOQUES' : '' }
@@ -61,7 +64,7 @@ export const resolveSplitFooterValidityText = (
   siblings: any[],
   value: Parameters<typeof splitFooterValidityText>[0]
 ): string => {
-  const copy = splitFooterValidityText({ ...value, layout: object?.quickValidityLayout })
+  const copy = splitFooterValidityText({ ...value, layout: object?.quickValidityLayout, copyStyle: object?.quickValidityCopyStyle })
   if (!copy.period) return ''
   if (object?.quickValidityLayout === 'inline-footer') {
     return [copy.heading, copy.period, copy.stock].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()

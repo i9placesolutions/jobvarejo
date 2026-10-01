@@ -9,6 +9,7 @@ import {
   type BusinessEntry,
 } from '~/utils/businessProfile'
 import { BUSINESS_PAYMENT_CARD_OPTIONS } from '~/utils/paymentCards'
+import { formatBrazilWhatsApp } from '~/utils/whatsapp-auth'
 import { paymentBrandSvg } from '~/utils/paymentBrandSvg'
 
 definePageMeta({
@@ -117,8 +118,9 @@ const loadProfile = async () => {
     profile.value = await $fetch<any>('/api/profile', { headers })
     const normalized = normalizeBusinessProfile(profile.value?.business_profile)
     Object.assign(form, normalized)
+    form.whatsappNumbers = form.whatsappNumbers.map(entry => ({ ...entry, value: formatBrazilWhatsApp(entry.value) }))
     onboardingAddress.value = normalized.address
-    onboardingWhatsApp.value = normalized.whatsapp
+    onboardingWhatsApp.value = formatBrazilWhatsApp(normalized.whatsapp)
     onboardingCompanyName.value = form.companyName || String(profile.value?.name || '')
     if (Array.isArray(profile.value?.selected_modules) && profile.value.selected_modules.length) {
       selectedModules.value = profile.value.selected_modules
@@ -234,8 +236,9 @@ const saveProfile = async () => {
     profile.value = response
     const saved = normalizeBusinessProfile(response?.business_profile)
     Object.assign(form, saved)
+    form.whatsappNumbers = form.whatsappNumbers.map(entry => ({ ...entry, value: formatBrazilWhatsApp(entry.value) }))
     onboardingAddress.value = saved.address
-    onboardingWhatsApp.value = saved.whatsapp
+    onboardingWhatsApp.value = formatBrazilWhatsApp(saved.whatsapp)
     onboardingCompanyName.value = saved.companyName
     ensureEntryDrafts()
     successMessage.value = isOnboarding.value ? 'Dados do estabelecimento e módulos salvos! Teste de 15 dias liberado.' : 'Cadastro comercial atualizado.'
@@ -293,7 +296,7 @@ onMounted(loadProfile)
         </button>
         <div class="brand">
           <span class="brand__mark"><Store class="h-4 w-4" /></span>
-          <div><strong>Cadastro da loja</strong><small>Perfil comercial nativo do JobVarejo</small></div>
+          <div><strong>Cadastro da loja</strong><small>Identidade da loja nos encartes e vídeos</small></div>
         </div>
         <NuxtLink class="back-link" :to="returnTarget">{{ returnLabel }}</NuxtLink>
       </div>
@@ -302,8 +305,8 @@ onMounted(loadProfile)
     <main class="page-main">
       <div class="page-intro">
         <p>{{ isOnboarding ? 'PRIMEIRO PASSO' : 'IDENTIDADE COMERCIAL' }}</p>
-        <h1>{{ isOnboarding ? 'Configure sua loja antes do primeiro encarte' : 'Dados que aparecem nos seus encartes' }}</h1>
-        <span>{{ isOnboarding ? 'Adicione sua logo, Instagram e endereço para usar nos encartes. Você poderá completar o cadastro depois.' : 'Salve uma vez e reutilize o cadastro nos próximos encartes da edição rápida.' }}</span>
+        <h1>{{ isOnboarding ? 'Configure sua loja antes do primeiro encarte' : 'Dados da loja para encartes e vídeos' }}</h1>
+        <span>{{ isOnboarding ? 'Adicione sua logo, Instagram e endereço para usar nos encartes. Você poderá completar o cadastro depois.' : 'Salve a identidade da loja para reutilizar nos novos encartes e vídeos. Artes já criadas mantêm os dados da edição.' }}</span>
       </div>
 
       <div v-if="errorMessage" class="feedback feedback--error"><X class="h-4 w-4" />{{ errorMessage }}</div>
@@ -325,7 +328,7 @@ onMounted(loadProfile)
           <div class="onboarding-fields">
             <label><span>Nome da empresa</span><input v-model="onboardingCompanyName" type="text" maxlength="160" placeholder="Supermercado Central" required /></label>
             <div class="form-grid">
-              <label><span>WhatsApp comercial</span><input v-model="onboardingWhatsApp" type="text" maxlength="80" placeholder="(11) 99999-9999" required /></label>
+              <label><span>WhatsApp comercial</span><input :value="onboardingWhatsApp" @input="onboardingWhatsApp = formatBrazilWhatsApp(($event.target as HTMLInputElement).value)" type="tel" inputmode="tel" placeholder="(11) 99999-9999" required /></label>
               <label><span>Instagram</span><input v-model="form.instagram" type="text" maxlength="120" placeholder="@sualoja" required /></label>
             </div>
             <label><span>Endereço completo</span><textarea v-model="onboardingAddress" rows="2" maxlength="300" placeholder="Rua, número, bairro, cidade - UF" required></textarea></label>
@@ -392,12 +395,13 @@ onMounted(loadProfile)
 
         <section v-if="!isOnboarding" class="profile-form surface">
           <div class="surface-title"><div><p>CONTATO</p><h2>Onde o cliente encontra você</h2></div></div>
+          <p class="surface-help">Os números e endereços são usados nas artes. O apelido serve apenas para identificar cada contato no cadastro. O primeiro da lista é o contato principal.</p>
           <div class="repeatable-grid">
             <div class="repeatable-field">
               <div class="field-heading"><span><MessageCircle class="field-icon" />WhatsApp</span><small>Você pode cadastrar até 8 números</small></div>
               <div v-for="(entry, index) in form.whatsappNumbers" :key="entry.id" class="repeatable-row">
-                <input v-model="entry.label" type="text" maxlength="60" :aria-label="`Nome do WhatsApp ${index + 1}`" placeholder="Ex.: Loja / Delivery" />
-                <input v-model="entry.value" type="text" maxlength="80" :aria-label="`Número do WhatsApp ${index + 1}`" placeholder="(00) 00000-0000" />
+                <label class="contact-value"><span>Número com DDD</span><input :value="entry.value" @input="entry.value = formatBrazilWhatsApp(($event.target as HTMLInputElement).value)" type="tel" inputmode="tel" :aria-label="`Número do WhatsApp ${index + 1}`" placeholder="(00) 00000-0000" /></label>
+                <label class="contact-label"><span>Apelido (opcional)</span><input v-model="entry.label" type="text" maxlength="60" :aria-label="`Apelido do WhatsApp ${index + 1} (opcional)`" placeholder="Ex.: Delivery" /></label>
                 <button class="remove-entry" type="button" :aria-label="`Remover WhatsApp ${index + 1}`" @click="removeEntry('whatsapp', entry.id)"><Trash2 class="h-4 w-4" /></button>
               </div>
               <button class="add-entry" type="button" :disabled="form.whatsappNumbers.length >= 8" @click="addEntry('whatsapp')"><Plus class="h-4 w-4" />Adicionar WhatsApp</button>
@@ -408,8 +412,8 @@ onMounted(loadProfile)
             <div class="repeatable-field repeatable-field--wide">
               <div class="field-heading"><span><MapPin class="field-icon" />Endereço</span><small>Cadastre filiais, lojas ou mais de um endereço</small></div>
               <div v-for="(entry, index) in form.addresses" :key="entry.id" class="repeatable-row repeatable-row--address">
-                <input v-model="entry.label" type="text" maxlength="60" :aria-label="`Nome do endereço ${index + 1}`" placeholder="Ex.: Loja centro" />
-                <textarea v-model="entry.value" rows="2" maxlength="300" :aria-label="`Endereço ${index + 1}`" placeholder="Rua, número, bairro e cidade"></textarea>
+                <label class="contact-value"><span>Endereço completo</span><textarea v-model="entry.value" rows="2" maxlength="300" :aria-label="`Endereço ${index + 1}`" placeholder="Rua, número, bairro e cidade"></textarea></label>
+                <label class="contact-label"><span>Apelido (opcional)</span><input v-model="entry.label" type="text" maxlength="60" :aria-label="`Apelido do endereço ${index + 1} (opcional)`" placeholder="Ex.: Filial centro" /></label>
                 <button class="remove-entry" type="button" :aria-label="`Remover endereço ${index + 1}`" @click="removeEntry('address', entry.id)"><Trash2 class="h-4 w-4" /></button>
               </div>
               <button class="add-entry" type="button" :disabled="form.addresses.length >= 8" @click="addEntry('address')"><Plus class="h-4 w-4" />Adicionar endereço</button>
@@ -488,5 +492,15 @@ onMounted(loadProfile)
 .trial-tag { align-self: flex-start; background: #dcfce7; color: #15803d; font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; letter-spacing: .05em; }
 @media (max-width: 768px) {
   .modules-selection-grid { grid-template-columns: 1fr; }
+}
+
+.repeatable-row, .repeatable-row--address { grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr) 34px; align-items: end; }
+.repeatable-row label { display: grid; gap: 6px; min-width: 0; }
+.repeatable-row label > span { color: #64748b; font-size: 11px; font-weight: 600; }
+@media (max-width: 700px) {
+  .repeatable-row, .repeatable-row--address { grid-template-columns: minmax(0, 1fr) 34px; }
+  .repeatable-row .contact-value { grid-column: 1; grid-row: 1; }
+  .repeatable-row .contact-label { grid-column: 1; grid-row: 2; }
+  .repeatable-row .remove-entry { grid-column: 2; grid-row: 1; }
 }
 </style>

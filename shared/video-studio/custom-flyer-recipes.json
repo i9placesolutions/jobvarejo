@@ -4334,11 +4334,12 @@
     "ink": "#222222",
     "label": "banner",
     "labelNames": [
-      "Mês da Economia — Etiqueta"
+      "Fim de Semana Maluco — Oval preta e amarela · página 2",
+      "Barlow Black"
     ],
-    "background": "operacao-fecha-mes-amarela-background.png",
-    "seal": "operacao-fecha-mes-amarela-seal.png",
-    "sealAspect": 1,
+    "background": "operacao-fecha-mes-reference-20261001-background.png",
+    "seal": "operacao-fecha-mes-reference-20261001-seal.png",
+    "sealAspect": 0.916030534351145,
     "posterLayout": "thematic-seal",
     "music": "retail-drive",
     "musicStyle": "synth",
@@ -4350,7 +4351,7 @@
       "finish": "clean",
       "product": "slam",
       "text": "stomp",
-      "price": "slam",
+      "price": "drop",
       "camera": "impact",
       "atmosphere": [
         "spotlights"
@@ -4360,7 +4361,7 @@
     },
     "semanticMotifs": false,
     "backgroundKind": "spotlight",
-    "revision": 1,
+    "revision": 2,
     "layoutName": "Operação Fecha Mês — Amarelo e Grafite",
     "vertical": {
       "seal": [
@@ -4451,7 +4452,7 @@
       ]
     },
     "preferSingleProduct": true,
-    "backgroundHorizontal": "operacao-fecha-mes-amarela-wide.png",
+    "backgroundHorizontal": "operacao-fecha-mes-reference-20261001-background.png",
     "posterPriceCornerRadius": 0.01,
     "posterRetailFinish": {
       "labelFill": "#323232",
@@ -11088,5 +11089,2622 @@
     },
     "preserveBrandLayout": true,
     "backgroundGradient": "radial-gradient(ellipse at 50% 18%, #ffd22224, transparent 55%), linear-gradient(145deg, #171819, #080b12)"
+  },
+  {
+    "id": "flyer-4ac789c8-71f4-4a8b-96ae-8d9e703f0282",
+    "sourceProject": "4ac789c8-71f4-4a8b-96ae-8d9e703f0282",
+    "name": "Baixa Tudo Total — Verde Neon",
+    "campaign": "BAIXA TUDO TOTAL — VERDE NEON",
+    "accent": "#aaff00",
+    "base": "#093108",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Preto/Amarelo"
+    ],
+    "background": "collection-20261001-01-background.png",
+    "seal": "collection-20261001-01-seal.png",
+    "sealAspect": 1.4,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100100,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Baixa Tudo Total — Verde Neon",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-01-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#093108",
+      "labelInk": "#ffffff",
+      "labelEdge": "#aaff00"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-f6dcbbe6-f9b1-4d09-8e21-31fe305cbbe5",
+    "sourceProject": "f6dcbbe6-f9b1-4d09-8e21-31fe305cbbe5",
+    "name": "Promoção Só Hoje — Vermelha",
+    "campaign": "PROMOÇÃO SÓ HOJE — VERMELHA",
+    "accent": "#ffdd00",
+    "base": "#a00606",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Varejo — Vermelha com Borda Amarela"
+    ],
+    "background": "collection-20261001-02-background.png",
+    "seal": "collection-20261001-02-seal.png",
+    "sealAspect": 1.5,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100101,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Promoção Só Hoje — Vermelha",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-02-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#a00606",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdd00"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-1a014da8-d0f0-483b-b56c-cf8f3a49a40b",
+    "sourceProject": "1a014da8-d0f0-483b-b56c-cf8f3a49a40b",
+    "name": "24h de Preços Imbatíveis — Laranja",
+    "campaign": "24H DE PREÇOS IMBATÍVEIS — LARANJA",
+    "accent": "#ffad00",
+    "base": "#181818",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "preto/amarelo 3d"
+    ],
+    "background": "collection-20261001-03-background.png",
+    "seal": "collection-20261001-03-seal.png",
+    "sealAspect": 1.1886956521739132,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100102,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "24h de Preços Imbatíveis — Laranja",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-03-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#181818",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffad00"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-1c9b7763-fa63-436b-9f2d-dfe1875ed04d",
+    "sourceProject": "1c9b7763-fa63-436b-9f2d-dfe1875ed04d",
+    "name": "Mega Ofertas — Azul e Amarelo",
+    "campaign": "MEGA OFERTAS — AZUL E AMARELO",
+    "accent": "#ffe600",
+    "base": "#0649ab",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "Semana Imbatível — Etiqueta"
+    ],
+    "background": "collection-20261001-04-background.png",
+    "seal": "collection-20261001-04-seal.png",
+    "sealAspect": 1,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100103,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Mega Ofertas — Azul e Amarelo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-04-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#0649ab",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe600"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-78be56e6-beee-4095-adcb-871ef579c199",
+    "sourceProject": "78be56e6-beee-4095-adcb-871ef579c199",
+    "name": "Aqui Tem Grandes Ofertas — Azul",
+    "campaign": "AQUI TEM GRANDES OFERTAS — AZUL",
+    "accent": "#ffda00",
+    "base": "#0343a1",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "Comece o Mês de Carrinho Cheio — Etiqueta"
+    ],
+    "background": "collection-20261001-05-background.png",
+    "seal": "collection-20261001-05-seal.png",
+    "sealAspect": 1.2,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100104,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Aqui Tem Grandes Ofertas — Azul",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-05-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#0343a1",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda00"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-15edbe91-acc8-4d49-9f0e-e61992c07421",
+    "sourceProject": "15edbe91-acc8-4d49-9f0e-e61992c07421",
+    "name": "Semana de Ofertas — Azul",
+    "campaign": "SEMANA DE OFERTAS — AZUL",
+    "accent": "#ffde00",
+    "base": "#0250b5",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "Venha Fazer Economia — Etiqueta"
+    ],
+    "background": "collection-20261001-06-background.png",
+    "seal": "collection-20261001-06-seal.png",
+    "sealAspect": 1.1942508710801394,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100105,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Semana de Ofertas — Azul",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-06-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#0250b5",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffde00"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-4a578d49-087d-4922-a9f6-9f2376c099cc",
+    "sourceProject": "4a578d49-087d-4922-a9f6-9f2376c099cc",
+    "name": "Black Friday — Ouro e Prata",
+    "campaign": "BLACK FRIDAY — OURO E PRATA",
+    "accent": "#ffcf35",
+    "base": "#131313",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "Fim de Semana Maluco — Retangular preta e amarela · página 2"
+    ],
+    "background": "collection-20261001-07-background.png",
+    "seal": "collection-20261001-07-seal.png",
+    "sealAspect": 1.5,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100106,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Black Friday — Ouro e Prata",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-07-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#131313",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffcf35"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-d840b59b-6b17-4897-a7c3-9c312c756e4d",
+    "sourceProject": "d840b59b-6b17-4897-a7c3-9c312c756e4d",
+    "name": "Black Friday — Vermelho e Preto",
+    "campaign": "BLACK FRIDAY — VERMELHO E PRETO",
+    "accent": "#ff2525",
+    "base": "#171717",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "PRETA VERMELHA AMARELA"
+    ],
+    "background": "collection-20261001-08-background.png",
+    "seal": "collection-20261001-08-seal.png",
+    "sealAspect": 1.5,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100107,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Black Friday — Vermelho e Preto",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-08-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#171717",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ff2525"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-e6b1d002-8bc2-4d6c-9678-6840f7f169a3",
+    "sourceProject": "e6b1d002-8bc2-4d6c-9678-6840f7f169a3",
+    "name": "Black Friday Antecipado — Ouro",
+    "campaign": "BLACK FRIDAY ANTECIPADO — OURO",
+    "accent": "#ffda4d",
+    "base": "#131313",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "Fim de Semana Maluco — Oval preta e amarela · página 2"
+    ],
+    "background": "collection-20261001-09-background.png",
+    "seal": "collection-20261001-09-seal.png",
+    "sealAspect": 1.1830008673026886,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100108,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Black Friday Antecipado — Ouro",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-09-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#131313",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffda4d"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-76386259-0a88-439e-b20e-b658acdff2a8",
+    "sourceProject": "76386259-0a88-439e-b20e-b658acdff2a8",
+    "name": "Comece o Mês Economizando — Clássico",
+    "campaign": "COMECE O MÊS ECONOMIZANDO — CLÁSSICO",
+    "accent": "#ffbd00",
+    "base": "#0649ae",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "Mês da Economia — Etiqueta"
+    ],
+    "background": "collection-20261001-10-background.png",
+    "seal": "collection-20261001-10-seal.png",
+    "sealAspect": 1.3072014585232452,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100109,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Comece o Mês Economizando — Clássico",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-10-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#0649ae",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffbd00"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-d90ab0ad-ac4b-40db-8fea-f4bc77801480",
+    "sourceProject": "d90ab0ad-ac4b-40db-8fea-f4bc77801480",
+    "name": "Comece o Mês Economizando — Calendário",
+    "campaign": "COMECE O MÊS ECONOMIZANDO — CALENDÁRIO",
+    "accent": "#ffca00",
+    "base": "#0652b8",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "Preço Baixo É Aqui — Etiqueta"
+    ],
+    "background": "collection-20261001-11-background.png",
+    "seal": "collection-20261001-11-seal.png",
+    "sealAspect": 0.9857482185273159,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100110,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Comece o Mês Economizando — Calendário",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-11-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#0652b8",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffca00"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-df643073-16d3-4c30-9417-883bb287ff7c",
+    "sourceProject": "df643073-16d3-4c30-9417-883bb287ff7c",
+    "name": "Começou o Mês — Azul e Amarelo",
+    "campaign": "COMEÇOU O MÊS — AZUL E AMARELO",
+    "accent": "#ffdc00",
+    "base": "#0251b6",
+    "ink": "#111827",
+    "label": "banner",
+    "labelNames": [
+      "É Preço Baixo Todo Dia — Etiqueta"
+    ],
+    "background": "collection-20261001-12-background.png",
+    "seal": "collection-20261001-12-seal.png",
+    "sealAspect": 1.2,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100111,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Começou o Mês — Azul e Amarelo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "collection-20261001-12-background.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#0251b6",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffdc00"
+    },
+    "preserveBrandLayout": true,
+    "appearanceDefaults": {
+      "contactColor": "#18324a"
+    }
+  },
+  {
+    "id": "flyer-2932f305-036e-46a8-a0cc-acd1c1aa08e2",
+    "sourceProject": "2932f305-036e-46a8-a0cc-acd1c1aa08e2",
+    "name": "Super Desconto — Laranja e Preto",
+    "campaign": "SUPER DESCONTO — LARANJA E PRETO",
+    "accent": "#ff8a1c",
+    "base": "#140700",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "preto/amarelo 3d"
+    ],
+    "background": "rodrigues-20261001-super-desconto-background.png",
+    "seal": "rodrigues-20261001-super-desconto-seal.png",
+    "sealAspect": 1.2592592592592593,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100140,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Super Desconto — Laranja e Preto",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "rodrigues-20261001-super-desconto-background-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#181818",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ff8a1c"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-26cfe1c9-519a-44e6-a501-681af6a584b9",
+    "sourceProject": "26cfe1c9-519a-44e6-a501-681af6a584b9",
+    "name": "Operação Detona Preço — Vermelho e Amarelo",
+    "campaign": "OPERAÇÃO DETONA PREÇO — VERMELHO E AMARELO",
+    "accent": "#ffd21f",
+    "base": "#c40d12",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Varejo — Vermelha com Borda Amarela"
+    ],
+    "background": "rodrigues-20261001-detona-preco-background.png",
+    "seal": "rodrigues-20261001-detona-preco-seal.png",
+    "sealAspect": 1.6623376623376624,
+    "posterLayout": "thematic-seal",
+    "music": "retail-bounce",
+    "musicStyle": "groove",
+    "bpm": 128,
+    "seed": 26100141,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights",
+        "spark-burst"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Operação Detona Preço — Vermelho e Amarelo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "rodrigues-20261001-detona-preco-background-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#c40d12",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd21f"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-46055b0f-1422-4ba5-8d02-2bd9b5407e3a",
+    "sourceProject": "46055b0f-1422-4ba5-8d02-2bd9b5407e3a",
+    "name": "Queima de Estoque — Vermelho e Preto",
+    "campaign": "QUEIMA DE ESTOQUE — VERMELHO E PRETO",
+    "accent": "#e3161b",
+    "base": "#141414",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "PRETA VERMELHA AMARELA"
+    ],
+    "background": "rodrigues-20261001-queima-estoque-background.png",
+    "seal": "rodrigues-20261001-queima-estoque-seal.png",
+    "sealAspect": 1.2296296296296296,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100142,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights",
+        "embers"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 1,
+    "layoutName": "Queima de Estoque — Vermelho e Preto",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "rodrigues-20261001-queima-estoque-background-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#171717",
+      "labelInk": "#ffffff",
+      "labelEdge": "#e3161b"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-c674c107-e625-406f-b878-888631b43805",
+    "sourceProject": "c674c107-e625-406f-b878-888631b43805",
+    "name": "Limpa Estoque — Amarelo e Preto",
+    "campaign": "LIMPA ESTOQUE — AMARELO E PRETO",
+    "accent": "#ffcc00",
+    "base": "#111111",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Preto/Amarelo"
+    ],
+    "background": "rodrigues-20261001-limpa-estoque-background.png",
+    "seal": "rodrigues-20261001-limpa-estoque-seal.png",
+    "sealAspect": 1.236130867709815,
+    "posterLayout": "thematic-seal",
+    "music": "retail-bounce",
+    "musicStyle": "groove",
+    "bpm": 128,
+    "seed": 26100143,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "industrial",
+    "revision": 1,
+    "layoutName": "Limpa Estoque — Amarelo e Preto",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "rodrigues-20261001-limpa-estoque-background-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#111111",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffcc00"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-f9a1d735-c13a-4d31-afec-8210b563112e",
+    "sourceProject": "f9a1d735-c13a-4d31-afec-8210b563112e",
+    "name": "48H de Preços Imbatíveis — Vermelho e Preto",
+    "campaign": "48H DE PREÇOS IMBATÍVEIS — VERMELHO E PRETO",
+    "accent": "#e3161b",
+    "base": "#0b0b0b",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Preço Baixo É Aqui — Etiqueta",
+      "PRETA VERMELHA AMARELA"
+    ],
+    "background": "rodrigues-20261001-48h-background.png",
+    "seal": "rodrigues-20261001-48h-seal.png",
+    "sealAspect": 1.0798934753661784,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100144,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "rise",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "clock",
+    "revision": 1,
+    "layoutName": "48H de Preços Imbatíveis — Vermelho e Preto",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "rodrigues-20261001-48h-background-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#c40d12",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffffff"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-5d92cb51-cfa8-43f7-93fc-379036313ccd",
+    "sourceProject": "5d92cb51-cfa8-43f7-93fc-379036313ccd",
+    "name": "Última Chance — Sirene Vermelho e Amarelo",
+    "campaign": "ÚLTIMA CHANCE — SIRENE VERMELHO E AMARELO",
+    "accent": "#ffd21f",
+    "base": "#a30a0a",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Fim de Semana Maluco — Retangular preta e amarela · página 2"
+    ],
+    "background": "rodrigues-20261001-ultima-chance-background.png",
+    "seal": "rodrigues-20261001-ultima-chance-seal.png",
+    "sealAspect": 1.3407738095238095,
+    "posterLayout": "thematic-seal",
+    "music": "retail-bounce",
+    "musicStyle": "groove",
+    "bpm": 128,
+    "seed": 26100145,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "whip-left",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "alarm",
+    "revision": 1,
+    "layoutName": "Última Chance — Sirene Vermelho e Amarelo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "rodrigues-20261001-ultima-chance-background-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#111111",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd21f"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-4c988cb9-53e0-4655-b5e7-7f62d5ba3b2f",
+    "sourceProject": "4c988cb9-53e0-4655-b5e7-7f62d5ba3b2f",
+    "name": "Vem Pagar Menos — Azul e Amarelo",
+    "campaign": "VEM PAGAR MENOS — AZUL E AMARELO",
+    "accent": "#ffd400",
+    "base": "#0a3fd0",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Semana Imbatível — Etiqueta"
+    ],
+    "background": "rodrigues-20261001-vem-pagar-menos-background.png",
+    "seal": "rodrigues-20261001-vem-pagar-menos-seal.png",
+    "sealAspect": 1.108187134502924,
+    "posterLayout": "thematic-seal",
+    "music": "retail-drive",
+    "musicStyle": "synth",
+    "bpm": 128,
+    "seed": 26100146,
+    "transition": "shutter",
+    "motion": {
+      "speed": "balanced",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "spotlights"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "metal-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "spotlight",
+    "revision": 1,
+    "layoutName": "Vem Pagar Menos — Azul e Amarelo",
+    "vertical": {
+      "seal": [
+        145,
+        70,
+        790,
+        550
+      ],
+      "logo": [
+        95,
+        1510,
+        890,
+        295
+      ],
+      "product": [
+        60,
+        665,
+        960,
+        620
+      ],
+      "name": [
+        85,
+        1153,
+        910,
+        75
+      ],
+      "condition": [
+        160,
+        1152,
+        760,
+        30
+      ],
+      "price": [
+        85,
+        1240,
+        910,
+        265
+      ],
+      "validity": [
+        70,
+        1817,
+        940,
+        40
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        50,
+        630,
+        610
+      ],
+      "logo": [
+        40,
+        685,
+        650,
+        270
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ],
+      "validity": [
+        60,
+        970,
+        610,
+        50
+      ]
+    },
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "rodrigues-20261001-vem-pagar-menos-background-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#0649ab",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffe600"
+    },
+    "preserveBrandLayout": true
   }
 ]

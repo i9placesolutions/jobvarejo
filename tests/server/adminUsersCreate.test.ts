@@ -49,6 +49,22 @@ describe('POST /api/admin/users — cadastro de empresa', () => {
     expect(result.user.email).toBe(login.email)
   })
 
+  it('cria empresa com acesso por WhatsApp sem email e não expõe o email técnico', async () => {
+    const body = { name: 'Maria Silva', whatsapp: '(69) 3544-2251', password: 'senha-inicial-forte', role: 'user', companyName: 'Mercado Central', hasPlatformAccess: true }
+    mocks.body.mockResolvedValue(body)
+    mocks.query.mockResolvedValue({ rows: [{ id, email: 'internal-whatsapp-556935442251@jobvarejo.invalid', internal_only: false }] })
+    const result = await handler({} as any)
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ email: 'internal-whatsapp-556935442251@jobvarejo.invalid', whatsapp: '+556935442251', passwordHash: 'hash-de-teste', role: 'user' }), expect.anything())
+    expect(result.user.email).toBe('')
+  })
+
+  it('rejeita WhatsApp já cadastrado antes de criar a identidade', async () => {
+    mocks.body.mockResolvedValue({ ...login, role: 'user', companyName: 'Mercado Central', hasPlatformAccess: true })
+    mocks.whatsapp.mockResolvedValue({ id: 'existente' })
+    await expect(handler({} as any)).rejects.toMatchObject({ statusCode: 409 })
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
+
   it('recusa editor sem suporte no banco antes de criar a identidade', async () => {
     mocks.body.mockResolvedValue({ ...login, role: 'editor', permissions: { videos: { edit: true } } })
     mocks.query.mockResolvedValue({ rows: [{ supported: false }] })

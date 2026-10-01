@@ -75,11 +75,14 @@ RUN /opt/image-worker/bin/python -m playwright install-deps chromium \
 RUN /opt/image-worker/bin/python -m playwright install --only-shell chromium
 COPY workers/download_model.py /tmp/download_model.py
 ARG BIREFNET_MODEL_URL=https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx
+ARG BIREFNET_GENERAL_MODEL_URL=https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-epoch_244.onnx
 RUN --mount=type=cache,target=/root/.cache/birefnet \
     mkdir -p /opt/image-models \
     && /opt/image-worker/bin/python /tmp/download_model.py "$BIREFNET_MODEL_URL" /root/.cache/birefnet/birefnet-general-lite.onnx \
     && cp /root/.cache/birefnet/birefnet-general-lite.onnx /opt/image-models/ \
-    && /opt/image-worker/bin/python -c "from rembg import new_session; new_session('birefnet-general-lite', providers=['CPUExecutionProvider'])"
+    && /opt/image-worker/bin/python /tmp/download_model.py "$BIREFNET_GENERAL_MODEL_URL" /root/.cache/birefnet/birefnet-general.onnx \
+    && cp /root/.cache/birefnet/birefnet-general.onnx /opt/image-models/ \
+    && /opt/image-worker/bin/python -c "from rembg import new_session; new_session('birefnet-general-lite', providers=['CPUExecutionProvider']); new_session('birefnet-general', providers=['CPUExecutionProvider'])"
 
 
 WORKDIR /app

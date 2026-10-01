@@ -2,6 +2,7 @@ import { requireAdminUser } from '../../../utils/auth'
 import { enforceRateLimit } from '../../../utils/rate-limit'
 import { pgQuery } from '../../../utils/postgres'
 import { normalizeEditorPermissions } from '../../../../shared/access-control'
+import { isTechnicalAdminEmail } from '../../../utils/admin-users'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireAdminUser(event)
@@ -24,5 +25,5 @@ export default defineEventHandler(async (event) => {
      ORDER BY p.created_at DESC NULLS LAST, p.id DESC
      LIMIT 100
   `, [search, pattern])
-  return { users: rows.map(row => ({ ...row, permissions: normalizeEditorPermissions(row.permissions) })) }
+  return { users: rows.map(row => ({ ...row, email: isTechnicalAdminEmail(row.email) ? '' : row.email, permissions: normalizeEditorPermissions(row.permissions) })) }
 })

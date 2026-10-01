@@ -5,18 +5,20 @@ export const useLogoPreference = () => {
   const { user } = useAuth()
   const ownerId = useState<string>('logo-preference-owner', () => '')
   const { getApiAuthHeaders } = useApiAuth()
+  const businessProfile = useBusinessProfile()
   let queue = Promise.resolve()
   let revision = 0
   const accept = (payload: any) => {
     if (payload?.id && user.value?.id && payload.id !== user.value.id) return
     if (payload?.id) ownerId.value = payload.id
+    businessProfile.accept(payload)
     preference.value = normalizeLogoPreference((payload?.business_profile ?? payload)?.logoPreference)
   }
   const refresh = async () => {
     const version = revision
     const accountId = user.value?.id
     try {
-      const result = await $fetch('/api/profile', { headers: await getApiAuthHeaders() })
+      const result = await businessProfile.load()
       if (version === revision && accountId === user.value?.id) accept(result)
     } catch { /* Authentication may not exist on a public preview. */ }
   }
@@ -47,7 +49,6 @@ export const useLogoPreference = () => {
   if (import.meta.client) {
     const update = (event: Event) => accept((event as CustomEvent).detail)
     onMounted(() => {
-      void refresh()
       window.addEventListener('business-profile:updated', update)
       window.addEventListener('focus', refresh)
     })

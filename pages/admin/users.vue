@@ -2,6 +2,8 @@
 import { ACCESS_ACTIONS, ACCESS_AREAS, ACCESS_AREA_ACTIONS, type AccessAction, type AccessArea, type EditorPermissions } from '~/shared/access-control'
 import type { UserRole } from '~/types/auth'
 import AdminWorkspaceShell from '~/components/AdminWorkspaceShell.vue'
+import { Eye, EyeOff } from 'lucide-vue-next'
+import { formatBrazilWhatsApp } from '~/utils/whatsapp-auth'
 
 definePageMeta({ layout: false, middleware: ['auth', 'admin'], ssr: false })
 useHead({ title: 'Usuários e acessos | JobVarejo' })
@@ -30,6 +32,7 @@ const notice = ref('')
 const editingId = ref<string | null>(null)
 const editingInternalOnly = ref(false)
 const editingSuperAdmin = ref(false)
+const passwordVisible = ref(false)
 const form = reactive({ name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user' as UserRole, hasPlatformAccess: false, is_active: true })
 const requiresLogin = computed(() => form.role !== 'user' || form.hasPlatformAccess)
 const permissions = reactive<Record<AccessArea, Record<AccessAction, boolean>>>(Object.fromEntries(
@@ -50,6 +53,7 @@ const resetForm = () => {
   editingId.value = null
   editingInternalOnly.value = false
   editingSuperAdmin.value = false
+  passwordVisible.value = false
   Object.assign(form, { name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user', hasPlatformAccess: false, is_active: true })
   clearPermissions()
   error.value = ''
@@ -59,13 +63,18 @@ const editUser = (user: ManagedUser) => {
   editingId.value = user.id
   editingInternalOnly.value = user.internal_only === true
   editingSuperAdmin.value = user.role === 'super_admin'
-  Object.assign(form, { name: user.internal_only ? '' : user.name, companyName: user.company_name || '', email: user.email, whatsapp: user.whatsapp || '', password: '', role: user.role, hasPlatformAccess: !user.internal_only, is_active: user.is_active })
+  passwordVisible.value = false
+  Object.assign(form, { name: user.internal_only ? '' : user.name, companyName: user.company_name || '', email: user.email, whatsapp: formatBrazilWhatsApp(user.whatsapp || ''), password: '', role: user.role, hasPlatformAccess: !user.internal_only, is_active: user.is_active })
   clearPermissions()
   for (const area of ACCESS_AREAS) for (const action of ACCESS_ACTIONS) {
     permissions[area.id][action.id] = user.permissions?.[area.id]?.[action.id] === true
   }
   error.value = ''
   window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+const formatWhatsAppInput = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  form.whatsapp = formatBrazilWhatsApp(input.value)
 }
 const load = async () => {
   loading.value = true
@@ -109,7 +118,6 @@ const save = async () => {
           name: form.name,
           companyName: form.companyName,
           hasPlatformAccess: form.hasPlatformAccess,
-          email: form.email,
           whatsapp: form.whatsapp,
           role: form.role,
           is_active: form.is_active,
@@ -122,7 +130,7 @@ const save = async () => {
     } else {
       await $fetch('/api/admin/users', {
         method: 'POST',
-        body: { ...form, permissions: selectedPermissions() }
+        body: { ...form, email: form.role === 'user' ? '' : form.email, permissions: selectedPermissions() }
       })
       notice.value = form.role === 'user' ? 'Empresa criada. Ela já está disponível para os editores.' : 'Usuário criado.'
     }
@@ -171,9 +179,17 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
           <p v-if="form.role === 'user' && !requiresLogin" class="users-help">Uso interno: a empresa ficará disponível para administradores e editores, sem login próprio.</p>
           <template v-if="requiresLogin">
             <label>{{ form.role === 'user' ? 'Nome do responsável' : 'Nome' }} <input v-model="form.name" required minlength="2" maxlength="120" autocomplete="off"></label>
-            <label>E-mail <input v-model="form.email" required type="email" :disabled="!!editingId && !editingInternalOnly" autocomplete="off"></label>
-            <label>WhatsApp para entrar <input v-model="form.whatsapp" required type="tel" :disabled="!!editingId && !editingInternalOnly" placeholder="(64) 99999-9999" autocomplete="off"></label>
-            <label>{{ editingId && !editingInternalOnly ? 'Nova senha (opcional)' : 'Senha inicial' }} <input v-model="form.password" type="password" :required="!editingId || editingInternalOnly" minlength="8" autocomplete="new-password"></label>
+            <label v-if="form.role !== 'user'">E-mail <input v-model="form.email" required type="email" :disabled="!!editingId && !editingInternalOnly" autocomplete="off"></label>
+            <label>WhatsApp para entrar <input v-model="form.whatsapp" required type="tel" :disabled="!!editingId && !editingInternalOnly" placeholder="(64) 99999-9999" autocomplete="off" @input="formatWhatsAppInput"></label>
+            <label>{{ editingId && !editingInternalOnly ? 'Nova senha (opcional)' : 'Senha inicial' }}
+              <span class="users-password-field">
+                <input v-model="form.password" :type="passwordVisible ? 'text' : 'password'" :required="!editingId || editingInternalOnly" minlength="8" autocomplete="new-password">
+                <button type="button" class="users-password-toggle" :aria-label="passwordVisible ? 'Ocultar senha' : 'Mostrar senha'" :aria-pressed="passwordVisible" @click="passwordVisible = !passwordVisible">
+                  <EyeOff v-if="passwordVisible" aria-hidden="true" />
+                  <Eye v-else aria-hidden="true" />
+                </button>
+              </span>
+            </label>
           </template>
           <label v-if="editingId" class="users-checkbox"><input v-model="form.is_active" type="checkbox" :disabled="editingSuperAdmin || editingId === auth.user.value?.id"> Usuário ativo</label>
 
@@ -226,6 +242,10 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
 .users-form > label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
 .users-help { grid-column: 1 / -1; margin: -4px 0 0; color: #64748b; font-size: 13px; }
 .users-form input:not([type=checkbox]), .users-form select, .users-search { box-sizing: border-box; width: 100%; height: 42px; min-height: 42px; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; font-size: 14px; line-height: 20px; }
+.users-password-field { position: relative; display: block; }
+.users-password-field input { padding-right: 42px !important; }
+.users-password-toggle { position: absolute; top: 50%; right: 7px; display: grid; width: 30px; height: 30px; place-items: center; transform: translateY(-50%); color: #64748b; }
+.users-password-toggle svg { width: 17px; height: 17px; }
 .users-form select { appearance: none; padding-right: 36px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 11px center; background-size: 16px 16px; }
 .users-form input:disabled, .users-form select:disabled { background-color: #f1f5f9; }
 .users-form .users-checkbox { flex-direction: row; align-items: center; }

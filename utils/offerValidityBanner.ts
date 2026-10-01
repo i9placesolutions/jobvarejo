@@ -1,4 +1,5 @@
 import { layoutReferenceValidity } from './referenceFlyerLayout'
+import { fitQuickBusinessFooterText } from './quickBusinessFooterTypography'
 /** Mantém a validade dentro da faixa reservada pelo modelo, usando medidas reais do Fabric. */
 export const layoutOfferValidityBanner = (objects: any[]): boolean => {
   let changed = false
@@ -10,7 +11,10 @@ export const layoutOfferValidityBanner = (objects: any[]): boolean => {
     const stock = siblings.find(object => object.name === 'stock-validity')
     if (!band?.getBoundingRect || !heading || !stock || !date.initDimensions || !date.calcTextWidth) continue
 
-    const tracked = [band, heading, date, stock]
+    const referenceStyle = date.quickValidityReferenceStyle
+    const pillStyle = ['stack-pill', 'inline-pill'].includes(referenceStyle)
+    const pill = pillStyle ? siblings.find(object => object.name === 'reference-validity-stock-band') : null
+    const tracked = [band, heading, date, stock, ...(pill ? [pill] : [])]
     const keys = ['left', 'top', 'width', 'height', 'originX', 'originY', 'scaleX', 'scaleY', 'fontSize', 'text',
       '__rawText', 'styles', 'visible', 'lineHeight', 'splitByGrapheme', 'dynamicFieldBaseFontSize',
       'dynamicFieldAutoFitFontSize', 'dynamicFieldAutoHeight', 'dynamicFieldHeight']
@@ -20,6 +24,77 @@ export const layoutOfferValidityBanner = (objects: any[]): boolean => {
     band.set({ visible })
     heading.set({ visible: visible && !!String(heading.text || '').trim() })
     stock.set({ visible: visible && !!String(stock.text || '').trim() })
+    if (pillStyle) {
+      // A faixa recebe chamada e período; o estoque fica centralizado na própria pílula do modelo.
+      stock.set({ visible: stock.visible !== false && !!pill })
+      pill?.set({ visible: stock.visible !== false })
+      const fit = (field: any, left: number, top: number, w: number, h: number, size: number, align: string): number => {
+        field.set({ originX: 'left', originY: 'top', scaleX: 1, scaleY: 1, textAlign: align, lineHeight: 1 })
+        fitQuickBusinessFooterText(field, { width: w, height: h, maxFontSize: size, singleLine: true })
+        field.set({ left, top: top + Math.max(0, (h - field.getBoundingRect().height) / 2) })
+        const lineWidth = field.getLineWidth ? Number(field.getLineWidth(0)) : Number(field.calcTextWidth?.() || 0)
+        return lineWidth * Number(field.scaleX || 1)
+      }
+      if (visible) {
+        const bounds = band.getBoundingRect()
+        const inset = bounds.height * .06
+        const x = bounds.left + inset, y = bounds.top + inset
+        const width = bounds.width - inset * 2, height = bounds.height - inset * 2
+        if (referenceStyle === 'stack-pill') {
+          const align = date.textAlign === 'center' ? 'center' : 'left'
+          if (heading.visible !== false) fit(heading, x, y, width, height * .38, height * .36, align)
+          fit(date, x, y + height * .38, width, height * .62, height * .6, align)
+        } else {
+          const fields = [heading, date].filter(field => field.visible !== false)
+          const size = height * .86, gap = height * .24
+          const natural = fields.map(field => fit(field, x, y, 100000, height, size, 'left'))
+          const total = natural.reduce((sum, value) => sum + value, 0) + gap * (fields.length - 1)
+          const factor = Math.min(1, width / Math.max(1, total))
+          let left = x + (width - total * factor) / 2
+          fields.forEach((field, index) => {
+            fit(field, left, y, natural[index]! * factor + 2, height, size * factor, 'left')
+            left += natural[index]! * factor + gap * factor
+          })
+        }
+        if (pill && stock.visible !== false) {
+          const area = pill.getBoundingRect()
+          const padY = area.height * .16, padX = Math.max(area.height * .45, area.width * .03)
+          fit(stock, area.left + padX, area.top + padY, area.width - padX * 2, area.height - padY * 2, (area.height - padY * 2) * .92, 'center')
+        }
+      }
+      tracked.forEach(object => { object.setCoords?.(); object.dirty = true })
+      changed = state() !== before || changed
+      continue
+    }
+    if (['inline', 'stacked', 'card'].includes(referenceStyle)) {
+      const bounds = band.getBoundingRect()
+      const inset = bounds.height * (referenceStyle === 'stacked' ? .02 : .06)
+      const x = bounds.left + inset, y = bounds.top + inset
+      const width = bounds.width - inset * 2, height = bounds.height - inset * 2
+      const fit = (field: any, left: number, top: number, w: number, h: number, size: number, align: string) => {
+        if (!visible || field.visible === false) return
+        field.set({ originX: 'left', originY: 'top', scaleX: 1, scaleY: 1, textAlign: align, lineHeight: 1 })
+        fitQuickBusinessFooterText(field, { width: w, height: h, maxFontSize: size, singleLine: true })
+        field.set({ left, top: top + Math.max(0, (h - field.getBoundingRect().height) / 2) })
+      }
+      if (referenceStyle === 'inline') {
+        stock.set({ visible: false })
+        const headingShare = Math.min(.8, Math.max(.2, Number(date.quickValidityHeadingShare) || .43))
+        fit(heading, x, y, width * headingShare, height, height * .78, 'left')
+        fit(date, x + width * headingShare, y, width * (1 - headingShare), height, height * .78, 'left')
+      } else if (referenceStyle === 'stacked') {
+        stock.set({ visible: false })
+        fit(heading, x, y, width, height * .44, height * .44, 'left')
+        fit(date, x, y + height * .44, width, height * .56, height * .56, 'left')
+      } else {
+        fit(heading, x, y, width, height * .25, height * .26, 'center')
+        fit(date, x, y + height * .25, width, height * .48, height * .49, 'center')
+        fit(stock, x, y + height * .73, width, height * .27, height * .27, 'center')
+      }
+      tracked.forEach(object => { object.setCoords?.(); object.dirty = true })
+      changed = state() !== before || changed
+      continue
+    }
     if (visible) {
       const bounds = band.getBoundingRect()
       const inset = Math.max(1, bounds.height * .09)
