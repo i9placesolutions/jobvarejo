@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg'
 import type { UserRole } from '~/types/auth'
 import type { EditorPermissions } from '../../shared/access-control'
 import { pgOneOrNull, pgQuery } from './postgres'
+import { PROFILE_ACTIVE_SQL } from './account-access'
 
 type ProfileRow = {
   id: string
@@ -13,6 +14,8 @@ type ProfileRow = {
   avatar_url: string | null
   role: UserRole
   is_active?: boolean
+  has_active_column?: boolean
+  has_permissions_column?: boolean
   editor_permissions?: EditorPermissions
   business_profile?: { companyName?: string; internalOnly?: boolean } | null
   password_hash?: string | null
@@ -109,7 +112,9 @@ export const getProfileById = async (id: string): Promise<ProfileRow | null> => 
   return pgOneOrNull<ProfileRow>(
     `select p.id, p.email, p.login_whatsapp, p.login_whatsapp_verified_at, p.name, p.avatar_url,
             p.role::text as role, p.password_hash, p.reset_token_hash, p.reset_token_expires_at,
-            coalesce((to_jsonb(p)->>'is_active')::boolean, true) as is_active,
+            (${PROFILE_ACTIVE_SQL}) as is_active,
+            to_jsonb(p) ? 'is_active' as has_active_column,
+            to_jsonb(p) ? 'editor_permissions' as has_permissions_column,
             coalesce(to_jsonb(p)->'editor_permissions', '{}'::jsonb) as editor_permissions,
             p.business_profile,
             coalesce(to_jsonb(p)->'selected_modules', '["encartes", "cartazes", "radio"]'::jsonb) as selected_modules,

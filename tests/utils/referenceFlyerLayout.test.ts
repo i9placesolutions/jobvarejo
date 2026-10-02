@@ -54,9 +54,9 @@ describe('layout fiel à referência de varejo',()=>{
  })
 })
 
-it('reduz Instagram longo na faixa e restaura tamanho para um nome curto',()=>{
+it('reduz Instagram longo automaticamente quando o campo não tem transformação manual',()=>{
  const band=object({name:'header-instagram-background',left:567,top:364,width:484,height:52})
- const field=text({name:'header-instagram',businessProfileField:'instagram',text:'@'+ 'supermercado'.repeat(12),fontSize:28,__manualTransform:true})
+ const field=text({name:'header-instagram',businessProfileField:'instagram',text:'@'+ 'supermercado'.repeat(12),fontSize:28})
  const icon=object({name:'header-icon-instagram',width:22,height:22})
  const nodes=[band,field,icon]
  compactBusinessFooter(nodes)
@@ -65,7 +65,6 @@ it('reduz Instagram longo na faixa e restaura tamanho para um nome curto',()=>{
  expect(b.left+b.width).toBeLessThan(1051)
  expect(b.top+b.height).toBeLessThan(416)
  expect(field.text).toBe('@'+'supermercado'.repeat(12))
- expect(field.__manualTransform).toBe(true)
  const longWidth=band.width, center=band.left+band.width/2
  field.text='@loja';compactBusinessFooter(nodes)
  expect(band.width).toBeLessThan(longWidth)
@@ -78,6 +77,37 @@ it('reduz Instagram longo na faixa e restaura tamanho para um nome curto',()=>{
  expect(compactBusinessFooter(nodes)).toBe(false)
  field.text='';compactBusinessFooter(nodes)
  expect(band.visible).toBe(false);expect(icon.visible).toBe(false)
+})
+
+it('preserva no roundtrip a transformação manual do cabeçalho do Instagram',()=>{
+ const saved=JSON.stringify({
+  band:{name:'header-instagram-background',left:567,top:364,width:484,height:52,__manualTransform:true},
+  field:{name:'header-instagram',businessProfileField:'instagram',text:'@supermercado',fontSize:28,left:638,top:380,width:270,height:28,scaleX:1.2,scaleY:1,__manualTransform:true},
+  icon:{name:'header-icon-instagram',left:602,top:379,width:22,height:22,scaleX:1.4,scaleY:1.4,__manualTransform:true}
+ })
+ const restored=JSON.parse(saved)
+ const band=object(restored.band)
+ const field=text({...restored.field,calcTextWidth(){return this.text.length*this.fontSize*.53}})
+ const icon=object(restored.icon)
+ const nodes=[band,field,icon]
+ const geometry=JSON.stringify([band.left,band.top,band.width,field.left,field.top,field.width,field.scaleX,field.scaleY,icon.left,icon.top,icon.scaleX,icon.scaleY])
+
+ compactBusinessFooter(nodes)
+
+ expect(JSON.stringify([band.left,band.top,band.width,field.left,field.top,field.width,field.scaleX,field.scaleY,icon.left,icon.top,icon.scaleX,icon.scaleY])).toBe(geometry)
+ expect(field.__manualTransform).toBe(true)
+})
+
+it('preserva a transformação manual do ícone sem interromper o layout automático do texto',()=>{
+ const band=object({name:'header-instagram-background',left:567,top:364,width:484,height:52})
+ const field=text({name:'header-instagram',businessProfileField:'instagram',text:'@'+ 'supermercado'.repeat(12),fontSize:28})
+ const icon=object({name:'header-icon-instagram',left:612,top:378,width:22,height:22,scaleX:1.6,scaleY:1.6,__manualTransform:true})
+ const iconGeometry=[icon.left,icon.top,icon.scaleX,icon.scaleY]
+
+ compactBusinessFooter([band,field,icon])
+
+ expect([icon.left,icon.top,icon.scaleX,icon.scaleY]).toEqual(iconGeometry)
+ expect(field.scaleX).toBeLessThan(1)
 })
 
 it('mantém contatos e ícones dentro do rodapé com altura reduzida',()=>{

@@ -258,6 +258,17 @@ export default defineEventHandler(async (event) => {
     } catch (notifyErr) {
       console.warn('[api/projects:post] Failed to publish realtime notification:', notifyErr)
     }
+    if (!projectId && !isTemplate) {
+      try {
+        await pgQuery(
+          `insert into public.notifications (user_id, title, message, type, metadata)
+           values ($1, $2, $3, $4, $5::jsonb)`,
+          [user.id, 'Projeto criado', `Seu projeto "${name}" foi criado com sucesso`, 'success', JSON.stringify({ project_id: result.id, project_name: name })]
+        )
+      } catch (notifyErr) {
+        console.warn('[api/projects:post] Failed to create project notification:', notifyErr)
+      }
+    }
   }
 
   return { success: true, project: result }

@@ -7,6 +7,7 @@ import type { Folder as FolderModel } from '~/types/folder'
 import { useResponsive } from '~/composables/useResponsive'
 import { getProjectPreviewSource } from '~/utils/dashboardProjectPreview'
 import { saveProjectAsFlyerTemplate } from '~/utils/flyerTemplateApi'
+import { formatNotificationDateTime } from '~/utils/notificationDateTime'
 
 const { isMobile: dashMobile, isTablet: dashTablet } = useResponsive()
 const showMobileDrawer = ref(false)
@@ -84,6 +85,9 @@ const confirmDialogData = ref({
 
 // Notifications state
 const showNotifications = ref(false)
+const showUserMenu = ref(false)
+const userMenuRef = ref<HTMLElement | null>(null)
+const userMenuButtonRef = ref<HTMLButtonElement | null>(null)
 const notifications = ref<any[]>([])
 const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
 const notificationButtonRef = ref<HTMLElement | null>(null)
@@ -122,6 +126,30 @@ const closeFloatingOverlays = () => {
   showFolderMenu.value = null
   showProjectMenu.value = null
   showNotifications.value = false
+  showUserMenu.value = false
+}
+
+const toggleUserMenu = () => {
+  const shouldOpen = !showUserMenu.value
+  closeFloatingOverlays()
+  showUserMenu.value = shouldOpen
+}
+
+const handleUserMenuOutsideClick = (event: Event) => {
+  if (showUserMenu.value && !userMenuRef.value?.contains(event.target as Node)) {
+    showUserMenu.value = false
+  }
+}
+
+const handleUserMenuEscape = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !showUserMenu.value) return
+  showUserMenu.value = false
+  userMenuButtonRef.value?.focus()
+}
+
+const openUserMenuPage = async (path: string) => {
+  showUserMenu.value = false
+  await navigateTo(path)
 }
 
 // Close menus when clicking outside - only on client
@@ -246,11 +274,19 @@ const loadNotifications = async () => {
   }
 }
 
+let notificationRefreshInterval: ReturnType<typeof setInterval> | null = null
+const refreshVisibleNotifications = () => {
+  if (document.visibilityState === 'visible' && auth.isAdmin.value) {
+    void loadNotifications()
+  }
+}
+
 // Toggle notifications modal
 const toggleNotifications = async () => {
   if (!showNotifications.value) {
     showFolderMenu.value = null
     showProjectMenu.value = null
+    showUserMenu.value = false
   }
   showNotifications.value = !showNotifications.value
   if (showNotifications.value) {
@@ -280,14 +316,13 @@ const markAsRead = async (notificationId: string) => {
 // Mark all as read
 const markAllAsRead = async () => {
   try {
-    const unreadIds = notifications.value.filter(n => !n.read).map(n => n.id)
-    if (unreadIds.length === 0) return
+    if (unreadCount.value === 0) return
 
     const headers = await getApiAuthHeaders()
     await $fetch('/api/notifications', {
       method: 'PATCH',
       headers,
-      body: { ids: unreadIds, read: true }
+      body: { mark_all: true, read: true }
     })
 
     notifications.value.forEach(n => {
@@ -307,6 +342,11 @@ onMounted(async () => {
   if (process.client && auth.isAdmin.value) {
     document.addEventListener('click', handleContextMenusOutsideClick)
     document.addEventListener('click', handleNotificationsOutsideClick)
+    document.addEventListener('click', handleUserMenuOutsideClick)
+    document.addEventListener('keydown', handleUserMenuEscape)
+    document.addEventListener('visibilitychange', refreshVisibleNotifications)
+    window.addEventListener('focus', refreshVisibleNotifications)
+    notificationRefreshInterval = setInterval(refreshVisibleNotifications, 30_000)
   }
 })
 
@@ -314,6 +354,11 @@ onUnmounted(() => {
   if (process.client) {
     document.removeEventListener('click', handleContextMenusOutsideClick)
     document.removeEventListener('click', handleNotificationsOutsideClick)
+    document.removeEventListener('click', handleUserMenuOutsideClick)
+    document.removeEventListener('keydown', handleUserMenuEscape)
+    document.removeEventListener('visibilitychange', refreshVisibleNotifications)
+    window.removeEventListener('focus', refreshVisibleNotifications)
+    if (notificationRefreshInterval) clearInterval(notificationRefreshInterval)
   }
 })
 
@@ -932,22 +977,7 @@ const createProject = async () => {
 
     if (data) {
       projects.value.unshift(data)
-      
-      // Create notification for new project
-      await $fetch('/api/notifications', {
-        method: 'POST',
-        headers,
-        body: {
-          title: 'Projeto criado',
-          message: `Seu projeto "${newProjectName.value}" foi criado com sucesso`,
-          type: 'success',
-          metadata: { project_id: data.id, project_name: newProjectName.value }
-        }
-      }).catch((err) => {
-        console.warn('Falha ao criar notificação de projeto:', err)
-      })
-      
-      // Reload notifications to show new one
+
       await loadNotifications()
       newProjectName.value = ''
       showCreateProject.value = false
@@ -1461,14 +1491,37 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <Bell class="w-[18px] h-[18px]" />
             <span v-if="unreadCount > 0" class="dash-notification-dot absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-white"></span>
           </button>
-          <div v-if="auth.user.value" class="dash-user-menu h-10 flex items-center gap-2 px-2.5 py-1.5 rounded-xl cursor-pointer transition-all group">
-            <div class="dash-user-avatar w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden">
-              <img v-if="auth.user.value.avatar_url" :src="auth.user.value.avatar_url" :alt="auth.user.value.name || 'Administrador'" class="w-full h-full object-cover" />
-              <span v-else>{{ auth.user.value.name?.charAt(0) || 'U' }}</span>
+          <div v-if="auth.user.value" ref="userMenuRef" class="relative">
+            <button
+              ref="userMenuButtonRef"
+              type="button"
+              class="dash-user-menu h-10 flex items-center gap-2 px-2.5 py-1.5 rounded-xl transition-all group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              aria-label="Abrir menu do perfil"
+              aria-haspopup="menu"
+              :aria-expanded="showUserMenu"
+              aria-controls="dashboard-user-menu"
+              @click.stop="toggleUserMenu"
+            >
+              <span class="dash-user-avatar w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden">
+                <img v-if="auth.user.value.avatar_url" :src="auth.user.value.avatar_url" :alt="auth.user.value.name || 'Administrador'" class="w-full h-full object-cover" />
+                <span v-else>{{ auth.user.value.name?.charAt(0) || 'U' }}</span>
+              </span>
+              <span v-if="!dashMobile" class="dash-user-role">{{ auth.isSuperAdmin.value ? 'Super admin' : 'Administrador' }}</span>
+              <span v-if="!dashMobile" class="dash-user-name text-[13px] font-medium max-w-35 truncate transition-colors">{{ formatUserName(auth.user.value.name) }}</span>
+              <ChevronDown v-if="!dashMobile" class="w-3.5 h-3.5 transition-colors" />
+            </button>
+            <div v-if="showUserMenu" id="dashboard-user-menu" role="menu" aria-label="Menu do perfil" class="absolute right-0 top-[calc(100%+8px)] z-50 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:bg-blue-50" @click="openUserMenuPage('/profile')">
+                <User class="h-4 w-4 text-slate-500" /> Meu Perfil
+              </button>
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:bg-blue-50" @click="openUserMenuPage('/business-profile')">
+                <Store class="h-4 w-4 text-emerald-600" /> Minha loja
+              </button>
+              <div class="my-1 border-t border-slate-100" />
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 focus-visible:outline-none focus-visible:bg-red-50" @click="showUserMenu = false; handleSignOut()">
+                <LogOut class="h-4 w-4" /> Sair
+              </button>
             </div>
-            <span v-if="!dashMobile" class="dash-user-role">{{ auth.isSuperAdmin.value ? 'Super admin' : 'Administrador' }}</span>
-            <span v-if="!dashMobile" class="dash-user-name text-[13px] font-medium max-w-35 truncate transition-colors">{{ formatUserName(auth.user.value.name) }}</span>
-            <ChevronDown v-if="!dashMobile" class="w-3.5 h-3.5 transition-colors" />
           </div>
         </div>
       </header>
@@ -2100,7 +2153,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
                     <div class="flex-1 min-w-0">
                       <p class="text-[12px] font-semibold text-slate-700 mb-0.5">{{ notification.title }}</p>
                       <p class="text-[11px] text-slate-500 line-clamp-2">{{ notification.message }}</p>
-                      <p class="text-[10px] text-slate-400 mt-1">{{ formatDistanceToNow(notification.created_at) }}</p>
+                      <p class="text-[10px] text-slate-400 mt-1">{{ formatNotificationDateTime(notification.created_at) }}</p>
                     </div>
                     <div v-if="!notification.read" class="w-1.5 h-1.5 bg-indigo-500 rounded-full shrink-0 mt-1.5"></div>
                   </div>

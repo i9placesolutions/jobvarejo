@@ -1,7 +1,7 @@
 import type { H3Event } from 'h3'
 import type { BuilderTenant } from '~/types/builder'
 import { getTenantById } from './builder-auth-db'
-import { getProfileById } from './auth-db'
+import { getProfileByEmail, getProfileById } from './auth-db'
 import { requireAuthenticatedUser } from './auth'
 import { verifyBuilderSessionToken } from './builder-session-token'
 import { pgOneOrNull } from './postgres'
@@ -11,10 +11,10 @@ import { normalizeEditorPermissions } from '../../shared/access-control'
 const _tenantCache = new Map<string, { tenant: BuilderTenant; expiresAt: number }>()
 const TENANT_CACHE_TTL_MS = 5 * 60 * 1000
 
-const getCachedTenant = async (id: string): Promise<BuilderTenant | null> => {
+const getCachedTenant = async (id: string, refresh = false): Promise<BuilderTenant | null> => {
   const now = Date.now()
   const cached = _tenantCache.get(id)
-  if (cached && cached.expiresAt > now) return cached.tenant
+  if (!refresh && cached && cached.expiresAt > now) return cached.tenant
   _tenantCache.delete(id)
   const row = await getTenantById(id)
   if (row?.id) {
@@ -196,17 +196,32 @@ export const requireBuilderTenant = async (event: H3Event): Promise<BuilderTenan
     } as BuilderTenant
   }
 
-  const linkedProfile = await getProfileById(payload.sub)
-  if (linkedProfile?.id) {
-    if (linkedProfile.is_active === false) throw createError({ statusCode: 403, statusMessage: 'Conta desativada.' })
-    await assertRoleApiAccess(event, linkedProfile.role, normalizeEditorPermissions(linkedProfile.editor_permissions))
-  }
-  const tenant = await getCachedTenant(payload.sub)
-  if (!tenant?.id || !tenant?.email) {
+  // Legacy Builder tenants may have a random ID even when they belong to a
+  // JobVarejo profile. Resolve that profile by the tenant's normalized email
+  // on every request so an already-issued Builder cookie observes block,
+  // removal, and unblock immediately, even with a warm tenant cache.
+  const tenant = await getCachedTenant(payload.sub, true)
+  if (!tenant?.id || !tenant.email) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Invalid or expired builder token'
     })
+  }
+  const email = String(tenant.email || '').trim().toLowerCase()
+  if (!email) {
+    throw createError({ statusCode: 401, statusMessage: 'Invalid or expired builder token' })
+  }
+
+  const linkedProfileById = await getProfileById(payload.sub)
+  const linkedProfileIdentity = linkedProfileById?.id || !email
+    ? null
+    : await getProfileByEmail(email)
+  const linkedProfile = linkedProfileById || (linkedProfileIdentity?.id
+    ? await getProfileById(linkedProfileIdentity.id)
+    : null)
+  if (linkedProfile?.id) {
+    if (linkedProfile.is_active === false) throw createError({ statusCode: 403, statusMessage: 'Conta desativada.' })
+    await assertRoleApiAccess(event, linkedProfile.role, normalizeEditorPermissions(linkedProfile.editor_permissions))
   }
 
   if (!tenant.is_active) {

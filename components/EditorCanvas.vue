@@ -633,6 +633,7 @@ const PageEnhancementDialog = defineAsyncComponent(() => import('./PageEnhanceme
 const showPageEnhancement = ref(false)
 const preparingPageEnhancement = ref(false)
 const QuickModeElementColorMenu = defineAsyncComponent(() => import('./QuickModeElementColorMenu.vue'))
+const QuickModeElementQuickActions = defineAsyncComponent(() => import('./QuickModeElementQuickActions.vue'))
 import {
   Undo,
   Redo,
@@ -7781,7 +7782,6 @@ const quickModeSelectedText = computed(() => {
     void selectedObjectRef.value
     return isQuickNativeTextObject(canvas.value?.getActiveObject?.())
 })
-const quickModeElementColorDismissed = ref(false)
 const quickEntryFormatRequired = computed(() => {
     void isFabricReady.value
     void productZoneUiVersion.value
@@ -7795,11 +7795,10 @@ const confirmQuickEntryFormat = () => {
     hasUnsavedChanges.value = true
     triggerAutoSave()
 }
-const quickLabelColorRequested = ref(false)
+const quickModeElementStyleRequested = ref(false)
 const selectedObjectRef = shallowRef<any>(null) // Direct reference for properties panel (shallow for performance)
 watch(() => selectedObjectRef.value?._customId, () => {
-    quickModeElementColorDismissed.value = false
-    quickLabelColorRequested.value = false
+    quickModeElementStyleRequested.value = false
 })
 
 const quickModeAllColorTargets = computed(() => [
@@ -8016,27 +8015,50 @@ const refreshSelectedRef = (extra?: Record<string, any>) => {
 }
 
 const selectedObjectPos = ref<{top: number, left: number, width: number, height: number, visible: boolean}>({ top: 0, left: 0, width: 0, height: 0, visible: false })
-// O painel de personalização acompanha o próprio elemento, inclusive filhos
-// de cards; selectedObjectPos continua dedicado às ações de zonas/imagens.
+// A barra compacta acompanha o elemento; os controles completos ficam fora do canvas.
 const quickModeElementAnchor = ref({ top: 0, left: 0, width: 0, height: 0, visible: false })
-const quickModeElementColorPosition = computed(() => {
-    const anchor = quickModeElementAnchor.value
-    const viewportWidth = wrapperEl.value?.clientWidth || 800
-    const viewportHeight = wrapperEl.value?.clientHeight || 600
-    const menuWidth = 280
-    const menuHeight = quickModeSelectedText.value ? 480 : 360
-    const right = anchor.left + anchor.width + 12
-    return {
-        left: `${right + menuWidth <= viewportWidth - 8 ? right : Math.max(8, anchor.left - menuWidth - 12)}px`,
-        top: `${Math.max(8, Math.min(anchor.top, viewportHeight - menuHeight - 8))}px`
-    }
-})
+const showQuickModeElementActions = computed(() => (
+    isQuickMode.value && quickModeSelectedColorTargets.value.length > 0 &&
+    quickModeElementAnchor.value.visible && !isDesignLoading.value && !figmaCrop.isCropActive.value
+))
+const showQuickModeElementStyle = computed(() => (
+    showQuickModeElementActions.value && quickModeElementStyleRequested.value
+))
+
+const keepQuickModeSelectedElementInView = () => {
+    if (!showQuickModeElementStyle.value || !canvas.value) return
+    // Only the viewport moves; artwork geometry and history remain untouched.
+    const anchor = getCanvasObjectFloatingPos(canvas.value.getActiveObject?.(), canvas.value.viewportTransform)
+    if (!anchor.visible) return
+    const width = canvas.value.getWidth()
+    const height = canvas.value.getHeight()
+    const left = anchor.width > width - 16
+        ? (width - anchor.width) / 2
+        : Math.max(8, Math.min(anchor.left, width - anchor.width - 8))
+    const top = anchor.height > height - 16
+        ? (height - anchor.height) / 2
+        : Math.max(8, Math.min(anchor.top, height - anchor.height - 8))
+    if (left === anchor.left && top === anchor.top) return
+    const viewport = [...canvas.value.viewportTransform]
+    viewport[4] += left - anchor.left
+    viewport[5] += top - anchor.top
+    canvas.value.setViewportTransform(viewport)
+    safeRequestRenderAll()
+}
+
+const toggleQuickModeElementStyle = async () => {
+    quickModeElementStyleRequested.value = !quickModeElementStyleRequested.value
+    await nextTick()
+    resizeCanvas()
+    keepQuickModeSelectedElementInView()
+    updateFloatingUI()
+}
 
 const priceGroupsWithDeepSelect = new Set<any>()
 const priceGroupUiVersion = ref(0)
 const selectedPriceGroupSubTarget = shallowRef<any>(null)
 watch(selectedPriceGroupSubTarget, () => {
-    quickLabelColorRequested.value = false
+    quickModeElementStyleRequested.value = false
 })
 const selectedPriceGroupSelectionKind = ref<'label' | 'card' | 'other' | 'none'>('none')
 
@@ -10995,6 +11017,10 @@ onMounted(async () => {
                   if (raf) cancelAnimationFrame(raf);
                   raf = requestAnimationFrame(() => {
                       resizeCanvas();
+                      if (isQuickMode.value) {
+                          keepQuickModeSelectedElementInView();
+                          updateFloatingUI();
+                      }
                   });
               });
               wrapperResizeObserver.observe(wrapperEl.value);
@@ -14926,12 +14952,6 @@ const getEditorReactivityContext = () => ({
     updateProductImageSelectionIntent,
     updateScrollbars,
     updateSelection,
-    onQuickModeElementPointerDown: () => {
-        if (isQuickMode.value) {
-            quickModeElementColorDismissed.value = false;
-            quickLabelColorRequested.value = false;
-        }
-    },
     getReactivityBoundCanvas: () => reactivityBoundCanvas,
     setReactivityBoundCanvas: (value: any) => { reactivityBoundCanvas = value },
     getTeardownReactivity: () => teardownReactivity,
@@ -30907,25 +30927,13 @@ const handleAutoOfferLayout = async () => {
               <div class="canvas-workspace" :class="{ 'has-logo-panel': selectedQuickLogo }">
                   <div ref="wrapperEl" class="quick-mode-canvas-viewport w-full h-full min-w-0 min-h-0 relative flex items-center justify-center overflow-hidden bg-[#1a1a1a]">
                   <canvas ref="canvasEl" class="block canvas-touch-surface" @contextmenu.prevent.stop></canvas>
-                  <QuickModeElementColorMenu
-                    v-if="isQuickMode && (!showProductLabelQuickActions || quickLabelColorRequested) && quickModeSelectedColorTargets.length && quickModeElementAnchor.visible && !quickModeElementColorDismissed && !isDesignLoading && !figmaCrop.isCropActive.value"
-                    :key="selectedObjectRef?._customId || quickModeSelectedColorTargets[0]?.id"
-                    :targets="quickModeSelectedColorTargets"
-                    :recent-colors="recentColors"
+                  <QuickModeElementQuickActions
+                    v-if="showQuickModeElementActions && !showProductLabelQuickActions && !showProductImageQuickActions"
+                    :anchor="quickModeElementAnchor"
                     :text-selected="quickModeSelectedText"
-                    :font-family="quickModeNativeFontFamily"
-                    :font-size="quickFontSize"
-                    :typography="quickTypography"
+                    :expanded="showQuickModeElementStyle"
                     :busy="isParsingProducts || isProcessing"
-                    :style="quickModeElementColorPosition"
-                    @apply-color="applyQuickModeColorChange"
-                    @clear-color="clearQuickModeColor"
-                    @apply-opacity="applyQuickModeOpacityChange"
-                    @restore-color="restoreQuickModeColor"
-                    @apply-font="applyQuickModeNativeFont"
-                    @apply-font-size="applyQuickFontSize"
-                    @apply-typography="applyQuickTypography"
-                    @close="quickModeElementColorDismissed = true; quickLabelColorRequested = false"
+                    @edit-style="toggleQuickModeElementStyle"
                   />
                    <label
                      v-if="quickSelectedCardConfiguration && quickCardConfigurationOptions.length > 1 && selectedObjectPos.visible && !showProductImageQuickActions && !isDesignLoading && !figmaCrop.isCropActive.value"
@@ -31104,7 +31112,7 @@ const handleAutoOfferLayout = async () => {
 
                     <ProductLabelQuickActions
                       v-if="selectedProductLabelQuickActions"
-                      :visible="showProductLabelQuickActions && !quickLabelColorRequested"
+                      :visible="showProductLabelQuickActions"
                       :can-edit-color="isQuickMode && quickModeSelectedColorTargets.length > 0"
                       :top="selectedProductLabelQuickActionsPos.top"
                       :left="selectedProductLabelQuickActionsPos.left"
@@ -31121,7 +31129,7 @@ const handleAutoOfferLayout = async () => {
                       @template="handleProductLabelTemplateChange"
                       @template-all="handleProductLabelTemplateChangeAll"
                       @manage-templates="openGlobalLabelTemplates"
-                      @edit-color="quickModeElementColorDismissed = false; quickLabelColorRequested = true"
+                      @edit-color="toggleQuickModeElementStyle"
                       @templates-open="prepareQuickLabelPreviews"
                     />
 
@@ -31158,6 +31166,28 @@ const handleAutoOfferLayout = async () => {
 
                   <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" accept="image/*" multiple />
               </div>
+
+                  <aside v-if="showQuickModeElementStyle" class="quick-element-inspector" aria-label="Personalização do elemento selecionado">
+                    <QuickModeElementColorMenu
+                      :key="selectedObjectRef?._customId || quickModeSelectedColorTargets[0]?.id"
+                      :targets="quickModeSelectedColorTargets"
+                      :recent-colors="recentColors"
+                      :text-selected="quickModeSelectedText"
+                      :font-family="quickModeNativeFontFamily"
+                      :font-size="quickFontSize"
+                      :typography="quickTypography"
+                      :busy="isParsingProducts || isProcessing"
+                      :docked="true"
+                      @apply-color="applyQuickModeColorChange"
+                      @clear-color="clearQuickModeColor"
+                      @apply-opacity="applyQuickModeOpacityChange"
+                      @restore-color="restoreQuickModeColor"
+                      @apply-font="applyQuickModeNativeFont"
+                      @apply-font-size="applyQuickFontSize"
+                      @apply-typography="applyQuickTypography"
+                      @close="quickModeElementStyleRequested = false"
+                    />
+                  </aside>
 
                    <QuickLogoQuickActions
                      v-if="selectedQuickLogo"
@@ -31727,9 +31757,14 @@ main {
     min-height: 0;
 }
 
-/* Abrir as opcoes nao pode redimensionar/recentralizar o encarte. */
+/* O inspector reserva espaço na interface sem cobrir a arte. */
 .canvas-workspace { position:relative; display:flex; flex:1 1 auto; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; }
 .canvas-workspace > .quick-mode-canvas-viewport { flex:1 1 0; min-width:0; min-height:0; }
+.quick-element-inspector { position:relative; z-index:130; flex:0 0 280px; min-width:0; min-height:0; overflow:hidden; border-left:1px solid #484850; background:#24252b; }
+@media (max-width: 767px) {
+    .canvas-workspace:has(> .quick-element-inspector) { flex-direction:column; }
+    .quick-element-inspector { flex:0 0 auto; width:100%; height:40%; max-height:320px; border-left:0; border-top:1px solid #484850; }
+}
 .canvas-workspace > :deep(.quick-logo-actions) { position:absolute; z-index:40; top:8px; left:8px; width:300px; max-height:calc(100% - 16px); margin:0; }
 @media (max-width: 767px) {
     .canvas-workspace > :deep(.quick-logo-actions) { top:auto; bottom:8px; right:8px; width:auto; max-height:38%; }

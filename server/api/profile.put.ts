@@ -27,12 +27,15 @@ export default defineEventHandler(async (event) => {
 
   const row = await pgOneOrNull<any>(
     `update public.profiles
-        set business_profile = ($1::jsonb - 'logoPreference' - 'internalOnly') ||
+        set business_profile = ($1::jsonb - 'logoPreference' - 'internalOnly' - 'adminAccess') ||
             CASE WHEN business_profile ? 'logoPreference'
               THEN jsonb_build_object('logoPreference', business_profile->'logoPreference')
               ELSE '{}'::jsonb END ||
             CASE WHEN business_profile ? 'internalOnly'
               THEN jsonb_build_object('internalOnly', business_profile->'internalOnly')
+              ELSE '{}'::jsonb END ||
+            CASE WHEN business_profile ? 'adminAccess'
+              THEN jsonb_build_object('adminAccess', business_profile->'adminAccess')
               ELSE '{}'::jsonb END,
             selected_modules = coalesce($3::jsonb, selected_modules),
             onboarding_completed = $4::boolean,

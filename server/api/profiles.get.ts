@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
                 CASE WHEN COALESCE((business_profile->>'internalOnly')::boolean, false) THEN '' ELSE email END AS email,
                 avatar_url
          from public.profiles
-         where id <> $1
+         where id <> $1 AND COALESCE(business_profile->'adminAccess'->>'removedAt', '') = ''
          order by created_at desc nulls last
          limit $2`,
         [user.id, limit]
@@ -38,6 +38,7 @@ export default defineEventHandler(async (event) => {
                 CASE WHEN COALESCE((business_profile->>'internalOnly')::boolean, false) THEN '' ELSE email END AS email,
                 avatar_url
          from public.profiles
+         where COALESCE(business_profile->'adminAccess'->>'removedAt', '') = ''
          order by created_at desc nulls last
          limit $1`,
         [limit]

@@ -1,4 +1,4 @@
-import { applyDynamicBusinessTextColor } from './dynamicBusinessFields'
+import { applyDynamicBusinessTextColor, markBusinessTextStyleAsManual } from './dynamicBusinessFields'
 type ArrangeMode = any
 
 export type EditorCanvasActionsContext = Record<string, any>
@@ -1135,6 +1135,7 @@ const updateObjectProperty = (prop: string, value: any) => {
     if (isQuickModeLockedObject(active)) return;
 
     if (active) {
+        let inspectorTransformMarked = false;
         if (INSPECTOR_TRANSFORM_PROPS.has(prop)) {
             active = resolveInspectorSnapshotTarget(active);
         }
@@ -1198,6 +1199,10 @@ const updateObjectProperty = (prop: string, value: any) => {
             }
         }
 
+        // Inspector typography is explicit metadata for dynamic fields and the
+        // social caption. Other text, such as product titles, stays auto-laid out.
+        markBusinessTextStyleAsManual(active, prop, !!getTextSelectionRange(active));
+
         if (prop === 'fill' && !getTextSelectionRange(active) && applyDynamicBusinessTextColor(active, value)) {
             safeRequestRenderAll();
             debouncedSaveCurrentState();
@@ -1226,6 +1231,12 @@ const updateObjectProperty = (prop: string, value: any) => {
                 safeAddWithUpdate,
                 applyWholeTextWhenNoSelection: true
             })) {
+                if (isDynamicBusinessFieldObject(active) && prop === 'fontSize' && !getTextSelectionRange(active)) {
+                    const requestedFontSize = Number(value);
+                    if (Number.isFinite(requestedFontSize) && requestedFontSize > 0) {
+                        active.set({ dynamicFieldBaseFontSize: requestedFontSize, dynamicFieldAutoFitFontSize: requestedFontSize });
+                    }
+                }
                 safeRequestRenderAll();
                 debouncedSaveCurrentState();
                 refreshSelectedRef();
@@ -1469,8 +1480,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             if (prop === 'left' || prop === 'top') {
                 const prevLeft = active.left;
                 const prevTop = active.top;
-                if (['fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'charSpacing'].includes(prop) && ['text', 'textbox', 'i-text'].includes(String(active.type).toLowerCase())) active.__manualTypography = true;
-            active.set(prop, value);
+                active.set(prop, value);
                 active.setCoords();
 
                 const dx = active.left - prevLeft;
@@ -1954,6 +1964,8 @@ const updateObjectProperty = (prop: string, value: any) => {
                 if (Number.isFinite(requestedHeight) && requestedHeight > 0) {
                     active.set({ height: requestedHeight, dynamicFieldHeight: requestedHeight });
                 }
+                markInspectorTransformAsManual(active, prop);
+                inspectorTransformMarked = true;
             } else if (isTextStyleObject(active) && typeof active.initDimensions === 'function') {
                 active.initDimensions();
                 active.dirty = true;
@@ -2004,7 +2016,7 @@ const updateObjectProperty = (prop: string, value: any) => {
             if (isQuickLogoImageObject(active)) syncQuickLogoBackdrop(active);
         }
 
-        markInspectorTransformAsManual(active, prop);
+        if (!inspectorTransformMarked) markInspectorTransformAsManual(active, prop);
         markPriceGroupAsManuallyCustomized(active);
 
         // If it's a group, we might want to dirty it

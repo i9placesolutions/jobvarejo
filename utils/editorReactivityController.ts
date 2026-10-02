@@ -1,6 +1,7 @@
 import { positionProductLimitBelowName } from './productLimitLayout'
 import { resolveFabricTarget } from './fabricTarget'
 import { syncProductPriceFromText } from './productPriceTextSync'
+import { isDynamicBusinessFieldObject } from './dynamicBusinessFields'
 
 type GlobalStyles = Record<string, any>
 
@@ -9,6 +10,25 @@ export type EditorReactivityContext = Record<string, any>
 export const isExplicitCanvasTransformAction = (value: unknown): boolean => {
     const action = String(value || '').trim().toLowerCase()
     return ['drag', 'move', 'scale', 'resiz', 'rotate', 'skew'].some(kind => action.includes(kind))
+}
+
+/** A receita de contatos só pode reposicionar camadas que não foram ajustadas pelo usuário. */
+export const markBusinessCompositionTransformAsManual = (candidate: any, action: unknown): boolean => {
+    if (!candidate || !isExplicitCanvasTransformAction(action)) return false
+    const name = String(candidate.name || '').trim()
+    const field = String(candidate.businessProfileField || candidate.quickDataField || '').trim()
+    const isCompositionObject = isDynamicBusinessFieldObject(candidate) ||
+        /^footer-(dynamic|reference)-/.test(name) ||
+        /^footer-column-divider-/.test(name) ||
+        name === 'footer-social-divider' ||
+        /^icon-(address|whatsapp|instagram|facebook)$/.test(name) ||
+        /^header-(social-(caption|divider|background)|icon-(instagram|facebook)|instagram|facebook)$/.test(name) ||
+        ['address', 'whatsapp', 'instagram', 'facebook'].includes(field)
+    if (!isCompositionObject) return false
+    candidate.__manualTransform = true
+    candidate.dirty = true
+    candidate.setCoords?.()
+    return true
 }
 
 export const createEditorReactivityController = (ctx: EditorReactivityContext) => {
@@ -1914,27 +1934,9 @@ const setupReactivity = () => {
         }
         if (obj) {
             const modifiedAction = String(e?.transform?.action || '').trim().toLowerCase();
-            const isExplicitTransform = isExplicitCanvasTransformAction(modifiedAction);
-            const isFooterCompositionObject = (candidate: any): boolean => {
-                if (!candidate) return false;
-                const name = String(candidate.name || '').trim();
-                const field = String(candidate.businessProfileField || candidate.quickDataField || '').trim();
-                return isDynamicBusinessFieldObject(candidate) ||
-                    /^footer-(dynamic|reference)-/.test(name) ||
-                    /^footer-column-divider-/.test(name) ||
-                    name === 'footer-social-divider' ||
-                    /^icon-(address|whatsapp|instagram|facebook)$/.test(name) ||
-                    ['address', 'whatsapp', 'instagram', 'facebook'].includes(field);
-            };
-            const markFooterCompositionObject = (candidate: any) => {
-                if (!isExplicitTransform || !isFooterCompositionObject(candidate)) return;
-                candidate.__manualTransform = true;
-                candidate.dirty = true;
-                candidate.setCoords?.();
-            };
-            markFooterCompositionObject(obj);
+            markBusinessCompositionTransformAsManual(obj, modifiedAction);
             if (isActiveSelectionObject(obj) && typeof obj.getObjects === 'function') {
-                (obj.getObjects() || []).forEach((member: any) => markFooterCompositionObject(member));
+                (obj.getObjects() || []).forEach((member: any) => markBusinessCompositionTransformAsManual(member, modifiedAction));
             }
             if (isQuickLogoImageObject(obj)) syncQuickLogoBackdrop(obj);
             if (isDynamicBusinessFieldObject(obj)) {

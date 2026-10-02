@@ -14,6 +14,7 @@ const props = defineProps<{
   fontSize?: number
   typography?: { lineHeight?: number; charSpacing?: number }
   busy?: boolean
+  docked?: boolean
 }>()
 const emit = defineEmits<{
   (event: 'apply-color', payload: { targetId: string; value: string }): void
@@ -59,7 +60,7 @@ const apply = (value: string) => {
 </script>
 
 <template>
-  <div v-show="!pickingColor" class="element-color-menu" role="dialog" :aria-label="textSelected ? 'Personalizar texto selecionado' : 'Cor do elemento selecionado'" @pointerdown.stop @mousedown.stop @click.stop @keydown.esc="emit('close')">
+  <div v-show="!pickingColor" class="element-color-menu" :class="{ 'element-color-menu--docked': docked }" role="dialog" :aria-label="textSelected ? 'Personalizar texto selecionado' : 'Cor do elemento selecionado'" @pointerdown.stop @mousedown.stop @click.stop @keydown.stop @keydown.esc="emit('close')">
     <div class="element-color-menu__heading">
       <div><Palette :size="15" /><strong>{{ textSelected ? 'Personalizar texto' : 'Cor deste elemento' }}</strong></div>
       <button type="button" aria-label="Fechar cores do elemento" @click="emit('close')"><X :size="15" /></button>
@@ -97,6 +98,7 @@ const apply = (value: string) => {
 
 <style scoped>
 .element-color-menu{position:absolute;z-index:130;width:min(280px,calc(100vw - 32px));max-height:min(560px,80vh);overflow:auto;padding:13px;border:1px solid #656078;border-radius:14px;background:#24252b;color:#f4f4f5;box-shadow:0 16px 40px #0008;font-size:12px}
+.element-color-menu--docked{position:relative;width:100%;height:100%;max-height:100%;border:0;border-radius:0;box-shadow:none}
 .element-color-menu__heading,.element-color-menu__heading>div{display:flex;align-items:center;justify-content:space-between;gap:8px}.element-color-menu__heading>div{justify-content:flex-start;color:#ddd6fe}.element-color-menu__heading button{display:grid;place-items:center;width:27px;height:27px;border-radius:7px;color:#d4d4d8}.element-color-menu__heading button:hover{background:#ffffff18}
 .element-color-menu p{margin:6px 0 12px;color:#a1a1aa;font-size:11px}.element-color-menu__name{display:block;margin-bottom:9px}.element-color-menu__target{display:grid;gap:5px;margin-bottom:10px;color:#d4d4d8}.element-color-menu__target select{width:100%;padding:7px;border:1px solid #555662;border-radius:7px;background:#30313a;color:white}
 .element-color-menu__recent{margin-bottom:10px}.element-color-menu__swatches-label{display:block;margin-bottom:5px;color:#a1a1aa;font-size:10px}.element-color-menu__swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}.element-color-menu__swatches button{height:25px;border:2px solid #ffffff55;border-radius:7px}.element-color-menu__swatches button:hover,.element-color-menu__swatches button:focus-visible{border-color:white;outline:2px solid #a78bfa}

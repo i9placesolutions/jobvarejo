@@ -2,7 +2,7 @@ import { enforceRateLimit } from '../../../utils/rate-limit'
 import { verifyPassword } from '../../../utils/password'
 import { createBuilderSessionToken } from '../../../utils/builder-session-token'
 import { getTenantByEmail, normalizeBuilderEmail, updateTenantLastLogin } from '../../../utils/builder-auth-db'
-import { getProfileByEmail } from '../../../utils/auth-db'
+import { getProfileByEmail, getProfileById } from '../../../utils/auth-db'
 import { setBuilderAuthCookies } from '../../../utils/builder-cookie'
 
 export default defineEventHandler(async (event) => {
@@ -24,7 +24,9 @@ export default defineEventHandler(async (event) => {
   const tenant = await getTenantByEmail(email)
   if (tenant?.id) {
     const validPassword = await verifyPassword(password, tenant.password_hash || null)
-    if (!validPassword) {
+    const linkedIdentity = await getProfileByEmail(String(tenant.email))
+    const linkedProfile = linkedIdentity ? await getProfileById(linkedIdentity.id) : null
+    if (!validPassword || tenant.is_active === false || linkedProfile?.is_active === false) {
       throw createError({ statusCode: 401, statusMessage: 'E-mail ou senha invalidos' })
     }
 
@@ -56,7 +58,8 @@ export default defineEventHandler(async (event) => {
     }
 
     const validPassword = await verifyPassword(password, (profile as any).password_hash || null)
-    if (!validPassword) {
+    const currentProfile = await getProfileById(profile.id)
+    if (!validPassword || !currentProfile || currentProfile.is_active === false) {
       throw createError({ statusCode: 401, statusMessage: 'E-mail ou senha invalidos' })
     }
 

@@ -33,8 +33,12 @@ const editingId = ref<string | null>(null)
 const editingInternalOnly = ref(false)
 const editingSuperAdmin = ref(false)
 const passwordVisible = ref(false)
-const form = reactive({ name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user' as UserRole, hasPlatformAccess: false, is_active: true })
+const actionBusy = ref(false)
+const removalTarget = ref<ManagedUser | null>(null)
+const removalConfirmation = ref('')
+const form = reactive({ name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user' as UserRole, hasPlatformAccess: false })
 const requiresLogin = computed(() => form.role !== 'user' || form.hasPlatformAccess)
+const editingUser = computed(() => users.value.find(user => user.id === editingId.value) || null)
 const permissions = reactive<Record<AccessArea, Record<AccessAction, boolean>>>(Object.fromEntries(
   ACCESS_AREAS.map(area => [area.id, Object.fromEntries(ACCESS_ACTIONS.map(action => [action.id, false]))])
 ) as Record<AccessArea, Record<AccessAction, boolean>>)
@@ -54,7 +58,7 @@ const resetForm = () => {
   editingInternalOnly.value = false
   editingSuperAdmin.value = false
   passwordVisible.value = false
-  Object.assign(form, { name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user', hasPlatformAccess: false, is_active: true })
+  Object.assign(form, { name: '', companyName: '', email: '', whatsapp: '', password: '', role: 'user', hasPlatformAccess: false })
   clearPermissions()
   error.value = ''
 }
@@ -64,7 +68,7 @@ const editUser = (user: ManagedUser) => {
   editingInternalOnly.value = user.internal_only === true
   editingSuperAdmin.value = user.role === 'super_admin'
   passwordVisible.value = false
-  Object.assign(form, { name: user.internal_only ? '' : user.name, companyName: user.company_name || '', email: user.email, whatsapp: formatBrazilWhatsApp(user.whatsapp || ''), password: '', role: user.role, hasPlatformAccess: !user.internal_only, is_active: user.is_active })
+  Object.assign(form, { name: user.internal_only ? '' : user.name, companyName: user.company_name || '', email: user.email, whatsapp: formatBrazilWhatsApp(user.whatsapp || ''), password: '', role: user.role, hasPlatformAccess: !user.internal_only })
   clearPermissions()
   for (const area of ACCESS_AREAS) for (const action of ACCESS_ACTIONS) {
     permissions[area.id][action.id] = user.permissions?.[area.id]?.[action.id] === true
@@ -106,7 +110,7 @@ const selectedPermissions = (): EditorPermissions => {
 }
 
 const save = async () => {
-  if (saving.value) return
+  if (saving.value || actionBusy.value) return
   saving.value = true
   error.value = ''
   notice.value = ''
@@ -120,7 +124,6 @@ const save = async () => {
           hasPlatformAccess: form.hasPlatformAccess,
           whatsapp: form.whatsapp,
           role: form.role,
-          is_active: form.is_active,
           permissions: selectedPermissions(),
           ...(form.password ? { password: form.password } : {})
         }
@@ -144,6 +147,70 @@ const save = async () => {
 }
 
 const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Administrador', editor: 'Editor', user: 'Usuário comum' })[role]
+const userDisplayName = (user: ManagedUser) => user.company_name || user.name || user.email
+const canAdministerAccount = (user: ManagedUser) => auth.isSuperAdmin.value
+  && user.role !== 'super_admin'
+  && user.id !== auth.user.value?.id
+
+const changeUserStatus = async (user: ManagedUser) => {
+  if (!canAdministerAccount(user) || actionBusy.value || saving.value) return
+  actionBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    await $fetch(`/api/admin/users/${user.id}/status`, {
+      method: 'PATCH',
+      body: { is_active: !user.is_active }
+    })
+    if (editingId.value === user.id) resetForm()
+    notice.value = user.is_active
+      ? `Acesso de ${userDisplayName(user)} bloqueado.`
+      : `Acesso de ${userDisplayName(user)} desbloqueado.`
+    await load()
+  } catch (cause: any) {
+    error.value = cause?.data?.statusMessage || 'Não foi possível alterar o acesso deste usuário.'
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+const openRemovalConfirmation = (user: ManagedUser) => {
+  if (!canAdministerAccount(user) || actionBusy.value || saving.value) return
+  error.value = ''
+  removalConfirmation.value = ''
+  removalTarget.value = user
+}
+
+const cancelRemoval = () => {
+  if (actionBusy.value) return
+  removalTarget.value = null
+  removalConfirmation.value = ''
+}
+
+const removeUser = async () => {
+  const user = removalTarget.value
+  if (!user || !canAdministerAccount(user) || actionBusy.value || saving.value) return
+  if (removalConfirmation.value.trim() !== userDisplayName(user).trim()) return
+
+  actionBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    await $fetch(`/api/admin/users/${user.id}`, {
+      method: 'DELETE',
+      body: { confirmId: user.id }
+    })
+    if (editingId.value === user.id) resetForm()
+    notice.value = `${userDisplayName(user)} removido da listagem e com acesso revogado. Os materiais foram preservados.`
+    removalTarget.value = null
+    removalConfirmation.value = ''
+    await load()
+  } catch (cause: any) {
+    error.value = cause?.data?.statusMessage || 'Não foi possível remover este usuário.'
+  } finally {
+    actionBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -191,7 +258,7 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
               </span>
             </label>
           </template>
-          <label v-if="editingId" class="users-checkbox"><input v-model="form.is_active" type="checkbox" :disabled="editingSuperAdmin || editingId === auth.user.value?.id"> Usuário ativo</label>
+          <p v-if="editingUser" class="users-help">Estado da conta: <strong :class="editingUser.is_active ? 'users-active' : 'users-inactive'">{{ editingUser.is_active ? 'Ativo' : 'Bloqueado' }}</strong>.<template v-if="canAdministerAccount(editingUser)"> Altere pela ação Bloquear ou Desbloquear na lista.</template></p>
 
           <fieldset v-if="form.role === 'editor'" class="users-permissions">
             <legend>Permissões do editor</legend>
@@ -207,7 +274,7 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
             </div>
           </fieldset>
 
-          <button class="users-save" type="submit" :disabled="saving">{{ saving ? 'Salvando…' : editingId ? 'Salvar acesso' : form.role === 'user' ? 'Criar empresa' : 'Criar usuário' }}</button>
+          <button class="users-save" type="submit" :disabled="saving || actionBusy">{{ saving ? 'Salvando…' : editingId ? 'Salvar acesso' : form.role === 'user' ? 'Criar empresa' : 'Criar usuário' }}</button>
         </form>
       </section>
 
@@ -216,14 +283,38 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
         <input v-model="search" class="users-search" type="search" placeholder="Buscar empresa, nome, e-mail ou WhatsApp" aria-label="Buscar usuários">
         <p v-if="loading">Carregando usuários…</p>
         <div v-else class="users-list">
-          <article v-for="user in users" :key="user.id" class="users-list-item">
+          <article v-for="user in users" :key="user.id" class="users-list-item" :class="{ 'users-list-item-admin': canAdministerAccount(user) }">
             <div><strong>{{ user.company_name || user.name || user.email }}</strong><small>{{ user.internal_only ? 'Uso interno · sem acesso à plataforma' : `${user.name} · ${user.email} · ${user.whatsapp || 'Sem WhatsApp'}` }}</small></div>
             <span class="users-role">{{ roleLabel(user.role) }}</span>
-            <span :class="user.is_active ? 'users-active' : 'users-inactive'">{{ user.is_active ? 'Ativo' : 'Desativado' }}</span>
+            <span :class="user.is_active ? 'users-active' : 'users-inactive'">{{ user.is_active ? 'Ativo' : 'Bloqueado' }}</span>
             <button v-if="canManage(user)" type="button" @click="editUser(user)">Editar</button>
+            <div v-if="canAdministerAccount(user)" class="users-admin-actions">
+              <button type="button" :disabled="actionBusy || saving" @click="changeUserStatus(user)">{{ actionBusy ? 'Aguarde…' : user.is_active ? 'Bloquear' : 'Desbloquear' }}</button>
+              <button type="button" class="users-remove-action" :disabled="actionBusy || saving" @click="openRemovalConfirmation(user)">Remover</button>
+            </div>
           </article>
         </div>
       </section>
+
+      <div v-if="removalTarget" class="users-dialog-backdrop" @click.self="cancelRemoval">
+        <section class="users-removal-dialog" role="alertdialog" aria-modal="true" aria-labelledby="remove-user-title" aria-describedby="remove-user-description">
+          <h2 id="remove-user-title">Remover usuário?</h2>
+          <p id="remove-user-description">
+            <strong>{{ userDisplayName(removalTarget) }}</strong>
+            <template v-if="removalTarget.company_name && removalTarget.name"> · {{ removalTarget.name }}</template>
+            <template v-if="removalTarget.email"> · {{ removalTarget.email }}</template>
+          </p>
+          <p>A conta sairá da listagem e perderá o acesso à plataforma. Projetos, arquivos e demais materiais serão preservados.</p>
+          <p v-if="error" class="users-error" role="alert">{{ error }}</p>
+          <label>Digite <strong>{{ userDisplayName(removalTarget) }}</strong> para confirmar
+            <input v-model="removalConfirmation" type="text" autocomplete="off" :disabled="actionBusy">
+          </label>
+          <div class="users-dialog-actions">
+            <button type="button" :disabled="actionBusy" @click="cancelRemoval">Cancelar</button>
+            <button type="button" class="users-remove-action" :disabled="actionBusy || removalConfirmation.trim() !== userDisplayName(removalTarget).trim()" @click="removeUser">{{ actionBusy ? 'Removendo…' : 'Remover usuário' }}</button>
+          </div>
+        </section>
+      </div>
     </main>
   </AdminWorkspaceShell>
 </template>
@@ -261,6 +352,11 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
 .users-save { grid-column: 1 / -1; justify-self: start; min-height: 42px; padding: 0 20px; border-radius: 10px; background: #2563eb; color: white; font-weight: 800; }
 .users-save:disabled { opacity: .6; }
 .users-list-item { display: grid; grid-template-columns: minmax(0, 1fr) 130px 100px 60px; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid #e2e8f0; }
+.users-list-item-admin { grid-template-columns: minmax(0, 1fr) 130px 100px auto auto; }
+.users-list-item .users-admin-actions { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+.users-admin-actions button, .users-dialog-actions button { color: #2563eb; font-weight: 700; }
+.users-list-item button:disabled, .users-dialog-actions button:disabled { cursor: not-allowed; opacity: .55; }
+.users-admin-actions .users-remove-action, .users-dialog-actions .users-remove-action { color: #b91c1c; }
 .users-search { margin-bottom: 15px; }
 .users-list-item div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .users-list-item small { color: #64748b; overflow-wrap: anywhere; }
@@ -268,5 +364,12 @@ const roleLabel = (role: UserRole) => ({ super_admin: 'Super admin', admin: 'Adm
 .users-active { color: #047857; } .users-inactive { color: #b91c1c; }
 .users-notice, .users-error { padding: 10px 14px; border-radius: 9px; }
 .users-notice { background: #ecfdf5; color: #047857; } .users-error { background: #fef2f2; color: #b91c1c; }
-@media (max-width: 700px) { .users-page { padding: 18px 12px 40px; } .users-card { padding: 15px; } .users-form { grid-template-columns: 1fr; } .users-list-item { grid-template-columns: 1fr auto; } }
+.users-dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 20px; background: #0f172a88; }
+.users-removal-dialog { width: min(520px, 100%); padding: 24px; border: 1px solid #dbe5f0; border-radius: 16px; background: #fff; box-shadow: 0 24px 80px #0f172a33; }
+.users-removal-dialog h2 { margin: 0 0 14px; font-size: 21px; }
+.users-removal-dialog p { margin: 0 0 12px; color: #475569; line-height: 1.55; }
+.users-removal-dialog label { display: flex; flex-direction: column; gap: 7px; margin-top: 18px; font-size: 13px; }
+.users-removal-dialog input { box-sizing: border-box; width: 100%; height: 42px; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 9px; font-size: 14px; }
+.users-dialog-actions { display: flex; justify-content: flex-end; gap: 16px; margin-top: 20px; }
+@media (max-width: 700px) { .users-page { padding: 18px 12px 40px; } .users-card { padding: 15px; } .users-form { grid-template-columns: 1fr; } .users-list-item { grid-template-columns: 1fr auto; } .users-admin-actions { grid-column: 1 / -1; justify-content: flex-start; } }
 </style>

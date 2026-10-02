@@ -8,6 +8,7 @@ import {
   getDynamicBusinessTextOptions,
   isDynamicBusinessAddress,
   isDynamicBusinessValidity,
+  markBusinessTextStyleAsManual,
   normalizeDynamicBusinessTextCase,
   reflowDynamicBusinessTextObject,
   syncDynamicBusinessTextHeight,
@@ -235,6 +236,53 @@ describe('campos grandes com quebra de linha', () => {
     expect(object.styles[0][0]).toEqual({ fontSize: 40, fill: '#fff' })
     expect(object.styles[0][1]).toEqual({ fontSize: 12, fontWeight: 700 })
   })
+})
+
+it('preserva tipografia e geometria manuais depois do roundtrip do JSON', () => {
+  const saved = JSON.stringify({
+    type: 'textbox', businessProfileField: 'validity', text: 'OFERTAS VÁLIDAS DE 01 A 07/10',
+    fontSize: 18, dynamicFieldBaseFontSize: 32, lineHeight: 1.65, textAlign: 'left',
+    fill: '#fc0', styles: { 0: { 0: { fontSize: 22, fill: '#f00' } } }, dynamicFieldHeight: 94,
+    left: 173, top: 411, width: 286, height: 94, scaleX: 1.25, scaleY: 0.8,
+    __manualTypography: true, __manualTransform: true
+  })
+  const object = textbox(JSON.parse(saved))
+  object.calcTextHeight = () => Number(object.fontSize) * 2
+  object.initDimensions = () => { object.height = object.calcTextHeight() }
+  object.getPointByOrigin = () => ({ x: 0, y: 0 })
+  object.setPositionByOrigin = () => { throw new Error('posição manual alterada') }
+
+  fitDynamicBusinessTextObject(object)
+
+  expect(object).toMatchObject({
+    fontSize: 18, dynamicFieldBaseFontSize: 32, lineHeight: 1.65, textAlign: 'left',
+    fill: '#fc0', styles: { 0: { 0: { fontSize: 22, fill: '#f00' } } },
+    left: 173, top: 411, width: 286, height: 94, scaleX: 1.25, scaleY: 0.8,
+    __manualTypography: true, __manualTransform: true
+  })
+  object.calcTextHeight = () => 120
+  fitDynamicBusinessTextObject(object)
+  expect(object.height).toBe(120)
+})
+
+it('marca somente tipografia dinâmica e captions sociais como edição manual', () => {
+  const dynamic = textbox({ fontSize: 24 })
+  expect(markBusinessTextStyleAsManual(dynamic, 'fontSize')).toBe(true)
+  expect(dynamic.__manualTypography).toBe(true)
+  expect(dynamic.__manualTransform).toBe(true)
+
+  const selected = textbox({ fontSize: 24 })
+  expect(markBusinessTextStyleAsManual(selected, 'lineHeight', true)).toBe(true)
+  expect(selected.__manualTypography).toBe(true)
+  expect(selected.__manualTransform).toBeUndefined()
+
+  const caption = textbox({ name: 'header-social-caption', businessProfileField: undefined })
+  expect(markBusinessTextStyleAsManual(caption, 'fontFamily')).toBe(true)
+  expect(caption.__manualTransform).toBe(true)
+
+  const title = textbox({ name: 'smart_title', businessProfileField: undefined })
+  expect(markBusinessTextStyleAsManual(title, 'fontSize')).toBe(false)
+  expect(markBusinessTextStyleAsManual(dynamic, 'fill')).toBe(false)
 })
 
 it('preserva quebra de nomes longos do Instagram ao configurar um objeto recarregado', () => {

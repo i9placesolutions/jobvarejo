@@ -26,6 +26,27 @@ beforeEach(() => {
 })
 
 describe('PATCH /api/admin/users/:id — edição do super admin', () => {
+  it('edita cadastro em banco legado sem colunas de status e permissões', async () => {
+    mocks.profile.mockResolvedValue({ id: targetId, name: 'Cliente', role: 'user', is_active: false, has_active_column: false, has_permissions_column: false, business_profile: { companyName: 'Mercado', adminAccess: { blocked: true } } })
+    mocks.body.mockResolvedValue({ name: 'Cliente atualizado' })
+    await handler({} as any)
+    expect(mocks.update.mock.calls[0]![1]).toEqual([targetId, 'Cliente atualizado', null, 'Mercado', 'user'])
+    expect(mocks.update.mock.calls[0]![0]).not.toMatch(/\b(is_active|editor_permissions)\s*=/)
+    expect(mocks.update.mock.calls[0]![0]).toContain("COALESCE(business_profile->'adminAccess'->>'removedAt', '') = ''")
+  })
+
+  it('recusa conta removida antes de trocar senha', async () => {
+    mocks.profile.mockResolvedValue({ id: targetId, role: 'user', business_profile: { adminAccess: { removedAt: '2026-10-02' } } })
+    await expect(handler({} as any)).rejects.toMatchObject({ statusCode: 409 })
+    expect(mocks.hash).not.toHaveBeenCalled()
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('informa conflito se remoção vencer edição concorrente', async () => {
+    mocks.update.mockResolvedValue(null)
+    await expect(handler({} as any)).rejects.toMatchObject({ statusCode: 409 })
+  })
+
   it('permite editar o próprio nome preservando senha, nível e status', async () => {
     const result = await handler({} as any)
     expect(result.user).toMatchObject({ name: 'Admin atualizado', role: 'super_admin', is_active: true })

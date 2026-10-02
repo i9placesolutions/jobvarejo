@@ -6,6 +6,7 @@ import { enforceRateLimit } from '../../../utils/rate-limit'
 import { pgOneOrNull, pgTx } from '../../../utils/postgres'
 import { normalizeEditorPermissions } from '../../../../shared/access-control'
 import type { UserRole } from '~/types/auth'
+import { isRemovedAccount } from '../../../utils/account-access'
 
 export default defineEventHandler(async (event) => {
   const { user, role: actorRole } = await requireAdminUser(event)
@@ -14,6 +15,7 @@ export default defineEventHandler(async (event) => {
   if (!UUID_PATTERN.test(id)) throw createError({ statusCode: 400, statusMessage: 'Usuário inválido.' })
   const current = await getProfileById(id)
   if (!current) throw createError({ statusCode: 404, statusMessage: 'Usuário não encontrado.' })
+  if (isRemovedAccount(current)) throw createError({ statusCode: 409, statusMessage: 'Este usuário foi removido e não pode ser editado.' })
   if (current.role === 'super_admin' && actorRole !== 'super_admin') throw createError({ statusCode: 403, statusMessage: 'Somente o super administrador edita super administradores.' })
   if (current.role === 'admin' && actorRole !== 'super_admin') throw createError({ statusCode: 403, statusMessage: 'Somente o super administrador gerencia administradores.' })
   const body = await readBody<Record<string, unknown>>(event)
@@ -46,6 +48,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Nova senha inválida (8 a 256 caracteres).' })
   }
   const active = body.is_active === undefined ? current.is_active !== false : body.is_active === true
+  const hasActiveColumn = current.has_active_column !== false
+  const hasPermissionsColumn = current.has_permissions_column !== false
+  if (body.is_active !== undefined && !hasActiveColumn) {
+    throw createError({ statusCode: 400, statusMessage: 'Use a ação Bloquear ou Desbloquear na lista de usuários.' })
+  }
+  if (role === 'editor' && !hasPermissionsColumn) {
+    throw createError({ statusCode: 503, statusMessage: 'O acesso de editores requer a atualização do banco de acessos.' })
+  }
   const companyName = role === 'user' || role === 'super_admin'
     ? String(body.companyName ?? current.business_profile?.companyName ?? '').trim().replace(/\s+/g, ' ')
     : ''
@@ -68,16 +78,19 @@ export default defineEventHandler(async (event) => {
         const result = await client.query<any>(`
           UPDATE public.profiles
              SET name = $2, email = $3, login_whatsapp = $4,
-                 login_whatsapp_verified_at = now(), password_hash = $5, is_active = $7,
+                 login_whatsapp_verified_at = now(), password_hash = $5,
+                 ${hasActiveColumn ? 'is_active = $7,' : ''}
                  business_profile = COALESCE(business_profile, '{}'::jsonb) || jsonb_build_object('companyName', $6::text, 'internalOnly', false),
                  updated_at = now()
-           WHERE id = $1
+           WHERE id = $1 AND COALESCE(business_profile->'adminAccess'->>'removedAt', '') = ''
            RETURNING id, name, email, login_whatsapp AS whatsapp, role::text AS role,
-                     is_active, editor_permissions AS permissions,
+                     COALESCE((to_jsonb(profiles)->>'is_active')::boolean, true) AS is_active,
+                     COALESCE(to_jsonb(profiles)->'editor_permissions', '{}'::jsonb) AS permissions,
                      business_profile->>'companyName' AS company_name,
                      false AS internal_only, created_at, last_login_at
-        `, [id, access.name, accountEmail, access.whatsapp, passwordHash, companyName, active])
-        if (!result.rows[0]) throw createError({ statusCode: 404, statusMessage: 'Empresa não encontrada.' })
+        `, hasActiveColumn ? [id, access.name, accountEmail, access.whatsapp, passwordHash, companyName, active]
+          : [id, access.name, accountEmail, access.whatsapp, passwordHash, companyName])
+        if (!result.rows[0]) throw createError({ statusCode: 409, statusMessage: 'A conta foi removida durante a edição. Atualize a lista.' })
         const builder = await client.query<{ relation: string | null }>("SELECT to_regclass('public.builder_tenants')::text AS relation")
         if (builder.rows[0]?.relation) {
           // O Builder usa a sessão principal; não duplicar o hash evita senha antiga após reset.
@@ -101,8 +114,13 @@ export default defineEventHandler(async (event) => {
   // O super admin conserva nível/status/permissões. Seu cadastro também deve
   // funcionar nos bancos legados sem as colunas da migração de acessos.
   const params: unknown[] = [id, internalOnly ? companyName : name, passwordHash, updateCompanyName ? companyName : null]
-  const accessUpdate = preservingSuperAdmin ? '' : ', role = $5::public.user_role, is_active = $6, editor_permissions = $7::jsonb'
-  if (!preservingSuperAdmin) params.push(role, active, JSON.stringify(permissions))
+  let accessUpdate = ''
+  if (!preservingSuperAdmin) {
+    params.push(role)
+    accessUpdate = ', role = $5::public.user_role'
+    if (hasActiveColumn) { params.push(active); accessUpdate += `, is_active = $${params.length}` }
+    if (hasPermissionsColumn) { params.push(JSON.stringify(permissions)); accessUpdate += `, editor_permissions = $${params.length}::jsonb` }
+  }
   const updated = await pgOneOrNull<any>(`
     UPDATE public.profiles
        SET name = $2,
@@ -114,7 +132,7 @@ export default defineEventHandler(async (event) => {
            reset_token_expires_at = CASE WHEN $3::text IS NULL THEN reset_token_expires_at ELSE NULL END
            ${accessUpdate},
            updated_at = now()
-     WHERE id = $1
+     WHERE id = $1 AND COALESCE(business_profile->'adminAccess'->>'removedAt', '') = ''
      RETURNING id, name, email, login_whatsapp AS whatsapp, role::text AS role,
                COALESCE((to_jsonb(profiles)->>'is_active')::boolean, true) AS is_active,
                COALESCE(to_jsonb(profiles)->'editor_permissions', '{}'::jsonb) AS permissions,
@@ -122,6 +140,6 @@ export default defineEventHandler(async (event) => {
                COALESCE((business_profile->>'internalOnly')::boolean, false) AS internal_only,
                created_at, last_login_at
   `, params)
-  if (!updated) throw createError({ statusCode: 404, statusMessage: 'Usuário não encontrado.' })
+  if (!updated) throw createError({ statusCode: 409, statusMessage: 'A conta foi removida durante a edição. Atualize a lista.' })
   return { user: { ...updated, email: internalOnly ? '' : updated.email } }
 })

@@ -27,6 +27,7 @@ import {
   type FlyerTemplateSummary
 } from '~/utils/flyerTemplateApi'
 import { normalizeFlyerTemplateCategory } from '~/utils/flyerTemplateCategory'
+import { orderFlyerTemplatesForCompany } from '~/utils/companyFlyerTemplateOrder'
 
 definePageMeta({
   layout: false,
@@ -86,7 +87,7 @@ const usePreviewTemplate = async () => {
 const selectedTemplateCategory = ref<string | null>(null)
 const selectedTemplateSubcategory = ref<string | null>(null)
 const templateSearch = ref('')
-const templateSort = ref<'recent' | 'name'>('recent')
+const templateSort = ref<'company' | 'recent' | 'name'>('company')
 const existingProjects = ref<ProjectListRow[]>([])
 const projectSearch = ref('')
 const projectSort = ref<'recent' | 'oldest' | 'name'>('recent')
@@ -164,7 +165,7 @@ const filteredTemplates = computed(() => {
   const categoryKey = getCategoryKey(selectedTemplateCategory.value)
   const subcategoryKey = getCategoryKey(selectedTemplateSubcategory.value)
 
-  return [...templates.value]
+  const matchingTemplates = templates.value
     .filter((template) => {
       if (categoryKey && getCategoryKey(getTemplateCategory(template)) !== categoryKey) return false
       if (subcategoryKey && getCategoryKey(getTemplateSubcategory(template)) !== subcategoryKey) return false
@@ -178,12 +179,15 @@ const filteredTemplates = computed(() => {
       ].filter(Boolean).join(' '))
       return searchableText.includes(normalizedSearch)
     })
-    .sort((a, b) => {
-      if (templateSort.value === 'name') {
-        return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base' })
-      }
-      return (Date.parse(b.updated_at || b.created_at || '') || 0) - (Date.parse(a.updated_at || a.created_at || '') || 0)
-    })
+  if (templateSort.value === 'company') {
+    return orderFlyerTemplatesForCompany(matchingTemplates, auth.user.value?.id || '')
+  }
+  return matchingTemplates.sort((a, b) => {
+    if (templateSort.value === 'name') {
+      return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base' })
+    }
+    return (Date.parse(b.updated_at || b.created_at || '') || 0) - (Date.parse(a.updated_at || a.created_at || '') || 0)
+  })
 })
 
 const activeTemplateFilterCount = computed(() => [
@@ -192,12 +196,12 @@ const activeTemplateFilterCount = computed(() => [
   selectedTemplateSubcategory.value
 ].filter(Boolean).length)
 
-const hasTemplateFilters = computed(() => activeTemplateFilterCount.value > 0 || templateSort.value !== 'recent')
+const hasTemplateFilters = computed(() => activeTemplateFilterCount.value > 0 || templateSort.value !== 'company')
 const hasProjectFilters = computed(() => !!projectSearch.value.trim() || projectSort.value !== 'recent')
 
 const clearTemplateFilters = () => {
   templateSearch.value = ''
-  templateSort.value = 'recent'
+  templateSort.value = 'company'
   selectedTemplateCategory.value = null
   selectedTemplateSubcategory.value = null
 }
@@ -399,7 +403,7 @@ onUnmounted(() => {
               Edição rápida
             </div>
             <h1 class="mt-4 max-w-xl text-3xl font-bold tracking-[-0.04em] text-white sm:text-4xl lg:text-[2.75rem]">Comece pelo encarte certo.</h1>
-            <p class="mt-3 max-w-xl text-sm leading-6 text-blue-100/80 sm:text-base">Encontre um modelo pronto, filtre por categoria ou pesquise pelo nome. Depois, é só preencher os produtos e publicar.</p>
+            <p class="mt-3 max-w-xl text-sm leading-6 text-blue-100/80 sm:text-base">Os temas aparecem em uma ordem diferente para cada empresa. Filtre por categoria ou pesquise pelo nome; depois, preencha os produtos e publique.</p>
             <div class="mt-6 flex flex-wrap gap-2 text-xs font-semibold">
               <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-2 text-blue-50">
                 <LayoutTemplate class="h-3.5 w-3.5 text-blue-200" />
@@ -631,6 +635,7 @@ onUnmounted(() => {
               <span class="sr-only">Ordenar modelos</span>
               <ArrowDownAZ class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" />
               <select v-model="templateSort" aria-label="Ordenar modelos" class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-9 text-sm font-semibold text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100">
+                <option value="company">Variados para sua loja</option>
                 <option value="recent">Mais recentes</option>
                 <option value="name">Nome: A–Z</option>
               </select>

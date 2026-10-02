@@ -97,18 +97,18 @@ export const layoutHeaderInstagram = (objects: any[]): boolean => {
       const centerX = Number.isFinite(band.headerInstagramCenterX) ? band.headerInstagramCenterX : b.left + b.width / 2
       assign(band, { headerInstagramMaxWidth: maxWidth, headerInstagramCenterX: centerX })
       const width = Math.max(1, maxWidth - inset * 2 - iconSize - gap - 2), height = Math.max(1, b.height - 14 * s)
-      assign(field, { originX: 'left', originY: 'top', lineHeight: 1, textAlign: 'left' })
-      const manual = field.__manualTransform
-      field.__manualTransform = false
-      fitQuickBusinessFooterText(field, { width, height, maxFontSize: 28 * s, singleLine: true })
-      field.__manualTransform = manual
+      const manualFieldLayout = field.__manualTransform || field.__manualTypography
+      if (!manualFieldLayout) {
+        assign(field, { originX: 'left', originY: 'top', lineHeight: 1, textAlign: 'left' })
+        fitQuickBusinessFooterText(field, { width, height, maxFontSize: 28 * s, singleLine: true })
+      }
       const measured = typeof field.calcTextWidth === 'function' ? field.calcTextWidth() : String(field.text || '').length * field.fontSize * .6
-      const textWidth = Math.min(width, measured * field.scaleX)
+      const textWidth = manualFieldLayout ? bounds(field).width : Math.min(width, measured * field.scaleX)
       const bandWidth = Math.min(maxWidth, textWidth + inset * 2 + iconSize + gap)
       const left = centerX - bandWidth / 2
-      assign(band, { originX: 'left', left, width: bandWidth, scaleX: 1 })
-      assign(field, { width: textWidth / field.scaleX, left: left + inset + iconSize + gap, top: b.top + (b.height - bounds(field).height) / 2 })
-      if (icon) {
+      if (!band.__manualTransform) assign(band, { originX: 'left', left, width: bandWidth, scaleX: 1 })
+      if (!manualFieldLayout) assign(field, { width: textWidth / field.scaleX, left: left + inset + iconSize + gap, top: b.top + (b.height - bounds(field).height) / 2 })
+      if (icon && !icon.__manualTransform) {
         const scale = iconSize / Math.max(icon.width, icon.height)
         assign(icon, { originX: 'left', originY: 'top', left: left + inset, top: b.top + (b.height - icon.height * scale) / 2, scaleX: scale, scaleY: scale })
       }

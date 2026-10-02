@@ -1,6 +1,7 @@
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { enforceRateLimit } from '../../utils/rate-limit'
 import { pgQuery } from '../../utils/postgres'
+import { PROFILE_ACTIVE_SQL } from '../../utils/account-access'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
@@ -19,7 +20,7 @@ export default defineEventHandler(async (event) => {
            CASE WHEN COALESCE((p.business_profile->>'internalOnly')::boolean, false) THEN '' ELSE p.email END AS email
       FROM public.profiles p
      WHERE p.role = 'user'
-       AND COALESCE((to_jsonb(p)->>'is_active')::boolean, true)
+       AND (${PROFILE_ACTIVE_SQL})
        AND ($1 = '' OR p.name ILIKE $2 ESCAPE '!' OR p.email ILIKE $2 ESCAPE '!'
             OR p.business_profile->>'companyName' ILIKE $2 ESCAPE '!')
      ORDER BY label ASC, p.id ASC
@@ -33,7 +34,7 @@ export default defineEventHandler(async (event) => {
              CASE WHEN COALESCE((p.business_profile->>'internalOnly')::boolean, false) THEN '' ELSE p.email END AS email
         FROM public.profiles p
        WHERE p.id = $1 AND p.role = 'user'
-         AND COALESCE((to_jsonb(p)->>'is_active')::boolean, true)
+         AND (${PROFILE_ACTIVE_SQL})
        LIMIT 1
     `, [selectedId])
     if (selected.rows[0]) rows.unshift(selected.rows[0])

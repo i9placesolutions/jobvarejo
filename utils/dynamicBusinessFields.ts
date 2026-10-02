@@ -162,6 +162,26 @@ export const isDynamicBusinessAddress = (object: any): boolean =>
 export const isDynamicBusinessValidity = (object: any): boolean =>
   isDynamicBusinessFieldObject(object) && getDynamicBusinessField(object) === 'validity'
 
+const INSPECTOR_TYPOGRAPHY_PROPS = new Set([
+  'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'underline', 'linethrough',
+  'textAlign', 'lineHeight', 'charSpacing', 'textBackgroundColor'
+])
+const LAYOUT_AFFECTING_TYPOGRAPHY_PROPS = new Set([
+  'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textAlign', 'lineHeight', 'charSpacing'
+])
+
+/** Marca escolhas tipográficas do Inspector que pertencem ao usuário. */
+export const markBusinessTextStyleAsManual = (object: any, property: string, hasTextSelection = false): boolean => {
+  const type = String(object?.type || '').toLowerCase()
+  const isText = TEXT_OBJECT_TYPES.has(type)
+  const isSocialCaption = object?.name === 'header-social-caption'
+  if (!isText || (!isDynamicBusinessFieldObject(object) && !isSocialCaption) || !INSPECTOR_TYPOGRAPHY_PROPS.has(property)) return false
+
+  object.__manualTypography = true
+  if (!hasTextSelection && LAYOUT_AFFECTING_TYPOGRAPHY_PROPS.has(property)) object.__manualTransform = true
+  return true
+}
+
 /**
  * Configuracao de um campo dinamico. A largura continua usando o reflow nativo
  * do Textbox; altura, fonte e escala ficam disponiveis separadamente.
@@ -345,15 +365,24 @@ export const fitDynamicBusinessTextObject = (
 
   const changed = captureDynamicBusinessTextBaseline(object)
   const currentFontSize = finitePositive(object.fontSize) || 16
-  const baseFontSize = finitePositive(options.maxFontSize)
-    || finitePositive(object.dynamicFieldBaseFontSize)
-    || currentFontSize
+  const manualTypography = object.__manualTypography === true
+  const manualTransform = object.__manualTransform === true
+  const baseFontSize = manualTypography
+    ? currentFontSize
+    : finitePositive(options.maxFontSize)
+      || finitePositive(object.dynamicFieldBaseFontSize)
+      || currentFontSize
   // O modelo define a fonte; o conteúdo só recalcula linhas e altura.
   // Inclui estilos por caractere: preencher dados não é uma edição tipográfica.
   const width = finitePositive(options.maxWidth) || finitePositive(object.width)
   const topAnchor = object.getPointByOrigin?.('center', 'top')
   const previousHeight = Number(object.height)
   const previousWidth = Number(object.width)
+  const manualGeometry = manualTransform
+    ? Object.fromEntries(['left', 'top', 'width', 'scaleX', 'scaleY', 'angle', 'originX', 'originY']
+      .filter(key => object[key] !== undefined)
+      .map(key => [key, object[key]]))
+    : null
   setObjectValues(object, {
     fontSize: baseFontSize,
     dynamicFieldAutoFitFontSize: baseFontSize,
@@ -365,7 +394,7 @@ export const fitDynamicBusinessTextObject = (
     setObjectValues(object, { width, splitByGrapheme: true })
     object.initDimensions?.()
   }
-  if (getDynamicBusinessField(object) === 'validity' && !isSplitFooterValidity(object) && width != null) {
+  if (!manualTypography && !manualTransform && getDynamicBusinessField(object) === 'validity' && !isSplitFooterValidity(object) && width != null) {
     const flatText = String(object.text || '').replace(/\s+/g, ' ').trim()
     // Preservar uma linha somente quando ela cabe com a fonte legível do modelo.
     let text = flatText.replace(/\s+(?:e\s+)?(enquanto\s+durarem\s+os\s+estoques)/i, '\n$1')
@@ -396,14 +425,18 @@ export const fitDynamicBusinessTextObject = (
   if (getDynamicBusinessField(object) === 'validity' && !isSplitFooterValidity(object)) {
     const siblings = (object.group || object.canvas)?.getObjects?.() || []
     const icon = siblings.find((item: any) => item.quickDynamicIconFor === 'validity' && item.parentFrameId === object.parentFrameId)
-    if (icon?.set) {
+    if (icon?.set && !icon.__manualTransform) {
       const size = Number(object.fontSize || 32) * Math.abs(Number(object.scaleY || 1)) * 1.2
       const sourceSize = Math.max(Number(icon.width || 1), Number(icon.height || 1))
       icon.set({ scaleX: size / sourceSize, scaleY: size / sourceSize, visible: object.visible !== false, dirty: true })
       icon.setCoords?.()
     }
   }
-  if (topAnchor) object.setPositionByOrigin?.(topAnchor, 'center', 'top')
+  if (manualGeometry) {
+    setObjectValues(object, manualGeometry)
+  } else if (topAnchor) {
+    object.setPositionByOrigin?.(topAnchor, 'center', 'top')
+  }
   object.setCoords?.()
   return changed || Math.abs(currentFontSize - baseFontSize) > 0.01
     || previousHeight !== Number(object.height) || previousWidth !== Number(object.width)
