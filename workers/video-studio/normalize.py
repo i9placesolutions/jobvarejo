@@ -88,16 +88,29 @@ def normalize(text, pronunciations=None):
     text = sub(r'%', ' por cento', text)
     text = sub(r'\+', ' mais ', text)
     def money(m):
-        raw = m.group(1).replace('.', '').replace(',', '.')
-        cents = round(float(raw) * 100)
-        reais, rest = divmod(cents, 100)
-        parts = []
-        if reais: parts.append(num2words(reais, lang='pt_BR') + (' real' if reais == 1 else ' reais'))
-        # Em ofertas com reais inteiros, a locução omite a fração de centavos.
-        # Valores abaixo de um real viram uma frase curta, sem anunciar centavos.
-        if not reais and rest: parts.append('menos de um real')
-        return ' e '.join(parts) or 'zero reais'
+        raw = m.group(1).replace('.', '')
+        if ',' in raw:
+            whole, fraction = raw.split(',', 1)
+            cents = int(fraction.ljust(2, '0'))
+        else:
+            whole, cents = raw, 0
+        reais = int(whole)
+        if cents:
+            return _integer_words(reais) + ' e ' + _integer_words(cents)
+        return num2words(reais, lang='pt_BR') + (' real' if reais == 1 else ' reais')
     text = sub(r'R\$\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?)', money, text, flags=IGNORECASE)
+    # Roteiros salvos podem conter a forma monetária anterior por extenso.
+    # Normalize apenas números ligados a reais/centavos, sem alterar prosa livre.
+    number_words = (
+        'zero|um|uma|dois|duas|três|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|'
+        'treze|quatorze|catorze|quinze|dezesseis|dezassete|dezessete|dezoito|dezenove|'
+        'vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|'
+        'duzentos|trezentos|quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|'
+        'novecentos|mil|milhão|milhões|bilhão|bilhões'
+    )
+    word_number = r'(?:' + number_words + r')(?:\s+(?:e\s+)?(?:' + number_words + r'))*'
+    text = sub(r'\b(' + word_number + r')\s+rea(?:l|is)\s+e\s+(' + word_number + r')\s+centavos?\b', r'\1 e \2', text, flags=IGNORECASE)
+    text = sub(r'\b(' + word_number + r')\s+centavos?\b', r'zero e \1', text, flags=IGNORECASE)
     text = sub(r'/\s*kg\b', ' o quilo', text, flags=IGNORECASE)
     text = sub(r'/\s*un\b', ' a unidade', text, flags=IGNORECASE)
     units = {'kg': ('quilo','quilos',False), 'g': ('grama','gramas',False), 'ml': ('mililitro','mililitros',False), 'l': ('litro','litros',False), 'un': ('unidade','unidades',True), 'und': ('unidade','unidades',True), 'unid': ('unidade','unidades',True), 'pct': ('pacote','pacotes',False), 'pcte': ('pacote','pacotes',False), 'cx': ('caixa','caixas',True), 'dz': ('dúzia','dúzias',True)}
@@ -111,7 +124,7 @@ def normalize(text, pronunciations=None):
             spoken = sub(r'\bdois$', 'duas', spoken) if int(number) % 10 == 2 and int(number) % 100 != 12 else spoken
         return spoken + ' ' + (singular if number == 1 else plural)
     text = sub(r'\b(\d+(?:,\d+)?)\s*(kg|ml|unid|und|un|pcte|pct|cx|dz|g|l)\b', measure, text, flags=IGNORECASE)
-    # A two-decimal amount without R$ in an offer is still a price.
+    # Valor com duas casas sem R$ em uma oferta ainda representa preço.
     text = sub(r'(?<![\w,])(\d+(?:\.\d{3})*,\d{2})(?!\w)', money, text)
     for abbreviation, spoken in {'kg': 'o quilo', 'g': 'o grama', 'ml': 'o mililitro', 'l': 'o litro', 'un': 'a unidade', 'und': 'a unidade', 'unid': 'a unidade', 'pct': 'o pacote', 'pcte': 'o pacote', 'cx': 'a caixa', 'dz': 'a dúzia'}.items():
         text = sub(r'\b' + abbreviation + r'\b', spoken, text, flags=IGNORECASE)

@@ -21,12 +21,12 @@ export default defineEventHandler(async event=>{
  if(input.kind==='voice'&&!process.env.ELEVENLABS_API_KEY)throw createError({statusCode:503,statusMessage:'Configure ELEVENLABS_API_KEY no servidor para gerar a locução.'})
  const label=resolveVideoLabel((doc.priceLabel||flyerRecipe(doc.theme)?await listVideoLabels(u.id,doc.priceLabel||undefined):[]).filter((l):l is NonNullable<typeof l>=>!!l),doc.theme,doc.priceLabel)
  if((doc.priceLabel||flyerRecipe(doc.theme))&&!label)throw createError({statusCode:422,statusMessage:'Esta etiqueta não está disponível para este vídeo.'})
- trace('label');const audioHash=videoHash(videoAudioIdentity(doc));const fingerprint=videoHash(input.kind==='voice'?{audioHash,voice,voiceMode:'full-v1',provider:'elevenlabs',model:'eleven_v3',speechVersion:3,pacingVersion:'retail-pauses-v1'}:input.kind==='render'?{doc,label,revision:p.revision,renderVersion:6}: {prompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado',project:p.id})
+ trace('label');const audioHash=videoHash(videoAudioIdentity(doc));const fingerprint=videoHash(input.kind==='voice'?{audioHash,voice,voiceMode:'full-v1',provider:'elevenlabs',model:'eleven_v3',speechVersion:4,pacingVersion:'retail-pauses-v1'}:input.kind==='render'?{doc,label,revision:p.revision,renderVersion:6}: {prompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado',project:p.id})
  return pgTx(async client=>{
   await client.query("SET LOCAL idle_in_transaction_session_timeout='30s'")
   await client.query("SET LOCAL statement_timeout='30s'")
   // Stage the large body before taking the account lock; assets can finish saving.
-  const stagedPayload={voiceMode:'full-v1',speechProvider:'elevenlabs',speechModel:'eleven_v3',speechVersion:3,document:doc,label,audioHash,voice,voiceResult:null,musicPrompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado, sem voz'}
+  const stagedPayload={voiceMode:'full-v1',speechProvider:'elevenlabs',speechModel:'eleven_v3',speechVersion:4,document:doc,label,audioHash,voice,voiceResult:null,musicPrompt:input.musicPrompt||'Trilha instrumental animada para ofertas de supermercado, sem voz'}
   await stageVideoPayload(client,videoJson(stagedPayload));trace('payload-staged')
   await client.query('SELECT id FROM public.profiles WHERE id=$1 FOR UPDATE',[u.id])
   trace('account-lock');const prior=await client.query("SELECT id,kind,status,result,progress,error,revision FROM public.video_studio_jobs WHERE user_id=$1 AND project_id=$2 AND kind=$3 AND fingerprint=$4 AND status IN ('queued','running','ready') LIMIT 1",[u.id,p.id,input.kind,fingerprint]);if(prior.rows[0])return prior.rows[0]

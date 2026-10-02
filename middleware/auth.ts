@@ -1,3 +1,5 @@
+import { shouldPromptBusinessProfileOnboarding } from '~/utils/businessProfile'
+
 // Rotas públicas (sem autenticação)
 const publicRoutes = [
   '/landing',
@@ -55,6 +57,22 @@ export default defineNuxtRouteMiddleware(async (to) => {
       path.startsWith('/radio-indoor') || path === '/plans' || path === '/billing' ||
       (path.startsWith('/editor/') && String(to.query.quick || '') === '1')
     if (!permitted) return navigateTo('/', { replace: true })
+
+    if (path !== '/business-profile') {
+      let shouldOnboard = true
+      try {
+        const profile = await $fetch<{ business_profile?: unknown }>('/api/profile?self=1')
+        shouldOnboard = shouldPromptBusinessProfileOnboarding(role, profile?.business_profile)
+      } catch {
+        // Fail closed for offer creation when the persisted profile is unknown.
+      }
+      if (shouldOnboard) {
+        return navigateTo({
+          path: '/business-profile',
+          query: { onboarding: '1', returnTo: to.fullPath || '/' }
+        }, { replace: true })
+      }
+    }
   }
   if (role === 'editor') {
     if (path.startsWith('/admin/')) return navigateTo('/', { replace: true })

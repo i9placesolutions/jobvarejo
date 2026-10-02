@@ -3,9 +3,11 @@ import { cartazistaUser, cartazistaDatabaseError } from '~/server/utils/cartazis
 import { cartazistaDesignSchema, parseCartazistaInput } from '~/server/utils/cartazista-schema'
 import { pgOneOrNull } from '~/server/utils/postgres'
 import { parseAndStringifyJsonbParam } from '~/server/utils/jsonb'
+import { requireBusinessProfileForOfferCreation } from '~/server/utils/business-profile-onboarding'
 
 export default defineEventHandler(async (event) => {
   const user = await cartazistaUser(event)
+  await requireBusinessProfileForOfferCreation(user)
   const data = parseCartazistaInput(cartazistaDesignSchema, await readBody(event))
   try {
     const id = data.id || randomUUID()

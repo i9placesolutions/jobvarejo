@@ -96,6 +96,15 @@ export function selectCatalogSoundAssets(document,format='vertical',{showcase=fa
 
 export function selectCatalogTemplateAssets(document,format,{recipe,backgroundAsset}={}){
  const assets=new Set()
+ const spriteAssets={
+  'sprite-sparks':'spark','sprite-smoke':'smoke','sprite-flare':'flare',
+  'sprite-stars':'star','sprite-rings':'ring','sprite-lightning':'lightning',
+  'sprite-fire':'fire','sprite-dust':'dust','sprite-vortex':'vortex',
+ }
+ for(const effect of document?.motion?.atmosphere||[]){
+  const sprite=spriteAssets[effect]
+  if(sprite)assets.add(`templates/effects/kenney-${sprite}.png`)
+ }
  if(recipe){
   const chosen=document?.background
   const energy=chosen&&backgroundAsset?backgroundAsset(chosen,format):format==='vertical'?(recipe.energyBackgroundVertical||recipe.energyBackground):recipe.energyBackground

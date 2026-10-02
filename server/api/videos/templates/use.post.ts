@@ -4,9 +4,11 @@ import { newVideoFromTemplate } from '../../../../shared/video-studio/templates'
 import { loadVideoBrand } from '../../../utils/video-studio/brand'
 import { videoUser, videoJson } from '../../../utils/video-studio/service'
 import { pgOneOrNull } from '../../../utils/postgres'
+import { requireBusinessProfileForOfferCreation } from '../../../utils/business-profile-onboarding'
 
 export default defineEventHandler(async event => {
   const user = await videoUser(event, 15)
+  await requireBusinessProfileForOfferCreation(user)
   const input = z.object({theme:z.string().refine(id=>VIDEO_THEMES.some(t=>t.id===id))}).safeParse(await readBody(event))
   if (!input.success) throw createError({statusCode:422,statusMessage:'Escolha um modelo disponível.'})
   // Somente a receita compartilhada é copiada. Nenhum ID, mídia privada,

@@ -3,11 +3,40 @@ import {
   formatBusinessAddressValues,
   formatBusinessContactValues,
   formatBusinessPaymentMethods,
+  isBusinessProfileComplete,
   normalizeBusinessProfile,
+  shouldPromptBusinessProfileOnboarding,
 } from '~/utils/businessProfile'
 import { mergeBusinessProfile } from '../../server/utils/business-profile'
 
 describe('businessProfile repeatable data', () => {
+  it('requires persisted company, logo, Instagram, WhatsApp and address fields regardless of the completion flag', () => {
+    expect(isBusinessProfileComplete({
+      onboarding_completed: true,
+      companyName: 'Mercado Central',
+      logo: 'logos/mercado.png',
+      instagram: '@mercadocentral',
+      whatsapp: '(11) 99999-0000',
+      address: 'Rua A, 10',
+    })).toBe(true)
+    expect(isBusinessProfileComplete({ onboarding_completed: true })).toBe(false)
+  })
+
+  it('accepts complete legacy profile data even when onboarding_completed is false', () => {
+    const legacyProfile = {
+      onboarding_completed: false,
+      companyName: 'Mercado Central',
+      logoUrl: 'logos/mercado.png',
+      instagram: '@mercadocentral',
+      whatsapp: '(11) 99999-0000',
+      address: 'Rua A, 10',
+    }
+    expect(isBusinessProfileComplete(legacyProfile)).toBe(true)
+    expect(shouldPromptBusinessProfileOnboarding('user', legacyProfile)).toBe(false)
+    expect(shouldPromptBusinessProfileOnboarding('user', { onboarding_completed: true })).toBe(true)
+    expect(shouldPromptBusinessProfileOnboarding('admin', { onboarding_completed: true })).toBe(false)
+  })
+
   it('migrates legacy WhatsApp and endereço strings without losing compatibility', () => {
     const profile = normalizeBusinessProfile({ whatsapp: '(11) 99999-0000', address: 'Rua A, 10' })
 

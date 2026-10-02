@@ -1,0 +1,21 @@
+Ampliação do catálogo de vídeos — 01/10/2026
+
+Pedido: baixar muitas opções de fundos, efeitos, transições, sons e músicas para variar os vídeos.
+
+Adicionados: 24 fundos (48 PNGs, horizontal 1920x1080 e vertical 1080x1920), 34 faixas musicais distintas, 40 sons estéreo, 9 sprites de partículas e 8 transições nativas. 131 arquivos novos, 150.951.060 bytes; 1027 referências totais no manifesto Wasabi.
+
+Fontes CC0: Kenney Particle Pack, Interface Sounds e Impact Sounds; OpenGameArt Generated Backgrounds Vol.2 e Vol.3 (rh0), Space backgrounds with stars and nubular (Soluna Software), Swishes Sound Pack (artisticdude), 3xBlast Free Music Pack (15 faixas), Dance Music Pack (4 faixas diferentes; versão Celebrity V2 omitida), Free Rhythm Game Music Pack 2 (10 faixas), Going Deep, Electronic Outlaw, Wednesday Night, Barriers e Funked Up. URLs/autores/licenças e SHA256 dos originais e derivados estão em public/video-studio/catalog-provenance.json. Evidências de licença e arquivos originais preservados em output/video-library-20261001/sources.
+
+Áudio convertido e normalizado com FFmpeg para estéreo 48 kHz (WAV PCM nos sons; MP3 192 kbps nas músicas). Decode completo executado para cada arquivo. Faixas curtas permanecem loops; o compositor já repete a música. Não foi feita audição integral das 34 músicas.
+
+Fundos são imagens com movimento do compositor existente, não clipes de vídeo baixados. Partículas usam 9 PNGs transparentes CC0; posições determinísticas por frame e quantidade reduzida em fastPreview. Transições adicionais são implementações nativas: clarão, tela dividida, diamante, radial, faixas, pixels, V e anel. Não há anúncios/projetos de clientes modificados nem associação automática de novos recursos aos modelos existentes.
+
+Wasabi: upload via migrate-catalog-to-wasabi.mjs --upload --archive; 131 HEADs verificaram bytes/metadados; novo GET de cada objeto pelo resolver real do worker conferiu conteúdo contra SHA256. Relatório: output/video-library-20261001/wasabi-readback.json. Keys imutáveis video-studio/catalog/<sha256>/<path>. Rota de catálogo existente preservada; sem mudanças em autenticação, permissões, isolamento, rate limit, circuit breaker ou fallback.
+
+Verificação: 8 stills reais cobrindo todas as novas transições, alternando Reels/TV; 2 clipes curtos H264/AAC decodificados em baixa resolução para revisão técnica. Não equivalem a revisar todos os frames de exportações comerciais finais. Relatórios e clipes em output/video-library-20261001/review.
+
+Testes: suíte Video Studio atual com 386 passando e 4 falhando; as mesmas quatro falhas reproduzidas no HEAD anterior em checkout temporário: família clock do modelo Fecha Mês, 24 modelos com músicas repetidas, margem logo/validade e sobreposição produto/etiqueta na coleção Economia. Testes novos da expansão e efeitos passam. Logs em output/video-library-20261001/{video-tests,baseline-tests}.log.
+
+Publicação: somente catálogo Wasabi e alteração local. Sem commit, push, deploy, migração ou geração paga. Build final, typecheck final e preview serão registrados no Vault após conclusão.
+
+Conclusão local: typecheck final e build final exit 0; chunk máximo 455 KB / limite 500 KB; 14 testes dirigidos finais passaram. Preview reiniciado na porta 3000; página HTTP 200 e 131 arquivos testados via GET Range HTTP 206, com Content-Range. Artefatos binários mantidos fora do build. Publicação de app e worker ainda pendente.

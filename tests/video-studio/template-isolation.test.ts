@@ -1,15 +1,16 @@
 import {beforeEach,describe,it,expect,vi} from 'vitest'
-const mocks=vi.hoisted(()=>({user:vi.fn(),brand:vi.fn(),query:vi.fn(),owned:vi.fn(),assets:vi.fn(),body:vi.fn()}))
+const mocks=vi.hoisted(()=>({user:vi.fn(),brand:vi.fn(),query:vi.fn(),owned:vi.fn(),assets:vi.fn(),body:vi.fn(),profileGuard:vi.fn()}))
 vi.mock('../../server/utils/video-studio/service',()=>({videoUser:mocks.user,videoJson:JSON.stringify,ownedVideo:mocks.owned,validateVideoAssets:mocks.assets}))
 vi.mock('../../server/utils/video-studio/brand',()=>({loadVideoBrand:mocks.brand}))
 vi.mock('../../server/utils/postgres',()=>({pgOneOrNull:mocks.query}))
+vi.mock('../../server/utils/business-profile-onboarding',()=>({requireBusinessProfileForOfferCreation:mocks.profileGuard}))
 vi.stubGlobal('defineEventHandler',(handler:any)=>handler)
 vi.stubGlobal('readBody',mocks.body)
 vi.stubGlobal('createError',(data:any)=>Object.assign(new Error(data.statusMessage),data))
 const useTemplate=(await import('../../server/api/videos/templates/use.post')).default
 const save=(await import('../../server/api/videos/projects/index.post')).default
 const {newVideoFromTemplate}=await import('../../shared/video-studio/templates')
-beforeEach(()=>{vi.clearAllMocks();mocks.user.mockResolvedValue({id:'account-a'});mocks.brand.mockResolvedValue({brand:{name:'Loja A',logo:'logo-a'},warning:''});mocks.query.mockImplementation(async(_sql,params)=>({id:'new-private-id',user_id:params[0],document:JSON.parse(params[2])}));mocks.assets.mockResolvedValue(undefined)})
+beforeEach(()=>{vi.clearAllMocks();mocks.user.mockResolvedValue({id:'account-a'});mocks.profileGuard.mockResolvedValue(undefined);mocks.brand.mockResolvedValue({brand:{name:'Loja A',logo:'logo-a'},warning:''});mocks.query.mockImplementation(async(_sql,params)=>({id:'new-private-id',user_id:params[0],document:JSON.parse(params[2])}));mocks.assets.mockResolvedValue(undefined)})
 describe('isolamento e proteção do modelo no servidor',()=>{
  it('cria um novo projeto somente com a marca da sessão e ignora identidade enviada pelo cliente',async()=>{
   mocks.body.mockResolvedValue({theme:'impact',userId:'account-b',brand:{name:'Loja B'},id:'master-id'})

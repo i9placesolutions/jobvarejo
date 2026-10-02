@@ -110,7 +110,6 @@ const BUSINESS_FIELDS: Array<{ id: BusinessFieldId; label: string }> = [
   { id: 'address', label: 'Endereço' },
   { id: 'hours', label: 'Horário' },
   { id: 'instagram', label: 'Instagram' },
-  { id: 'facebook', label: 'Facebook' },
   { id: 'website', label: 'Site' },
   { id: 'footerPaymentImages', label: 'Cartões aceitos' },
   { id: 'paymentMethods', label: 'Formas de pagamento' },

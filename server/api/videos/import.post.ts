@@ -8,6 +8,7 @@ import { pgOneOrNull } from '../../utils/postgres'
 import { getS3Client } from '../../utils/s3'
 import { isValidStoragePath,isStorageKeyAllowedForUser } from '../../utils/storage-scope'
 import { extractStorageKeyFromRef } from '../../../utils/storageRef'
+import { requireBusinessProfileForOfferCreation } from '../../utils/business-profile-onboarding'
 export default defineEventHandler(async event=>{
  const u=await videoUser(event,10),body=await readBody(event)
  const row=await pgOneOrNull<any>('SELECT canvas_data FROM public.projects WHERE id=$1 AND user_id=$2',[videoId(body?.projectId),u.id]);if(!row)throw createError({statusCode:404,statusMessage:'Encarte não encontrado.'})
@@ -19,6 +20,7 @@ export default defineEventHandler(async event=>{
  const requested=Array.isArray(body?.indices)?body.indices.filter((n:unknown)=>Number.isInteger(n)&&Number(n)>=0&&Number(n)<products.length).slice(0,6):null
  const candidates=products.map((p,i)=>({index:i,name:String(p.name||''),price:typeof p.price==='number'?p.price.toFixed(2).replace('.',','):String(p.price||''),unit:String(p.unit||''),condition:String(p.limitText||p.condition||''),complex:Boolean(p.priceMode&&p.priceMode!=='retail'||p.priceWholesale||p.priceSpecial)}))
  if(!requested)return {items:candidates,warning:unread?'Algumas páginas não puderam ser lidas. Confira a lista antes de importar.':''}
+ await requireBusinessProfileForOfferCreation(u)
  const offers=[]
  for(const index of requested){const p=products[index],c=candidates[index];if(!p||!c||c.complex){skipped++;continue}let image='';let imageAspectRatio:number|undefined;const key=keyFor(p.imageUrl||p.image);if(key){try{const bytes=await sharp(await read(key),{limitInputPixels:24_000_000}).trim({threshold:10}).resize(1500,1500,{fit:'inside',withoutEnlargement:true}).png().toBuffer();const info=await sharp(bytes).metadata();imageAspectRatio=Number(info.width)/Number(info.height);image=(await putVideoAsset(u.id,'image',c.name,bytes,'image/png','png',{width:info.width,height:info.height})).id}catch{}}
  offers.push({id:randomUUID(),name:c.name.slice(0,120),price:c.price,unit:c.unit.slice(0,30),condition:c.condition.slice(0,140),alcoholBadgeEnabled:typeof p.alcoholBadgeEnabled==='boolean'?p.alcoholBadgeEnabled:isAlcoholicProduct(p),image,imageAspectRatio})}

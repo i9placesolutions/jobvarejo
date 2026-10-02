@@ -254,3 +254,18 @@ export const normalizeBusinessProfile = (value: unknown): BusinessProfile => {
     paymentMethods
   }
 }
+
+/** Required store details used before a user can start creating offers. */
+export const isBusinessProfileComplete = (value: unknown): boolean => {
+  const profile = normalizeBusinessProfile(value)
+  return Boolean(
+    profile.companyName.trim()
+    && profile.logo.trim()
+    && profile.instagram.trim()
+    && profile.address.trim()
+    && profile.whatsapp.trim()
+  )
+}
+
+export const shouldPromptBusinessProfileOnboarding = (role: unknown, value: unknown): boolean =>
+  String(role || '') === 'user' && !isBusinessProfileComplete(value)

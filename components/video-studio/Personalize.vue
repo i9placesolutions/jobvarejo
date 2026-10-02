@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {VIDEO_BACKGROUNDS,backgroundAsset} from '~/shared/video-studio/backgrounds'
 import {VIDEO_COLOR_PALETTES,VIDEO_TEXT_COLORS} from '~/shared/video-studio/personalization'
-import {SCENE_TRANSITIONS,SOUND_EFFECTS,motionSettings,soundAsset,type VideoMotionSettings} from '~/shared/video-studio/effect-catalog'
+import {SCENE_TRANSITIONS,SOUND_EFFECTS,SPECTACLE_EFFECTS,motionSettings,soundAsset,type VideoMotionSettings} from '~/shared/video-studio/effect-catalog'
 import {newVideoFromTemplate} from '~/shared/video-studio/templates'
 import {flyerRecipe} from '~/shared/video-studio/flyer-recipes'
 import {VIDEO_EFFECTS,type VideoDocument} from '~/shared/video-studio/model'
@@ -19,6 +19,7 @@ function choosePalette(palette:typeof VIDEO_COLOR_PALETTES[number]){doc.value.ap
 function setTextColor(key:typeof VIDEO_TEXT_COLORS[number]['key'],event:Event){doc.value.appearance={...doc.value.appearance,[key]:(event.target as HTMLInputElement).value}}
 function resetTextColor(key:typeof VIDEO_TEXT_COLORS[number]['key']){doc.value.appearance={...doc.value.appearance,[key]:undefined}}
 function setSound(key:'transitionSound'|'accentSound',event:Event){doc.value.motion={...motion.value,[key]:(event.target as HTMLSelectElement).value as VideoMotionSettings['transitionSound']}}
+function toggleSpectacle(id:VideoMotionSettings['atmosphere'][number]){const current=doc.value.motion?.atmosphere||[];if(!current.includes(id)&&current.length>=8)return;doc.value={...doc.value,motion:{...motion.value,atmosphere:current.includes(id)?current.filter(item=>item!==id):[...current,id]}}}
 function restore(){const original=newVideoFromTemplate(doc.value.theme);doc.value={...doc.value,appearance:undefined,background:undefined,motion:original.motion,effects:original.effects,intensity:original.intensity,transition:original.transition,audio:{...doc.value.audio,music:original.audio.music,musicVolume:original.audio.musicVolume,effectsVolume:original.audio.effectsVolume,sounds:original.audio.sounds}}}
 </script>
 
@@ -50,6 +51,7 @@ function restore(){const original=newVideoFromTemplate(doc.value.theme);doc.valu
    <div class="transitions" role="group" aria-label="Transição entre ofertas"><button v-for="t in (supportsCatalog?SCENE_TRANSITIONS:SCENE_TRANSITIONS.slice(0,4))" :key="t.id" type="button" :aria-pressed="doc.transition===t.id" :class="{selected:doc.transition===t.id}" @click="doc.transition=t.id">{{ t.name }}</button></div>
    <VideoStudioEffectsLibrary v-if="supportsCatalog" v-model="doc"/>
    <div v-else class="sound-settings"><div v-for="field in ([{key:'transitionSound',name:'Som da transição'},{key:'accentSound',name:'Som do destaque'}] as const)" :key="field.key" class="sound-setting"><label>{{ field.name }}<select :value="motion[field.key]" @change="setSound(field.key,$event)"><option v-for="sound in SOUND_EFFECTS" :key="sound.id" :value="sound.id">{{ sound.name }}</option></select></label><audio controls preload="none" :src="'/video-studio/audio/'+soundAsset(motion[field.key])"/></div></div>
+   <details v-if="!supportsCatalog" class="personalize-details"><summary><span>Fogos, explosões e energia</span><span aria-hidden="true">⌄</span></summary><p class="details-help">Combine até 8 efeitos no fundo e confira na prévia.</p><div class="effects"><label v-for="effect in SPECTACLE_EFFECTS" :key="effect.id"><input type="checkbox" :checked="motion.atmosphere.includes(effect.id)" :disabled="!motion.atmosphere.includes(effect.id)&&motion.atmosphere.length>=8" @change="toggleSpectacle(effect.id)"/>{{ effect.name }}</label></div></details>
    <details class="personalize-details"><summary><span>Brilhos, partículas e intensidade</span><span aria-hidden="true">⌄</span></summary><div class="effects"><label v-for="effect in VIDEO_EFFECTS" :key="effect.id"><input v-model="doc.effects" type="checkbox" :value="effect.id"/>{{ effect.name }}</label></div><label class="intensity-field">Intensidade<select v-model.number="doc.intensity"><option :value=".25">Suave</option><option :value=".55">Equilibrada</option><option :value=".85">Impactante</option></select></label></details>
   </section>
 

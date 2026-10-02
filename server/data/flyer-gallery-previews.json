@@ -1316,6 +1316,90 @@
       "sha256": "c08c17e758d99aa330814d276dbd2b84e320d05dd1e7411b46126352d4169ab8",
       "bytes": 20612,
       "sourcePolicyVersion": 1
+    },
+    "d90ab0ad-ac4b-40db-8fea-f4bc77801480": {
+      "revision": "2026-10-02T11:13:05.685Z",
+      "key": "imagens/catalogo-encartes/d03c17226d7b0a9c4bc62dd2d6bc77c7b06f7f6ca6a2887f4d8ecf4ba6a8035b.webp",
+      "sha256": "d03c17226d7b0a9c4bc62dd2d6bc77c7b06f7f6ca6a2887f4d8ecf4ba6a8035b",
+      "bytes": 17162,
+      "sourcePolicyVersion": 1
+    },
+    "d840b59b-6b17-4897-a7c3-9c312c756e4d": {
+      "revision": "2026-10-02T11:12:44.947Z",
+      "key": "imagens/catalogo-encartes/bbd77e63991495ee9d2dbb2b7aa178e2b697c052290c443affeef57d28149f7d.webp",
+      "sha256": "bbd77e63991495ee9d2dbb2b7aa178e2b697c052290c443affeef57d28149f7d",
+      "bytes": 25002,
+      "sourcePolicyVersion": 1
+    },
+    "4ac789c8-71f4-4a8b-96ae-8d9e703f0282": {
+      "revision": "2026-10-02T11:11:46.265Z",
+      "key": "imagens/catalogo-encartes/b2e4779a19f15923749fbf00d4386be037268db3d3700e188402b83f46bfb57c.webp",
+      "sha256": "b2e4779a19f15923749fbf00d4386be037268db3d3700e188402b83f46bfb57c",
+      "bytes": 27344,
+      "sourcePolicyVersion": 1
+    },
+    "78be56e6-beee-4095-adcb-871ef579c199": {
+      "revision": "2026-10-02T11:12:16.853Z",
+      "key": "imagens/catalogo-encartes/45b9a5d53c11725b534bdba1b08fee55f31c6c699fe45d6b922dc7d35a0e4610.webp",
+      "sha256": "45b9a5d53c11725b534bdba1b08fee55f31c6c699fe45d6b922dc7d35a0e4610",
+      "bytes": 25698,
+      "sourcePolicyVersion": 1
+    },
+    "e6b1d002-8bc2-4d6c-9678-6840f7f169a3": {
+      "revision": "2026-10-02T11:12:53.830Z",
+      "key": "imagens/catalogo-encartes/2980ee2e92c51c24f1d6ff0117f4808c40d87c9aaa842e73f2c750282877c59e.webp",
+      "sha256": "2980ee2e92c51c24f1d6ff0117f4808c40d87c9aaa842e73f2c750282877c59e",
+      "bytes": 20950,
+      "sourcePolicyVersion": 1
+    },
+    "df643073-16d3-4c30-9417-883bb287ff7c": {
+      "revision": "2026-10-02T11:13:16.803Z",
+      "key": "imagens/catalogo-encartes/c3bc123df342e8621441389946330c870e945cc46caf30b22b54ac2e8107822b.webp",
+      "sha256": "c3bc123df342e8621441389946330c870e945cc46caf30b22b54ac2e8107822b",
+      "bytes": 21318,
+      "sourcePolicyVersion": 1
+    },
+    "f6dcbbe6-f9b1-4d09-8e21-31fe305cbbe5": {
+      "revision": "2026-10-02T11:11:52.676Z",
+      "key": "imagens/catalogo-encartes/ffe31c8674f4e4bac3806a4b6a90c47da0d7122d57543343074d7b2db5ee4a62.webp",
+      "sha256": "ffe31c8674f4e4bac3806a4b6a90c47da0d7122d57543343074d7b2db5ee4a62",
+      "bytes": 24718,
+      "sourcePolicyVersion": 1
+    },
+    "76386259-0a88-439e-b20e-b658acdff2a8": {
+      "revision": "2026-10-02T11:13:00.140Z",
+      "key": "imagens/catalogo-encartes/f5487465809e76f962b240e4836b3ab4eb32db5c4bf347a9a13cb059eede69d4.webp",
+      "sha256": "f5487465809e76f962b240e4836b3ab4eb32db5c4bf347a9a13cb059eede69d4",
+      "bytes": 21776,
+      "sourcePolicyVersion": 1
+    },
+    "15edbe91-acc8-4d49-9f0e-e61992c07421": {
+      "revision": "2026-10-02T11:12:24.808Z",
+      "key": "imagens/catalogo-encartes/3f63310bbc0b6225a15e9c8d48fa1bed24550fea9a4f4a2527d595b421b5e6ab.webp",
+      "sha256": "3f63310bbc0b6225a15e9c8d48fa1bed24550fea9a4f4a2527d595b421b5e6ab",
+      "bytes": 24250,
+      "sourcePolicyVersion": 1
+    },
+    "1a014da8-d0f0-483b-b56c-cf8f3a49a40b": {
+      "revision": "2026-10-02T11:12:01.077Z",
+      "key": "imagens/catalogo-encartes/b16930501c998d04821e1f1b25cf7538ea892b481340813818607dc482f45894.webp",
+      "sha256": "b16930501c998d04821e1f1b25cf7538ea892b481340813818607dc482f45894",
+      "bytes": 25076,
+      "sourcePolicyVersion": 1
+    },
+    "1c9b7763-fa63-436b-9f2d-dfe1875ed04d": {
+      "revision": "2026-10-02T11:12:08.289Z",
+      "key": "imagens/catalogo-encartes/3d67101c908bae8f66842d71791cde33e8a25414983c1b4b27f0c6ef2c7d5ef0.webp",
+      "sha256": "3d67101c908bae8f66842d71791cde33e8a25414983c1b4b27f0c6ef2c7d5ef0",
+      "bytes": 24886,
+      "sourcePolicyVersion": 1
+    },
+    "4a578d49-087d-4922-a9f6-9f2376c099cc": {
+      "revision": "2026-10-02T11:12:35.877Z",
+      "key": "imagens/catalogo-encartes/6d9abc6dfcca7e601021554da6e41fb2e3e1835bd88bbb060509db7270497c1e.webp",
+      "sha256": "6d9abc6dfcca7e601021554da6e41fb2e3e1835bd88bbb060509db7270497c1e",
+      "bytes": 19700,
+      "sourcePolicyVersion": 1
     }
   }
 }

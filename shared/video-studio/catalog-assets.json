@@ -7,6 +7,210 @@
       "bytes": 176004,
       "contentType": "audio/mpeg"
     },
+    "audio/cc0-barriers.mp3": {
+      "key": "video-studio/catalog/6e4c57fe92d573ade453f9b41d4f724d96797c63c1f87b635d78aa70dd9fe5e9/audio/cc0-barriers.mp3",
+      "sha256": "6e4c57fe92d573ade453f9b41d4f724d96797c63c1f87b635d78aa70dd9fe5e9",
+      "bytes": 4239054,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-1001-serum-patches.mp3": {
+      "key": "video-studio/catalog/5d1dbe128a550a869f810d5fd639366275fb8fa24214130cfd124bdc8acc0225/audio/cc0-blast-1001-serum-patches.mp3",
+      "sha256": "5d1dbe128a550a869f810d5fd639366275fb8fa24214130cfd124bdc8acc0225",
+      "bytes": 2623725,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-4xthefloor.mp3": {
+      "key": "video-studio/catalog/6679c87f3d44b46b98ac1ce144425332670ca8b8f77525eeb837249ff65afb44/audio/cc0-blast-4xthefloor.mp3",
+      "sha256": "6679c87f3d44b46b98ac1ce144425332670ca8b8f77525eeb837249ff65afb44",
+      "bytes": 308781,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-behind-you.mp3": {
+      "key": "video-studio/catalog/c9f6108b43628fb5a8d7bc85d1b3427c698013556b5c402ee7a7cc102532b931/audio/cc0-blast-behind-you.mp3",
+      "sha256": "c9f6108b43628fb5a8d7bc85d1b3427c698013556b5c402ee7a7cc102532b931",
+      "bytes": 1383597,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-free-as-a-bird.mp3": {
+      "key": "video-studio/catalog/ea4d185b08a5ba984c05ed66a28a618b7e0b3ed7dd626163f2d3a7498850f05b/audio/cc0-blast-free-as-a-bird.mp3",
+      "sha256": "ea4d185b08a5ba984c05ed66a28a618b7e0b3ed7dd626163f2d3a7498850f05b",
+      "bytes": 1537389,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-i-ll-blast-you-to-next-week.mp3": {
+      "key": "video-studio/catalog/aff1b83be5d0fe6bc2b98897f180627d49cc6f38ea6c909c4d9a23eba38591f2/audio/cc0-blast-i-ll-blast-you-to-next-week.mp3",
+      "sha256": "aff1b83be5d0fe6bc2b98897f180627d49cc6f38ea6c909c4d9a23eba38591f2",
+      "bytes": 1975149,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-i-m-biking-to-school.mp3": {
+      "key": "video-studio/catalog/858663f7c5c6c87f4367150f728ad6445770b63162b071a89c5ccf7fa95958a1/audio/cc0-blast-i-m-biking-to-school.mp3",
+      "sha256": "858663f7c5c6c87f4367150f728ad6445770b63162b071a89c5ccf7fa95958a1",
+      "bytes": 216621,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-i-work-in-a-cafe-part-time.mp3": {
+      "key": "video-studio/catalog/c7f30ef2218d42efdce48b5646c427db8205e47d27b022b023d3e2483c527774/audio/cc0-blast-i-work-in-a-cafe-part-time.mp3",
+      "sha256": "c7f30ef2218d42efdce48b5646c427db8205e47d27b022b023d3e2483c527774",
+      "bytes": 1537389,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-just-add-synths.mp3": {
+      "key": "video-studio/catalog/8ff960111385cb31ae345ef36661e8aad22b60b3b3b4afecac7f905e146936a9/audio/cc0-blast-just-add-synths.mp3",
+      "sha256": "8ff960111385cb31ae345ef36661e8aad22b60b3b3b4afecac7f905e146936a9",
+      "bytes": 330669,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-now-that-s-automation-v54.mp3": {
+      "key": "video-studio/catalog/832d6f296979d90c2183fdcf90301ebbf18f47241e812d0e5e77ceab35d19e59/audio/cc0-blast-now-that-s-automation-v54.mp3",
+      "sha256": "832d6f296979d90c2183fdcf90301ebbf18f47241e812d0e5e77ceab35d19e59",
+      "bytes": 1740211,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-skate-fast-stay-in-school.mp3": {
+      "key": "video-studio/catalog/8f332a0616b581f475242fd913153e1235319e06cb9b43a2591ecc41b34a1a1f/audio/cc0-blast-skate-fast-stay-in-school.mp3",
+      "sha256": "8f332a0616b581f475242fd913153e1235319e06cb9b43a2591ecc41b34a1a1f",
+      "bytes": 550125,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-snare-to-the-left.mp3": {
+      "key": "video-studio/catalog/09e8dfee71bfcf94983a89fd870e283ce4c7f2035c82e68abab1be3ca4243c52/audio/cc0-blast-snare-to-the-left.mp3",
+      "sha256": "09e8dfee71bfcf94983a89fd870e283ce4c7f2035c82e68abab1be3ca4243c52",
+      "bytes": 2963565,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-spy-in-the-skool.mp3": {
+      "key": "video-studio/catalog/1cfafdbd9114ce5393cc807d7869936681d85a6c2dcf2959a340367d45809a60/audio/cc0-blast-spy-in-the-skool.mp3",
+      "sha256": "1cfafdbd9114ce5393cc807d7869936681d85a6c2dcf2959a340367d45809a60",
+      "bytes": 2745261,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-that-optimisticly-sad-part.mp3": {
+      "key": "video-studio/catalog/cc7683b2122991d025f3945786ba7837faa871dd7cc53778c5fe815251f7a0c8/audio/cc0-blast-that-optimisticly-sad-part.mp3",
+      "sha256": "cc7683b2122991d025f3945786ba7837faa871dd7cc53778c5fe815251f7a0c8",
+      "bytes": 545517,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-that-s-what-friends-do.mp3": {
+      "key": "video-studio/catalog/ef6c8f2a3f0e295da567709d12d33a6e09b28f1ad448a19c6f6e8c495747bcea/audio/cc0-blast-that-s-what-friends-do.mp3",
+      "sha256": "ef6c8f2a3f0e295da567709d12d33a6e09b28f1ad448a19c6f6e8c495747bcea",
+      "bytes": 2082285,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-blast-the-sad-part.mp3": {
+      "key": "video-studio/catalog/e984ebba634590cf2d46b8158eb20c965e155fd055127c93be7f18499a50c4b5/audio/cc0-blast-the-sad-part.mp3",
+      "sha256": "e984ebba634590cf2d46b8158eb20c965e155fd055127c93be7f18499a50c4b5",
+      "bytes": 1025325,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-dance-cant-resist-the-groove.mp3": {
+      "key": "video-studio/catalog/4286fc7e52f1efec1008d58663ea4ef4edcbc3f1b3a5aa1a36cd97404a116e4e/audio/cc0-dance-cant-resist-the-groove.mp3",
+      "sha256": "4286fc7e52f1efec1008d58663ea4ef4edcbc3f1b3a5aa1a36cd97404a116e4e",
+      "bytes": 2307501,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-dance-silent-dance-floor.mp3": {
+      "key": "video-studio/catalog/fa5839251795b0e4844fd30614dbfc0e94107b80d4b66435632117e5e01d37d1/audio/cc0-dance-silent-dance-floor.mp3",
+      "sha256": "fa5839251795b0e4844fd30614dbfc0e94107b80d4b66435632117e5e01d37d1",
+      "bytes": 2097837,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-dance-the-celebrity.mp3": {
+      "key": "video-studio/catalog/40de964853a3d12d7bfba9809e3bbbe580165077f10e0e42e9e269dd26aa7569/audio/cc0-dance-the-celebrity.mp3",
+      "sha256": "40de964853a3d12d7bfba9809e3bbbe580165077f10e0e42e9e269dd26aa7569",
+      "bytes": 1679085,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-dance-twin-layers.mp3": {
+      "key": "video-studio/catalog/6a07c374cfde88ab8fc0d1e8495ac7bfeb632c1b10f4d0360b8722f19dc36241/audio/cc0-dance-twin-layers.mp3",
+      "sha256": "6a07c374cfde88ab8fc0d1e8495ac7bfeb632c1b10f4d0360b8722f19dc36241",
+      "bytes": 2726829,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-electronic-outlaw.mp3": {
+      "key": "video-studio/catalog/68a7b9b9b65f0f6aab45eefd28e6b5cc922d2a38bdd6f4a8ded00c1795271b21/audio/cc0-electronic-outlaw.mp3",
+      "sha256": "68a7b9b9b65f0f6aab45eefd28e6b5cc922d2a38bdd6f4a8ded00c1795271b21",
+      "bytes": 4167130,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-funked-up.mp3": {
+      "key": "video-studio/catalog/2c855dda4aa950e5673b8416015d8794e6fd96a6c9b25f5cbcf1547a9d5fad47/audio/cc0-funked-up.mp3",
+      "sha256": "2c855dda4aa950e5673b8416015d8794e6fd96a6c9b25f5cbcf1547a9d5fad47",
+      "bytes": 1592391,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-going-deep.mp3": {
+      "key": "video-studio/catalog/ac59339e39b505b83aa3550345d688bdd5f7d9df84da2e89a7f3c02cf580897f/audio/cc0-going-deep.mp3",
+      "sha256": "ac59339e39b505b83aa3550345d688bdd5f7d9df84da2e89a7f3c02cf580897f",
+      "bytes": 2391021,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-1.mp3": {
+      "key": "video-studio/catalog/e65db05d8651a268ca074c983eb5bb6bd1d83ba15dba2950734e334c86221b87/audio/cc0-rhythm-1.mp3",
+      "sha256": "e65db05d8651a268ca074c983eb5bb6bd1d83ba15dba2950734e334c86221b87",
+      "bytes": 4789485,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-10.mp3": {
+      "key": "video-studio/catalog/f7a7c51a29b4fb09f584e192d0ea3f5f6fe1a6834a812f41225f1fdc70d66013/audio/cc0-rhythm-10.mp3",
+      "sha256": "f7a7c51a29b4fb09f584e192d0ea3f5f6fe1a6834a812f41225f1fdc70d66013",
+      "bytes": 5549229,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-2.mp3": {
+      "key": "video-studio/catalog/b9b3d7112c0dc297db461e2bd36db1210e26d55a4b3687be623777066f2bf31b/audio/cc0-rhythm-2.mp3",
+      "sha256": "b9b3d7112c0dc297db461e2bd36db1210e26d55a4b3687be623777066f2bf31b",
+      "bytes": 5850477,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-3.mp3": {
+      "key": "video-studio/catalog/201440d29922c860a8477c1bc5ae9a1628f556c5700942b3073f524e7bf7f743/audio/cc0-rhythm-3.mp3",
+      "sha256": "201440d29922c860a8477c1bc5ae9a1628f556c5700942b3073f524e7bf7f743",
+      "bytes": 5416173,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-4.mp3": {
+      "key": "video-studio/catalog/543e86c475b9868f971099a350b3d06da234ade04593eac5296c696844d86108/audio/cc0-rhythm-4.mp3",
+      "sha256": "543e86c475b9868f971099a350b3d06da234ade04593eac5296c696844d86108",
+      "bytes": 6181101,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-5.mp3": {
+      "key": "video-studio/catalog/c8c99d595ceb2a0fd0256aa277226254722f4a6de0688a8339833844f7975d1f/audio/cc0-rhythm-5.mp3",
+      "sha256": "c8c99d595ceb2a0fd0256aa277226254722f4a6de0688a8339833844f7975d1f",
+      "bytes": 4741677,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-6.mp3": {
+      "key": "video-studio/catalog/48b1abfcadac7a1cd33b65dd6e419336ebbb6a56d964af7540abe467c65b36b9/audio/cc0-rhythm-6.mp3",
+      "sha256": "48b1abfcadac7a1cd33b65dd6e419336ebbb6a56d964af7540abe467c65b36b9",
+      "bytes": 6398253,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-7.mp3": {
+      "key": "video-studio/catalog/4a769b6cbae4ed88bd9bb2a47a4c6aaa3c94ce89028869c589a9c0dc21d13f13/audio/cc0-rhythm-7.mp3",
+      "sha256": "4a769b6cbae4ed88bd9bb2a47a4c6aaa3c94ce89028869c589a9c0dc21d13f13",
+      "bytes": 4369581,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-8.mp3": {
+      "key": "video-studio/catalog/92d7fe2ada905ea318cb6d111769ef568cda0bf341c959ad6ada03689b29130b/audio/cc0-rhythm-8.mp3",
+      "sha256": "92d7fe2ada905ea318cb6d111769ef568cda0bf341c959ad6ada03689b29130b",
+      "bytes": 4735341,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-rhythm-9.mp3": {
+      "key": "video-studio/catalog/0c3d1e13970ddcf8d413e90c7502d36030e4d42ba6239842e7f5a79a4d66ae7b/audio/cc0-rhythm-9.mp3",
+      "sha256": "0c3d1e13970ddcf8d413e90c7502d36030e4d42ba6239842e7f5a79a4d66ae7b",
+      "bytes": 5227821,
+      "contentType": "audio/mpeg"
+    },
+    "audio/cc0-wednesday-night.mp3": {
+      "key": "video-studio/catalog/ba1c506808429c08d6c17eadda002c2b8916a36b9ef725323a544463cd3c3153/audio/cc0-wednesday-night.mp3",
+      "sha256": "ba1c506808429c08d6c17eadda002c2b8916a36b9ef725323a544463cd3c3153",
+      "bytes": 4240735,
+      "contentType": "audio/mpeg"
+    },
     "audio/energy.mp3": {
       "key": "video-studio/catalog/8fcd94287cf065bc80ac495740c833c1fe5a585d53626884c464229a1b72d2f4/audio/energy.mp3",
       "sha256": "8fcd94287cf065bc80ac495740c833c1fe5a585d53626884c464229a1b72d2f4",
@@ -1105,6 +1309,246 @@
       "bytes": 149984,
       "contentType": "audio/wav"
     },
+    "audio/sfx/cc0-close-001.wav": {
+      "key": "video-studio/catalog/2927a5009a1baa2800897957fcd96aa04f8d056847b249879f90b3e862bd7a21/audio/sfx/cc0-close-001.wav",
+      "sha256": "2927a5009a1baa2800897957fcd96aa04f8d056847b249879f90b3e862bd7a21",
+      "bytes": 28454,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-close-004.wav": {
+      "key": "video-studio/catalog/6dba958b37a3b972558b4d08edea3f03402750af0f32379d52f82905def87060/audio/sfx/cc0-close-004.wav",
+      "sha256": "6dba958b37a3b972558b4d08edea3f03402750af0f32379d52f82905def87060",
+      "bytes": 62070,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-confirmation-001.wav": {
+      "key": "video-studio/catalog/c528faba3ddb2d3edeaf457610eed509bbc9a349acce23b296f646cd58821ce6/audio/sfx/cc0-confirmation-001.wav",
+      "sha256": "c528faba3ddb2d3edeaf457610eed509bbc9a349acce23b296f646cd58821ce6",
+      "bytes": 55730,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-confirmation-003.wav": {
+      "key": "video-studio/catalog/09d750fef40bf6073ebb7f88fcc672d7ee3a323061fb8694c5ffefe02cdbf6a7/audio/sfx/cc0-confirmation-003.wav",
+      "sha256": "09d750fef40bf6073ebb7f88fcc672d7ee3a323061fb8694c5ffefe02cdbf6a7",
+      "bytes": 61906,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-drop-001.wav": {
+      "key": "video-studio/catalog/f5d2478d59a17da08bf42695efb5e45ddcfd7cd5dba7f912109c74f10cde3619/audio/sfx/cc0-drop-001.wav",
+      "sha256": "f5d2478d59a17da08bf42695efb5e45ddcfd7cd5dba7f912109c74f10cde3619",
+      "bytes": 25434,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-drop-004.wav": {
+      "key": "video-studio/catalog/00bc09d6666a1ed38486e6f25f599ead9cd50fda8e17a4f4158c1f5e1178d516/audio/sfx/cc0-drop-004.wav",
+      "sha256": "00bc09d6666a1ed38486e6f25f599ead9cd50fda8e17a4f4158c1f5e1178d516",
+      "bytes": 54566,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-glitch-001.wav": {
+      "key": "video-studio/catalog/811ce90fddeff0c89fb5f1fc0d1d9429118374100c9a54a043e010d3cfd88c2a/audio/sfx/cc0-glitch-001.wav",
+      "sha256": "811ce90fddeff0c89fb5f1fc0d1d9429118374100c9a54a043e010d3cfd88c2a",
+      "bytes": 3366,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-glitch-003.wav": {
+      "key": "video-studio/catalog/b3bfcda5688f53929907d3cd6e7a8a6f93aece2c2b2720cc7e11e70c6f5a92f6/audio/sfx/cc0-glitch-003.wav",
+      "sha256": "b3bfcda5688f53929907d3cd6e7a8a6f93aece2c2b2720cc7e11e70c6f5a92f6",
+      "bytes": 2310,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-impactbell-heavy-000.wav": {
+      "key": "video-studio/catalog/3e77d2bd9f4085ef59581e9d37c9817fd10fb35bb4aa9de4cbd34f717888b206/audio/sfx/cc0-impactbell-heavy-000.wav",
+      "sha256": "3e77d2bd9f4085ef59581e9d37c9817fd10fb35bb4aa9de4cbd34f717888b206",
+      "bytes": 284274,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-impactbell-heavy-002.wav": {
+      "key": "video-studio/catalog/53312b691b53a38eec353e8b784888e436283a284338050bb767d77d6d42f19b/audio/sfx/cc0-impactbell-heavy-002.wav",
+      "sha256": "53312b691b53a38eec353e8b784888e436283a284338050bb767d77d6d42f19b",
+      "bytes": 133958,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-impactgeneric-light-001.wav": {
+      "key": "video-studio/catalog/975988eabe939a97aaf2271da7ea4d58893a6ea0c7efa16fccdc1d7fa4423f97/audio/sfx/cc0-impactgeneric-light-001.wav",
+      "sha256": "975988eabe939a97aaf2271da7ea4d58893a6ea0c7efa16fccdc1d7fa4423f97",
+      "bytes": 22082,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-impactglass-heavy-001.wav": {
+      "key": "video-studio/catalog/3b5856a416b9f8a9a8fb357f92fa5a07928959829a5a69dfe83606a245df11c9/audio/sfx/cc0-impactglass-heavy-001.wav",
+      "sha256": "3b5856a416b9f8a9a8fb357f92fa5a07928959829a5a69dfe83606a245df11c9",
+      "bytes": 82446,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-impactglass-medium-000.wav": {
+      "key": "video-studio/catalog/f6a643786ab37f0c0b8cf383af855eed1017f8bfe717665293e33d8d8dc46556/audio/sfx/cc0-impactglass-medium-000.wav",
+      "sha256": "f6a643786ab37f0c0b8cf383af855eed1017f8bfe717665293e33d8d8dc46556",
+      "bytes": 103846,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-impactmetal-heavy-000.wav": {
+      "key": "video-studio/catalog/5925a9a15d52afd6b9f13c82dcd18269af89d2722bae03d0c083bb6bf970f6e9/audio/sfx/cc0-impactmetal-heavy-000.wav",
+      "sha256": "5925a9a15d52afd6b9f13c82dcd18269af89d2722bae03d0c083bb6bf970f6e9",
+      "bytes": 31714,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-impactmetal-medium-003.wav": {
+      "key": "video-studio/catalog/7acd66b3f6ef15c8eb60650afa0a095c45cf36b619c96b55673728302940cc02/audio/sfx/cc0-impactmetal-medium-003.wav",
+      "sha256": "7acd66b3f6ef15c8eb60650afa0a095c45cf36b619c96b55673728302940cc02",
+      "bytes": 48282,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-impactplate-heavy-000.wav": {
+      "key": "video-studio/catalog/ae26a2dda354c8b52bafe0a3e01db10969a7a492ff6c3c39f10554bcf615765f/audio/sfx/cc0-impactplate-heavy-000.wav",
+      "sha256": "ae26a2dda354c8b52bafe0a3e01db10969a7a492ff6c3c39f10554bcf615765f",
+      "bytes": 93902,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-impactsoft-heavy-000.wav": {
+      "key": "video-studio/catalog/c60cfbe980e2601f38d4eba6bb810cf1ed08d953ec74726d0538785a62e95543/audio/sfx/cc0-impactsoft-heavy-000.wav",
+      "sha256": "c60cfbe980e2601f38d4eba6bb810cf1ed08d953ec74726d0538785a62e95543",
+      "bytes": 101226,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-maximize-001.wav": {
+      "key": "video-studio/catalog/b3016a44cacd7260e8bdce68589caf3709b607a172b7ed05ea58926102989083/audio/sfx/cc0-maximize-001.wav",
+      "sha256": "b3016a44cacd7260e8bdce68589caf3709b607a172b7ed05ea58926102989083",
+      "bytes": 49690,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-maximize-004.wav": {
+      "key": "video-studio/catalog/201e0c05edbd38e273681302ea0e4ba3cac8945edc5bd80df9b3f07e3b1d06d3/audio/sfx/cc0-maximize-004.wav",
+      "sha256": "201e0c05edbd38e273681302ea0e4ba3cac8945edc5bd80df9b3f07e3b1d06d3",
+      "bytes": 80326,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-maximize-007.wav": {
+      "key": "video-studio/catalog/dce6a43fac55df607a10818cc3ab7ef1f743f6df15eb01f764d24f51c71b36fd/audio/sfx/cc0-maximize-007.wav",
+      "sha256": "dce6a43fac55df607a10818cc3ab7ef1f743f6df15eb01f764d24f51c71b36fd",
+      "bytes": 35186,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-minimize-001.wav": {
+      "key": "video-studio/catalog/0bb41e3c5a21beef3561bc6b8d58199e36d9f9866a7c53fde579485e2db7eeb5/audio/sfx/cc0-minimize-001.wav",
+      "sha256": "0bb41e3c5a21beef3561bc6b8d58199e36d9f9866a7c53fde579485e2db7eeb5",
+      "bytes": 49690,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-minimize-004.wav": {
+      "key": "video-studio/catalog/93386eb30cf608d3d8850d59ec843c86a1cea3fbf26d24a3757211f0d2552b1f/audio/sfx/cc0-minimize-004.wav",
+      "sha256": "93386eb30cf608d3d8850d59ec843c86a1cea3fbf26d24a3757211f0d2552b1f",
+      "bytes": 80326,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-minimize-007.wav": {
+      "key": "video-studio/catalog/a55f46e3c3012350866e290bae893f528645ae225f975283b9689fd697e3b962/audio/sfx/cc0-minimize-007.wav",
+      "sha256": "a55f46e3c3012350866e290bae893f528645ae225f975283b9689fd697e3b962",
+      "bytes": 35186,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-open-001.wav": {
+      "key": "video-studio/catalog/f43d5ecbee0831cca5a8542cd43b09709262a743afae2e82cf186c6ed42f6bc6/audio/sfx/cc0-open-001.wav",
+      "sha256": "f43d5ecbee0831cca5a8542cd43b09709262a743afae2e82cf186c6ed42f6bc6",
+      "bytes": 28454,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-open-004.wav": {
+      "key": "video-studio/catalog/06da60dd689399e97133e8debd82f61180b347215c457ce6f40e26f9ccb874a5/audio/sfx/cc0-open-004.wav",
+      "sha256": "06da60dd689399e97133e8debd82f61180b347215c457ce6f40e26f9ccb874a5",
+      "bytes": 62070,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-scratch-001.wav": {
+      "key": "video-studio/catalog/c7c7df1c012fada77c7ba3ba387ead5d206fc3465f41bdc78b76a49ee42bcd88/audio/sfx/cc0-scratch-001.wav",
+      "sha256": "c7c7df1c012fada77c7ba3ba387ead5d206fc3465f41bdc78b76a49ee42bcd88",
+      "bytes": 26830,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-scratch-004.wav": {
+      "key": "video-studio/catalog/5d9ac6679221fea7125b20246fb0fc15974d55e317c8c846790ccc1e0263fcd3/audio/sfx/cc0-scratch-004.wav",
+      "sha256": "5d9ac6679221fea7125b20246fb0fc15974d55e317c8c846790ccc1e0263fcd3",
+      "bytes": 62494,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-01.wav": {
+      "key": "video-studio/catalog/1c617e5ff8e9ebc9dc8418011e0655cf3d207ea12a34428e422c5cce0156c1e2/audio/sfx/cc0-swish-01.wav",
+      "sha256": "1c617e5ff8e9ebc9dc8418011e0655cf3d207ea12a34428e422c5cce0156c1e2",
+      "bytes": 24320,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-02.wav": {
+      "key": "video-studio/catalog/938950579caaf861712c970eefc886bce3fef4877f183f94501024751946fbb6/audio/sfx/cc0-swish-02.wav",
+      "sha256": "938950579caaf861712c970eefc886bce3fef4877f183f94501024751946fbb6",
+      "bytes": 18520,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-03.wav": {
+      "key": "video-studio/catalog/1d8bdb92187c3509b20f3e942fa937f10f2cffe1375e61f5161f9e76adc74192/audio/sfx/cc0-swish-03.wav",
+      "sha256": "1d8bdb92187c3509b20f3e942fa937f10f2cffe1375e61f5161f9e76adc74192",
+      "bytes": 28124,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-04.wav": {
+      "key": "video-studio/catalog/c82c95b57ad5e2cf212592ea9d9a932c0fca74cc77f195d40e26edae38f5ea16/audio/sfx/cc0-swish-04.wav",
+      "sha256": "c82c95b57ad5e2cf212592ea9d9a932c0fca74cc77f195d40e26edae38f5ea16",
+      "bytes": 28120,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-05.wav": {
+      "key": "video-studio/catalog/017c700ab896c0730744e2d02d3fd17f938e3faa8c3fc11f2c8de7c71ef42d8a/audio/sfx/cc0-swish-05.wav",
+      "sha256": "017c700ab896c0730744e2d02d3fd17f938e3faa8c3fc11f2c8de7c71ef42d8a",
+      "bytes": 24520,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-06.wav": {
+      "key": "video-studio/catalog/fef3cd5594244a6bedaccd2e30bcf233e6b4bd54d9b51b1f6001d96110f6267c/audio/sfx/cc0-swish-06.wav",
+      "sha256": "fef3cd5594244a6bedaccd2e30bcf233e6b4bd54d9b51b1f6001d96110f6267c",
+      "bytes": 26616,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-07.wav": {
+      "key": "video-studio/catalog/93fee09238ef3b23d48f5b7165061eb9c8d09369e4d9d7eeceede36e06f919b8/audio/sfx/cc0-swish-07.wav",
+      "sha256": "93fee09238ef3b23d48f5b7165061eb9c8d09369e4d9d7eeceede36e06f919b8",
+      "bytes": 36116,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-08.wav": {
+      "key": "video-studio/catalog/f223b2d9706d98b227384e8ba6f2097980e9f0f1c2b898cd039db07201dd6346/audio/sfx/cc0-swish-08.wav",
+      "sha256": "f223b2d9706d98b227384e8ba6f2097980e9f0f1c2b898cd039db07201dd6346",
+      "bytes": 29620,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-09.wav": {
+      "key": "video-studio/catalog/47fa20f804b626d2fe50302a2911cdd4bed2b47291bfdd1f40425f80b84b614a/audio/sfx/cc0-swish-09.wav",
+      "sha256": "47fa20f804b626d2fe50302a2911cdd4bed2b47291bfdd1f40425f80b84b614a",
+      "bytes": 37920,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-10.wav": {
+      "key": "video-studio/catalog/3ec9d9416415d2f69dbd15e381af7aeb08be5b7ccc19a9bf64808453bf34a014/audio/sfx/cc0-swish-10.wav",
+      "sha256": "3ec9d9416415d2f69dbd15e381af7aeb08be5b7ccc19a9bf64808453bf34a014",
+      "bytes": 24120,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-11.wav": {
+      "key": "video-studio/catalog/8626d4cdc8287b8225438562a0114139094f2954a830c890a807114482002045/audio/sfx/cc0-swish-11.wav",
+      "sha256": "8626d4cdc8287b8225438562a0114139094f2954a830c890a807114482002045",
+      "bytes": 20124,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-12.wav": {
+      "key": "video-studio/catalog/930ade4a2a1ee23bce5d0d95474bf71ea6ce56e22ca673b6c44e807f356501c9/audio/sfx/cc0-swish-12.wav",
+      "sha256": "930ade4a2a1ee23bce5d0d95474bf71ea6ce56e22ca673b6c44e807f356501c9",
+      "bytes": 14720,
+      "contentType": "audio/wav"
+    },
+    "audio/sfx/cc0-swish-13.wav": {
+      "key": "video-studio/catalog/a30a0c6be170bbaaa8b9d1d35621a1fad9a94b6b07de1d9e2808ce4bf6d67245/audio/sfx/cc0-swish-13.wav",
+      "sha256": "a30a0c6be170bbaaa8b9d1d35621a1fad9a94b6b07de1d9e2808ce4bf6d67245",
+      "bytes": 13724,
+      "contentType": "audio/wav"
+    },
     "audio/sfx/coin.wav": {
       "key": "video-studio/catalog/0d605090e4cba274a1920bec9a4f3bfcb23419537e5923afd41e1bb7803c6d90/audio/sfx/coin.wav",
       "sha256": "0d605090e4cba274a1920bec9a4f3bfcb23419537e5923afd41e1bb7803c6d90",
@@ -1417,6 +1861,18 @@
       "bytes": 2018122,
       "contentType": "image/png"
     },
+    "templates/backgrounds/blue-pattern-v1.png": {
+      "key": "video-studio/catalog/ceb8fe8ab7a49bafb608cfe328904eabdddc922849b9b110a8525cfe03ecf1d5/templates/backgrounds/blue-pattern-v1.png",
+      "sha256": "ceb8fe8ab7a49bafb608cfe328904eabdddc922849b9b110a8525cfe03ecf1d5",
+      "bytes": 381591,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/blue-pattern-vertical-v1.png": {
+      "key": "video-studio/catalog/b482065cd496cd8b302c57103c3970095cfe41b34bb1100637b589b66bd803ba/templates/backgrounds/blue-pattern-vertical-v1.png",
+      "sha256": "b482065cd496cd8b302c57103c3970095cfe41b34bb1100637b589b66bd803ba",
+      "bytes": 708386,
+      "contentType": "image/png"
+    },
     "templates/backgrounds/celebration-v1.png": {
       "key": "video-studio/catalog/60769031b682f06f2d366cb2d5ef2ebbf557f40984ce5e15622381d71d0a4314/templates/backgrounds/celebration-v1.png",
       "sha256": "60769031b682f06f2d366cb2d5ef2ebbf557f40984ce5e15622381d71d0a4314",
@@ -1429,6 +1885,102 @@
       "bytes": 1890725,
       "contentType": "image/png"
     },
+    "templates/backgrounds/data-blue-v1.png": {
+      "key": "video-studio/catalog/ffc676948dce8080b2266b1eca1aabbbd60560b22911c157ac379ffdc0fea596/templates/backgrounds/data-blue-v1.png",
+      "sha256": "ffc676948dce8080b2266b1eca1aabbbd60560b22911c157ac379ffdc0fea596",
+      "bytes": 285477,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/data-blue-vertical-v1.png": {
+      "key": "video-studio/catalog/96ac8aefefacf3211ba0c378cfc4dac31d348527ef63ee581da7e42f2752e967/templates/backgrounds/data-blue-vertical-v1.png",
+      "sha256": "96ac8aefefacf3211ba0c378cfc4dac31d348527ef63ee581da7e42f2752e967",
+      "bytes": 511638,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-azure-v1.png": {
+      "key": "video-studio/catalog/06e89193306dd834b1cb391f816cb51763252725afe9c33320effa1a09e15ee7/templates/backgrounds/digital-azure-v1.png",
+      "sha256": "06e89193306dd834b1cb391f816cb51763252725afe9c33320effa1a09e15ee7",
+      "bytes": 1285598,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-azure-vertical-v1.png": {
+      "key": "video-studio/catalog/4934d9f67767f7dd5bdf8606ff31a390c4e671cf1a1342f5041f597c3ff109f1/templates/backgrounds/digital-azure-vertical-v1.png",
+      "sha256": "4934d9f67767f7dd5bdf8606ff31a390c4e671cf1a1342f5041f597c3ff109f1",
+      "bytes": 2568380,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-ember-v1.png": {
+      "key": "video-studio/catalog/f5522d5c155cf025c5e96125a011b34288be9e1ae4108672e2947fc2d97f6516/templates/backgrounds/digital-ember-v1.png",
+      "sha256": "f5522d5c155cf025c5e96125a011b34288be9e1ae4108672e2947fc2d97f6516",
+      "bytes": 1166412,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-ember-vertical-v1.png": {
+      "key": "video-studio/catalog/8389efd360f4ee022cd2cc45aea4ba108354c4c3a0e4eb138342a703a724d6f5/templates/backgrounds/digital-ember-vertical-v1.png",
+      "sha256": "8389efd360f4ee022cd2cc45aea4ba108354c4c3a0e4eb138342a703a724d6f5",
+      "bytes": 2278635,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-glitch-v1.png": {
+      "key": "video-studio/catalog/8e9e3deeeb18c0ba99d8c3e294c55d80e979811fbbaa8a2e1aaebbe1899ecf10/templates/backgrounds/digital-glitch-v1.png",
+      "sha256": "8e9e3deeeb18c0ba99d8c3e294c55d80e979811fbbaa8a2e1aaebbe1899ecf10",
+      "bytes": 1291169,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-glitch-vertical-v1.png": {
+      "key": "video-studio/catalog/18f93ef02cbaec66a53bac8aecbd3a403b8a9ce6f9c78a213f1119e449edc15d/templates/backgrounds/digital-glitch-vertical-v1.png",
+      "sha256": "18f93ef02cbaec66a53bac8aecbd3a403b8a9ce6f9c78a213f1119e449edc15d",
+      "bytes": 2571556,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-gold-v1.png": {
+      "key": "video-studio/catalog/4a8bbddf27a794c1c44ad8145e254c56057db4206aa77d58cb4966e647853d9b/templates/backgrounds/digital-gold-v1.png",
+      "sha256": "4a8bbddf27a794c1c44ad8145e254c56057db4206aa77d58cb4966e647853d9b",
+      "bytes": 416372,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-gold-vertical-v1.png": {
+      "key": "video-studio/catalog/9fe22993c634177e3a4fd8caea57512985ba0f7a54d0c200aa8afd22a252b39d/templates/backgrounds/digital-gold-vertical-v1.png",
+      "sha256": "9fe22993c634177e3a4fd8caea57512985ba0f7a54d0c200aa8afd22a252b39d",
+      "bytes": 786113,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-matrix-v1.png": {
+      "key": "video-studio/catalog/5e77e24b31529872fb95d58d1867d8470bc01e7b17a70cef35153079835681da/templates/backgrounds/digital-matrix-v1.png",
+      "sha256": "5e77e24b31529872fb95d58d1867d8470bc01e7b17a70cef35153079835681da",
+      "bytes": 327929,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-matrix-vertical-v1.png": {
+      "key": "video-studio/catalog/4a4eaf399a605ba026b671133d0b5386b3693dea9f2bdeaba22f3970b64a4823/templates/backgrounds/digital-matrix-vertical-v1.png",
+      "sha256": "4a4eaf399a605ba026b671133d0b5386b3693dea9f2bdeaba22f3970b64a4823",
+      "bytes": 579960,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-rays-v1.png": {
+      "key": "video-studio/catalog/22ed6b9eb07f8feedc963aada6d94367233abf4f17fafa77c2f156f17b2dc1cb/templates/backgrounds/digital-rays-v1.png",
+      "sha256": "22ed6b9eb07f8feedc963aada6d94367233abf4f17fafa77c2f156f17b2dc1cb",
+      "bytes": 1000743,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-rays-vertical-v1.png": {
+      "key": "video-studio/catalog/4fd9ff243cf9f0dda841dffa3977857cacd7353c5de1cd8e5e3196973e660c98/templates/backgrounds/digital-rays-vertical-v1.png",
+      "sha256": "4fd9ff243cf9f0dda841dffa3977857cacd7353c5de1cd8e5e3196973e660c98",
+      "bytes": 1890497,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-stars-v1.png": {
+      "key": "video-studio/catalog/0e7410c58d91e9755f69209cd04fd77601f7e5177489fa8cda633c4c3dfd32a1/templates/backgrounds/digital-stars-v1.png",
+      "sha256": "0e7410c58d91e9755f69209cd04fd77601f7e5177489fa8cda633c4c3dfd32a1",
+      "bytes": 1210292,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/digital-stars-vertical-v1.png": {
+      "key": "video-studio/catalog/9431d7dc67d00ce3ac82c068885025c651054fbc0992893628c949e0ba3d1c5c/templates/backgrounds/digital-stars-vertical-v1.png",
+      "sha256": "9431d7dc67d00ce3ac82c068885025c651054fbc0992893628c949e0ba3d1c5c",
+      "bytes": 1615298,
+      "contentType": "image/png"
+    },
     "templates/backgrounds/electric-v1.png": {
       "key": "video-studio/catalog/6822f556c7dafc64758668762338f902a61b0d39e10a15d9dc78379d2a5b2079/templates/backgrounds/electric-v1.png",
       "sha256": "6822f556c7dafc64758668762338f902a61b0d39e10a15d9dc78379d2a5b2079",
@@ -1439,6 +1991,42 @@
       "key": "video-studio/catalog/cbbc8d7ffb3f3f57e493fa542087c5344113c44d9af9fbb0531780d121591eb5/templates/backgrounds/electric-vertical-v1.png",
       "sha256": "cbbc8d7ffb3f3f57e493fa542087c5344113c44d9af9fbb0531780d121591eb5",
       "bytes": 2144126,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/geometric-light-v1.png": {
+      "key": "video-studio/catalog/223a96a86fa42cfd0468d99da8535d19207a7a8fa8a70990f6fea57854f15f97/templates/backgrounds/geometric-light-v1.png",
+      "sha256": "223a96a86fa42cfd0468d99da8535d19207a7a8fa8a70990f6fea57854f15f97",
+      "bytes": 923786,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/geometric-light-vertical-v1.png": {
+      "key": "video-studio/catalog/cc73a2c345a2ddcf16347426f5701733a3de7d956a220cc16504c298c817c927/templates/backgrounds/geometric-light-vertical-v1.png",
+      "sha256": "cc73a2c345a2ddcf16347426f5701733a3de7d956a220cc16504c298c817c927",
+      "bytes": 1766013,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/gold-night-v1.png": {
+      "key": "video-studio/catalog/96a33b985277de89e0491a8f1a3aeaa2d60524d9e53ea533751f4186a543f853/templates/backgrounds/gold-night-v1.png",
+      "sha256": "96a33b985277de89e0491a8f1a3aeaa2d60524d9e53ea533751f4186a543f853",
+      "bytes": 697521,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/gold-night-vertical-v1.png": {
+      "key": "video-studio/catalog/961aea00a8f82e379088db1822a81889915b0faf04792877248d5aa54eb8bffc/templates/backgrounds/gold-night-vertical-v1.png",
+      "sha256": "961aea00a8f82e379088db1822a81889915b0faf04792877248d5aa54eb8bffc",
+      "bytes": 1272331,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/green-pattern-v1.png": {
+      "key": "video-studio/catalog/d1b28459aa7d4f9e7de2b6a981be1feff4da4bee227c29636f0a9a3bc32e335a/templates/backgrounds/green-pattern-v1.png",
+      "sha256": "d1b28459aa7d4f9e7de2b6a981be1feff4da4bee227c29636f0a9a3bc32e335a",
+      "bytes": 291251,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/green-pattern-vertical-v1.png": {
+      "key": "video-studio/catalog/06d759cc2008cbe84ffe073caea6010c13aceb54ecac68360f06b653ab5fa4c3/templates/backgrounds/green-pattern-vertical-v1.png",
+      "sha256": "06d759cc2008cbe84ffe073caea6010c13aceb54ecac68360f06b653ab5fa4c3",
+      "bytes": 514695,
       "contentType": "image/png"
     },
     "templates/backgrounds/harvest-v1.png": {
@@ -1465,6 +2053,66 @@
       "bytes": 2039736,
       "contentType": "image/png"
     },
+    "templates/backgrounds/nebula-1-v1.png": {
+      "key": "video-studio/catalog/179cb6b78ec713bc8dc3740bcf9527067d6142c815ace72514cce998042cf0a0/templates/backgrounds/nebula-1-v1.png",
+      "sha256": "179cb6b78ec713bc8dc3740bcf9527067d6142c815ace72514cce998042cf0a0",
+      "bytes": 970944,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/nebula-1-vertical-v1.png": {
+      "key": "video-studio/catalog/dfef21eb1fab8e7670fb6c8f038c6febcf15d7640c75d231fd03d62d8e647797/templates/backgrounds/nebula-1-vertical-v1.png",
+      "sha256": "dfef21eb1fab8e7670fb6c8f038c6febcf15d7640c75d231fd03d62d8e647797",
+      "bytes": 1007095,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/nebula-2-v1.png": {
+      "key": "video-studio/catalog/db66d8bbbf943e9c33f7400bb59a42e4dd18f503f068f3858df6685c3187a758/templates/backgrounds/nebula-2-v1.png",
+      "sha256": "db66d8bbbf943e9c33f7400bb59a42e4dd18f503f068f3858df6685c3187a758",
+      "bytes": 882609,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/nebula-2-vertical-v1.png": {
+      "key": "video-studio/catalog/97978759e9a00e14ffca567205fd256a6433223c08166760dccbfebacde9f8fa/templates/backgrounds/nebula-2-vertical-v1.png",
+      "sha256": "97978759e9a00e14ffca567205fd256a6433223c08166760dccbfebacde9f8fa",
+      "bytes": 922270,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/nebula-3-v1.png": {
+      "key": "video-studio/catalog/426fc30e8ba2880b6fb57918bc0dd664761fa3b62f1cc469074d42ff43e62f1c/templates/backgrounds/nebula-3-v1.png",
+      "sha256": "426fc30e8ba2880b6fb57918bc0dd664761fa3b62f1cc469074d42ff43e62f1c",
+      "bytes": 1879820,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/nebula-3-vertical-v1.png": {
+      "key": "video-studio/catalog/81744cb48f56421baed910316cc6561405d7c028ca8f0e305c78aa8d4b297ef1/templates/backgrounds/nebula-3-vertical-v1.png",
+      "sha256": "81744cb48f56421baed910316cc6561405d7c028ca8f0e305c78aa8d4b297ef1",
+      "bytes": 1838531,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/nebula-4-v1.png": {
+      "key": "video-studio/catalog/13dabe799bbf1cdc0a13c08a74b6c0de7dcf804a556e99f2f2c1768226975fc6/templates/backgrounds/nebula-4-v1.png",
+      "sha256": "13dabe799bbf1cdc0a13c08a74b6c0de7dcf804a556e99f2f2c1768226975fc6",
+      "bytes": 1185144,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/nebula-4-vertical-v1.png": {
+      "key": "video-studio/catalog/3f4b2c406d8ba788d1c8e7210cd50539ce2c84e3cc66765664d5504a9eafdda7/templates/backgrounds/nebula-4-vertical-v1.png",
+      "sha256": "3f4b2c406d8ba788d1c8e7210cd50539ce2c84e3cc66765664d5504a9eafdda7",
+      "bytes": 1213730,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/nebula-5-v1.png": {
+      "key": "video-studio/catalog/79b84f08580263d495223a7b2512e9386a6f98be1399f41dcdf42d79d2c7ffbb/templates/backgrounds/nebula-5-v1.png",
+      "sha256": "79b84f08580263d495223a7b2512e9386a6f98be1399f41dcdf42d79d2c7ffbb",
+      "bytes": 1351857,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/nebula-5-vertical-v1.png": {
+      "key": "video-studio/catalog/621823ddab674fc0e4fd5ca57b72557e07f8b5bb2a00d1bde236f0daf402e72a/templates/backgrounds/nebula-5-vertical-v1.png",
+      "sha256": "621823ddab674fc0e4fd5ca57b72557e07f8b5bb2a00d1bde236f0daf402e72a",
+      "bytes": 1361780,
+      "contentType": "image/png"
+    },
     "templates/backgrounds/neon-v1.png": {
       "key": "video-studio/catalog/6c2a620564058cc06e6e3af2832979a32fc4c8948ccd563954d4e97cd855afb0/templates/backgrounds/neon-v1.png",
       "sha256": "6c2a620564058cc06e6e3af2832979a32fc4c8948ccd563954d4e97cd855afb0",
@@ -1477,6 +2125,42 @@
       "bytes": 2271254,
       "contentType": "image/png"
     },
+    "templates/backgrounds/ocean-waves-v1.png": {
+      "key": "video-studio/catalog/983bdccb528bcc9540b33baba26277b290350429c6532a06c83fbc432554afe5/templates/backgrounds/ocean-waves-v1.png",
+      "sha256": "983bdccb528bcc9540b33baba26277b290350429c6532a06c83fbc432554afe5",
+      "bytes": 907531,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/ocean-waves-vertical-v1.png": {
+      "key": "video-studio/catalog/0f4f37fe474ba3137c3fb12d5f5f124346d50432f21435918a4a270c7bdadb2b/templates/backgrounds/ocean-waves-vertical-v1.png",
+      "sha256": "0f4f37fe474ba3137c3fb12d5f5f124346d50432f21435918a4a270c7bdadb2b",
+      "bytes": 1689738,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/pink-pattern-v1.png": {
+      "key": "video-studio/catalog/8ed9c3110c503e0d39c3e40686d7e878d8ca1c294f0791c0b37f6fa352a33805/templates/backgrounds/pink-pattern-v1.png",
+      "sha256": "8ed9c3110c503e0d39c3e40686d7e878d8ca1c294f0791c0b37f6fa352a33805",
+      "bytes": 341025,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/pink-pattern-vertical-v1.png": {
+      "key": "video-studio/catalog/1750aa6b9b247aa864faf60de1a2f2dde64336d222f62bb6c91652606e6a129d/templates/backgrounds/pink-pattern-vertical-v1.png",
+      "sha256": "1750aa6b9b247aa864faf60de1a2f2dde64336d222f62bb6c91652606e6a129d",
+      "bytes": 625068,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/purple-pattern-v1.png": {
+      "key": "video-studio/catalog/8af4a8f480c1ad34c405314dd9f774c1d4d5c60500c3f65832c11961a77653a4/templates/backgrounds/purple-pattern-v1.png",
+      "sha256": "8af4a8f480c1ad34c405314dd9f774c1d4d5c60500c3f65832c11961a77653a4",
+      "bytes": 270551,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/purple-pattern-vertical-v1.png": {
+      "key": "video-studio/catalog/8379b65a21ab3db465221f69c4d6046771160249e772cbf30ee760e9bf2ffbdc/templates/backgrounds/purple-pattern-vertical-v1.png",
+      "sha256": "8379b65a21ab3db465221f69c4d6046771160249e772cbf30ee760e9bf2ffbdc",
+      "bytes": 477597,
+      "contentType": "image/png"
+    },
     "templates/backgrounds/red-gold-v1.png": {
       "key": "video-studio/catalog/fcfee889c5edb02f51308794b0437814190c867e19c50d150426a2705bee494d/templates/backgrounds/red-gold-v1.png",
       "sha256": "fcfee889c5edb02f51308794b0437814190c867e19c50d150426a2705bee494d",
@@ -1487,6 +2171,54 @@
       "key": "video-studio/catalog/a9d531c626c6bf4bfe29b520adde63e4765126755e2f454afc725755b7b16917/templates/backgrounds/red-gold-vertical-v1.png",
       "sha256": "a9d531c626c6bf4bfe29b520adde63e4765126755e2f454afc725755b7b16917",
       "bytes": 2117062,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/sand-pattern-v1.png": {
+      "key": "video-studio/catalog/164cc3d814a93609e28fe3148fa6d4dc3d70c5c3c15b1097c5f79cb33f1d6b27/templates/backgrounds/sand-pattern-v1.png",
+      "sha256": "164cc3d814a93609e28fe3148fa6d4dc3d70c5c3c15b1097c5f79cb33f1d6b27",
+      "bytes": 210195,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/sand-pattern-vertical-v1.png": {
+      "key": "video-studio/catalog/e52784bf1d5ba1bd1de074897c3d5e7457a8fa4ea4941edb1feddc6cfc660517/templates/backgrounds/sand-pattern-vertical-v1.png",
+      "sha256": "e52784bf1d5ba1bd1de074897c3d5e7457a8fa4ea4941edb1feddc6cfc660517",
+      "bytes": 353958,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/silver-waves-v1.png": {
+      "key": "video-studio/catalog/8e67355d2da43b7bacfe1cfd062e2bb35662f6a53efc3d7b301a3df60aad8d41/templates/backgrounds/silver-waves-v1.png",
+      "sha256": "8e67355d2da43b7bacfe1cfd062e2bb35662f6a53efc3d7b301a3df60aad8d41",
+      "bytes": 963991,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/silver-waves-vertical-v1.png": {
+      "key": "video-studio/catalog/9d681578e5b997482803332690070d2f871a8cfd17c3eb9d6268afc5c1fa342e/templates/backgrounds/silver-waves-vertical-v1.png",
+      "sha256": "9d681578e5b997482803332690070d2f871a8cfd17c3eb9d6268afc5c1fa342e",
+      "bytes": 1824781,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/vertical-streaks-v1.png": {
+      "key": "video-studio/catalog/6dab88469360e288456c70a0bbb3001d4f45c43462d017b485e59e87742c821e/templates/backgrounds/vertical-streaks-v1.png",
+      "sha256": "6dab88469360e288456c70a0bbb3001d4f45c43462d017b485e59e87742c821e",
+      "bytes": 208808,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/vertical-streaks-vertical-v1.png": {
+      "key": "video-studio/catalog/a1d86a5ab4b9b7bece09dd87a035ce0d8553431170909e8f0378bf036d86776a/templates/backgrounds/vertical-streaks-vertical-v1.png",
+      "sha256": "a1d86a5ab4b9b7bece09dd87a035ce0d8553431170909e8f0378bf036d86776a",
+      "bytes": 346985,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/warm-mosaic-v1.png": {
+      "key": "video-studio/catalog/b0cfa57c0d4ada5ca5b7606f9e8d21e6e3726d2df93aa083e9dc4830e3927c97/templates/backgrounds/warm-mosaic-v1.png",
+      "sha256": "b0cfa57c0d4ada5ca5b7606f9e8d21e6e3726d2df93aa083e9dc4830e3927c97",
+      "bytes": 273042,
+      "contentType": "image/png"
+    },
+    "templates/backgrounds/warm-mosaic-vertical-v1.png": {
+      "key": "video-studio/catalog/0ea7f02df28632ddd8e9432b4247ec83089c44a9e8f804670b44a1df97ca4e34/templates/backgrounds/warm-mosaic-vertical-v1.png",
+      "sha256": "0ea7f02df28632ddd8e9432b4247ec83089c44a9e8f804670b44a1df97ca4e34",
+      "bytes": 483938,
       "contentType": "image/png"
     },
     "templates/black-esquenta-friday-fogo-background.png": {
@@ -3779,6 +4511,60 @@
       "key": "video-studio/catalog/2dd4518c9582271bd30fd6b3285bdea725926f786e5fe993164daf2cf38a8d78/templates/economia-venha-economia-wide.png",
       "sha256": "2dd4518c9582271bd30fd6b3285bdea725926f786e5fe993164daf2cf38a8d78",
       "bytes": 1991436,
+      "contentType": "image/png"
+    },
+    "templates/effects/kenney-dust.png": {
+      "key": "video-studio/catalog/427d6dcad5a8d16b8143d412a5a48ce859716150a074ea5bb36eca577c0ae541/templates/effects/kenney-dust.png",
+      "sha256": "427d6dcad5a8d16b8143d412a5a48ce859716150a074ea5bb36eca577c0ae541",
+      "bytes": 114937,
+      "contentType": "image/png"
+    },
+    "templates/effects/kenney-fire.png": {
+      "key": "video-studio/catalog/9727a9743ac6ab8dd4dd79f5fc5b0266290efae45f4d4452279eb5e4bcf3a978/templates/effects/kenney-fire.png",
+      "sha256": "9727a9743ac6ab8dd4dd79f5fc5b0266290efae45f4d4452279eb5e4bcf3a978",
+      "bytes": 99891,
+      "contentType": "image/png"
+    },
+    "templates/effects/kenney-flare.png": {
+      "key": "video-studio/catalog/254f5bd4f0548612bf29305d27899efdee8cb8d8306292761ebbddebd3e57935/templates/effects/kenney-flare.png",
+      "sha256": "254f5bd4f0548612bf29305d27899efdee8cb8d8306292761ebbddebd3e57935",
+      "bytes": 42886,
+      "contentType": "image/png"
+    },
+    "templates/effects/kenney-lightning.png": {
+      "key": "video-studio/catalog/9624ea2017b8b2767a9d3b82e978b7fdf5154d83e6756cd919da51447bb97138/templates/effects/kenney-lightning.png",
+      "sha256": "9624ea2017b8b2767a9d3b82e978b7fdf5154d83e6756cd919da51447bb97138",
+      "bytes": 64808,
+      "contentType": "image/png"
+    },
+    "templates/effects/kenney-ring.png": {
+      "key": "video-studio/catalog/ed6c6f082e666c16bcaca89f15aefb55df9bf69450090518bcae1d3d61f82936/templates/effects/kenney-ring.png",
+      "sha256": "ed6c6f082e666c16bcaca89f15aefb55df9bf69450090518bcae1d3d61f82936",
+      "bytes": 72952,
+      "contentType": "image/png"
+    },
+    "templates/effects/kenney-smoke.png": {
+      "key": "video-studio/catalog/2db2f69874cdb1e5203f2f86803d5debde30402590cf50a810afaba882184616/templates/effects/kenney-smoke.png",
+      "sha256": "2db2f69874cdb1e5203f2f86803d5debde30402590cf50a810afaba882184616",
+      "bytes": 97568,
+      "contentType": "image/png"
+    },
+    "templates/effects/kenney-spark.png": {
+      "key": "video-studio/catalog/5902da3a324cad0a4b5a88ce1e3c9cc18fee50922c358ce93d8c9f1ad7708f0a/templates/effects/kenney-spark.png",
+      "sha256": "5902da3a324cad0a4b5a88ce1e3c9cc18fee50922c358ce93d8c9f1ad7708f0a",
+      "bytes": 95070,
+      "contentType": "image/png"
+    },
+    "templates/effects/kenney-star.png": {
+      "key": "video-studio/catalog/4255985e312a0058dc0c4f8b5befc902da17e6be5e5252007f3c7b02bb150157/templates/effects/kenney-star.png",
+      "sha256": "4255985e312a0058dc0c4f8b5befc902da17e6be5e5252007f3c7b02bb150157",
+      "bytes": 50142,
+      "contentType": "image/png"
+    },
+    "templates/effects/kenney-vortex.png": {
+      "key": "video-studio/catalog/69baaab4bc68473e9f926dc249a1d1b58f759c88906e10ac859bf43ac3cfbc8b/templates/effects/kenney-vortex.png",
+      "sha256": "69baaab4bc68473e9f926dc249a1d1b58f759c88906e10ac859bf43ac3cfbc8b",
+      "bytes": 81463,
       "contentType": "image/png"
     },
     "templates/esquenta-black-friday-escudo-background.png": {

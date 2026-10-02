@@ -190,7 +190,7 @@ const fields = computed<SetupField[]>(() => {
   const seen = new Set<SetupField>()
   return (Array.isArray(props.fields) ? props.fields : [])
     .map(value => FIELD_ALIASES[String(value || '').trim().replace(/\s+/g, '').toLowerCase()] || null)
-    .filter((field): field is SetupField => !!field)
+    .filter((field): field is SetupField => !!field && field !== 'facebook')
     .filter(field => {
       if (seen.has(field)) return false
       seen.add(field)

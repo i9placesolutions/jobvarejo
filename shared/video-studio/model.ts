@@ -62,11 +62,10 @@ export function parseOfferPrice(value: string): number | null {
 }
 export function displayPrice(value: string): string { const n = parseOfferPrice(value); return n === null ? value : n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) }
 function spokenPrice(value: string): string {
-  const amount = parseOfferPrice(value)
-  if (amount === null) return value
-  const wholeReais = Math.floor(amount)
-  // A arte conserva o preço exato; a locução fala apenas os reais inteiros.
-  return wholeReais > 0 ? `R$ ${wholeReais.toLocaleString('pt-BR')}` : 'menos de um real'
+  if (parseOfferPrice(value) === null) return value
+  const amount = value.trim().replace(/^R\$\s*/i, '')
+  // Preserve o valor comercial completo; o normalizador o escreve por extenso.
+  return `R$ ${amount}`
 }
 function spokenOfferName(offer: VideoOffer): string {
   const unit=offer.unit.trim().toLowerCase()

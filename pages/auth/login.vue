@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Eye, EyeOff, MessageCircle, Lock, ArrowRight, ShieldCheck } from 'lucide-vue-next'
+import { shouldPromptBusinessProfileOnboarding } from '~/utils/businessProfile'
 
 definePageMeta({
   layout: 'auth',
@@ -16,7 +17,6 @@ const showPassword = ref(false)
 const isLoading = ref(false)
 const isRedirecting = ref(false)
 const errorMessage = ref('')
-const BUSINESS_PROFILE_ONBOARDING_KEY = 'jobvarejo:business-profile-onboarding-pending'
 
 const handleLogin = async () => {
   if (isLoading.value || isRedirecting.value) {
@@ -36,10 +36,18 @@ const handleLogin = async () => {
 
     // Avoid overlapping Nuxt navigations if the user submits twice.
     isRedirecting.value = true
-    const shouldOpenBusinessProfile = typeof window !== 'undefined'
-      && window.localStorage.getItem(BUSINESS_PROFILE_ONBOARDING_KEY) === '1'
+    let shouldOpenBusinessProfile = auth.user.value?.role === 'user'
     if (shouldOpenBusinessProfile) {
-      window.localStorage.removeItem(BUSINESS_PROFILE_ONBOARDING_KEY)
+      try {
+        const profile = await $fetch<{ business_profile?: unknown }>('/api/profile?self=1')
+        shouldOpenBusinessProfile = shouldPromptBusinessProfileOnboarding(auth.user.value?.role, profile?.business_profile)
+      } catch {
+        // If the persisted profile cannot be read, keep the account on the
+        // required setup screen; the API guard remains authoritative.
+        shouldOpenBusinessProfile = true
+      }
+    }
+    if (shouldOpenBusinessProfile) {
       await navigateTo('/business-profile?onboarding=1&returnTo=/', { replace: true })
       return
     }

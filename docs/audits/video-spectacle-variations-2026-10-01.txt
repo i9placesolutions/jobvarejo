@@ -1,0 +1,24 @@
+Variações adicionais de efeitos de vídeo — 01/10/2026
+
+Solicitação: ampliar opções de explosões, fogos de artifício, raios e efeitos para variar os vídeos.
+
+Escopo: 24 animações procedurais originais e 6 combinações prontas, com renderização por frame no Remotion. Não são novos clipes baixados; complementam os fundos/áudios/sprites CC0 baixados na ampliação anterior. Não há geração paga nem licenças de terceiros adicionais.
+
+Famílias:
+- Fogos (6): dourados, coloridos, salgueiro, anel, coração, fonte.
+- Explosões (5): bola de fogo, fumaça, faíscas, anéis de choque, quadrinhos.
+- Eletricidade (5): ramificações, corrente, esfera, tempestade, borda.
+- Chamas (4): colunas, parede, azuis, redemoinho.
+- Energia (4): portal, meteoros, aurora, raios radiais.
+
+Implementação: shared/video-studio/spectacle-effects.ts produz SVGs determinísticos por quadro; intensidade aplicada ao grupo. fastPreview reduz partículas e segmentos. Explosões limitadas à entrada da cena, sem repetição durante a leitura. Camada renderizada atrás do conteúdo comercial, sem mover produtos, preços, marcas ou textos.
+
+Integração: catálogo puro de opções, schema existente para salvar IDs, biblioteca de efeitos dos modelos de encarte/showcase; seletor nativo adicional em Personalize para modelos clássicos/broadcast. O limite de oito atmosferas permanece. Não foram alteradas receitas padrão nem projetos de clientes.
+
+Evidências de revisão e logs: output/video-spectacle-20261001.
+Validação final: npm run build e npm run typecheck finais concluídos com exit 0; check:client-chunk aprovado (455 KB / 500 KB); git diff --check aprovado. Cinco arquivos de testes direcionados, 22 testes aprovados. Suíte completa de vídeo: 394 aprovados e as mesmas 4 falhas preexistentes documentadas na ampliação anterior (campaign-direction, catalog-coverage e dois cenários de personalization). Typecheck inicial identificou erros próprios de tipagem, corrigidos; também capturou erros em testes de autenticação de outra tarefa simultânea, ausentes na verificação final. Aviso DEP0205 permanece sem bloquear a saída final.
+
+Revisão visual: 24 stills isolados, 6 quadros adicionais do brilho dos fogos e 8 stills nos quatro renderizadores × dois formatos (38 stills). Cinco clipes de 2,5 s/H264 em baixa resolução, sem trilha nova, decodificados integralmente via FFmpeg; quatro momentos por clipe conferidos em prancha. Evidências em review/review.json, fireworks-peak-review.json, decode.json e integration/review.json. Não representa revisão de vídeos comerciais completos nem teste de todos os frames de todas as 24 opções.
+
+Preview: processo reiniciado na porta 3000, snapshot isolado jobvarejo-preview-pFL5gd. Página /videos HTTP 200, scripts HTML HTTP 200 e os dois chunks contendo efeitos novos baixados do preview e comparados por SHA256 contra o build. Biblioteca autenticada conferida após reload pelo navegador, com 206 modelos e 67 vídeos existentes. Seletor de efeitos não foi usado para salvar um projeto de cliente; contrato de save/reload validado pelo schema real. Relatórios preview-http.json e preview-effects.json. Catálogo agora com 49 atmosferas e 12 combinações prontas.
+Publicação: alterações locais, sem commit/push/deploy. App e worker em produção dependem de publicação.

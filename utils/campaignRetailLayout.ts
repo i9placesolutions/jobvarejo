@@ -34,6 +34,12 @@ const fitText = (o: any, x: number, y: number, width: number, height: number, si
   changed = set(o, { left: x, top: y }) || changed
   return changed
 }
+const centerTextOnIcon = (field: any, icon: any): boolean => {
+  if (!field || !icon || !activeText(field) || field.__manualTransform) return false
+  const iconBox = box(icon)
+  const textBox = box(field)
+  return set(field, { top: iconBox.top + (iconBox.height - textBox.height) / 2 })
+}
 
 /** Layout dinâmico do cabeçalho social da campanha; aceita objetos Fabric e JSON. */
 export const layoutCampaignSocial = (objects: any[]): boolean => {
@@ -66,7 +72,9 @@ export const layoutCampaignSocial = (objects: any[]): boolean => {
           set(icon, { visible: true, originX: 'left', originY: 'top', left, top: band.top + band.height * .07, scaleX: factor, scaleY: factor })
           left += size + band.width * .025
         })
-        fitText(fields.find((_, index) => active[index]), left, band.top + band.height * .05, Math.max(1, band.left + band.width * .965 - left), band.height * .39, 25 * scale, true)
+        const field = fields.find((_, index) => active[index])
+        fitText(field, left, band.top + band.height * .05, Math.max(1, band.left + band.width * .965 - left), band.height * .39, 25 * scale, true)
+        centerTextOnIcon(field, icons.find((icon, index) => icon && active[index]))
         fitText(caption, band.left + band.width * .035, band.top + band.height * .50, band.width * .93, band.height * .42, 28 * scale, true)
         if (equalHandles && fields[1]) set(fields[1], { visible: false })
         if (divider) set(divider, { visible: false })
@@ -82,9 +90,10 @@ export const layoutCampaignSocial = (objects: any[]): boolean => {
           set(icon, { visible: true, originX: 'left', originY: 'top', left, top: band.top + band.height * .07, scaleX: factor, scaleY: factor })
           left += size + band.width * .03
         })
-        fitText(caption, left, band.top + band.height * .06, Math.max(1, band.left + band.width - left - band.width * .025), band.height * .42, 20 * scale)
         const field = fields.find((_, index) => active[index])
-        fitText(field, band.left + band.width * .035, band.top + band.height * .55, band.width * .93, band.height * .36, 26 * scale, true)
+        fitText(field, left, band.top + band.height * .05, Math.max(1, band.left + band.width * .965 - left), band.height * .39, 25 * scale, true)
+        centerTextOnIcon(field, icons.find((icon, index) => icon && active[index]))
+        fitText(caption, band.left + band.width * .035, band.top + band.height * .50, band.width * .93, band.height * .42, 20 * scale)
         if (equalHandles && fields[1]) set(fields[1], { visible: false })
         if (divider) set(divider, { visible: false })
         changed = before !== changedState([background, ...fields, ...icons, caption, divider].filter(Boolean)) || changed
@@ -122,8 +131,7 @@ export const layoutCampaignSocial = (objects: any[]): boolean => {
         })
         if (!field.__manualTransform) {
           fitText(field, left, rowTop + rowHeight * .12, textWidth, rowHeight * .76, 25 * scale, distinctRows)
-          // Centraliza o texto na altura do ícone quando a fonte não ocupa toda a linha.
-          if (activeText(field)) set(field, { top: rowTop + (rowHeight - box(field).height) / 2 })
+          centerTextOnIcon(field, icons[fieldKeyIndex])
         }
       })
       if (sameHandle && fields[1]) set(fields[1], { visible: false })

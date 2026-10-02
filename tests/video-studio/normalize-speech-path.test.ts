@@ -19,7 +19,7 @@ describe('video speech normalizer location', () => {
         { id: 'offer', text: 'Arroz 5kg por R$ 19,90' }
       ], [])
       expect(scripts[0]?.text).toContain('setembro')
-      expect(scripts[1]?.text).toContain('dezenove reais')
+      expect(scripts[1]?.text).toContain('dezenove e noventa')
       expect(scripts[1]?.text).not.toContain('centavos')
     } finally {
       process.chdir(root)

@@ -1,6 +1,7 @@
 import { pgQuery } from './postgres'
 import {
   EMPTY_BUSINESS_PROFILE,
+  isBusinessProfileComplete,
   normalizeBusinessProfile as normalizeSharedBusinessProfile,
   type BusinessProfile,
 } from '../../utils/businessProfile'
@@ -21,6 +22,9 @@ export const ensureBusinessProfileColumn = async (): Promise<void> => {
 
 export const normalizeBusinessProfile = (value: unknown): BusinessProfile =>
   normalizeSharedBusinessProfile(value)
+
+export const isCompleteBusinessProfile = (value: unknown): boolean =>
+  isBusinessProfileComplete(value)
 
 export const mergeBusinessProfile = (current: unknown, incoming: unknown): BusinessProfile => {
   const currentProfile = normalizeBusinessProfile(current)

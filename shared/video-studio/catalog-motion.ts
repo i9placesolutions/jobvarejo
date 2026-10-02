@@ -55,5 +55,13 @@ export function transitionMotion(frame:number,mode:SceneTransition) {
     case 'iris':return {...out,cover:peak,zoom:energy*.12}
     case 'rgb':return {...out,x:Math.sin(frame*2)*energy*22,zoom:energy*.05,chromatic:energy}
     case 'blur':return {...out,blur:energy*17,zoom:energy*.06}
+    case 'flash-wipe':return {...out,cover:energy,flash:peak*.72,x:energy*120}
+    case 'split-screen':return {...out,cover:peak,zoom:energy*.04}
+    case 'diamond-wipe':return {...out,cover:peak,flash:peak*.22,zoom:energy*.03}
+    case 'radial-burst':return {...out,cover:energy,flash:peak*.36,zoom:energy*.05}
+    case 'bar-wipe':return {...out,cover:peak,zoom:energy*.04}
+    case 'pixel-dissolve':return {...out,cover:energy,flash:peak*.12}
+    case 'chevron-wipe':return {...out,cover:peak,zoom:energy*.05}
+    case 'ring-wipe':return {...out,cover:energy,flash:peak*.16,zoom:energy*.06}
   }
 }

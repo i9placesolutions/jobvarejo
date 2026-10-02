@@ -3,6 +3,7 @@ import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull } from '../utils/postgres'
 import {
   ensureBusinessProfileColumn,
+  isCompleteBusinessProfile,
   mergeBusinessProfile
 } from '../utils/business-profile'
 
@@ -22,9 +23,7 @@ export default defineEventHandler(async (event) => {
   const incomingModules = Array.isArray(body?.selected_modules)
     ? JSON.stringify(body.selected_modules.filter((m: any) => typeof m === 'string'))
     : null
-  const onboardingCompleted = body?.onboarding_completed !== undefined
-    ? Boolean(body.onboarding_completed)
-    : null
+  const onboardingCompleted = isCompleteBusinessProfile(businessProfile)
 
   const row = await pgOneOrNull<any>(
     `update public.profiles
@@ -36,7 +35,7 @@ export default defineEventHandler(async (event) => {
               THEN jsonb_build_object('internalOnly', business_profile->'internalOnly')
               ELSE '{}'::jsonb END,
             selected_modules = coalesce($3::jsonb, selected_modules),
-            onboarding_completed = coalesce($4::boolean, onboarding_completed),
+            onboarding_completed = $4::boolean,
             updated_at = timezone('utc', now())
       where id = $2
       returning id,

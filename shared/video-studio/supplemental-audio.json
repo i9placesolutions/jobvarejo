@@ -1,0 +1,342 @@
+{
+  "sounds": [
+    {
+      "id": "cc0-close-001",
+      "name": "Corte suave",
+      "seconds": 0.147792
+    },
+    {
+      "id": "cc0-close-004",
+      "name": "Corte digital",
+      "seconds": 0.322875
+    },
+    {
+      "id": "cc0-confirmation-001",
+      "name": "Confirmação leve",
+      "seconds": 0.289854
+    },
+    {
+      "id": "cc0-confirmation-003",
+      "name": "Confirmação brilhante",
+      "seconds": 0.322021
+    },
+    {
+      "id": "cc0-drop-001",
+      "name": "Queda leve",
+      "seconds": 0.132063
+    },
+    {
+      "id": "cc0-drop-004",
+      "name": "Queda forte",
+      "seconds": 0.283792
+    },
+    {
+      "id": "cc0-glitch-001",
+      "name": "Glitch breve",
+      "seconds": 0.017125
+    },
+    {
+      "id": "cc0-glitch-003",
+      "name": "Glitch intenso",
+      "seconds": 0.011625
+    },
+    {
+      "id": "cc0-impactbell-heavy-000",
+      "name": "Sino grave",
+      "seconds": 1.480188
+    },
+    {
+      "id": "cc0-impactbell-heavy-002",
+      "name": "Sino brilhante",
+      "seconds": 0.697292
+    },
+    {
+      "id": "cc0-impactgeneric-light-001",
+      "name": "Impacto leve",
+      "seconds": 0.114604
+    },
+    {
+      "id": "cc0-impactglass-heavy-001",
+      "name": "Vidro forte",
+      "seconds": 0.429
+    },
+    {
+      "id": "cc0-impactglass-medium-000",
+      "name": "Vidro médio",
+      "seconds": 0.540458
+    },
+    {
+      "id": "cc0-impactmetal-heavy-000",
+      "name": "Metal forte",
+      "seconds": 0.164771
+    },
+    {
+      "id": "cc0-impactmetal-medium-003",
+      "name": "Metal médio",
+      "seconds": 0.251063
+    },
+    {
+      "id": "cc0-impactplate-heavy-000",
+      "name": "Placa de impacto",
+      "seconds": 0.488667
+    },
+    {
+      "id": "cc0-impactsoft-heavy-000",
+      "name": "Pancada abafada",
+      "seconds": 0.526813
+    },
+    {
+      "id": "cc0-maximize-001",
+      "name": "Subida brilhante",
+      "seconds": 0.258396
+    },
+    {
+      "id": "cc0-maximize-004",
+      "name": "Abertura crescente",
+      "seconds": 0.417958
+    },
+    {
+      "id": "cc0-maximize-007",
+      "name": "Expansão rápida",
+      "seconds": 0.182854
+    },
+    {
+      "id": "cc0-minimize-001",
+      "name": "Descida suave",
+      "seconds": 0.258396
+    },
+    {
+      "id": "cc0-minimize-004",
+      "name": "Fechamento curto",
+      "seconds": 0.417958
+    },
+    {
+      "id": "cc0-minimize-007",
+      "name": "Recuo rápido",
+      "seconds": 0.182854
+    },
+    {
+      "id": "cc0-open-001",
+      "name": "Abertura suave",
+      "seconds": 0.147792
+    },
+    {
+      "id": "cc0-open-004",
+      "name": "Abertura digital",
+      "seconds": 0.322875
+    },
+    {
+      "id": "cc0-scratch-001",
+      "name": "Arranhado curto",
+      "seconds": 0.139333
+    },
+    {
+      "id": "cc0-scratch-004",
+      "name": "Arranhado longo",
+      "seconds": 0.325083
+    },
+    {
+      "id": "cc0-swish-01",
+      "name": "Passagem leve · 01",
+      "seconds": 0.126042
+    },
+    {
+      "id": "cc0-swish-02",
+      "name": "Passagem leve · 02",
+      "seconds": 0.095833
+    },
+    {
+      "id": "cc0-swish-03",
+      "name": "Passagem leve · 03",
+      "seconds": 0.145854
+    },
+    {
+      "id": "cc0-swish-04",
+      "name": "Passagem leve · 04",
+      "seconds": 0.145833
+    },
+    {
+      "id": "cc0-swish-05",
+      "name": "Passagem forte · 05",
+      "seconds": 0.127083
+    },
+    {
+      "id": "cc0-swish-06",
+      "name": "Passagem forte · 06",
+      "seconds": 0.138
+    },
+    {
+      "id": "cc0-swish-07",
+      "name": "Passagem forte · 07",
+      "seconds": 0.187479
+    },
+    {
+      "id": "cc0-swish-08",
+      "name": "Passagem forte · 08",
+      "seconds": 0.153646
+    },
+    {
+      "id": "cc0-swish-09",
+      "name": "Passagem forte · 09",
+      "seconds": 0.196875
+    },
+    {
+      "id": "cc0-swish-10",
+      "name": "Passagem forte · 10",
+      "seconds": 0.125
+    },
+    {
+      "id": "cc0-swish-11",
+      "name": "Passagem forte · 11",
+      "seconds": 0.104188
+    },
+    {
+      "id": "cc0-swish-12",
+      "name": "Passagem forte · 12",
+      "seconds": 0.076042
+    },
+    {
+      "id": "cc0-swish-13",
+      "name": "Passagem forte · 13",
+      "seconds": 0.070854
+    }
+  ],
+  "music": [
+    {
+      "id": "cc0-barriers",
+      "name": "Barriers · groove acelerado"
+    },
+    {
+      "id": "cc0-blast-1001-serum-patches",
+      "name": "1001 Serum Patches · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-4xthefloor",
+      "name": "4xTheFloor · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-behind-you",
+      "name": "Behind You · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-free-as-a-bird",
+      "name": "Free as a Bird · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-i-ll-blast-you-to-next-week",
+      "name": "I'll Blast You To Next Week · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-i-m-biking-to-school",
+      "name": "I'm Biking to School · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-i-work-in-a-cafe-part-time",
+      "name": "I Work in a Cafe Part-Time · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-just-add-synths",
+      "name": "Just Add Synths · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-now-that-s-automation-v54",
+      "name": "Now That's Automation v54 · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-skate-fast-stay-in-school",
+      "name": "Skate Fast, Stay in School · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-snare-to-the-left",
+      "name": "Snare to the Left · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-spy-in-the-skool",
+      "name": "Spy in the Skool · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-that-optimisticly-sad-part",
+      "name": "That Optimisticly Sad Part · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-that-s-what-friends-do",
+      "name": "That's What Friends Do · 3xBlast"
+    },
+    {
+      "id": "cc0-blast-the-sad-part",
+      "name": "The Sad Part · 3xBlast"
+    },
+    {
+      "id": "cc0-dance-cant-resist-the-groove",
+      "name": "Cant Resist The Groove · dance"
+    },
+    {
+      "id": "cc0-dance-silent-dance-floor",
+      "name": "Silent Dance Floor · dance"
+    },
+    {
+      "id": "cc0-dance-the-celebrity",
+      "name": "The Celebrity · dance"
+    },
+    {
+      "id": "cc0-dance-twin-layers",
+      "name": "Twin Layers · dance"
+    },
+    {
+      "id": "cc0-electronic-outlaw",
+      "name": "Electronic Outlaw · energia retro"
+    },
+    {
+      "id": "cc0-funked-up",
+      "name": "Funked Up · guitarra e groove"
+    },
+    {
+      "id": "cc0-going-deep",
+      "name": "Going Deep · eletrônico"
+    },
+    {
+      "id": "cc0-rhythm-1",
+      "name": "Stomper · eletrônico · 160 BPM"
+    },
+    {
+      "id": "cc0-rhythm-10",
+      "name": "Whats Cooking · eletrônico · 190 BPM"
+    },
+    {
+      "id": "cc0-rhythm-2",
+      "name": "Drama · eletrônico · 130 BPM"
+    },
+    {
+      "id": "cc0-rhythm-3",
+      "name": "Mental Corruption · eletrônico · 150 BPM"
+    },
+    {
+      "id": "cc0-rhythm-4",
+      "name": "Logic Or Emotions · eletrônico · 151 BPM"
+    },
+    {
+      "id": "cc0-rhythm-5",
+      "name": "Extended · eletrônico · 120 BPM"
+    },
+    {
+      "id": "cc0-rhythm-6",
+      "name": "Celebration And Fear · eletrônico · 190 BPM"
+    },
+    {
+      "id": "cc0-rhythm-7",
+      "name": "T.O.E · eletrônico · 120 BPM"
+    },
+    {
+      "id": "cc0-rhythm-8",
+      "name": "Ripped Apart · eletrônico · 174 BPM"
+    },
+    {
+      "id": "cc0-rhythm-9",
+      "name": "Zen Devils · eletrônico · 205 BPM"
+    },
+    {
+      "id": "cc0-wednesday-night",
+      "name": "Wednesday Night · funk suave"
+    }
+  ]
+}

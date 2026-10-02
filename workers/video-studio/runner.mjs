@@ -29,7 +29,7 @@ const bucket=cfg('WASABI_BUCKET')||'jobvarejo',workerId=`${hostname()}:${process
 const catalogStorage={s3,bucket,root}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms))
 const hash=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
-const SPEECH_VERSION=3
+const SPEECH_VERSION=4
 let stopping=false
 process.on('SIGTERM',()=>{stopping=true});process.on('SIGINT',()=>{stopping=true})
 async function touch(){await pool.query('INSERT INTO public.video_studio_workers(id,heartbeat_at) VALUES($1,now()) ON CONFLICT(id) DO UPDATE SET heartbeat_at=now()',[workerId])}

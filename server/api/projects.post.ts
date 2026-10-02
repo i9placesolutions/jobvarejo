@@ -10,6 +10,7 @@ import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull, pgQuery } from '../utils/postgres'
 import { ensureProjectTemplateColumn } from '../utils/project-templates'
 import { normalizeFlyerTemplateConfigCategory } from '~/utils/flyerTemplateCategory'
+import { requireBusinessProfileForOfferCreation } from '../utils/business-profile-onboarding'
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -130,6 +131,7 @@ export default defineEventHandler(async (event) => {
   if (projectId && !isUuid(projectId)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid project id format' })
   }
+  if (!projectId) await requireBusinessProfileForOfferCreation(user)
 
   const nameRaw = String(payload.name || '').trim()
   const name = nameRaw || 'Untitled Project'

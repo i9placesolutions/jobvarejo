@@ -81,7 +81,7 @@ async function processProject(project){
 }
 const selected=limit?rows.slice(0,limit):rows
 for(let i=0;i<selected.length;i+=4){await Promise.all(selected.slice(i,i+4).map(processProject));globalThis.gc?.()}
-if(!limit){const ids=new Set(rows.map(p=>p.id));for(const id of Object.keys(manifest.assets))if(!ids.has(id))delete manifest.assets[id]}
+// Scoped refresh: preserve all existing catalog entries outside this collection.
 if(apply&&!limit)await writeFile(manifestPath,JSON.stringify(manifest,null,2)+'\n')
 await writeFile(output+'/metrics.json',JSON.stringify(metrics,null,2))
 console.log(JSON.stringify({mode:apply?'uploaded':'local-review',count:Object.keys(manifest.assets).length,totalBytes:Object.values(manifest.assets).reduce((n,a)=>n+a.bytes,0)}))

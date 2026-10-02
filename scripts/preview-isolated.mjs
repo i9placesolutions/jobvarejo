@@ -1,5 +1,5 @@
 // Um snapshot completo por processo evita HTML antigo com chunks de um build novo.
-import { cp, mkdtemp, rm, access } from 'node:fs/promises'
+import { cp, mkdtemp, rm, access, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -19,6 +19,9 @@ const snapshot = await mkdtemp(join(tmpdir(), 'jobvarejo-preview-'))
 let child
 try {
   await cp(resolve(root, '.output'), snapshot, { recursive: true, dereference: true })
+  // Dependências externalizadas (como sharp) continuam no node_modules do projeto.
+  // O snapshot preserva os chunks do build e usa essas dependências em runtime.
+  await symlink(resolve(root, 'node_modules'), join(snapshot, 'node_modules'), 'dir')
   console.log(`Preview isolado em http://${host}:${port} — snapshot ${snapshot}`)
   child = spawn(process.execPath, ['server/index.mjs'], {
     cwd: snapshot, stdio: 'inherit',

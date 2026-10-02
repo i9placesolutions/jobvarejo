@@ -1,7 +1,10 @@
 import {CAMPAIGN_SOUNDS} from './campaign-direction'
 import {REFERENCE_SOUNDS} from './reference-sounds'
+import supplementalAudio from './supplemental-audio.json'
 import generatedFlyers from './generated-flyer-recipes.json'
 // Origem dos áudios registrada em catalog-provenance.json.
+// Supplemental IDs são validados em runtime pelo schema, sem alargar o tipo estático do catálogo.
+const supplementalSounds = supplementalAudio.sounds as unknown as readonly {id:`cc0-${string}`;name:string;seconds:number}[]
 export const PRODUCT_ENTRANCES = [
   {id:'slam',name:'Pancada frontal'}, {id:'whip-left',name:'Disparo pela esquerda'},
   {id:'whip-right',name:'Disparo pela direita'}, {id:'rise',name:'Subida explosiva'},
@@ -19,6 +22,21 @@ export const CAMERA_MOVEMENTS = [
   {id:'handheld',name:'Câmera viva'}, {id:'swing',name:'Balanço lateral'},
   {id:'zoom-pulse',name:'Pulso de aproximação'}, {id:'none',name:'Câmera estável'},
 ] as const
+export const SPECTACLE_EFFECTS = [
+  {id:'fireworks-gold',name:'Fogos dourados'}, {id:'fireworks-multicolor',name:'Fogos coloridos'},
+  {id:'fireworks-willow',name:'Fogos salgueiro'}, {id:'fireworks-ring',name:'Fogos em anel'},
+  {id:'fireworks-heart',name:'Fogos em coração'}, {id:'fireworks-fountain',name:'Fonte de fogos'},
+  {id:'explosion-fireball',name:'Bola de fogo'}, {id:'explosion-smoke',name:'Nuvem de explosão'},
+  {id:'explosion-sparks',name:'Estilhaços de faíscas'}, {id:'explosion-shockrings',name:'Anéis de choque'},
+  {id:'explosion-comic',name:'Explosão gráfica'},
+  {id:'electric-fork',name:'Raio bifurcado'}, {id:'electric-chain',name:'Arco elétrico'},
+  {id:'electric-orb',name:'Esfera elétrica'}, {id:'electric-storm',name:'Tempestade elétrica'},
+  {id:'electric-border',name:'Contorno elétrico'},
+  {id:'flame-columns',name:'Colunas de chamas'}, {id:'flame-wall',name:'Parede de fogo'},
+  {id:'flame-blue',name:'Chamas azuis'}, {id:'flame-whirl',name:'Redemoinho de fogo'},
+  {id:'energy-portal',name:'Portal de energia'}, {id:'energy-meteor',name:'Meteoro luminoso'},
+  {id:'energy-aurora',name:'Aurora de energia'}, {id:'energy-starburst',name:'Estrela de energia'},
+] as const
 export const SCENE_TRANSITIONS = [
   {id:'light',name:'Zoom com luz'}, {id:'slide',name:'Câmera rápida'},
   {id:'smoke',name:'Fumaça'}, {id:'fade',name:'Corte suave'},
@@ -26,6 +44,10 @@ export const SCENE_TRANSITIONS = [
   {id:'spin',name:'Giro de câmera'}, {id:'diagonal',name:'Corte diagonal'},
   {id:'shutter',name:'Persianas rápidas'}, {id:'iris',name:'Portal circular'},
   {id:'rgb',name:'Distorção de cor'}, {id:'blur',name:'Foco e desfoque'},
+  {id:'flash-wipe',name:'Corte com clarão'}, {id:'split-screen',name:'Corte dividido'},
+  {id:'diamond-wipe',name:'Diamante luminoso'}, {id:'radial-burst',name:'Explosão radial'},
+  {id:'bar-wipe',name:'Faixas laterais'}, {id:'pixel-dissolve',name:'Dissolução em pixels'},
+  {id:'chevron-wipe',name:'Corte em V'}, {id:'ring-wipe',name:'Anel luminoso'},
 ] as const
 export const ATMOSPHERE_EFFECTS = [
   {id:'fire',name:'Fogo em camadas'}, {id:'fire-jets',name:'Labaredas de impacto'},
@@ -36,8 +58,14 @@ export const ATMOSPHERE_EFFECTS = [
   {id:'spotlights',name:'Holofotes'}, {id:'lightning',name:'Descargas elétricas'},
   {id:'prism',name:'Reflexos de cor'}, {id:'dust',name:'Poeira em profundidade'},
   {id:'orbit',name:'Órbitas luminosas'}, {id:'grid',name:'Túnel geométrico'},
+  {id:'sprite-sparks',name:'Faíscas em profundidade'}, {id:'sprite-smoke',name:'Fumaça em camadas'},
+  {id:'sprite-flare',name:'Reflexos de lente'}, {id:'sprite-stars',name:'Estrelas em profundidade'},
+  {id:'sprite-rings',name:'Anéis luminosos'}, {id:'sprite-lightning',name:'Descargas em camada'},
+  {id:'sprite-fire',name:'Chamas em profundidade'}, {id:'sprite-dust',name:'Poeira suspensa'},
+  {id:'sprite-vortex',name:'Vórtice de luz'}, ...SPECTACLE_EFFECTS,
 ] as const
 export const SOUND_EFFECTS = [
+  ...supplementalSounds,
   ...REFERENCE_SOUNDS,
   ...CAMPAIGN_SOUNDS,
   {id:'retail-whoosh-v1',name:'Passagem curta · suave',seconds:.54},
@@ -51,6 +79,7 @@ export const SOUND_EFFECTS = [
   {id:'glitch',name:'Pulso digital',seconds:.3}, {id:'boom',name:'Explosão curta',seconds:.85},
 ] as const
 export const BUILTIN_MUSIC = [
+  ...supplementalAudio.music,
   ...generatedFlyers.map(r=>({id:r.music,name:`${r.name} · ${r.musicStyle} · ${r.bpm} BPM`})),
   {id:'upbeat',name:'Animada'}, {id:'energy',name:'Energia'}, {id:'calm',name:'Leve'},
   {id:'retail-drive',name:'Varejo eletrônico · 140 BPM'}, {id:'retail-bounce',name:'Varejo groove · 128 BPM'},
@@ -79,6 +108,12 @@ export const MOTION_PRESETS: {id:string;name:string;description:string;color:str
   {id:'party',name:'Festa de descontos',description:'Impulso, balanço e órbitas de luz.',color:'#ffb9df',transition:'iris',motion:{...DEFAULT_MOTION,product:'elastic',text:'tilt',price:'tilt',camera:'swing',atmosphere:['orbit','prism','shockwave'],transitionSound:'air-swipe',accentSound:'sparkle'}},
   {id:'neon',name:'Varejo digital',description:'Túnel geométrico, zoom e pulso digital.',color:'#aeb0ff',transition:'rgb',motion:{...DEFAULT_MOTION,finish:'chromatic',product:'zoom-out',text:'stretch',price:'whip-right',camera:'zoom-pulse',atmosphere:['grid','spotlights','speed-lines'],transitionSound:'glitch',accentSound:'metal-hit'}},
   {id:'focus',name:'Destaque direto',description:'Movimento preciso com leitura mais tranquila.',color:'#a7debd',transition:'blur',motion:{...DEFAULT_MOTION,finish:'clean',product:'tilt',text:'tracking',price:'rise',camera:'none',speed:'balanced',atmosphere:['dust','spotlights'],transitionSound:'air-swipe',accentSound:'pop'}},
+  {id:'fireworks',name:'Fogos dourados e coloridos',description:'Foguetes luminosos, reflexos festivos e corte radial.',color:'#ffcf70',transition:'radial-burst',motion:{...DEFAULT_MOTION,atmosphere:['fireworks-multicolor','fireworks-gold'],accentSound:'sparkle'}},
+  {id:'inferno',name:'Inferno de ofertas',description:'Bola de fogo e colunas de chamas em uma entrada forte.',color:'#ff683c',transition:'snap-zoom',motion:{...DEFAULT_MOTION,atmosphere:['explosion-fireball','flame-columns'],accentSound:'boom'}},
+  {id:'electric',name:'Pulso elétrico',description:'Arcos ramificados e esfera de energia com pulso digital.',color:'#63dfff',transition:'rgb',motion:{...DEFAULT_MOTION,atmosphere:['electric-fork','electric-orb'],accentSound:'glitch'}},
+  {id:'festival',name:'Festival no céu',description:'Rastros salgueiro e uma fonte de luz em cascata.',color:'#f3b5ff',transition:'spin',motion:{...DEFAULT_MOTION,atmosphere:['fireworks-willow','fireworks-fountain'],accentSound:'sparkle'}},
+  {id:'cosmic',name:'Portal cósmico',description:'Anéis de energia e meteoros cruzando o cenário.',color:'#9caaff',transition:'iris',motion:{...DEFAULT_MOTION,atmosphere:['energy-portal','energy-meteor'],transitionSound:'suction'}},
+  {id:'impact-burst',name:'Impacto explosivo',description:'Ondas de choque e explosão gráfica no início da oferta.',color:'#ffc45c',transition:'diamond-wipe',motion:{...DEFAULT_MOTION,atmosphere:['explosion-shockrings','explosion-comic'],accentSound:'bass-hit'}},
 ]
 export const motionSettings = (motion?: VideoMotionSettings): VideoMotionSettings => motion || DEFAULT_MOTION
 export function identifyMotionPreset(motion:VideoMotionSettings|undefined,transition:SceneTransition) {

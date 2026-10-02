@@ -20,6 +20,7 @@ import {
   hasSingleFlyerTemplateModel,
   renameFlyerTemplateModelInPlace
 } from '~/utils/flyerTemplateNaming'
+import { requireBusinessProfileForOfferCreation } from '../../utils/business-profile-onboarding'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MAX_PROJECT_NAME_LENGTH = 120
@@ -172,6 +173,7 @@ const copiedPagesToBlueprints = (pages: any[]) => pages.map((page: any, index: n
 export default defineEventHandler(async (event) => {
   const user = await requireAuthenticatedUser(event)
   await enforceRateLimit(event, `projects-duplicate:${user.id}`, 30, 60_000)
+  await requireBusinessProfileForOfferCreation(user)
   const body = await readBody<Record<string, any>>(event)
   const sourceProjectId = String(body?.sourceProjectId || '').trim()
   if (!isUuid(sourceProjectId)) {

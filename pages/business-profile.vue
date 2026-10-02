@@ -121,7 +121,7 @@ const loadProfile = async () => {
     form.whatsappNumbers = form.whatsappNumbers.map(entry => ({ ...entry, value: formatBrazilWhatsApp(entry.value) }))
     onboardingAddress.value = normalized.address
     onboardingWhatsApp.value = formatBrazilWhatsApp(normalized.whatsapp)
-    onboardingCompanyName.value = form.companyName || String(profile.value?.name || '')
+    onboardingCompanyName.value = form.companyName
     if (Array.isArray(profile.value?.selected_modules) && profile.value.selected_modules.length) {
       selectedModules.value = profile.value.selected_modules
     }
@@ -191,7 +191,7 @@ const clearPaymentCards = () => {
 
 const saveProfile = async () => {
   if (isUploading.value) return
-  if (isOnboarding.value && (!form.logo.trim() || !form.instagram.trim() || !onboardingAddress.value.trim() || !onboardingCompanyName.value.trim())) {
+  if (isOnboarding.value && (!form.logo.trim() || !form.instagram.trim() || !onboardingAddress.value.trim() || !onboardingWhatsApp.value.trim() || !onboardingCompanyName.value.trim())) {
     errorMessage.value = 'Informe a logo, o nome da empresa, o WhatsApp, o Instagram e o endereço da loja.'
     return
   }
@@ -424,7 +424,7 @@ onMounted(loadProfile)
 
         <section v-if="!isOnboarding" class="profile-form surface">
           <div class="surface-title"><div><p>REDES SOCIAIS</p><h2>Atalhos do encarte</h2></div></div>
-          <div class="form-grid"><label><span>Instagram</span><input v-model="form.instagram" type="text" placeholder="@sualoja" /></label><label><span>Facebook</span><input v-model="form.facebook" type="text" placeholder="sualoja" /></label></div>
+          <div class="form-grid"><label><span>Instagram</span><input v-model="form.instagram" type="text" placeholder="@sualoja" /></label></div>
         </section>
 
         <section v-if="!isOnboarding" class="profile-form surface">

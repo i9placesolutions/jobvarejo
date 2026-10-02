@@ -1,0 +1,122 @@
+[
+  {
+    "id": "digital-azure",
+    "name": "Textura azul profundo",
+    "color": "#0b3251"
+  },
+  {
+    "id": "digital-rays",
+    "name": "Raios dourados",
+    "color": "#725923"
+  },
+  {
+    "id": "digital-stars",
+    "name": "Campo de estrelas",
+    "color": "#25334e"
+  },
+  {
+    "id": "digital-glitch",
+    "name": "Circuitos de luz",
+    "color": "#263648"
+  },
+  {
+    "id": "digital-ember",
+    "name": "Textura de brasas",
+    "color": "#652419"
+  },
+  {
+    "id": "digital-gold",
+    "name": "Ondas de ouro",
+    "color": "#634a1d"
+  },
+  {
+    "id": "digital-matrix",
+    "name": "Chuva digital azul",
+    "color": "#10243a"
+  },
+  {
+    "id": "data-blue",
+    "name": "Dados em azul",
+    "color": "#202052"
+  },
+  {
+    "id": "gold-night",
+    "name": "Noite dourada",
+    "color": "#514620"
+  },
+  {
+    "id": "geometric-light",
+    "name": "Linhas geométricas",
+    "color": "#313459"
+  },
+  {
+    "id": "purple-pattern",
+    "name": "Geometria violeta",
+    "color": "#341465"
+  },
+  {
+    "id": "sand-pattern",
+    "name": "Dobras de areia",
+    "color": "#716746"
+  },
+  {
+    "id": "blue-pattern",
+    "name": "Mosaico azul",
+    "color": "#153e59"
+  },
+  {
+    "id": "pink-pattern",
+    "name": "Rastros magenta",
+    "color": "#542442"
+  },
+  {
+    "id": "vertical-streaks",
+    "name": "Feixes verticais",
+    "color": "#232747"
+  },
+  {
+    "id": "ocean-waves",
+    "name": "Ondas oceânicas",
+    "color": "#12394d"
+  },
+  {
+    "id": "silver-waves",
+    "name": "Ondas prateadas",
+    "color": "#293942"
+  },
+  {
+    "id": "green-pattern",
+    "name": "Textura verde",
+    "color": "#143729"
+  },
+  {
+    "id": "warm-mosaic",
+    "name": "Mosaico quente",
+    "color": "#633826"
+  },
+  {
+    "id": "nebula-1",
+    "name": "Nebulosa verde",
+    "color": "#145635"
+  },
+  {
+    "id": "nebula-2",
+    "name": "Nebulosa dourada",
+    "color": "#59541c"
+  },
+  {
+    "id": "nebula-3",
+    "name": "Nebulosa violeta",
+    "color": "#361256"
+  },
+  {
+    "id": "nebula-4",
+    "name": "Nuvens rosadas",
+    "color": "#794461"
+  },
+  {
+    "id": "nebula-5",
+    "name": "Nuvens turquesa",
+    "color": "#155b69"
+  }
+]

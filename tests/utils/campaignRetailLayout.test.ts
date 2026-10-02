@@ -4,28 +4,33 @@ import { compactBusinessFooter } from '../../utils/compactBusinessFooter'
 const text = (name: string, field: string, value: string, parentFrameId = 'frame') => ({ type: 'Textbox', name, text: value, businessProfileField: field, parentFrameId, left: 0, top: 0, width: 180, height: 30, scaleX: 1, scaleY: 1, fontSize: 20, originX: 'left', originY: 'top', visible: true })
 
 describe('layout dinâmico da campanha varejo', () => {
-  it('coloca o perfil abaixo dos ícones na faixa social estreita', () => {
+  it('alinha Instagram ao ícone e deixa a chamada abaixo na faixa social estreita', () => {
     const band = { name: 'header-social-background', footerLayout: 'campaign-social', footerSocialLayout: 'stacked', parentFrameId: 'frame', left: 30, top: 380, width: 290, height: 85 }
     const instagram = text('header-instagram', 'instagram', '@SUPERMERCADORODRIGUES')
     const facebook = text('header-facebook', 'facebook', '@SUPERMERCADORODRIGUES')
-    const icon = { name: 'header-icon-instagram', parentFrameId: 'frame', left: 0, top: 0, width: 32, height: 32, visible: true }
+    const icon: any = { name: 'header-icon-instagram', parentFrameId: 'frame', left: 0, top: 0, width: 32, height: 32, visible: true }
     const caption = text('header-social-caption', '', 'SIGA NOSSAS\nREDES SOCIAIS!')
     compactBusinessFooter([band, instagram, facebook, icon, { ...icon, name: 'header-icon-facebook' }, caption])
-    expect(instagram.top).toBeGreaterThan(icon.top + 32)
-    expect(instagram.width * instagram.scaleX).toBeGreaterThan(260)
-    expect(instagram.fontSize * instagram.scaleY).toBeGreaterThan(15)
+    expect(instagram.top + instagram.height * instagram.scaleY / 2).toBeCloseTo(icon.top + icon.height * icon.scaleY / 2, 8)
+    expect(instagram.width * instagram.scaleX).toBeGreaterThan(180)
+    expect(instagram.fontSize * instagram.scaleY).toBeGreaterThan(14)
     expect(facebook.visible).toBe(false)
   })
   it('mantém a chamada abaixo do perfil nas referências com duas linhas', () => {
     const band = { name: 'header-social-background', footerLayout: 'campaign-social', footerSocialLayout: 'caption-below', parentFrameId: 'frame', left: 30, top: 20, width: 400, height: 85 }
     const instagram = text('header-instagram', 'instagram', '@SUPERMERCADORODRIGUES')
     const facebook = text('header-facebook', 'facebook', '@SUPERMERCADORODRIGUES')
-    const icon = { name: 'header-icon-instagram', parentFrameId: 'frame', left: 0, top: 0, width: 32, height: 32, visible: true }
+    const icon: any = { name: 'header-icon-instagram', parentFrameId: 'frame', left: 0, top: 0, width: 32, height: 32, visible: true }
     const caption = text('header-social-caption', '', 'SIGA NOSSAS\nREDES SOCIAIS!')
     compactBusinessFooter([band, instagram, facebook, icon, { ...icon, name: 'header-icon-facebook' }, caption])
     expect(caption.top).toBeGreaterThan(instagram.top)
+    expect(instagram.top + instagram.height * instagram.scaleY / 2).toBeCloseTo(icon.top + icon.height * icon.scaleY / 2, 8)
     expect(instagram.fontSize * instagram.scaleY).toBeGreaterThan(15)
     expect(caption.width * caption.scaleX).toBeGreaterThan(350)
+    const lineCenter = instagram.top + instagram.height * instagram.scaleY / 2
+    caption.text = 'VEJA AS OFERTAS DA LOJA'
+    compactBusinessFooter([band, instagram, facebook, icon, { ...icon, name: 'header-icon-facebook' }, caption])
+    expect(instagram.top + instagram.height * instagram.scaleY / 2).toBeCloseTo(lineCenter, 8)
   })
   it('recolhe redes vazias, reutiliza um texto para handles iguais e reativa ambos quando diferem', () => {
     const band = { type: 'Rect', name: 'header-social-background', footerLayout: 'campaign-social', parentFrameId: 'frame', left: 552, top: 2, width: 510, height: 70, visible: true }
@@ -50,6 +55,24 @@ describe('layout dinâmico da campanha varejo', () => {
     expect([instagram.visible, facebook.visible, iconInstagram.visible, iconFacebook.visible]).toEqual([true, true, true, true])
     expect(instagram.left).toBe(facebook.left)
     expect(Math.abs(instagram.top - facebook.top)).toBeGreaterThan(20)
+  })
+
+  it('alinha o perfil ao centro real do ícone no layout padrão com legenda lateral', () => {
+    const band = { name: 'header-social-background', footerLayout: 'campaign-social', parentFrameId: 'frame', left: 20, top: 15, width: 400, height: 70, visible: true }
+    const instagram = text('header-instagram', 'instagram', '@LOJA')
+    const facebook = text('header-facebook', 'facebook', '')
+    const icon: any = { name: 'header-icon-instagram', parentFrameId: 'frame', left: 0, top: 0, width: 35, height: 28, visible: true }
+    const facebookIcon = { ...icon, name: 'header-icon-facebook' }
+    const caption = text('header-social-caption', '', 'SIGA NOSSO INSTAGRAM')
+    const nodes = [band, instagram, facebook, icon, facebookIcon, caption]
+    compactBusinessFooter(nodes)
+    const center = icon.top + icon.height * icon.scaleY / 2
+    expect(instagram.top + instagram.height * instagram.scaleY / 2).toBeCloseTo(center, 8)
+    const previousCenter = center
+    caption.text = 'ACOMPANHE AS OFERTAS'
+    compactBusinessFooter(nodes)
+    expect(icon.top + icon.height * icon.scaleY / 2).toBeCloseTo(previousCenter, 8)
+    expect(instagram.top + instagram.height * instagram.scaleY / 2).toBeCloseTo(previousCenter, 8)
   })
 
   it('recolhe e reabre colunas do rodapé conforme telefone, endereço e cartões chegam', () => {
