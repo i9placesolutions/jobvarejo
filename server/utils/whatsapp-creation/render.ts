@@ -44,6 +44,8 @@ import { runArtPython } from '../art-studio-python'
 import { readArtImage } from '../art-studio-image'
 import { checkArtAssets } from '../art-studio'
 import { cartazistaPdfSize } from '~/utils/cartazista/pdf'
+import { bindAccountLogoToFlyerCanvas } from '~/utils/accountFlyerTemplatePreview'
+import { restoreCanvasStickerOutlines } from '~/utils/editorStickerOutline'
 
 const execute = promisify(execFile)
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -671,12 +673,12 @@ async function getTemplateCanvasPage(project: any, format: CreationFormat, forma
   return { page, canvas }
 }
 
-async function embedFlyerAssets(canvas: any, userId: string, templateOwnerId: string, logo: { bytes: Buffer; dataUrl: string } | null, profile: BusinessProfile, order: CreationOrder): Promise<void> {
+async function embedFlyerAssets(canvas: any, userId: string, templateOwnerId: string, logo: { bytes: Buffer; dataUrl: string } | null, profile: BusinessProfile, order: CreationOrder): Promise<any> {
   hydrateFlyerBusinessFields(canvas, profile, logo?.dataUrl || '', order)
   const visit = async (objects: any[]): Promise<void> => {
     for (const object of objects) {
       if (!object || typeof object !== 'object') continue
-      if (object.type === 'image' && object.src && !String(object.src).startsWith('data:image/')) {
+      if (String(object.type || '').toLowerCase() === 'image' && object.src && !String(object.src).startsWith('data:image/')) {
         const config = useRuntimeConfig()
         const key = extractStorageKeyFromRef(object.src, { bucket: config.wasabiBucket, endpoint: config.wasabiEndpoint })
         if (!key || !isValidStoragePath(key) || !(key.startsWith(`projects/${templateOwnerId}/`) || key.startsWith('templates/') || isPublicStorageKey(key))) return fail(403, 'O cabeçalho contém uma imagem fora do catálogo autorizado.')
@@ -687,6 +689,18 @@ async function embedFlyerAssets(canvas: any, userId: string, templateOwnerId: st
     }
   }
   await visit(canvas.objects)
+  let logoSize: { width: number; height: number; cropX?: number; cropY?: number } | null = null
+  if (logo) {
+    const sharp = (await import('sharp')).default
+    const metadata = await sharp(logo.bytes, { limitInputPixels: 16_000_000 }).metadata()
+    if (!metadata.width || !metadata.height) fail(422, 'A logo do perfil está inválida.')
+    if (metadata.hasAlpha) {
+      const trimmed = await sharp(logo.bytes, { limitInputPixels: 16_000_000 }).trim({ background: '#00000000', threshold: 10 }).png().toBuffer({ resolveWithObject: true })
+      logoSize = { width: trimmed.info.width, height: trimmed.info.height,
+        cropX: Math.max(0, -Number(trimmed.info.trimOffsetLeft || 0)), cropY: Math.max(0, -Number(trimmed.info.trimOffsetTop || 0)) }
+    } else logoSize = { width: metadata.width, height: metadata.height }
+  }
+  return bindAccountLogoToFlyerCanvas(canvas, { logoSrc: logo?.dataUrl || '', logoSize, logoPreference: profile.logoPreference })
 }
 
 export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile, logoDataUrl: string, order?: Pick<CreationOrder, 'validity' | 'conditions'>): any {
@@ -704,7 +718,7 @@ export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile
       const name = compact(String(object.name || ''))
       const logo = object.quickLogoSlot === true || field === 'logo' || /^(?:header|footer|account|business)(?:dynamic)?logo/.test(name)
       if (logo) {
-        if (object.type === 'image') { object.src = logoDataUrl; object.visible = !!logoDataUrl }
+        if (String(object.type || '').toLowerCase() === 'image') { object.src = logoDataUrl; object.visible = !!logoDataUrl }
         else if (!logoDataUrl && object.quickLogoBackdrop) object.visible = false
       } else {
       const semanticField = field || (name === 'headervalidity' ? 'validity' : '')
@@ -744,14 +758,14 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
     const themeCandidates = [page.templateThemeId, page.templateThemeName, templateConfig.category,
       templateConfig.subcategory, templateConfig.theme, templateConfig.themeName].filter((candidate) => String(candidate || '').trim())
     if (themeCandidates.length && !flyerThemeMatchesOrder(order.theme, themeCandidates)) fail(422, `O modelo não é compatível com o tema ${order.theme}.`)
-    await embedFlyerAssets(canvas, user.id, sourceOwnerId, logo, profile, order)
+    const preparedCanvas = await embedFlyerAssets(canvas, user.id, sourceOwnerId, logo, profile, order)
     const items = order.products.map((product) => {
       const image = images.get(product.id)
       if (!image) return fail(422, `A foto de “${product.name}” não está disponível.`)
       return { ...product, imageDataUrl: image.dataUrl, condition: product.condition || order.conditions, validity: order.validity }
     })
     if (!flyerDivisionSupportsProductCount(items.length, order.division, format)) fail(422, 'Story com mais de nove produtos precisa ser dividido em páginas.')
-    const pages = await renderEditableFlyerCanvas({ canvas, products: items, division: order.division, formatId: format.id })
+    const pages = await renderEditableFlyerCanvas({ canvas: preparedCanvas, products: items, division: order.division, formatId: format.id })
     for (const result of pages) payloadPages.push({ format, page: result, productIds: result.productIds, department: result.department || null })
   }
   const projectId = deterministicUuid(`${user.id}:${order.id}:${order.revision}:encarte`)
@@ -808,6 +822,36 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
   return { artifacts }
 }
 
+export async function applyFlyerLogoStickers(png: Buffer, canvas: any): Promise<Buffer> {
+  const stickers = (objects: any[]): any[] => (objects || []).flatMap(object => {
+    if (String(object?.type || '').toLowerCase() === 'image' && object.quickLogoSource && object.__stickerOutlineEnabled) return [object]
+    if (Array.isArray(object?.objects)) {
+      const children = stickers(object.objects)
+      if (children.length) return [{ ...object, objects: children }]
+    }
+    return []
+  })
+  const logos = stickers(canvas.objects)
+  if (!logos.length) return png
+  const width = Number(canvas.width), height = Number(canvas.height)
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) fail(422, 'Dimensões inválidas para o contorno da logo.')
+  const { StaticCanvas, getEnv } = await import('fabric/node')
+  const document = getEnv().document as unknown as Document
+  const overlay = new StaticCanvas(document.createElement('canvas'), {
+    width, height, renderOnAddRemove: false, enableRetinaScaling: false
+  })
+  try {
+    await overlay.loadFromJSON({ version: canvas.version, objects: logos })
+    restoreCanvasStickerOutlines(overlay, () => document.createElement('canvas') as HTMLCanvasElement)
+    overlay.renderAll()
+    const stickerPng = Buffer.from(overlay.toDataURL({ format: 'png', multiplier: 1 }).split(',')[1]!, 'base64')
+    const sharp = (await import('sharp')).default
+    return sharp(png).composite([{ input: stickerPng, left: 0, top: 0 }]).png().toBuffer()
+  } finally {
+    await overlay.dispose()
+  }
+}
+
 export async function renderEditableFlyerCanvas(input: { canvas: any; products: Array<CreationProduct & { imageDataUrl: string }>; division: CreationOrder['division']; formatId: string }): Promise<Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }>> {
   if (flyerRenders >= 1) fail(503, 'O renderizador de encartes está ocupado. Tente novamente em instantes.')
   flyerRenders++
@@ -821,10 +865,16 @@ export async function renderEditableFlyerCanvas(input: { canvas: any; products: 
     const result = await execute(python, [worker, '--input', inputFile, '--output-dir', dir], { timeout: 90_000, maxBuffer: MAX_WORKER_BYTES, env: { PATH: process.env.PATH, LANG: 'en_US.UTF-8', PYTHONIOENCODING: 'utf-8' } })
     const manifest = JSON.parse(result.stdout)
     if (!Array.isArray(manifest.pages) || !manifest.pages.length || manifest.pages.length > 100) fail(502, 'O renderizador não retornou páginas válidas.')
-    return await Promise.all(manifest.pages.map(async (page: any) => {
+    const pages: Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }> = []
+    for (const page of manifest.pages) {
       if (!/^page-\d+\.png$/.test(page.name) || !/^page-\d+\.json$/.test(page.canvas)) fail(502, 'O renderizador retornou caminhos inválidos.')
-      return { png: await readFile(join(dir!, page.name)), canvas: JSON.parse(await readFile(join(dir!, page.canvas), 'utf8')), productIds: page.productIds, department: page.department || null }
-    }))
+      const canvas = JSON.parse(await readFile(join(dir!, page.canvas), 'utf8'))
+      canvas.width = Number(canvas.width || input.canvas.width)
+      canvas.height = Number(canvas.height || input.canvas.height)
+      const png = await applyFlyerLogoStickers(await readFile(join(dir!, page.name)), canvas)
+      pages.push({ png, canvas, productIds: page.productIds, department: page.department || null })
+    }
+    return pages
   } catch (error: any) {
     if (error?.statusCode) throw error
     console.error('[whatsapp-creation:flyer-render]', String(error?.stderr || error?.message || 'worker failed').slice(0, 500))

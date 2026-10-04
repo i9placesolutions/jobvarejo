@@ -15,6 +15,7 @@ import {
   assertFlyerProfileBindings,
   hydrateFlyerBusinessFields,
   renderEditableFlyerCanvas,
+  applyFlyerLogoStickers,
   approvedProductImages,
   isPublishedArtAssetStorageKey,
   fillHeaderPreviewPlaceholders,
@@ -25,6 +26,7 @@ import { flyerHeaderCropHeight, flyerHeaderLogoBox } from '../../server/utils/wh
 import type { BusinessProfile } from '../../utils/businessProfile'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import sharp from 'sharp'
 
 const pythonWithPlaywright = (() => {
   try {
@@ -97,7 +99,7 @@ describe('adapter de render da criação WhatsApp', () => {
     const canvas = { objects: [
       { type: 'textbox', businessProfileField: 'companyName', text: 'Loja do template', visible: true },
       { type: 'textbox', businessProfileField: 'address', text: 'Endereço do template', visible: true },
-      { type: 'image', quickLogoSlot: true, src: 'imagens/logo-dono.png', visible: true },
+      { type: 'Image', quickLogoSlot: true, src: 'imagens/logo-dono.png', visible: true },
       { type: 'image', quickLogoBackdrop: true, visible: true }
     ] }
     hydrateFlyerBusinessFields(canvas, profile, 'data:image/png;base64,YQ==')
@@ -220,6 +222,27 @@ describe('adapter de render da criação WhatsApp', () => {
       'assert len(module._product_groups(items[:9], "single", len(slots))[0][1]) == 9'
     ].join('; ')
     execFileSync('python3', ['-c', python, workerPath], { stdio: 'pipe' })
+  })
+
+  it('mantém o contorno sticker da logo também no PNG da oferta completa', async () => {
+    const redLogo = await sharp({ create: { width: 100, height: 70, channels: 4, background: '#00000000' } })
+      .composite([{ input: Buffer.from('<svg width="100" height="70"><rect x="10" y="10" width="80" height="50" fill="#cc0000"/></svg>') }])
+      .png().toBuffer()
+    const logoData = `data:image/png;base64,${redLogo.toString('base64')}`
+    const base = await sharp({ create: { width: 400, height: 300, channels: 3, background: '#228833' } }).png().toBuffer()
+    const canvas = { version: '7.1.0', width: 400, height: 300, objects: [{
+      type: 'Image', name: 'header-logo-slot', src: logoData, quickLogoSlot: true, quickLogoSource: logoData,
+      left: 200, top: 100, originX: 'center', originY: 'center', width: 100, height: 70, scaleX: 1, scaleY: 1,
+      __stickerOutlineEnabled: true, __stickerOutlineColor: '#FFFFFF', __stickerOutlineWidth: 4,
+      __stickerOutlineOpacity: 1, __stickerOutlineMode: 'outside'
+    }] }
+    const result = await applyFlyerLogoStickers(base, canvas)
+    const outside = await sharp(result).extract({ left: 20, top: 20, width: 1, height: 1 }).raw().toBuffer()
+    expect([...outside.subarray(0, 3)]).toEqual([34, 136, 51])
+    const { data, info } = await sharp(result).extract({ left: 145, top: 60, width: 110, height: 80 }).raw().toBuffer({ resolveWithObject: true })
+    let white = 0
+    for (let i = 0; i < data.length; i += info.channels) if (data[i]! > 240 && data[i + 1]! > 240 && data[i + 2]! > 240) white++
+    expect(white).toBeGreaterThan(0)
   })
 
   it.skipIf(!pythonWithPlaywright)('usa Chromium e Fabric para gerar PNG real com nome e preço editáveis e respeita páginas', async () => {

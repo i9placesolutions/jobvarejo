@@ -161,6 +161,8 @@ def render(payload, output_dir: Path, fabric_path: Path):
             const isLogoSlot = o => o.quickLogoSlot === true || String(o.businessProfileField || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === 'logo' || /^(?:header|footer|account|business)(?:dynamic)?logo/.test(String(o.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ''));
             const logoSlots = all.filter(isLogoSlot);
             for (const logo of logoSlots) {
+              // The account preview already fitted and trimmed this logo. Keep that geometry.
+              if (logo.quickLogoSource) continue;
               const element = logo.getElement?.();
               const naturalWidth = Number(element?.naturalWidth || element?.width || 0);
               const naturalHeight = Number(element?.naturalHeight || element?.height || 0);
