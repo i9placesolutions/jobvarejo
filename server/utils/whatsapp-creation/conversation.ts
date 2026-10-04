@@ -7,6 +7,7 @@ import {
 } from '~/shared/whatsapp-creation'
 import { CARTAZISTA_FORMATS } from '~/types/cartazista'
 import { listCreationHeaders, listProductCandidates } from './catalog'
+import { createProductReviewBoards } from './product-review'
 import { ownedStorageBytes } from './media'
 
 export const CREATION_FORMATS: CreationFormat[] = [
@@ -52,6 +53,7 @@ export interface ConversationState {
   candidates: Array<{ itemId: string; key: string; hash: string }>
   artifacts: ConversationArtifact[]
   pendingUploaded?: { key: string; hash: string }
+  reviewPresentedRevision?: number
   turns: number
   lastPromptAt?: number
   usage?: { promptTokens: number; completionTokens: number; cost: number }
@@ -59,7 +61,9 @@ export interface ConversationState {
 }
 export type ConversationSend = { type: 'text' | 'image' | 'document' | 'video'; text: string; key?: string; url?: string; artifactId?: string; formatId?: string; purpose?: 'final' | 'preview' | 'review' }
 export const newConversationState = (): ConversationState => ({ phase: 'collecting', draft: { formats: [], products: [] }, choices: [], choiceOffset: 0, candidates: [], artifacts: [], turns: 0 })
-const explicit = (text: string) => !/\b(n[aã]o|errad[oa]s?|incorret[oa]s?|trocar|corrigir|exceto|menos|salvo|alterar|mudar|ajustar)\b/i.test(text) && /\b(sim|confirm(ar|o|a)|aprov(ar|o|a)|corret[oa]s?|certo|pode (gerar|fazer|usar)|todas? (ok|certas?))\b/i.test(text)
+const explicit = (text: string) => !/\b(n[aã]o|errad[oa]s?|incorret[oa]s?|trocar|corrigir|exceto|menos|salvo|alterar|mudar|ajustar)\b/i.test(text) && /\b(sim|ok|confirm(ar|o|a|ad[oa]s?)|aprov(ar|o|a)|corret[oa]s?|certo|pode (gerar|fazer|usar|seguir)|todas? (ok|certas?))\b/i.test(text)
+const shortConfirmation = (text: string) => /^(?:ok|sim|confirmad[oa]s?|confirmo|t[aá] certo|est[aá] certo|pode seguir)[.!]?$/i.test(text.trim())
+const photoItemNumber = (text: string, proposed?: number[]) => Number(text.trim().match(/^(?:(?:foto|produto|item)(?:\s+(?:do|de))?\s*)?(\d{1,2})[.!]?$/i)?.[1] || 0) || proposed?.[0] || 0
 const divisionReply = (text: string): ConversationState['draft']['division'] | undefined => {
   const reply = text.trim().toLocaleLowerCase('pt-BR')
   if (/^(?:tudo junto|todos? juntos?|mesma imagem|uma (?:s[oó] )?imagem|imagem [uú]nica|p[aá]gina [uú]nica|uma p[aá]gina)[.!]?$/.test(reply)) return 'single'
@@ -73,8 +77,8 @@ const validityReply = (text: string): string | undefined => {
 }
 const summary = (s: ConversationState) => {
   const d = s.draft
-  const items = d.products.map((p, i) => `${i + 1}. ${p.name} | ${p.brand} | ${p.variant} | ${p.weight} | ${p.price}${p.condition ? ` | ${p.condition}` : ''}`).join('\n')
-  return `Tema: ${d.theme}\nFormatos: ${d.formats.join(', ')}\nDivisão: ${d.division}\n${items || [d.institutionalText?.title, d.institutionalText?.message, d.institutionalText?.callToAction].filter(Boolean).join('\n')}\nValidade: ${d.validity || 'sem validade definida'}\nCondições: ${d.conditions || 'nenhuma condição adicional'}`
+  const items = d.products.map((p, i) => `${i + 1}. ${[p.name, p.brand, p.variant, p.weight].filter(Boolean).join(' ')} — ${p.price}${p.condition ? ` (${p.condition})` : ''}`).join('\n')
+  return `${items || [d.institutionalText?.title, d.institutionalText?.message, d.institutionalText?.callToAction].filter(Boolean).join('\n')}\nValidade: ${d.validity || 'sem validade definida'}${d.conditions ? `\nCondições: ${d.conditions}` : ''}`
 }
 
 const stringProperty = { type: 'string' }
@@ -131,6 +135,23 @@ export async function advanceConversation(input: {
     const validity = validityReply(input.text)
     if (validity) p = { ...p, action: 'update', validity }
   }
+  if (shortConfirmation(input.text)) {
+    const confirmationActions = { data: 'approve_data', images: 'approve_images', script: 'approve_script' } as const
+    const action = confirmationActions[s.phase as keyof typeof confirmationActions]
+    if (action) p = { ...p, action }
+  }
+  if (s.phase === 'data' && /^(?:confirmar|confirmo|aprovo)\s+(?:os\s+)?dados[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'approve_data' }
+  if (s.phase === 'images' && /^(?:confirmar|confirmo|aprovo)\s+(?:(?:todas?\s+as?\s+)?(?:fotos|imagens))(?:\s+[\d,\s]+)?[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'approve_images' }
+  if (s.phase === 'script' && /^(?:aprovar|aprovo)\s+(?:o\s+)?roteiro[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'approve_script' }
+  if (s.phase === 'preview') {
+    const approval = input.text.trim().match(/^aprovar\s+(?:r|v)?(\d+)(?=$|[\s.!])/i)
+    if (approval) p = { ...p, action: 'approve_preview', approvalRevision: Number(approval[1]) }
+  }
+  const photoCorrection = ['data', 'images'].includes(s.phase) && !input.uploaded &&
+    /\b(?:foto|imagem)\s*(?:do\s+)?(?:item|produto)?\s*\d{1,2}\b/i.test(input.text) &&
+    /errad|incorret|troca|troque|n[aã]o.{0,25}(?:corret|cert)/i.test(input.text)
+  if (photoCorrection) p = { ...p, action: 'update', products: undefined }
+  if ((input.uploaded || s.pendingUploaded) && ['data', 'images'].includes(s.phase) && p.action === 'status') p = { ...p, action: 'update' }
   s.turns++
   if (s.turns > 60) { say('vamos revisar este pedido com o atendimento antes de continuar. Seu rascunho permanece salvo.'); return { state: s, send, generate: false } }
   if (s.order && s.order.accountId !== input.accountId) throw new Error('ACCOUNT_MISMATCH')
@@ -160,6 +181,7 @@ export async function advanceConversation(input: {
       // Changes invalidate all previously generated artifacts before any further delivery.
       s.order = updateOrder(s.order, input.accountId, {})
       s.artifacts = []; s.candidates = []; s.runtime = undefined; s.phase = 'collecting'
+      s.reviewPresentedRevision = undefined
       if (s.header && (s.header.theme !== s.draft.theme || !s.draft.formats.every(f => s.header!.formats.includes(f)))) { s.header = undefined; s.choiceOffset = 0 }
     }
   }
@@ -204,13 +226,13 @@ export async function advanceConversation(input: {
     say(`qual formato deseja${d.kind === 'video' ? ': Story/Reels vertical, TV horizontal ou os dois' : d.kind === 'cartaz' ? ': A1, A2, A3, A4, A5, A6, A7 ou faixa' : ': Feed, quadrado, Story, TV ou impressão'}? Pode escolher mais de um com as mesmas ofertas.`)
     return { state: s, send, generate: false }
   }
-  if (!d.products.length && d.kind !== 'studio') { say(`mande os ${d.kind === 'video' ? 'itens da oferta, até seis por vídeo, ' : 'produtos '}com nome, marca, variante, peso e preço.`); return { state: s, send, generate: false } }
+  if (!d.products.length && d.kind !== 'studio') { say(`mande os ${d.kind === 'video' ? 'itens da oferta, até seis por vídeo, ' : 'produtos '}com nome e preço. Inclua marca, variedade e unidade quando fizerem parte da oferta.`); return { state: s, send, generate: false } }
   if (d.products.length && !d.division) { say('é tudo na mesma imagem ou você quer dividir em páginas ou por departamento? Os formatos escolhidos usarão a mesma lista.'); return { state: s, send, generate: false } }
   if (d.division === 'department' && d.products.some(item => !item.department)) { say('informe o departamento dos itens para eu separar corretamente.'); return { state: s, send, generate: false } }
   if (d.kind === 'video' && d.products.length > 6) { say('cada vídeo aceita até seis ofertas. Escolha os seis itens deste vídeo; depois fazemos os demais em outro vídeo.'); return { state: s, send, generate: false } }
   if (d.validity === undefined) { say('qual a validade das ofertas? Informe a data (por exemplo, 05/10/2026) ou diga “sem validade”.'); return { state: s, send, generate: false } }
-  const missing = d.products.flatMap((item, i) => ['name', 'brand', 'variant', 'weight', 'price'].filter(k => !(item as any)[k]?.trim()).map(k => `${i + 1} (${item.name || 'produto'}): ${k}`))
-  if (missing.length) { say(`preciso confirmar: ${missing.join('; ')}. Se um campo não se aplicar, informe “sem marca” ou “não se aplica”.`); return { state: s, send, generate: false } }
+  const missing = d.products.flatMap((item, i) => ['name', 'price'].filter(k => !(item as any)[k]?.trim()).map(k => `${i + 1} (${item.name || 'produto'}): ${k === 'name' ? 'nome' : 'preço'}`))
+  if (missing.length) { say(`preciso confirmar ${missing.join('; ')} antes de mostrar as fotos.`); return { state: s, send, generate: false } }
   if (d.kind === 'studio' && !d.products.length && (!d.institutionalText?.title || !d.institutionalText.message || !d.institutionalText.callToAction)) { say('qual título, mensagem e chamada devem aparecer na arte?'); return { state: s, send, generate: false } }
 
   if (!s.order || s.phase === 'collecting') {
@@ -237,37 +259,61 @@ export async function advanceConversation(input: {
       }
     }
     s.order = setImageCandidates(order, input.accountId, candidates); s.candidates = candidates; s.phase = 'data'
-    say(`confirme os dados antes de montar:\n${summary(s)}\nResponda “confirmar dados” ou envie as correções.`)
+    if (order.products.length) {
+      const boards = await createProductReviewBoards({ accountId: input.accountId, orderId: input.orderId, revision: s.order.revision,
+        validity: d.validity, products: [...order.products], candidates })
+      if (boards.length) s.reviewPresentedRevision = s.order.revision
+      const missingNumbers = order.products.flatMap((product, index) => candidates.some(candidate => candidate.itemId === product.id) ? [] : [index + 1])
+      boards.forEach((key, index) => send.push({ type: 'image', key, purpose: 'review', text: index === boards.length - 1
+        ? `Confira fotos e preços. ${missingNumbers.length ? `Faltam fotos dos itens ${missingNumbers.join(', ')}; envie essas fotos com o número.` : 'Responda “Confirmado” ou diga os números a corrigir.'}`
+        : `Produtos ${index * 12 + 1} a ${Math.min((index + 1) * 12, order.products.length)}.` }))
+    } else say(`confira os dados:\n${summary(s)}\nResponda “confirmar dados” ou mande correções.`)
     return { state: s, send, generate: false }
   }
-  if (p.action === 'approve_data' && s.phase === 'data' && explicit(input.text)) {
-    s.order = approveData(s.order, input.accountId); s.phase = 'images'
-    for (const [i, item] of s.order.products.entries()) {
-      const candidate = s.candidates.find(c => c.itemId === item.id)
-      if (candidate) send.push({ type: 'image', key: candidate.key, text: `Foto ${i + 1}: ${item.name}, ${item.brand}, ${item.variant}, ${item.weight}. Confira a embalagem.`, purpose: 'review' })
-      else say(`não encontrei uma foto segura do item ${i + 1}: ${item.name} ${item.brand} ${item.weight}. Envie a foto e diga o número desse item.`)
-    }
-    if (s.order.products.length) { say('essas são todas as fotos propostas. Estão corretas? Diga “confirmar todas as fotos” ou quais números precisam trocar.'); return { state: s, send, generate: false } }
-  }
-  if (s.phase === 'images' && !input.uploaded && !s.pendingUploaded && p.action === 'update' && /errad|incorret|troca|troque|n[aã]o.{0,25}(?:corret|cert)/i.test(input.text)) {
-    const numbers = p.itemNumbers || []
-    const itemIds = numbers.map(number => s.order!.products[number - 1]?.id).filter((id): id is string => Boolean(id))
-    if (!itemIds.length) { say('quais números das fotos estão errados? Informe os itens e envie as imagens corretas.'); return { state: s, send, generate: false } }
-    s.order = rejectImageCandidates(s.order, input.accountId, itemIds)
-    s.candidates = s.candidates.filter(candidate => !itemIds.includes(candidate.itemId))
-    say(`as fotos dos itens ${numbers.join(', ')} foram rejeitadas. Envie as imagens corretas e informe o número de cada item. Depois vamos confirmar esta nova revisão.`)
-    return { state: s, send, generate: false }
-  }
-  if (input.uploaded && s.phase === 'images') s.pendingUploaded = input.uploaded
-  if (s.pendingUploaded && s.phase === 'images') {
-    const itemNumber = p.itemNumbers?.[0]
+  if (input.uploaded && ['data', 'images'].includes(s.phase)) s.pendingUploaded = input.uploaded
+  if (s.pendingUploaded && ['data', 'images'].includes(s.phase)) {
+    const itemNumber = photoItemNumber(input.text, p.itemNumbers)
     const item = itemNumber ? s.order.products[itemNumber - 1] : undefined
     if (!item) { say('para qual número de produto é essa foto?'); return { state: s, send, generate: false } }
     const candidate = { itemId: item.id, key: s.pendingUploaded.key, hash: s.pendingUploaded.hash }
     s.pendingUploaded = undefined
     s.order = setImageCandidates(s.order, input.accountId, [candidate]); s.candidates = [...s.candidates.filter(c => c.itemId !== item.id), candidate]
-    // A new photo invalidates approvals. Present the updated set before asking again.
-    s.phase = 'data'; say(`foto do item ${itemNumber} substituída. Confirme novamente os dados desta revisão:\n${summary(s)}\nResponda “confirmar dados”.`)
+    s.phase = 'data'
+    const boards = await createProductReviewBoards({ accountId: input.accountId, orderId: input.orderId, revision: s.order.revision,
+      validity: d.validity || '', products: [...s.order.products], candidates: s.candidates })
+    if (boards.length) s.reviewPresentedRevision = s.order.revision
+    boards.forEach((key, index) => send.push({ type: 'image', key, purpose: 'review', text: index === boards.length - 1
+      ? `Foto do item ${itemNumber} recebida. Confira o conjunto e responda “Confirmado” ou indique correções.`
+      : `Produtos ${index * 12 + 1} a ${Math.min((index + 1) * 12, s.order!.products.length)}.` }))
+    return { state: s, send, generate: false }
+  }
+  if (p.action === 'approve_data' && s.phase === 'data' && explicit(input.text)) {
+    s.order = approveData(s.order, input.accountId)
+    const allPhotosShown = s.order.products.length > 0 && s.reviewPresentedRevision === s.order.revision &&
+      s.order.products.every(product => s.candidates.some(candidate => candidate.itemId === product.id))
+    if (allPhotosShown) {
+      for (const candidate of s.candidates) s.order = approveImage(s.order, input.accountId, candidate)
+      if (d.kind === 'video') {
+        s.phase = 'script'
+        say(s.order.script ? `roteiro da locução:\n${s.order.script}\nResponda “aprovar roteiro” ou mande as correções antes de gerar o áudio.` : 'vou preparar a locução das ofertas confirmadas para você revisar.')
+        return { state: s, send, generate: false }
+      }
+      assertCanRender(s.order, input.accountId); s.phase = 'rendering'
+      say('fotos e preços confirmados. Vou montar a prévia e enviar aqui.')
+      return { state: s, send, generate: true }
+    }
+    s.phase = 'images'
+    if (s.order.products.length) { say('faltam fotos de alguns itens. Envie as fotos com os números para eu mostrar o conjunto atualizado.'); return { state: s, send, generate: false } }
+  }
+  if (['data', 'images'].includes(s.phase) && !input.uploaded && !s.pendingUploaded && p.action === 'update' && /errad|incorret|troca|troque|n[aã]o.{0,25}(?:corret|cert)/i.test(input.text)) {
+    const literalNumbers = [...input.text.matchAll(/\b(?:foto|imagem)\s*(?:do\s+)?(?:item|produto)?\s*(\d{1,2})\b/gi)].map(match => Number(match[1]))
+    const numbers = literalNumbers.length ? literalNumbers : p.itemNumbers?.length ? p.itemNumbers : [...input.text.matchAll(/\b(?:item|produto)\s*(\d{1,2})\b/gi)].map(match => Number(match[1]))
+    const itemIds = numbers.map(number => s.order!.products[number - 1]?.id).filter((id): id is string => Boolean(id))
+    if (!itemIds.length) { say('quais números das fotos estão errados? Informe os itens e envie as imagens corretas.'); return { state: s, send, generate: false } }
+    s.order = rejectImageCandidates(s.order, input.accountId, itemIds)
+    s.candidates = s.candidates.filter(candidate => !itemIds.includes(candidate.itemId))
+    s.reviewPresentedRevision = undefined
+    say(`as fotos dos itens ${numbers.join(', ')} foram rejeitadas. Envie as imagens corretas e informe o número de cada item. Depois vamos confirmar esta nova revisão.`)
     return { state: s, send, generate: false }
   }
   if (p.action === 'approve_images' && s.phase === 'images' && explicit(input.text)) {
@@ -296,6 +342,7 @@ export async function advanceConversation(input: {
       s.phase = 'script'; say(`roteiro da locução:\n${s.order.script}\nResponda “aprovar roteiro” ou mande as correções antes de gerar o áudio.`); return { state: s, send, generate: false }
     }
     assertCanRender(s.order, input.accountId); s.phase = 'rendering'
+    say('fotos confirmadas. Vou montar a prévia e enviar aqui.')
     return { state: s, send, generate: true }
   }
   if (s.phase === 'script' && p.script && !s.order.script) {
@@ -312,7 +359,7 @@ export async function advanceConversation(input: {
     if (!explicit(input.text) || !match || Number(match[1]) !== s.order.revision || p.approvalRevision !== s.order.revision) { say(`para aprovar a prévia atual, responda “APROVAR ${s.order.revision}” e indique os números dos arquivos se aprovar só alguns.`); return { state: s, send, generate: false } }
     const selectionText = input.text.slice(input.text.indexOf(match[0]) + match[0].length)
     const mentioned = [...new Set((selectionText.match(/\d+/g) || []).map(Number))]
-    if (mentioned.some(number => number < 1 || number > s.artifacts.length) || !mentioned.length && (p.artifactNumbers?.length || /\b(somente|s[oó]|apenas|arquivo|pr[eé]via|primeir[oa]|segund[oa])\b/i.test(selectionText))) {
+    if (mentioned.some(number => number < 1 || number > s.artifacts.length) || !mentioned.length && /\b(somente|s[oó]|apenas|arquivo|pr[eé]via|primeir[oa]|segund[oa])\b/i.test(selectionText)) {
       say(`informe “APROVAR ${s.order.revision} arquivos 1, 2” para escolher alguns ou “APROVAR ${s.order.revision}” para aprovar todos.`)
       return { state: s, send, generate: false }
     }

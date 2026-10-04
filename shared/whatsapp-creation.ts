@@ -171,8 +171,10 @@ function validateProducts(products: readonly CreationProduct[]): void {
   for (const product of products) {
     if (!product.id.trim() || ids.has(product.id)) fail('INVALID_PRODUCT_ID', 'Cada produto precisa ter um ID estável e distinto.', { itemId: product.id })
     ids.add(product.id)
+    // Hortifruti and other bulk items may have no brand, variant or package.
+    // Keep those fields empty instead of inventing commercial details.
     for (const field of ['name', 'brand', 'variant', 'weight', 'price'] as const) {
-      if (typeof product[field] !== 'string' || !product[field].trim()) {
+      if (typeof product[field] !== 'string' || ((field === 'name' || field === 'price') && !product[field].trim())) {
         fail('MISSING_PRODUCT_FIELD', `O campo ${field} do produto precisa ser confirmado.`, { itemId: product.id, field })
       }
     }

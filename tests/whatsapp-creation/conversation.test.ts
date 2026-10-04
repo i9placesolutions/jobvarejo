@@ -12,7 +12,8 @@ import {
 const mocks = vi.hoisted(() => ({
   headers: vi.fn(),
   productCandidates: vi.fn(),
-  storageBytes: vi.fn()
+  storageBytes: vi.fn(),
+  productReview: vi.fn()
 }))
 
 vi.mock('../../server/utils/whatsapp-creation/catalog', () => ({
@@ -20,6 +21,7 @@ vi.mock('../../server/utils/whatsapp-creation/catalog', () => ({
   listProductCandidates: mocks.productCandidates
 }))
 vi.mock('../../server/utils/whatsapp-creation/media', () => ({ ownedStorageBytes: mocks.storageBytes }))
+vi.mock('../../server/utils/whatsapp-creation/product-review', () => ({ createProductReviewBoards: mocks.productReview }))
 
 const { advanceConversation, newConversationState } = await import('../../server/utils/whatsapp-creation/conversation')
 
@@ -72,6 +74,7 @@ beforeEach(() => {
     key: `imagens/${item.id}-candidate.png`, hash: `candidate-hash-${item.id}`
   }])
   mocks.storageBytes.mockResolvedValue(byteImage)
+  mocks.productReview.mockResolvedValue(['whatsapp-creation/review-board.png'])
 })
 
 describe('workflow da conversa de criação via WhatsApp', () => {
@@ -150,7 +153,8 @@ describe('workflow da conversa de criação via WhatsApp', () => {
 
     const date = await input(division.state, { action: 'status', validity: '05/10/2026' }, '05/10/2026')
     expect(date.state.draft.validity).toBe('05/10/2026')
-    expect(date.send[0]?.text).toMatch(/preciso confirmar/i)
+    expect(date.send[0]?.text).toMatch(/confira fotos e preços/i)
+    expect(date.send.some(message => message.type === 'image' && message.key === 'whatsapp-creation/review-board.png')).toBe(true)
     expect(date.state.draft.products[0]).toMatchObject({ brand: '', variant: '', weight: '' })
 
     const sameImage = await input(state, { action: 'update' }, 'Mesma imagem')
@@ -168,25 +172,92 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(selected.state.order?.dataApprovedRevision).toBeNull()
     expect(mocks.productCandidates).toHaveBeenCalledWith(accountId, expect.objectContaining({ id: item.id }))
     expect(mocks.storageBytes).toHaveBeenCalledWith(`imagens/${item.id}-candidate.png`, accountId)
+    expect(selected.send.some(message => message.type === 'image' && message.purpose === 'review')).toBe(true)
 
     const confirmedData = await input(selected.state, { action: 'approve_data' }, 'confirmar dados')
-    expect(confirmedData.state.phase).toBe('images')
+    expect(confirmedData.state.phase).toBe('rendering')
+    expect(confirmedData.generate).toBe(true)
     expect(confirmedData.state.order?.dataApprovedRevision).toBe(confirmedData.state.order?.revision)
-    expect(confirmedData.send.some(message => message.type === 'image' && message.purpose === 'review')).toBe(true)
-
-    const confirmedPhoto = await input(confirmedData.state, { action: 'approve_images' }, 'confirmar todas as fotos')
-    expect(confirmedPhoto.state.phase).toBe('rendering')
-    expect(confirmedPhoto.generate).toBe(true)
-    expect(confirmedPhoto.state.order?.images[0]).toMatchObject({
+    expect(confirmedData.state.order?.images[0]).toMatchObject({
       key: `imagens/${item.id}-candidate.png`, hash: createHash('sha256').update(byteImage).digest('hex'),
-      approvedRevision: confirmedPhoto.state.order?.revision
+      approvedRevision: confirmedData.state.order?.revision
     })
+  })
+
+  it('leva hortifruti com nome e preço, fotos, confirmação curta e prévia até a entrega aprovada', async () => {
+    const state = {
+      ...newConversationState(),
+      header: { ...header },
+      draft: {
+        kind: 'encarte' as const, theme: 'Fecha Mês', formats: ['stories'], division: 'single' as const,
+        products: [product('mamao', { name: 'Mamão Formosa', brand: '', variant: '', weight: '', price: '4.99' })],
+        validity: '05/10/2026'
+      }
+    }
+    const review = await input(state, { action: 'update' }, '05/10/2026')
+    expect(review.state.phase).toBe('data')
+    expect(review.send.filter(message => message.type === 'image')).toHaveLength(1)
+    expect(review.send.find(message => message.type === 'image')).toMatchObject({ key: 'whatsapp-creation/review-board.png', purpose: 'review' })
+    expect(review.state.order?.products[0]).toMatchObject({ brand: '', variant: '', weight: '' })
+
+    const data = await input(review.state, { action: 'status' }, 'Confirmado')
+    expect(data.state.phase).toBe('rendering')
+    expect(data.generate).toBe(true)
+
+    const revision = data.state.order!.revision
+    const artifactId = 'preview-hortifruti'
+    const preview = {
+      ...data.state,
+      phase: 'preview' as const,
+      order: registerPreview(data.state.order!, accountId, { artifactId, revision, formatIds: ['stories'] }),
+      artifacts: [{ artifactId, formatId: 'stories', key: 'whatsapp-creation/story.png', hash: 'hash', mimeType: 'image/png', projectId: 'project-story', editUrl: '/edit/story' }]
+    }
+    const noImplicitApproval = await input(preview, { action: 'status' }, 'Ok')
+    expect(noImplicitApproval.send.filter(message => message.purpose === 'final')).toHaveLength(0)
+    const approved = await input(preview, { action: 'status', artifactNumbers: [99] }, `APROVAR ${revision}`)
+    expect(approved.state.phase).toBe('approved')
+    expect(approved.send.filter(message => message.purpose === 'final')).toHaveLength(1)
+  })
+
+  it('agrupa quatro fotos de hortifruti em uma única imagem de conferência', async () => {
+    const names = ['Mamão Formosa', 'Alho', 'Abacate', 'Cebola']
+    const state = {
+      ...newConversationState(), header: { ...header },
+      draft: { kind: 'encarte' as const, theme: 'Hortifruti', formats: ['stories'], division: 'single' as const,
+        products: names.map((name, index) => product(`item-${index + 1}`, { name, brand: '', variant: '', weight: '', price: `${index + 4}.99` })),
+        validity: '05/10/2026' }
+    }
+    const review = await input(state, { action: 'update' }, '05/10/2026')
+    expect(mocks.productReview).toHaveBeenCalledOnce()
+    expect(mocks.productReview).toHaveBeenCalledWith(expect.objectContaining({ products: expect.arrayContaining(names.map(name => expect.objectContaining({ name }))) }))
+    expect(review.send.filter(message => message.type === 'image')).toHaveLength(1)
+    expect(review.send).toHaveLength(1)
+  })
+
+  it('aceita correção de foto pelo número mostrado na prancha antes da aprovação', async () => {
+    const first = await beginOrder({ products: [product('rice'), product('milk', { name: 'Leite' })], division: 'single' })
+    const review = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const rejected = await input(review.state, { action: 'update' }, 'a foto 2 está errada')
+    expect(rejected.state.phase).toBe('data')
+    expect(rejected.state.candidates).toHaveLength(1)
+    expect(rejected.state.candidates[0]?.itemId).toBe(review.state.order!.products[0]!.id)
+    expect(rejected.state.reviewPresentedRevision).toBeUndefined()
+    expect(rejected.send[0]?.text).toMatch(/envie as imagens corretas/i)
+  })
+
+  it('corrige a foto literal mesmo se a IA disser status e alterar a lista', async () => {
+    const first = await beginOrder({ products: [product('rice'), product('milk', { name: 'Leite' })], division: 'single' })
+    const review = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const rejected = await input(review.state, { action: 'status', itemNumbers: [1], products: [] }, 'a foto 2 está errada')
+    expect(rejected.state.draft.products).toHaveLength(2)
+    expect(rejected.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
+    expect(rejected.send[0]?.text).toMatch(/itens 2 foram rejeitadas/i)
   })
 
   it('invalidates data and photo approvals when an image is replaced', async () => {
     const initial = await beginOrder({ products: [product()], division: 'single' })
     const selected = await input(initial.state, { action: 'choose_header', choice: 1 }, '1')
-    const dataApproved = await input(selected.state, { action: 'approve_data' }, 'confirmar dados')
+    const dataApproved = await input({ ...selected.state, reviewPresentedRevision: undefined }, { action: 'approve_data' }, 'confirmar dados')
     const imageApproved = dataApproved
     const previousRevision = imageApproved.state.order!.revision
     const replacement = { key: `whatsapp-creation/${accountId}/inbound/new.png`, hash: 'new-photo-hash' }
@@ -198,17 +269,15 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(changed.state.order?.images[0]).toMatchObject({ key: replacement.key, hash: replacement.hash, approvedRevision: null })
 
     const reconfirmedData = await input(changed.state, { action: 'approve_data' }, 'confirmar dados')
-    expect(reconfirmedData.state.phase).toBe('images')
-    expect(reconfirmedData.state.order?.images[0]?.approvedRevision).toBeNull()
-    const reconfirmedPhoto = await input(reconfirmedData.state, { action: 'approve_images' }, 'confirmar todas as fotos')
-    expect(reconfirmedPhoto.generate).toBe(true)
-    expect(reconfirmedPhoto.state.order?.images[0]?.approvedRevision).toBe(reconfirmedPhoto.state.order?.revision)
+    expect(reconfirmedData.state.phase).toBe('rendering')
+    expect(reconfirmedData.generate).toBe(true)
+    expect(reconfirmedData.state.order?.images[0]?.approvedRevision).toBe(reconfirmedData.state.order?.revision)
   })
 
   it('guarda uma foto sem número e aplica ao item indicado na mensagem seguinte', async () => {
     const initial = await beginOrder({ products: [product(), product('milk', { name: 'Leite' })], division: 'single' })
     const selected = await input(initial.state, { action: 'choose_header', choice: 1 }, '1')
-    const dataApproved = await input(selected.state, { action: 'approve_data' }, 'confirmar dados')
+    const dataApproved = await input({ ...selected.state, reviewPresentedRevision: undefined }, { action: 'approve_data' }, 'confirmar dados')
     const incoming = { key: `whatsapp-creation/${accountId}/inbound/unassigned.png`, hash: 'unassigned-hash' }
     const initialKeys = selected.state.order!.images.map(image => image.key)
     const secondItemId = selected.state.order!.products[1]!.id
@@ -225,10 +294,29 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(assigned.state.phase).toBe('data')
   })
 
+  it('aceita foto enviada já na revisão de dados e associa o número respondido depois', async () => {
+    mocks.productCandidates.mockResolvedValue([])
+    const initial = await beginOrder({ products: [product('mamao', { name: 'Mamão Formosa', brand: '', variant: '', weight: '' })], division: 'single', formats: ['stories'] })
+    const review = await input(initial.state, { action: 'choose_header', choice: 1 }, '1')
+    expect(review.state.phase).toBe('data')
+    expect(review.send.some(message => message.text.includes('envie essas fotos'))).toBe(true)
+
+    const uploaded = { key: `whatsapp-creation/${accountId}/inbound/mamao.png`, hash: 'uploaded-hash' }
+    const waiting = await input(review.state, { action: 'status' }, '', { uploaded })
+    expect(waiting.state.pendingUploaded).toEqual(uploaded)
+    expect(waiting.send[0]?.text).toMatch(/qual número de produto/i)
+
+    const assigned = await input(waiting.state, { action: 'status' }, '1')
+    expect(assigned.state.pendingUploaded).toBeUndefined()
+    expect(assigned.state.candidates[0]).toMatchObject({ itemId: review.state.order!.products[0]!.id, ...uploaded })
+    expect(assigned.send.some(message => message.type === 'image' && message.key === 'whatsapp-creation/review-board.png')).toBe(true)
+    expect(assigned.state.phase).toBe('data')
+  })
+
   it('rejeita uma embalagem errada e não libera geração enquanto a foto correta não chegar', async () => {
     const first = await beginOrder({ products: [product()], division: 'single' })
     const selected = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
-    const confirmed = await input(selected.state, { action: 'approve_data' }, 'confirmar dados')
+    const confirmed = await input({ ...selected.state, reviewPresentedRevision: undefined }, { action: 'approve_data' }, 'confirmar dados')
     const rejected = await input(confirmed.state, { action: 'update', itemNumbers: [1] }, 'a foto do item 1 está errada')
     expect(rejected.state.candidates).toEqual([])
     expect(rejected.state.order?.images[0]?.key).toBe('')
@@ -283,7 +371,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
   it('não amplia a confirmação de uma foto para todas quando a IA omite os números', async () => {
     const first = await beginOrder({ products: [product(), product('milk')], division: 'single' })
     const selected = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
-    const confirmed = await input(selected.state, { action: 'approve_data' }, 'confirmar dados')
+    const confirmed = await input({ ...selected.state, reviewPresentedRevision: undefined }, { action: 'approve_data' }, 'confirmar dados')
     const partial = await input(confirmed.state, { action: 'approve_images' }, 'confirmar foto 1')
     expect(partial.generate).toBe(false)
     expect(partial.state.order?.images[0]?.approvedRevision).toBe(partial.state.order?.revision)

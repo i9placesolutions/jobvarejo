@@ -75,7 +75,7 @@ export default defineEventHandler(async event => {
       context = await beginCreationOrder(eventId, leaseToken, proposal.kind)
       proposal.action = 'update'
     }
-    if (context.payload.type === 'image' && context.state.phase === 'images') proposal.products = undefined
+    if (context.payload.type === 'image' && ['data', 'images'].includes(context.state.phase)) proposal.products = undefined
     const kind = proposal.kind || context.state.draft.kind
     if (kind) assertCreationAccess(context.account.user, kind)
     const result = await advanceConversation({ state: context.state, proposal, text: messageText, accountId: context.owner_id,
