@@ -44,6 +44,13 @@
             "redirect": {
               "followRedirects": false
             }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
           }
         }
       },
@@ -56,12 +63,45 @@
       "onError": "continueErrorOutput"
     },
     {
+      "id": "58ff88b3-5d16-4aad-99e1-5744f6bc63b8",
+      "name": "Evento aceito?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        570,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ca23cfed-c2d9-4ab2-9493-0c35adaeb805",
+              "leftValue": "={{ Number($json.statusCode) >= 200 && Number($json.statusCode) < 300 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
       "id": "6a7290d7-925f-47e6-83a1-ac9fd9e40b17",
       "name": "Confirmar recebimento",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        570,
+        850,
         0
       ],
       "parameters": {
@@ -79,14 +119,14 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        570,
+        850,
         190
       ],
       "parameters": {
         "respondWith": "json",
         "responseBody": "{\"error\":\"ingress_unavailable\",\"message\":\"Evento não foi aceito.\"}",
         "options": {
-          "responseCode": "={{ [400,401,403,422].includes(Number($json.error?.httpCode)) ? Number($json.error.httpCode) : 503 }}",
+          "responseCode": "={{ Number.isInteger(Number($json.statusCode)) && Number($json.statusCode) >= 400 && Number($json.statusCode) <= 599 ? Number($json.statusCode) : 503 }}",
           "enableStreaming": false
         }
       }
@@ -105,6 +145,24 @@
       ]
     },
     "Autenticar e persistir": {
+      "main": [
+        [
+          {
+            "node": "Evento aceito?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recusar recebimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evento aceito?": {
       "main": [
         [
           {
