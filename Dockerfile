@@ -100,7 +100,7 @@ COPY --from=builder /app/workers/whatsapp-creation/fabric.min.js ./workers/whats
 # Confirma que a API tem o mesmo normalizador de fala que o worker de vídeo.
 RUN printf '%s' '{"scripts":[{"id":"intro","text":"Oferta R$ 19,90 em 24/09/2026"}],"pronunciations":[]}' \
     | /opt/video-python/bin/python workers/video-studio/normalize.py \
-    | /opt/video-python/bin/python -c "import json,sys; text=json.load(sys.stdin)['scripts'][0]['text']; assert 'dezenove reais' in text and 'setembro' in text"
+    | /opt/video-python/bin/python -c "import json,sys; text=json.load(sys.stdin)['scripts'][0]['text']; assert all(word in text for word in ('dezenove', 'noventa', 'setembro'))"
 # Valida o motor isolado do Estúdio de Artes e suas fontes empacotadas.
 RUN /opt/image-worker/bin/python workers/art_studio.py --self-test
 
