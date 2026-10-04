@@ -1,0 +1,116 @@
+{
+  "name": "JobVarejo | Gerar vídeo",
+  "nodes": [
+    {
+      "id": "5ac1ceb8-f17b-47d5-a123-df62fedd1a33",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "orderId",
+              "type": "string"
+            },
+            {
+              "name": "token",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "notes": "Entradas orderId/token. Backend revalida WhatsApp verificado, dono, acesso, todas as fotos/dados aprovados e revisão. Gera projeto editável nativo na conta do cliente. Vídeo usa job ElevenLabs apenas após roteiro aprovado; conclusão consultada por workflow separado.",
+      "notesInFlow": true
+    },
+    {
+      "id": "dbeaccf4-ff19-4c94-83c5-c2ac617dd8d0",
+      "name": "Gerar na conta do cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        280,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://jobvarejo.com.br/api/whatsapp-creation/generate/video",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({orderId:$json.orderId,token:$json.token}) }}",
+        "options": {
+          "timeout": 180000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a511Seb0zY8Os3ai",
+          "name": "JobVarejo | Conta e criação"
+        }
+      }
+    },
+    {
+      "id": "eb56405c-d783-44dc-b26b-748527f3406d",
+      "name": "Retornar",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        560,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "Gerar na conta do cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar na conta do cliente": {
+      "main": [
+        [
+          {
+            "node": "Retornar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "executionTimeout": 240,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "630z2wt5TcMQXsUe"
+  }
+}

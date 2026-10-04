@@ -1,0 +1,83 @@
+{
+  "name": "JobVarejo | Retomar temas pendentes",
+  "nodes": [
+    {
+      "id": "dbebc937-5f27-4ae8-93ab-8c7d0538016d",
+      "name": "A cada 59 segundos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 59
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ef1cf808-8bdd-43cb-91df-59e2aeec857c",
+      "name": "Consultar pendências",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        280,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://jobvarejo.com.br/api/whatsapp-creation/follow-up-themes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {
+          "timeout": 180000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a511Seb0zY8Os3ai",
+          "name": "JobVarejo | Conta e criação"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "A cada 59 segundos": {
+      "main": [
+        [
+          {
+            "node": "Consultar pendências",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "executionTimeout": 240,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "630z2wt5TcMQXsUe"
+  }
+}

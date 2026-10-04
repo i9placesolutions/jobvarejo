@@ -1,0 +1,73 @@
+{
+  "name": "JobVarejo | Registrar falhas",
+  "nodes": [
+    {
+      "id": "4f866134-8325-4191-8739-df459c3d9aae",
+      "name": "Falha de execução",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "def2a97b-624c-47e9-85c2-e8dc51dc52a0",
+      "name": "Registrar falha",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        280,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://jobvarejo.com.br/api/whatsapp-creation/workflow-error",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({workflowId:String($json.workflow.id),executionId:String($json.execution?.id || 'trigger'),node:String($json.execution?.lastNodeExecuted || 'trigger')}) }}",
+        "options": {
+          "timeout": 60000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a511Seb0zY8Os3ai",
+          "name": "JobVarejo | Conta e criação"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Falha de execução": {
+      "main": [
+        [
+          {
+            "node": "Registrar falha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "executionTimeout": 240,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

@@ -53,7 +53,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const role = auth.user.value?.role
   if (role === 'user') {
     const permitted = path === '/' || path === '/quick-editor' || path === '/business-profile' ||
-      path === '/profile' || path.startsWith('/videos') || path.startsWith('/cartazista') ||
+      path === '/profile' || path.startsWith('/videos') || path.startsWith('/cartazista') || path.startsWith('/art-studio') ||
       path.startsWith('/radio-indoor') || path === '/plans' || path === '/billing' ||
       (path.startsWith('/editor/') && String(to.query.quick || '') === '1')
     if (!permitted) return navigateTo('/', { replace: true })

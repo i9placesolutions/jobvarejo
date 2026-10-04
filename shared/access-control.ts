@@ -9,6 +9,8 @@ export const ACCESS_AREAS = [
 ] as const
 
 export type AccessArea = typeof ACCESS_AREAS[number]['id']
+/** Customer modules; administering/publishing the shared template library stays privileged. */
+export const REGULAR_USER_AREAS: readonly AccessArea[] = ['encartes', 'videos', 'cartazes', 'artes', 'radio', 'loja']
 export type AccessAction = 'view' | 'create' | 'edit' | 'delete'
 export type EditorPermissions = Partial<Record<AccessArea, Partial<Record<AccessAction, boolean>>>>
 

@@ -19,6 +19,8 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked npm ci --include=optiona
 
 # Copiar codigo fonte
 COPY . .
+RUN mkdir -p workers/whatsapp-creation \
+    && cp node_modules/fabric/dist/index.min.js workers/whatsapp-creation/fabric.min.js
 
 # Build Nuxt: chama npx diretamente para evitar o prebuild env:check
 ENV NODE_OPTIONS="--max-old-space-size=4096"
@@ -94,6 +96,7 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked npm install --omit=dev -
 # Copiar output do build (self-contained)
 COPY --from=builder /app/.output ./.output
 COPY workers/ ./workers/
+COPY --from=builder /app/workers/whatsapp-creation/fabric.min.js ./workers/whatsapp-creation/fabric.min.js
 # Confirma que a API tem o mesmo normalizador de fala que o worker de vídeo.
 RUN printf '%s' '{"scripts":[{"id":"intro","text":"Oferta R$ 19,90 em 24/09/2026"}],"pronunciations":[]}' \
     | /opt/video-python/bin/python workers/video-studio/normalize.py \

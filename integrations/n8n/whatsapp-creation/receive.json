@@ -1,0 +1,137 @@
+{
+  "name": "JobVarejo | Receber WhatsApp e recibos",
+  "nodes": [
+    {
+      "id": "7445ec0e-e44b-49aa-b3a5-55f49e7f1a5e",
+      "name": "WhatsApp recebido",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jobvarejo-whatsapp-criacao",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "4e18996b-b3fe-4972-a8d8-a705b75fca55",
+      "notes": "Webhook público do provedor. Backend exige token exclusivo e instância correta; ignora grupos/histórico/fromMe. ACK só depois da persistência, sem aguardar IA. Recibos atualizam entrega. Dados de execução não são salvos.",
+      "notesInFlow": true
+    },
+    {
+      "id": "7bbfbc22-7cd7-4c2e-b75c-b7be67caee78",
+      "name": "Autenticar e persistir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        280,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://jobvarejo.com.br/api/whatsapp-creation/ingest",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({event:$json.body}) }}",
+        "options": {
+          "timeout": 60000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a511Seb0zY8Os3ai",
+          "name": "JobVarejo | Conta e criação"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "6a7290d7-925f-47e6-83a1-ac9fd9e40b17",
+      "name": "Confirmar recebimento",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        570,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\":true}",
+        "options": {
+          "responseCode": 200,
+          "enableStreaming": false
+        }
+      }
+    },
+    {
+      "id": "24bad9a4-30c6-466c-a941-841113943cb7",
+      "name": "Recusar recebimento",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        570,
+        190
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\":\"ingress_unavailable\",\"message\":\"Evento não foi aceito.\"}",
+        "options": {
+          "responseCode": "={{ [400,401,403,422].includes(Number($json.error?.httpCode)) ? Number($json.error.httpCode) : 503 }}",
+          "enableStreaming": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "WhatsApp recebido": {
+      "main": [
+        [
+          {
+            "node": "Autenticar e persistir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Autenticar e persistir": {
+      "main": [
+        [
+          {
+            "node": "Confirmar recebimento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recusar recebimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "executionTimeout": 240,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "630z2wt5TcMQXsUe"
+  }
+}

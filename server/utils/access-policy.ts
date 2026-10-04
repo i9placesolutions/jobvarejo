@@ -2,6 +2,7 @@ import { createError, getQuery, getRequestURL, readBody, type H3Event } from 'h3
 import type { UserRole } from '~/types/auth'
 import {
   hasEditorPermission,
+  REGULAR_USER_AREAS,
   type AccessAction,
   type AccessArea,
   type EditorPermissions
@@ -56,7 +57,7 @@ export async function assertRoleApiAccess(
     body = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       ? parsed as Record<string, unknown> : {}
   }
-  if (role === 'user' && (area === 'encartes' || area === 'videos' || area === 'cartazes' || area === 'loja' || area === 'radio')) {
+  if (role === 'user' && area && area !== 'admin' && REGULAR_USER_AREAS.includes(area)) {
     const changesTemplateLibrary = path === '/api/projects' &&
       ((event.method === 'POST' && (body?.is_template === true || 'template_category' in (body || {}))) ||
        (event.method === 'PATCH' && ['is_template', 'template_category', 'template_subcategory'].some(key => key in (body || {}))))

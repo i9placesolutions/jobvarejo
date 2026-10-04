@@ -1,6 +1,6 @@
 import type { UserWithProfile, AuthState } from '~/types/auth'
 import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
-import { hasEditorPermission, normalizeEditorPermissions, type AccessAction, type AccessArea } from '~/shared/access-control'
+import { hasEditorPermission, normalizeEditorPermissions, REGULAR_USER_AREAS, type AccessAction, type AccessArea } from '~/shared/access-control'
 
 const AUTH_COOKIE = 'authenticated'
 
@@ -185,7 +185,7 @@ export const useAuth = () => {
     const role = state.value.user?.role
     if (role === 'super_admin' || role === 'admin') return true
     if (role === 'editor') return hasEditorPermission(state.value.user?.editorPermissions || {}, area, action)
-    return role === 'user' && ['encartes', 'videos', 'cartazes', 'radio', 'loja'].includes(area)
+    return role === 'user' && REGULAR_USER_AREAS.includes(area)
   }
 
   return {

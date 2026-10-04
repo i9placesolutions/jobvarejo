@@ -1,0 +1,265 @@
+{
+  "name": "JobVarejo | Interpretar texto imagem e áudio",
+  "nodes": [
+    {
+      "id": "a8f15751-ccdb-4b8f-bd68-b4c0bfa25335",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "eventId",
+              "type": "string"
+            },
+            {
+              "name": "leaseToken",
+              "type": "string"
+            },
+            {
+              "name": "request",
+              "type": "object"
+            },
+            {
+              "name": "isAudio",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      "notes": "Entradas tipadas eventId/leaseToken/request/isAudio. Áudio transcrito literalmente e então interpretado. Só propõe campos; backend valida conta, produtos, revisões e aprovações. Sem retry de chamadas pagas.",
+      "notesInFlow": true
+    },
+    {
+      "id": "50e840c4-fab2-42c1-9849-b018a8608e43",
+      "name": "É áudio?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        230,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7be41734-198d-4a0d-afd3-871d64db21f1",
+              "leftValue": "={{ $json.isAudio }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fa353b54-d067-4690-82da-2898f1325fc6",
+      "name": "Transcrever áudio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        470,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 90000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        },
+        "nodeCredentialType": "openRouterApi"
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iW4aZzvdBFHYVGpU",
+          "name": "JobVarejo | OpenRouter"
+        }
+      }
+    },
+    {
+      "id": "a3bb6933-fb21-4685-819b-0c301bbd48fe",
+      "name": "Preparar texto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        710,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://jobvarejo.com.br/api/whatsapp-creation/interpret-audio",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({eventId:$('Entrada').first().json.eventId,leaseToken:$('Entrada').first().json.leaseToken,result:$json}) }}",
+        "options": {
+          "timeout": 60000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a511Seb0zY8Os3ai",
+          "name": "JobVarejo | Conta e criação"
+        }
+      }
+    },
+    {
+      "id": "9d730971-d14b-41c8-bb0a-ca89b980a4dc",
+      "name": "Interpretar pedido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        950,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 90000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        },
+        "nodeCredentialType": "openRouterApi"
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iW4aZzvdBFHYVGpU",
+          "name": "JobVarejo | OpenRouter"
+        }
+      }
+    },
+    {
+      "id": "8d853042-2c24-4f7b-8cd4-33bb5352eb70",
+      "name": "Retornar",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({eventId:$('Entrada').first().json.eventId,leaseToken:$('Entrada').first().json.leaseToken,result:$json}) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "É áudio?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "É áudio?": {
+      "main": [
+        [
+          {
+            "node": "Transcrever áudio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Interpretar pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcrever áudio": {
+      "main": [
+        [
+          {
+            "node": "Preparar texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar texto": {
+      "main": [
+        [
+          {
+            "node": "Interpretar pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpretar pedido": {
+      "main": [
+        [
+          {
+            "node": "Retornar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "executionTimeout": 240,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "630z2wt5TcMQXsUe"
+  }
+}
