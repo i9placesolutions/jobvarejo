@@ -122,14 +122,17 @@ export async function advanceConversation(input: {
   if (s.phase === 'rendering') { say('sua criação está em andamento. Vou enviar a prévia quando ficar pronta; aguarde antes de alterar este pedido.'); return { state: s, send, generate: false } }
   if (p.action === 'update' || p.action === 'new_order') {
     const before = JSON.stringify(s.draft)
-    const previousHeaderQuery = JSON.stringify([s.draft.kind, s.draft.theme, s.draft.formats])
+    const previousHeaderTheme = JSON.stringify([s.draft.kind, s.draft.theme])
+    const previousFormats = JSON.stringify(s.draft.formats)
     for (const key of ['kind', 'theme', 'formats', 'division', 'validity', 'conditions', 'institutionalText', 'script', 'additionalKinds'] as const) {
       if (p[key] !== undefined) (s.draft as any)[key] = p[key]
     }
     if (p.products) {
       s.draft.products = p.products.map((product, i) => ({ ...product, id: s.draft.products.find(old => old.id === product.id)?.id || s.draft.products[i]?.id || randomUUID() }))
     }
-    if (previousHeaderQuery !== JSON.stringify([s.draft.kind, s.draft.theme, s.draft.formats])) {
+    if (previousHeaderTheme !== JSON.stringify([s.draft.kind, s.draft.theme]) ||
+      (previousFormats !== JSON.stringify(s.draft.formats) &&
+        (!s.header || !s.draft.formats.every(format => s.header!.formats.includes(format))))) {
       s.header = undefined; s.choices = []; s.choiceOffset = 0
     }
     if (s.order && before !== JSON.stringify(s.draft)) {
@@ -143,7 +146,7 @@ export async function advanceConversation(input: {
   if (!d.kind) { say('você quer encarte, vídeo, cartazes ou arte do Estúdio?'); return { state: s, send, generate: false } }
   if (!d.theme?.trim()) { say('qual tema ou campanha você deseja? Por exemplo: Fecha Mês, fim de semana ou aniversário da loja.'); return { state: s, send, generate: false } }
   const formats = [...new Set(d.formats)].map(formatFor)
-  if (!formats.length || formats.some(f => !f) || (d.kind === 'video' && d.formats.some(f => !['stories', 'tv'].includes(f))) || (d.kind === 'cartaz' && d.formats.some(f => !CARTAZISTA_FORMATS.some(size => size.id === f)))) {
+  if ((!formats.length && d.kind !== 'encarte') || (d.formats.length && (formats.some(f => !f) || (d.kind === 'video' && d.formats.some(f => !['stories', 'tv'].includes(f))) || (d.kind === 'cartaz' && d.formats.some(f => !CARTAZISTA_FORMATS.some(size => size.id === f)))))) {
     say(`qual formato deseja${d.kind === 'video' ? ': Story/Reels vertical, TV horizontal ou os dois' : d.kind === 'cartaz' ? ': A1, A2, A3, A4, A5, A6, A7 ou faixa' : ': Feed, quadrado, Story, TV ou impressão'}? Pode escolher mais de um com as mesmas ofertas.`)
     return { state: s, send, generate: false }
   }
@@ -168,6 +171,10 @@ export async function advanceConversation(input: {
     s.phase = 'header'
     s.choices.forEach((h, i) => send.push(h.headerKey || h.previewUrl ? { type: 'image', text: `${i + 1} — ${h.name}. Tema ${d.theme}; formatos ${h.formats.join(', ')}.`, key: h.headerKey, url: h.previewUrl, purpose: 'review' } : { type: 'text', text: `${i + 1} — ${h.name}. A imagem deste modelo precisa ser preparada antes da escolha.` }))
     say(`qual cabeçalho prefere? Responda o número.${catalog.hasMore ? ' Para outras opções deste tema, diga “ver mais”.' : ''}`)
+    return { state: s, send, generate: false }
+  }
+  if (!formats.length) {
+    say(`qual formato deseja${d.kind === 'video' ? ': Story/Reels vertical, TV horizontal ou os dois' : d.kind === 'cartaz' ? ': A1, A2, A3, A4, A5, A6, A7 ou faixa' : ': Feed, quadrado, Story, TV ou impressão'}? Pode escolher mais de um com as mesmas ofertas.`)
     return { state: s, send, generate: false }
   }
   if (!d.products.length && d.kind !== 'studio') { say(`mande os ${d.kind === 'video' ? 'itens da oferta, até seis por vídeo, ' : 'produtos '}com nome, marca, variante, peso e preço.`); return { state: s, send, generate: false } }

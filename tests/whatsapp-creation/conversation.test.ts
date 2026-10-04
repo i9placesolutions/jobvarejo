@@ -75,6 +75,21 @@ beforeEach(() => {
 })
 
 describe('workflow da conversa de criação via WhatsApp', () => {
+  it('envia as imagens dos cabeçalhos depois do tema e só pede formato após a escolha', async () => {
+    const visualHeader = { ...header, theme: 'Hortifruti', headerKey: 'whatsapp-creation/owner/headers/preview.png' }
+    mocks.headers.mockResolvedValue({ headers: [visualHeader], hasMore: false, missingTheme: false })
+    const first = await input(newConversationState(), { action: 'update', kind: 'encarte', theme: 'Hortifruti' }, 'Hortifruti')
+    expect(mocks.headers).toHaveBeenCalledWith(accountId, 'encarte', 'Hortifruti', [], 0)
+    expect(first.state.phase).toBe('header')
+    expect(first.send).toContainEqual(expect.objectContaining({ type: 'image', key: visualHeader.headerKey }))
+    const chosen = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    expect(chosen.send.map(message => message.text).join(' ')).toMatch(/qual formato/i)
+    const story = await input(chosen.state, { action: 'update', formats: ['stories'] }, 'Story')
+    expect(story.state.header?.id).toBe(visualHeader.id)
+    expect(story.send.map(message => message.text).join(' ')).toMatch(/mande os produtos/i)
+    expect(mocks.headers).toHaveBeenCalledTimes(1)
+  })
+
   it('reinicia as opções ao trocar o tema depois de pedir mais cabeçalhos', async () => {
     const first = await beginOrder()
     const paged = await input(first.state, { action: 'more_headers' }, 'ver mais')

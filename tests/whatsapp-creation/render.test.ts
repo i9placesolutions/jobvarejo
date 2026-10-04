@@ -21,6 +21,7 @@ import {
   renderCreationHeaderPreview,
   resolveVideoHeaderPreviewAsset
 } from '../../server/utils/whatsapp-creation/render'
+import { flyerHeaderCropHeight, flyerHeaderLogoBox } from '../../server/utils/whatsapp-creation/header-preview'
 import type { BusinessProfile } from '../../utils/businessProfile'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -60,6 +61,16 @@ function pngDataUrl(): string {
 }
 
 describe('adapter de render da criação WhatsApp', () => {
+  it('recorta a miniatura na fronteira real entre cabeçalho e produtos', () => {
+    const canvas = { objects: [
+      { name: 'header-validity', top: 492 },
+      { name: 'product-section-surface', originY: 'top', top: 518 }
+    ] }
+    expect(flyerHeaderCropHeight(canvas, 1920, 1422)).toBe(384)
+    expect(() => flyerHeaderCropHeight({ objects: [] }, 1920, 1422)).toThrow(/não informa onde termina/i)
+    expect(flyerHeaderLogoBox({ objects: [{ quickLogoSlot: true, left: 585, top: 132, width: 398, height: 213, scaleX: 1.18, scaleY: 1.18 }] }, 1920, 800, 1422))
+      .toMatchObject({ left: 425, top: 89, width: 365, height: 203 })
+  })
   it('gera IDs nativos determinísticos por conta/pedido/revisão', () => {
     expect(deterministicUuid(`${userId}:${orderId}:r1`)).toMatch(/^[0-9a-f-]{36}$/)
     expect(deterministicUuid(`${userId}:${orderId}:r1`)).toBe(deterministicUuid(`${userId}:${orderId}:r1`))

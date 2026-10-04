@@ -62,6 +62,24 @@ describe('catálogo de criação pelo WhatsApp', () => {
     expect(params).toEqual([accountId])
   })
 
+  it('usa a página Story salva para preparar só o cabeçalho quando o formato ainda não foi escolhido', async () => {
+    const prefix = `projects/${accountId}/22222222-2222-4222-8222-222222222222/`
+    mocks.query.mockResolvedValue({ rows: [{
+      id: '22222222-2222-4222-8222-222222222222', owner_id: accountId, name: 'Hortifruti',
+      updated_at: '2026-10-04T10:00:00.000Z', preview_url: `${prefix}flyer.webp`,
+      template_config: { category: 'Hortifruti', formatIds: ['feed', 'stories'] },
+      page_metadata: [
+        { templateFormatId: 'feed', height: 1350, thumbnailPath: `${prefix}feed.webp`, canvasDataPath: `${prefix}feed.json.gz` },
+        { templateFormatId: 'stories', height: 1920, thumbnailPath: `${prefix}story.webp`, canvasDataPath: `${prefix}story.json.gz` }
+      ]
+    }] })
+    const result = await listCreationHeaders(accountId, 'encarte', 'Hortifruti', [])
+    expect(result.headers[0]).toMatchObject({
+      sourceThumbnailKey: `${prefix}story.webp`, sourceCanvasKey: `${prefix}story.json.gz`, sourcePageHeight: 1920
+    })
+    expect(result.headers[0]).not.toHaveProperty('previewUrl')
+  })
+
   it('usa IDs nativos de vídeo e de cabeçalho do Cartazista', async () => {
     const video = await listCreationHeaders(accountId, 'video', 'Fecha Mês', ['stories', 'tv'])
     expect(video.headers).toHaveLength(1)

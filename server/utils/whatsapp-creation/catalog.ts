@@ -22,6 +22,9 @@ export type CreationHeader = {
   sourceOwnerId?: string
   sourceUpdatedAt?: string
   nativeThemeId?: string
+  sourceThumbnailKey?: string
+  sourceCanvasKey?: string
+  sourcePageHeight?: number
 }
 
 export type CreationHeaderPage = {
@@ -172,6 +175,10 @@ const encarteHeaders = async (
     const publicPreview = isPublicPreview(row.preview_url) || pages
       .map(page => isPublicPreview(page.thumbnailUrl || page.thumbnail_url))
       .find(Boolean)
+    const previewPage = pages.find(page => page.templateFormatId === (requestedFormats[0] || 'stories')) ||
+      pages.find(page => page.templateFormatId === 'stories') || pages[0]
+    const sourceThumbnailKey = extractStorageKey(previewPage?.thumbnailPath || previewPage?.thumbnailUrl)
+    const sourceCanvasKey = extractStorageKey(previewPage?.canvasDataPath)
     matches.push({
       id: row.id,
       revision: revision.revision,
@@ -181,6 +188,9 @@ const encarteHeaders = async (
       ...(headerKey ? { headerKey } : {}),
       ...(publicPreview ? { previewUrl: publicPreview } : {}),
       sourceOwnerId: row.owner_id,
+      ...(previewPage && sourceThumbnailKey && sourceCanvasKey && Number(previewPage.height) > 0 ? {
+        sourceThumbnailKey, sourceCanvasKey, sourcePageHeight: Number(previewPage.height)
+      } : {}),
       ...(revision.sourceUpdatedAt ? { sourceUpdatedAt: revision.sourceUpdatedAt } : {})
     })
   }
