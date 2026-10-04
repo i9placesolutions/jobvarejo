@@ -1,6 +1,6 @@
 # Criação pelo WhatsApp na conta cliente
 
-A instância exclusiva Job Varejo envia eventos ao webhook n8n `jobvarejo-whatsapp-criacao`. O backend autentica serviço e provedor, resolve o telefone verificado em um perfil ativo `role=user` e mantém esse dono em todos os pedidos, assets e projetos. Telefones de staff não inferem uma conta selecionada no navegador.
+A instância exclusiva Job Varejo envia eventos ao webhook n8n `jobvarejo-whatsapp-criacao`. O backend autentica serviço e provedor, resolve o telefone verificado em um perfil ativo de cliente, admin ou super admin e mantém esse mesmo perfil como dono em todos os pedidos, assets e projetos. Admins usam a própria conta pelo WhatsApp; não há seleção implícita de outro cliente por cookie ou por ID na mensagem. Editores continuam recusados neste atendimento. A consulta considera a forma móvel brasileira com e sem o nono dígito, recusa vínculo ambíguo e preserva telefones fixos.
 
 ```mermaid
 flowchart LR

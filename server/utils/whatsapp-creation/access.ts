@@ -3,6 +3,7 @@ import { createError, getHeader, type H3Event } from 'h3'
 import type { UserRole } from '~/types/auth'
 import { normalizeEditorPermissions } from '~/shared/access-control'
 import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
+import { getBrazilWhatsAppPhoneCandidates } from '~/shared/whatsapp-creation-phone'
 import { normalizeBusinessProfile } from '../business-profile'
 import { PROFILE_ACTIVE_SQL } from '../account-access'
 import { pgQuery } from '../postgres'
@@ -52,10 +53,11 @@ export function authenticateWhatsAppService(event: H3Event): void {
   }
 }
 
-/** Resolve a verified direct sender to a customer account, never a staff session/account. */
+/** Resolve a verified direct sender to that sender's own active account. */
 export async function resolveWhatsAppAccount(phone: unknown): Promise<ResolvedWhatsAppAccount | UnlinkedWhatsAppNumber> {
   const normalizedPhone = normalizeBrazilWhatsApp(phone)
   if (!normalizedPhone) return { ok: false, error: 'unlinked_number' }
+  const phoneCandidates = getBrazilWhatsAppPhoneCandidates(normalizedPhone)
 
   const result = await pgQuery<WhatsAppProfile>(
     `select p.id, p.email, p.name, p.role::text as role,
@@ -64,9 +66,9 @@ export async function resolveWhatsAppAccount(phone: unknown): Promise<ResolvedWh
             coalesce(to_jsonb(p)->'editor_permissions', '{}'::jsonb) as editor_permissions,
             p.business_profile
        from public.profiles p
-      where p.login_whatsapp = $1
+      where p.login_whatsapp = any($1::text[])
       limit 2`,
-    [normalizedPhone]
+    [phoneCandidates]
   )
 
   if (result.rows.length === 0) return { ok: false, error: 'unlinked_number' }
@@ -79,10 +81,10 @@ export async function resolveWhatsAppAccount(phone: unknown): Promise<ResolvedWh
   if (!profile.is_active) {
     throw createError({ statusCode: 403, statusMessage: 'A conta vinculada ao WhatsApp está indisponível.' })
   }
-  // Staff may select another account in the web UI. A WhatsApp message has no
-  // trusted selection cookie, so its sender must belong to the customer itself.
-  if (profile.role !== 'user') {
-    throw createError({ statusCode: 403, statusMessage: 'Use o WhatsApp verificado da conta do cliente para solicitar esta criação.' })
+  // A WhatsApp message has no trusted account selection. Even staff use only
+  // their own verified profile; editor remains outside this creation flow.
+  if (profile.role === 'editor') {
+    throw createError({ statusCode: 403, statusMessage: 'Esta conta não tem permissão para solicitar esta criação pelo WhatsApp.' })
   }
 
   const user: AuthenticatedUser = {

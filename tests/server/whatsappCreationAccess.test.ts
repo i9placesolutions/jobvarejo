@@ -64,7 +64,29 @@ describe('acesso de criação pelo WhatsApp', () => {
     expect(mocks.query.mock.calls[0]?.[0]).toContain('login_whatsapp_verified_at')
     expect(mocks.query.mock.calls[0]?.[0]).toContain("business_profile->'adminAccess'->>'removedAt'")
     expect(mocks.query.mock.calls[0]?.[0]).toContain('business_profile')
-    expect(mocks.query.mock.calls[0]?.[1]).toEqual(['+5511999999999'])
+    expect(mocks.query.mock.calls[0]?.[0]).toContain('login_whatsapp = any($1::text[])')
+    expect(mocks.query.mock.calls[0]?.[1]).toEqual([['+5511999999999', '+551199999999']])
+  })
+
+  it.each([
+    ['+556496185163', '+5564996185163'],
+    ['+5564996185163', '+556496185163']
+  ])('resolve a variante móvel brasileira sem alterar o telefone remetente (%s)', async (senderPhone, storedPhone) => {
+    mocks.query.mockResolvedValue({ rows: [profile({ login_whatsapp: storedPhone })] })
+
+    const result = await resolveWhatsAppAccount(senderPhone)
+
+    expect(result).toMatchObject({ ok: true, senderPhone, user: { id: profileId, actorId: profileId, accountId: profileId } })
+    expect(mocks.query.mock.calls[0]?.[1]).toEqual([[senderPhone, storedPhone]])
+  })
+
+  it('não cria variante de nono dígito para telefone fixo', async () => {
+    mocks.query.mockResolvedValue({ rows: [profile({ login_whatsapp: '+556231900131' })] })
+
+    const result = await resolveWhatsAppAccount('+556231900131')
+
+    expect(result).toMatchObject({ ok: true, senderPhone: '+556231900131' })
+    expect(mocks.query.mock.calls[0]?.[1]).toEqual([['+556231900131']])
   })
 
   it('retorna vínculo ausente para número sem perfil verificado e para identificadores de grupo ou lid', async () => {
@@ -76,8 +98,16 @@ describe('acesso de criação pelo WhatsApp', () => {
     expect(mocks.query).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['editor', 'admin', 'super_admin'])('recusa telefone de %s sem vínculo inequívoco com uma conta de cliente', async role => {
+  it.each(['admin', 'super_admin'])('permite que %s use somente a própria conta verificada', async role => {
     mocks.query.mockResolvedValue({ rows: [profile({ role })] })
+    await expect(resolveWhatsAppAccount('+5511999999999')).resolves.toMatchObject({
+      ok: true,
+      user: { id: profileId, actorId: profileId, accountId: profileId, role }
+    })
+  })
+
+  it('mantém editor sem permissão para criação pelo WhatsApp', async () => {
+    mocks.query.mockResolvedValue({ rows: [profile({ role: 'editor' })] })
     await expect(resolveWhatsAppAccount('+5511999999999')).rejects.toMatchObject({ statusCode: 403 })
   })
 
@@ -88,8 +118,16 @@ describe('acesso de criação pelo WhatsApp', () => {
     mocks.query.mockResolvedValueOnce({ rows: [profile(), profile({ id: '22222222-2222-4222-8222-222222222222' })] })
     await expect(resolveWhatsAppAccount('+5511999999999')).rejects.toMatchObject({ statusCode: 409 })
 
+    // An exact match does not take precedence over a second profile matching
+    // the 9-digit mobile variant.
+    mocks.query.mockResolvedValueOnce({ rows: [
+      profile({ login_whatsapp: '+556496185163' }),
+      profile({ id: '22222222-2222-4222-8222-222222222222', login_whatsapp: '+5564996185163' })
+    ] })
+    await expect(resolveWhatsAppAccount('+556496185163')).rejects.toMatchObject({ statusCode: 409 })
+
     mocks.query.mockResolvedValueOnce({ rows: [] })
     await expect(resolveWhatsAppAccount({ phone: '+5511999999999', accountId: profileId })).resolves.toEqual({ ok: false, error: 'unlinked_number' })
-    expect(mocks.query).toHaveBeenCalledTimes(2)
+    expect(mocks.query).toHaveBeenCalledTimes(3)
   })
 })
