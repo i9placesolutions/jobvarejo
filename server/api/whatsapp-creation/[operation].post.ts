@@ -9,7 +9,7 @@ import { pollWhatsAppJobs, followUpWhatsAppThemes } from '~/server/utils/whatsap
 import { downloadProviderMedia } from '~/server/utils/whatsapp-creation/media'
 import { pgQuery } from '~/server/utils/postgres'
 import { prepareCreationHeader } from '~/server/utils/whatsapp-creation/header-preview'
-import { suggestJevRoute } from '~/server/utils/whatsapp-creation/jev'
+import { hasBriefFields, shouldConsultJev, suggestJevRoute } from '~/server/utils/whatsapp-creation/jev'
 
 const leaseSchema = z.object({ eventId: z.string().uuid(), leaseToken: z.string().uuid() })
 export default defineEventHandler(async event => {
@@ -58,7 +58,10 @@ export default defineEventHandler(async event => {
     try { proposed = JSON.parse(String(choice.message.content).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')) } catch { throw createError({ statusCode: 422, statusMessage: 'Interpretação incompleta. Nenhuma criação foi autorizada.' }) }
     const proposal = proposalSchema.parse(proposed)
     const messageText = context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || ''
-    const route = await suggestJevRoute({ text: messageText, phase: context.state.phase, kind: context.state.draft.kind })
+    if (proposal.action === 'status' && hasBriefFields(proposal) &&
+      !/\b(?:status|andamento|como (?:est[aá]|t[aá]) (?:o |meu )?pedido)\b/i.test(messageText)) proposal.action = 'update'
+    const route = shouldConsultJev(proposal, messageText)
+      ? await suggestJevRoute({ text: messageText, phase: context.state.phase, kind: context.state.draft.kind }) : null
     if (route) {
       const nextAction = route.action
       const explicitCancel = /\b(cancelar|cancela|cancele|desistir|desisto)\b/i.test(messageText)

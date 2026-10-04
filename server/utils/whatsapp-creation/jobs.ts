@@ -71,7 +71,10 @@ async function failGeneration(row: any, state: ConversationState) {
     current.phase = 'collecting'; current.runtime = undefined; current.artifacts = []
     if (current.order) current.order = updateOrder(current.order, row.owner_id, {})
     await client.query("UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,status='failed',revision=$4,updated_at=now() WHERE id=$1 AND owner_id=$2", [row.id, row.owner_id, JSON.stringify(current), current.order!.revision])
-    await queueCreationSend(client, row.conversation_id, row.owner_id, row.id, current, [{ type: 'text', text: 'Não consegui concluir esta criação. O projeto e os arquivos já gerados permanecem na sua conta. Nenhuma locução paga será repetida automaticamente; revise o pedido ou solicite atendimento.' }], `generation-error:${row.id}:${state.order!.revision}`)
+    const message = state.draft.kind === 'video'
+      ? 'Não consegui montar o vídeo. Seu pedido está salvo e a locução paga não será repetida automaticamente. Revise o pedido ou peça atendimento.'
+      : 'Não consegui montar a prévia. Seu pedido e as fotos estão salvos. Responda “tentar novamente” para receber uma nova conferência.'
+    await queueCreationSend(client, row.conversation_id, row.owner_id, row.id, current, [{ type: 'text', text: message }], `generation-error:${row.id}:${state.order!.revision}`)
   })
 }
 
@@ -89,7 +92,11 @@ export async function generateWhatsAppOrder(id: string, token: string, kind: str
   try {
     const output = await generateCreationArtifact(state.order!, account.user, account.businessProfile, event)
     return saveGeneration(row, state, output.artifacts, output.video ? { ...state.runtime, native: output.video } : undefined)
-  } catch (error) { await failGeneration(row, state); throw error }
+  } catch (error: any) {
+    console.error('[whatsapp-creation:generation-failed]', JSON.stringify({ kind, statusCode: Number(error?.statusCode || 500), reason: String(error?.statusMessage || error?.name || 'unknown').slice(0, 200) }))
+    await failGeneration(row, state)
+    throw error
+  }
 }
 
 /** Poll bounded work; the n8n execution never waits for a person or a long render. */

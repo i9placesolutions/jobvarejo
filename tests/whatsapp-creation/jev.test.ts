@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { suggestJevRoute } from '../../server/utils/whatsapp-creation/jev'
+import { hasBriefFields, shouldConsultJev, suggestJevRoute } from '../../server/utils/whatsapp-creation/jev'
 
 const actions = [
   'update', 'choose_header', 'approve_data', 'approve_images', 'approve_script',
@@ -26,6 +26,14 @@ afterEach(() => {
 })
 
 describe('suggestJevRoute', () => {
+  it('reserva Jev para mensagens ambíguas e preserva pedidos completos', () => {
+    const complete = { action: 'update' as const, kind: 'encarte' as const, theme: 'Hortifruti', formats: ['stories'], validity: '05/10/2026' }
+    expect(hasBriefFields(complete)).toBe(true)
+    expect(shouldConsultJev(complete, 'Quero encarte Hortifruti para Story em 05/10/2026')).toBe(false)
+    expect(shouldConsultJev({ action: 'status' }, '1')).toBe(false)
+    expect(shouldConsultJev({ action: 'status' }, 'Confirmado')).toBe(false)
+    expect(shouldConsultJev({ action: 'update' }, 'Talvez mudar a campanha')).toBe(true)
+  })
   it('returns a typed suggestion when Jev gives a confident, phase-compatible choice', async () => {
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const fetchMock = vi.fn().mockResolvedValue(mockResponse(validPayload('choose_header')))

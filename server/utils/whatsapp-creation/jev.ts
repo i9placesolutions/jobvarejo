@@ -36,6 +36,15 @@ const phaseForAction: Partial<Record<Proposal['action'], Phase>> = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+/** Structured commercial data already gives the server a deterministic route. */
+export const hasBriefFields = (proposal: Proposal): boolean =>
+  (['kind', 'theme', 'formats', 'division', 'products', 'validity', 'conditions', 'institutionalText', 'script', 'additionalKinds'] as const)
+    .some(field => proposal[field] !== undefined)
+
+export const shouldConsultJev = (proposal: Proposal, text: string): boolean =>
+  (proposal.action === 'update' || proposal.action === 'status') && !hasBriefFields(proposal) &&
+  !/^(?:\d{1,2}|ok|sim|confirmad[oa]s?|confirmo|t[aá] certo|est[aá] certo|pode seguir|tudo junto|mesma imagem|sem validade|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)[.!]?$/i.test(text.trim())
+
 /** Sugere uma ação delimitada; o chamador ainda valida fase e confirmação explícita antes de alterar estado. */
 export async function suggestJevRoute(input: JevRouteInput): Promise<JevRoute | null> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim()

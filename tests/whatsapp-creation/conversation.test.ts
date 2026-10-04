@@ -138,7 +138,54 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(choose.state.phase).toBe('collecting')
     expect(choose.state.draft.products.map(item => item.id)).toEqual(productIds)
     expect(choose.state.draft.division).toBeUndefined()
-    expect(choose.send.map(message => message.text).join(' ')).toMatch(/mesma imagem|dividir/i)
+    expect(choose.send.map(message => message.text).join(' ')).toMatch(/qual a validade/i)
+  })
+
+  it('aproveita um pedido inteiro em uma mensagem e segue da escolha direto à conferência visual', async () => {
+    const products = [
+      product('mamao', { name: 'Mamão Formosa', brand: '', variant: '', weight: '', price: '4.99' }),
+      product('alho', { name: 'Alho', brand: '', variant: '', weight: '', price: '22.99' })
+    ]
+    const first = await input(newConversationState(), {
+      action: 'update', kind: 'encarte', theme: 'Hortifruti', formats: ['stories'], products, validity: '05/10/2026'
+    }, 'Quero encarte Hortifruti para Story: Mamão Formosa 4,99 e Alho 22,99. Validade 05/10/2026.')
+    expect(first.state.phase).toBe('header')
+    expect(first.state.draft).toMatchObject({ theme: 'Hortifruti', formats: ['stories'], validity: '05/10/2026' })
+    expect(first.state.draft.products).toHaveLength(2)
+    expect(first.send).toHaveLength(1)
+
+    const chosen = await input(first.state, { action: 'status' }, '1')
+    expect(chosen.state.phase).toBe('data')
+    expect(chosen.state.draft.division).toBe('single')
+    expect(chosen.send).toHaveLength(1)
+    expect(chosen.send[0]).toMatchObject({ type: 'image', purpose: 'review' })
+    expect(chosen.send[0]?.text).toMatch(/confira fotos e preços/i)
+  })
+
+  it('retoma um render falho somente quando solicitado e reapresenta a conferência', async () => {
+    const first = await beginOrder({ products: [product()] })
+    const chosen = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const failed = { ...chosen.state, phase: 'collecting' as const, order: updateOrder(chosen.state.order!, accountId, {}) }
+    const status = await input(failed, { action: 'status' }, 'Qual o status do pedido?')
+    expect(status.state.phase).toBe('collecting')
+    expect(status.send).toHaveLength(1)
+    expect(status.send[0]?.type).toBe('text')
+
+    const resumed = await input(failed, { action: 'status' }, 'tentar novamente')
+    expect(resumed.state.phase).toBe('data')
+    expect(resumed.state.order!.revision).toBeGreaterThan(failed.order!.revision)
+    expect(resumed.send).toEqual([expect.objectContaining({ type: 'image', purpose: 'review' })])
+  })
+
+  it('divide automaticamente em páginas quando o Story tem mais de nove produtos', async () => {
+    const products = Array.from({ length: 10 }, (_, index) => product(`item-${index + 1}`))
+    const state = { ...newConversationState(), header: { ...header }, draft: {
+      kind: 'encarte' as const, theme: 'Hortifruti', formats: ['stories'], products, validity: '05/10/2026'
+    } }
+    const review = await input(state, { action: 'update' }, 'Pode montar')
+    expect(review.state.draft.division).toBe('pages')
+    expect(review.state.order?.division).toBe('pages')
+    expect(review.state.phase).toBe('data')
   })
 
   it('aceita respostas curtas de divisão e validade mesmo quando o modelo omite os campos', async () => {

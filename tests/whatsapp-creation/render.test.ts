@@ -84,6 +84,8 @@ describe('adapter de render da criação WhatsApp', () => {
     expect(selectedRevision).toBe(Date.parse('2026-10-03T12:00:00.000Z'))
     expect(flyerTemplateRevision('2026-10-03T12:00:00.000Z')).toBe(selectedRevision)
     expect(flyerTemplateRevision('2026-10-03T12:00:01.000Z')).not.toBe(selectedRevision)
+    expect(flyerTemplateRevision(new Date('2026-10-04T02:54:56.083Z'))).toBe(1791082496083)
+    expect(flyerTemplateRevision('2026-10-04T02:54:56.083Z')).toBe(1791082496083)
     expect(() => flyerTemplateRevision('not-a-date')).toThrow()
   })
 

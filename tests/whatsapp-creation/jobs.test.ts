@@ -121,7 +121,7 @@ describe('recuperação de jobs WhatsApp', () => {
     const [, queuedConversationId, queuedOwnerId, queuedOrderId, queuedState, queuedMessages, idempotencyKey] = mocks.queue.mock.calls[0]!
     expect([queuedConversationId, queuedOwnerId, queuedOrderId]).toEqual([conversationId, ownerId, orderId])
     expect(queuedState).toMatchObject({ phase: 'collecting' })
-    expect(queuedMessages).toEqual([expect.objectContaining({ type: 'text', text: expect.stringMatching(/nenhuma locução paga será repetida/i) })])
+    expect(queuedMessages).toEqual([expect.objectContaining({ type: 'text', text: expect.stringMatching(/tentar novamente/i) })])
     expect(idempotencyKey).toMatch(new RegExp(`^generation-error:${orderId}:\\d+$`))
     expect(queryCalls.some(sql => /UPDATE public\.whatsapp_creation_orders.*status='rendering'/.test(sql))).toBe(false)
   })

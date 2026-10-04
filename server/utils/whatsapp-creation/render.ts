@@ -81,7 +81,9 @@ export const deterministicUuid = (value: string): string => {
 }
 
 export const flyerTemplateRevision = (updatedAt: unknown): number => {
-  const value = new Date(String(updatedAt || '')).getTime()
+  // PostgreSQL returns a Date object. String(Date) discards milliseconds and
+  // incorrectly marks a selected template as stale during generation.
+  const value = updatedAt instanceof Date ? updatedAt.getTime() : new Date(String(updatedAt || '')).getTime()
   if (!Number.isSafeInteger(value) || value <= 0) return fail(409, 'A revisão deste modelo não pode ser verificada.')
   return value
 }
@@ -324,7 +326,7 @@ export async function renderCreationHeaderPreview(
       const selectedAt = (header as any).sourceUpdatedAt
       const liveAtRevision = flyerTemplateRevision(dbTemplate.updated_at)
       if (selectedAt
-        ? Date.parse(String(selectedAt)) !== Date.parse(String(dbTemplate.updated_at))
+        ? flyerTemplateRevision(selectedAt) !== liveAtRevision
         : header.revision !== Number(dbTemplate.revision) && header.revision !== liveAtRevision) {
         return fail(409, 'O modelo de cartaz mudou depois da escolha do cabeçalho.')
       }
@@ -862,7 +864,7 @@ export async function renderEditableFlyerCanvas(input: { canvas: any; products: 
     const inputFile = join(dir, 'input.json')
     await writeFile(inputFile, JSON.stringify(input), { mode: 0o600 })
     const python = process.env.PRODUCT_IMAGE_PYTHON || process.env.WHATSAPP_CREATION_PYTHON || 'python3'
-    const result = await execute(python, [worker, '--input', inputFile, '--output-dir', dir], { timeout: 90_000, maxBuffer: MAX_WORKER_BYTES, env: { PATH: process.env.PATH, LANG: 'en_US.UTF-8', PYTHONIOENCODING: 'utf-8' } })
+    const result = await execute(python, [worker, '--input', inputFile, '--output-dir', dir], { timeout: 90_000, maxBuffer: MAX_WORKER_BYTES, env: { PATH: process.env.PATH, LANG: 'en_US.UTF-8', PYTHONIOENCODING: 'utf-8', PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH } })
     const manifest = JSON.parse(result.stdout)
     if (!Array.isArray(manifest.pages) || !manifest.pages.length || manifest.pages.length > 100) fail(502, 'O renderizador não retornou páginas válidas.')
     const pages: Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }> = []
