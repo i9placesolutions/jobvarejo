@@ -234,6 +234,20 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(review.send).toHaveLength(1)
   })
 
+  it('sai da coleta atual com Confirmado mesmo quando a IA responde status', async () => {
+    const state = {
+      ...newConversationState(), header: { ...header },
+      draft: { kind: 'encarte' as const, theme: 'Hortifruti', formats: ['stories'], division: 'single' as const,
+        products: [product('mamao', { name: 'Mamão Formosa', brand: '', variant: '', weight: '', price: '4.99' })],
+        validity: '05/10/2026' }
+    }
+    const review = await input(state, { action: 'status', products: [] }, 'Confirmado')
+    expect(review.state.phase).toBe('data')
+    expect(review.state.draft.products).toHaveLength(1)
+    expect(review.send).toHaveLength(1)
+    expect(review.send[0]).toMatchObject({ type: 'image', purpose: 'review' })
+  })
+
   it('aceita correção de foto pelo número mostrado na prancha antes da aprovação', async () => {
     const first = await beginOrder({ products: [product('rice'), product('milk', { name: 'Leite' })], division: 'single' })
     const review = await input(first.state, { action: 'choose_header', choice: 1 }, '1')

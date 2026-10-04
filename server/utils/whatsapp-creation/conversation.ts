@@ -139,6 +139,9 @@ export async function advanceConversation(input: {
     const confirmationActions = { data: 'approve_data', images: 'approve_images', script: 'approve_script' } as const
     const action = confirmationActions[s.phase as keyof typeof confirmationActions]
     if (action) p = { ...p, action }
+    else if (s.phase === 'collecting' && s.header && s.draft.validity !== undefined && s.draft.products.length) {
+      p = { ...p, action: 'update', products: undefined }
+    }
   }
   if (s.phase === 'data' && /^(?:confirmar|confirmo|aprovo)\s+(?:os\s+)?dados[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'approve_data' }
   if (s.phase === 'images' && /^(?:confirmar|confirmo|aprovo)\s+(?:(?:todas?\s+as?\s+)?(?:fotos|imagens))(?:\s+[\d,\s]+)?[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'approve_images' }
