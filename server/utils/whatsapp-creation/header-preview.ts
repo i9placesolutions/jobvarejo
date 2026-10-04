@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
@@ -6,14 +8,18 @@ import { createError } from 'h3'
 import type { CreationKind } from '~/shared/whatsapp-creation'
 import type { ResolvedWhatsAppAccount } from './access'
 import type { CreationHeader } from './catalog'
-import { renderCreationHeaderPreview } from './render'
+import { hydrateFlyerBusinessFields, renderCreationHeaderPreview } from './render'
 import { getS3Client } from '../s3'
 import { videoBucket } from '../video-studio/service'
-import { isStorageKeyAllowedForUser, isValidStoragePath } from '../storage-scope'
+import { isPublicStorageKey, isStorageKeyAllowedForUser, isValidStoragePath } from '../storage-scope'
 import { extractStorageKeyFromRef } from '~/utils/storageRef'
+import { bindAccountLogoToFlyerCanvas } from '~/utils/accountFlyerTemplatePreview'
+import { restoreCanvasStickerOutlines } from '~/utils/editorStickerOutline'
 
 const MAX_THUMBNAIL_BYTES = 8 * 1024 * 1024
 const MAX_CANVAS_BYTES = 32 * 1024 * 1024
+const HEADER_WIDTH = 800
+let headerFontsReady = false
 
 export function flyerHeaderCropHeight(canvas: { objects?: any[] }, pageHeight: number, imageHeight: number): number {
   const boundaries = (canvas.objects || [])
@@ -55,6 +61,93 @@ async function sourceBytes(key: string, maximum: number): Promise<Buffer> {
   return bytes
 }
 
+async function registerHeaderFonts(): Promise<void> {
+  if (headerFontsReady) return
+  const { registerFont } = await import('canvas')
+  const variants = [
+    ['Regular', '400', 'normal'], ['SemiBold', '600', 'normal'],
+    ['Bold', '700', 'normal'], ['ExtraBold', '800', 'normal']
+  ] as const
+  for (const [variant, weight, style] of variants) {
+    const relative = `art-studio/fonts/Barlow-${variant}.ttf`
+    const path = [resolve('public', relative), resolve('.output/public', relative)].find(existsSync)
+    if (path) registerFont(path, { family: 'Barlow', weight, style })
+  }
+  headerFontsReady = true
+}
+
+/** Uses the same Fabric logo binding and sticker renderer as the editor preview. */
+async function renderHeaderCanvas(canvas: any, sourceOwnerId: string, account: ResolvedWhatsAppAccount, logo: Buffer, height: number): Promise<Buffer> {
+  const config = useRuntimeConfig()
+  const originalMetadata = await sharp(logo, { limitInputPixels: 16_000_000 }).metadata()
+  if (!originalMetadata.format) throw createError({ statusCode: 422, statusMessage: 'A logo do perfil está inválida.' })
+  const usableLogo = ['png', 'jpeg', 'webp'].includes(originalMetadata.format) ? logo : await sharp(logo, { limitInputPixels: 16_000_000 }).png().toBuffer()
+  const logoMetadata = await sharp(usableLogo, { limitInputPixels: 16_000_000 }).metadata()
+  if (!logoMetadata.width || !logoMetadata.height) throw createError({ statusCode: 422, statusMessage: 'A logo do perfil está inválida.' })
+  const trimmed = logoMetadata.hasAlpha
+    ? await sharp(usableLogo, { limitInputPixels: 16_000_000 }).trim({ background: '#00000000', threshold: 10 }).png().toBuffer({ resolveWithObject: true })
+    : null
+  const logoMime = logoMetadata.format === 'jpeg' ? 'image/jpeg' : logoMetadata.format === 'webp' ? 'image/webp' : 'image/png'
+  const logoDataUrl = `data:${logoMime};base64,${usableLogo.toString('base64')}`
+  const validity = (canvas.objects || []).find((object: any) => object?.name === 'header-validity')?.text || ''
+  hydrateFlyerBusinessFields(canvas, account.businessProfile, logoDataUrl, { validity, conditions: '' })
+  const prepared = bindAccountLogoToFlyerCanvas(canvas, {
+    logoSrc: logoDataUrl,
+    logoSize: trimmed ? {
+      width: trimmed.info.width, height: trimmed.info.height,
+      cropX: Math.max(0, -Number(trimmed.info.trimOffsetLeft || 0)),
+      cropY: Math.max(0, -Number(trimmed.info.trimOffsetTop || 0))
+    } : { width: logoMetadata.width, height: logoMetadata.height },
+    logoPreference: account.businessProfile.logoPreference
+  })
+  const pageWidth = Number(prepared.width || 1080)
+  const scale = HEADER_WIDTH / pageWidth
+  // Canvas objects below the product boundary cannot contribute to the header.
+  prepared.objects = (prepared.objects || []).filter((object: any) =>
+    object?.isFrame === true || /frame/i.test(String(object?.name || '')) ||
+    Number(object?.top || 0) - Number(object?.height || 0) * Number(object?.scaleY || 1) / (object?.originY === 'center' ? 2 : 1) < height / scale)
+  const images: any[] = []
+  const visit = (objects: any[]): void => {
+    for (const object of objects || []) {
+      if (object?.type === 'Image' && object.src && !String(object.src).startsWith('data:')) images.push(object)
+      if (Array.isArray(object?.objects)) visit(object.objects)
+      if (object?.clipPath) delete object.clipPath
+      if (object?._frameClipOwner) delete object._frameClipOwner
+    }
+  }
+  visit(prepared.objects)
+  if (images.length > 12) throw createError({ statusCode: 422, statusMessage: 'O cabeçalho possui imagens demais para a prévia.' })
+  await Promise.all(images.map(async object => {
+    const key = extractStorageKeyFromRef(object.src, { bucket: config.wasabiBucket, endpoint: config.wasabiEndpoint })
+    if (!key || !isValidStoragePath(key) || !(key.startsWith(`projects/${sourceOwnerId}/`) || key.startsWith('templates/') || isPublicStorageKey(key))) {
+      throw createError({ statusCode: 403, statusMessage: 'O cabeçalho usa uma imagem fora do catálogo autorizado.' })
+    }
+    const bytes = await sourceBytes(key, MAX_THUMBNAIL_BYTES)
+    const metadata = await sharp(bytes, { limitInputPixels: 24_000_000 }).metadata()
+    if (!metadata.format || !metadata.width || !metadata.height) throw createError({ statusCode: 422, statusMessage: 'Uma imagem do cabeçalho está inválida.' })
+    const supported = ['png', 'jpeg', 'gif', 'svg'].includes(metadata.format)
+    const encoded = supported ? bytes : await sharp(bytes).png().toBuffer()
+    const mime = metadata.format === 'svg' ? 'image/svg+xml' : supported ? `image/${metadata.format}` : 'image/png'
+    object.src = `data:${mime};base64,${encoded.toString('base64')}`
+  }))
+  await registerHeaderFonts()
+  const { StaticCanvas, getEnv } = await import('fabric/node')
+  const document = getEnv().document as unknown as Document
+  const output = new StaticCanvas(document.createElement('canvas'), {
+    width: HEADER_WIDTH, height, backgroundColor: '#ffffff', renderOnAddRemove: false, enableRetinaScaling: false
+  })
+  try {
+    await output.loadFromJSON(prepared)
+    output.setDimensions({ width: HEADER_WIDTH, height })
+    output.viewportTransform = [scale, 0, 0, scale, 0, 0]
+    restoreCanvasStickerOutlines(output, () => document.createElement('canvas') as HTMLCanvasElement)
+    output.renderAll()
+    return Buffer.from(output.toDataURL({ format: 'png', multiplier: 1 }).split(',')[1]!, 'base64')
+  } finally {
+    await output.dispose()
+  }
+}
+
 async function renderFlyerHeaderPreview(header: CreationHeader, account: ResolvedWhatsAppAccount): Promise<Buffer> {
   const { sourceOwnerId, sourceThumbnailKey, sourceCanvasKey, sourcePageHeight } = header
   const prefix = `projects/${sourceOwnerId}/${header.id}/`
@@ -63,17 +156,14 @@ async function renderFlyerHeaderPreview(header: CreationHeader, account: Resolve
     !sourceThumbnailKey.startsWith(prefix) || !sourceCanvasKey.startsWith(prefix)) {
     throw createError({ statusCode: 422, statusMessage: 'O cabeçalho do modelo não possui uma prévia autorizada.' })
   }
-  const [thumbnail, compressed] = await Promise.all([
-    sourceBytes(sourceThumbnailKey, MAX_THUMBNAIL_BYTES),
-    sourceBytes(sourceCanvasKey, MAX_CANVAS_BYTES)
-  ])
+  const compressed = await sourceBytes(sourceCanvasKey, MAX_CANVAS_BYTES)
   let canvas: { objects?: any[] }
   try { canvas = JSON.parse(gunzipSync(compressed, { maxOutputLength: MAX_CANVAS_BYTES }).toString('utf8')) }
   catch { throw createError({ statusCode: 422, statusMessage: 'O canvas do cabeçalho está inválido.' }) }
-  const metadata = await sharp(thumbnail).metadata()
-  if (!metadata.width || !metadata.height) throw createError({ statusCode: 422, statusMessage: 'A imagem do cabeçalho está inválida.' })
-  const height = flyerHeaderCropHeight(canvas, sourcePageHeight, metadata.height)
-  const logoBox = flyerHeaderLogoBox(canvas, sourcePageHeight, metadata.width, metadata.height)
+  const pageWidth = Number((canvas as any).width || 1080)
+  if (!Number.isFinite(pageWidth) || pageWidth < 320 || pageWidth > 8192) throw createError({ statusCode: 422, statusMessage: 'A largura do cabeçalho está inválida.' })
+  const height = flyerHeaderCropHeight(canvas, sourcePageHeight, Math.round(sourcePageHeight * HEADER_WIDTH / pageWidth))
+  const logoBox = flyerHeaderLogoBox(canvas, sourcePageHeight, HEADER_WIDTH, Math.round(sourcePageHeight * HEADER_WIDTH / pageWidth))
   if (logoBox.top + logoBox.height > height) throw createError({ statusCode: 422, statusMessage: 'A logo do modelo ultrapassa o cabeçalho.' })
   const config = useRuntimeConfig()
   const logoKey = extractStorageKeyFromRef(account.businessProfile.logo, { bucket: config.wasabiBucket, endpoint: config.wasabiEndpoint })
@@ -81,15 +171,7 @@ async function renderFlyerHeaderPreview(header: CreationHeader, account: Resolve
     throw createError({ statusCode: 422, statusMessage: 'Cadastre uma logo válida no perfil comercial para escolher o cabeçalho.' })
   }
   const logo = await sourceBytes(logoKey, MAX_THUMBNAIL_BYTES)
-  const logoPng = await sharp(logo).resize(Math.max(1, logoBox.width - 28), Math.max(1, logoBox.height - 28), {
-    fit: 'contain', withoutEnlargement: true
-  }).png().toBuffer()
-  const logoMetadata = await sharp(logoPng).metadata()
-  const cover = Buffer.from(`<svg width="${logoBox.width}" height="${logoBox.height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" rx="12" fill="white"/></svg>`)
-  return sharp(thumbnail).extract({ left: 0, top: 0, width: metadata.width, height }).composite([
-    { input: cover, left: logoBox.left, top: logoBox.top },
-    { input: logoPng, left: logoBox.left + Math.floor((logoBox.width - logoMetadata.width!) / 2), top: logoBox.top + Math.floor((logoBox.height - logoMetadata.height!) / 2) }
-  ]).png().toBuffer()
+  return renderHeaderCanvas(canvas, sourceOwnerId, account, logo, height)
 }
 
 /** Reusable preview in this customer's namespace; no project/job/paid call. */

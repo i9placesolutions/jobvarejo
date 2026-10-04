@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+
 /**
  * Gerador puro de outline de "sticker" (contorno suave) para uma imagem.
  * Aplica supersampling 2x e EDT (Euclidean Distance Transform) para
@@ -146,7 +148,8 @@ export const generateStickerOutlineCanvas = (
     outlineColor: string,
     outlineOpacity: number,
     outlineMode: StickerOutlineMode = 'outside',
-    sourceRect?: StickerOutlineSourceRect
+    sourceRect?: StickerOutlineSourceRect,
+    createCanvas: () => HTMLCanvasElement = () => document.createElement('canvas')
 ): HTMLCanvasElement | null => {
     try {
         if (img && (img as any).tagName === 'IMG') {
@@ -177,7 +180,7 @@ export const generateStickerOutlineCanvas = (
         let source = img
         const isFullSource = cropLeft === 0 && cropTop === 0 && srcW === elementW && srcH === elementH
         if (!isFullSource) {
-            const croppedCanvas = document.createElement('canvas')
+            const croppedCanvas = createCanvas()
             croppedCanvas.width = Math.max(1, Math.round(srcW))
             croppedCanvas.height = Math.max(1, Math.round(srcH))
             const croppedCtx = croppedCanvas.getContext('2d')
@@ -213,7 +216,7 @@ export const generateStickerOutlineCanvas = (
         const ch = finalSsH + padSs * 2
         const size = cw * ch
 
-        const srcCanvas = document.createElement('canvas')
+        const srcCanvas = createCanvas()
         srcCanvas.width = finalSsW
         srcCanvas.height = finalSsH
         const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true })
@@ -291,7 +294,7 @@ export const generateStickerOutlineCanvas = (
         ) ? 0 : INF)
         const coverage = createStickerCoverage(inside, distances, cw, ch, wScaled, ssScale, outlineMode)
 
-        const ssOutCanvas = document.createElement('canvas')
+        const ssOutCanvas = createCanvas()
         ssOutCanvas.width = cw
         ssOutCanvas.height = ch
         const ssOutCtx = ssOutCanvas.getContext('2d')
@@ -299,7 +302,7 @@ export const generateStickerOutlineCanvas = (
 
         const outImgData = ssOutCtx.createImageData(cw, ch)
 
-        const tmpC = document.createElement('canvas')
+        const tmpC = createCanvas()
         tmpC.width = 1
         tmpC.height = 1
         const tmpCtx = tmpC.getContext('2d')!
@@ -327,7 +330,7 @@ export const generateStickerOutlineCanvas = (
         const finalW = rasterW + finalPad * 2
         const finalH = rasterH + finalPad * 2
 
-        const outCanvas = document.createElement('canvas')
+        const outCanvas = createCanvas()
         outCanvas.width = finalW
         outCanvas.height = finalH
         const outCtx = outCanvas.getContext('2d')!

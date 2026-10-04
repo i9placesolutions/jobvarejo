@@ -27,6 +27,7 @@ const {
   assertCreationAccess,
   beginCreationOrder,
   claimCreationOutbound,
+  queueCreationSend,
   receiveCreationReceipt
 } = await import('../../server/utils/whatsapp-creation/repository')
 
@@ -63,6 +64,18 @@ beforeEach(() => {
 })
 
 describe('persistência e propriedade da criação WhatsApp', () => {
+  it('grava o índice de cada imagem para preservar a ordem de envio', async () => {
+    const calls: any[][] = []
+    const client = { query: vi.fn(async (_sql: string, params: any[]) => { calls.push(params); return { rows: [] } }) }
+    await queueCreationSend(client as any, conversationId, ownerId, oldOrderId, newConversationState(), [
+      { type: 'image', text: '1', key: 'headers/1.png' },
+      { type: 'image', text: '2', key: 'headers/2.png' },
+      { type: 'image', text: '3', key: 'headers/3.png' }
+    ], 'batch')
+    expect(calls.map(params => JSON.parse(params[5]).sendIndex)).toEqual([0, 1, 2])
+    expect(calls.map(params => JSON.parse(params[5]).text)).toEqual(['1', '2', '3'])
+  })
+
   it('grava receipt recebido antes do ACK e conclui o ACK como entregue', async () => {
     const ledger = new Set<string>()
     const calls: string[] = []

@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+
 import {
   generateStickerOutlineCanvas,
   type StickerOutlineMode,
@@ -7,6 +9,7 @@ import {
 type StickerOutlineRuntimeDeps = {
   getCanvas: () => any
   renderNow: () => void
+  createCanvas?: () => HTMLCanvasElement
 }
 
 export const createStickerOutlineRuntime = (deps: StickerOutlineRuntimeDeps) => {
@@ -180,7 +183,7 @@ export const createStickerOutlineRuntime = (deps: StickerOutlineRuntimeDeps) => 
           width: objectWidth > 0 ? objectWidth : undefined,
           height: objectHeight > 0 ? objectHeight : undefined
         } : undefined
-        const outCanvas = generateStickerOutlineCanvas(element, width, color, opacity, mode, sourceRect)
+        const outCanvas = generateStickerOutlineCanvas(element, width, color, opacity, mode, sourceRect, deps.createCanvas)
         if (
           outCanvas &&
           obj.__stickerOutlineEnabled &&
@@ -239,10 +242,11 @@ export const createStickerOutlineRuntime = (deps: StickerOutlineRuntimeDeps) => 
 }
 
 /** Recria efeitos nao serializaveis em cada superficie, sem alterar a geometria. */
-export const restoreCanvasStickerOutlines = (canvas: any) => {
+export const restoreCanvasStickerOutlines = (canvas: any, createCanvas?: () => HTMLCanvasElement) => {
   const runtime = createStickerOutlineRuntime({
     getCanvas: () => canvas,
-    renderNow: () => {}
+    renderNow: () => {},
+    createCanvas
   })
   const visit = (object: any) => {
     if (object?.__stickerOutlineEnabled) runtime.applyStickerOutlinePatch(object)

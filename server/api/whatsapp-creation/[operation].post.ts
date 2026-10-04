@@ -9,6 +9,7 @@ import { pollWhatsAppJobs, followUpWhatsAppThemes } from '~/server/utils/whatsap
 import { downloadProviderMedia } from '~/server/utils/whatsapp-creation/media'
 import { pgQuery } from '~/server/utils/postgres'
 import { prepareCreationHeader } from '~/server/utils/whatsapp-creation/header-preview'
+import { suggestJevRoute } from '~/server/utils/whatsapp-creation/jev'
 
 const leaseSchema = z.object({ eventId: z.string().uuid(), leaseToken: z.string().uuid() })
 export default defineEventHandler(async event => {
@@ -56,6 +57,20 @@ export default defineEventHandler(async event => {
     let proposed: unknown
     try { proposed = JSON.parse(String(choice.message.content).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')) } catch { throw createError({ statusCode: 422, statusMessage: 'Interpretação incompleta. Nenhuma criação foi autorizada.' }) }
     const proposal = proposalSchema.parse(proposed)
+    const messageText = context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || ''
+    const route = await suggestJevRoute({ text: messageText, phase: context.state.phase, kind: context.state.draft.kind })
+    if (route) {
+      const nextAction = route.action
+      const explicitCancel = /\b(cancelar|cancela|cancele|desistir|desisto)\b/i.test(messageText)
+      const explicitNewOrder = /\b(nov[oa]s?\s+(pedido|encarte|v[ií]deo|cartaz|arte)|outro\s+pedido|come[çc]ar\s+(de novo|outro))\b/i.test(messageText)
+      if ((nextAction !== 'cancel' || explicitCancel) && (nextAction !== 'new_order' || explicitNewOrder)) {
+        proposal.action = nextAction
+        if (nextAction === 'choose_header' && !proposal.choice && context.state.phase === 'header') {
+          const number = messageText.trim().match(/^(?:(?:op[çc][ãa]o|n[úu]mero)\s*)?(\d{1,2})\s*\.?$/i)
+          if (number) proposal.choice = Number(number[1])
+        }
+      }
+    }
     if (proposal.action === 'new_order' && ['approved', 'delivered', 'cancelled'].includes(context.state.phase)) {
       context = await beginCreationOrder(eventId, leaseToken, proposal.kind)
       proposal.action = 'update'
@@ -63,7 +78,7 @@ export default defineEventHandler(async event => {
     if (context.payload.type === 'image' && context.state.phase === 'images') proposal.products = undefined
     const kind = proposal.kind || context.state.draft.kind
     if (kind) assertCreationAccess(context.account.user, kind)
-    const result = await advanceConversation({ state: context.state, proposal, text: context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || '', accountId: context.owner_id,
+    const result = await advanceConversation({ state: context.state, proposal, text: messageText, accountId: context.owner_id,
       sender: context.sender_phone, orderId: context.current_order_id, name: context.account.user.user_metadata.name || context.account.businessProfile.companyName || 'cliente', uploaded: context.payload.uploaded,
       prepareHeader: (header, selectedKind) => prepareCreationHeader(header, selectedKind, context.account) })
     const usage = response.usage || {}, prior = result.state.usage, audio = context.payload.transcriptionUsage

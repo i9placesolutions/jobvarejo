@@ -161,7 +161,13 @@ export async function advanceConversation(input: {
     s.choices = catalog.headers as Header[]
     if (input.prepareHeader) {
       const prepared: Header[] = []
-      for (const header of s.choices) prepared.push(await input.prepareHeader(header, d.kind!))
+      if (d.kind === 'encarte') {
+        for (let index = 0; index < s.choices.length; index += 2) {
+          prepared.push(...await Promise.all(s.choices.slice(index, index + 2).map(header => input.prepareHeader!(header, d.kind!))))
+        }
+      } else {
+        for (const header of s.choices) prepared.push(await input.prepareHeader(header, d.kind!))
+      }
       s.choices = prepared
     }
     if (!s.choices.length) {
@@ -169,8 +175,8 @@ export async function advanceConversation(input: {
       return { state: s, send, generate: false, missingTheme: true }
     }
     s.phase = 'header'
-    s.choices.forEach((h, i) => send.push(h.headerKey || h.previewUrl ? { type: 'image', text: `${i + 1} — ${h.name}. Tema ${d.theme}; formatos ${h.formats.join(', ')}.`, key: h.headerKey, url: h.previewUrl, purpose: 'review' } : { type: 'text', text: `${i + 1} — ${h.name}. A imagem deste modelo precisa ser preparada antes da escolha.` }))
-    say(`qual cabeçalho prefere? Responda o número.${catalog.hasMore ? ' Para outras opções deste tema, diga “ver mais”.' : ''}`)
+    s.choices.forEach((h, i) => send.push(h.headerKey || h.previewUrl ? { type: 'image', text: d.kind === 'encarte' ? String(i + 1) : `${i + 1} — ${h.name}. Tema ${d.theme}; formatos ${h.formats.join(', ')}.`, key: h.headerKey, url: h.previewUrl, purpose: 'review' } : { type: 'text', text: `${i + 1} — ${h.name}. A imagem deste modelo precisa ser preparada antes da escolha.` }))
+    if (d.kind !== 'encarte') say(`qual cabeçalho prefere? Responda o número.${catalog.hasMore ? ' Para outras opções deste tema, diga “ver mais”.' : ''}`)
     return { state: s, send, generate: false }
   }
   if (!formats.length) {

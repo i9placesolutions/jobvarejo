@@ -109,7 +109,7 @@ export async function queueCreationSend(client: PoolClient, conversationId: stri
       assertCanDeliver(state.order, ownerId, item.artifactId, [item.formatId])
     }
     await client.query(`INSERT INTO public.whatsapp_creation_outbox(conversation_id,owner_id,order_id,idempotency_key,type,payload)
-      VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT(idempotency_key) DO NOTHING`, [conversationId, ownerId, orderId, `${correlation}:${index}`, item.type, JSON.stringify({ ...item, revision: state.order?.revision })])
+      VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT(idempotency_key) DO NOTHING`, [conversationId, ownerId, orderId, `${correlation}:${index}`, item.type, JSON.stringify({ ...item, revision: state.order?.revision, sendIndex: index })])
   }
 }
 
@@ -167,8 +167,8 @@ export async function claimCreationOutbound() {
     const row = (await client.query(`SELECT b.*,c.sender_phone,o.state FROM public.whatsapp_creation_outbox b
       JOIN public.whatsapp_creation_conversations c ON c.id=b.conversation_id AND c.owner_id=b.owner_id
       LEFT JOIN public.whatsapp_creation_orders o ON o.id=b.order_id AND o.owner_id=b.owner_id
-      WHERE b.status='pending' AND b.next_attempt_at<=now() AND NOT EXISTS(SELECT 1 FROM public.whatsapp_creation_outbox earlier WHERE earlier.conversation_id=b.conversation_id AND earlier.status IN ('pending','sending') AND (earlier.created_at,earlier.id)<(b.created_at,b.id))
-      ORDER BY b.created_at,b.id FOR UPDATE OF b SKIP LOCKED LIMIT 1`)).rows[0]
+      WHERE b.status='pending' AND b.next_attempt_at<=now() AND NOT EXISTS(SELECT 1 FROM public.whatsapp_creation_outbox earlier WHERE earlier.conversation_id=b.conversation_id AND earlier.status IN ('pending','sending') AND (earlier.created_at,COALESCE((earlier.payload->>'sendIndex')::integer,0),earlier.id)<(b.created_at,COALESCE((b.payload->>'sendIndex')::integer,0),b.id))
+      ORDER BY b.created_at,COALESCE((b.payload->>'sendIndex')::integer,0),b.id FOR UPDATE OF b SKIP LOCKED LIMIT 1`)).rows[0]
     if (!row) return { claimed: false }
     const account = await resolveWhatsAppAccount(row.sender_phone)
     if (!account.ok || account.user.id !== row.owner_id) {

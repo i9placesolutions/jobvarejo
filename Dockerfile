@@ -92,6 +92,8 @@ WORKDIR /app
 # Instalar apenas dependencias exigidas pelo bundle Nitro + opcionais nativas.
 COPY --from=builder /app/.output/server/package.runtime.json ./package.json
 RUN --mount=type=cache,target=/root/.npm,sharing=locked npm install --omit=dev --include=optional --ignore-scripts
+COPY --from=builder /app/node_modules/canvas/build/Release/ ./node_modules/canvas/build/Release/
+RUN node -e "require('canvas').createCanvas(1, 1)"
 
 # Copiar output do build (self-contained)
 COPY --from=builder /app/.output ./.output

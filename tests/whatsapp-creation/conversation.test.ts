@@ -75,6 +75,21 @@ beforeEach(() => {
 })
 
 describe('workflow da conversa de criação via WhatsApp', () => {
+  it('envia quatro prévias personalizadas com legendas 1 a 4 na ordem do catálogo', async () => {
+    const headers = Array.from({ length: 4 }, (_, index) => ({ ...header, id: `header-${index + 1}`, name: `Modelo ${index + 1}` }))
+    mocks.headers.mockResolvedValue({ headers, hasMore: false, missingTheme: false })
+    const prepared = await advanceConversation({
+      state: newConversationState(), proposal: { action: 'update', kind: 'encarte', theme: 'Hortifruti' },
+      text: 'Hortifruti', accountId, sender, orderId, name: 'Rafa',
+      prepareHeader: async selected => {
+        await new Promise(resolve => setTimeout(resolve, (5 - Number(selected.id.slice(-1))) * 2))
+        return { ...selected, headerKey: `headers/${selected.id}.png` }
+      }
+    })
+    expect(prepared.send.map(message => message.text)).toEqual(['1', '2', '3', '4'])
+    expect(prepared.send.map(message => message.key)).toEqual(headers.map(selected => `headers/${selected.id}.png`))
+  })
+
   it('envia as imagens dos cabeçalhos depois do tema e só pede formato após a escolha', async () => {
     const visualHeader = { ...header, theme: 'Hortifruti', headerKey: 'whatsapp-creation/owner/headers/preview.png' }
     mocks.headers.mockResolvedValue({ headers: [visualHeader], hasMore: false, missingTheme: false })
