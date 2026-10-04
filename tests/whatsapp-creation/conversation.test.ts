@@ -138,6 +138,27 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(choose.send.map(message => message.text).join(' ')).toMatch(/mesma imagem|dividir/i)
   })
 
+  it('aceita respostas curtas de divisão e validade mesmo quando o modelo omite os campos', async () => {
+    const state = {
+      ...newConversationState(),
+      header: { ...header },
+      draft: { kind: 'encarte' as const, theme: 'Fecha Mês', formats: ['stories'], products: [product('mamao', { name: 'Mamão Formosa', brand: '', variant: '', weight: '' })] }
+    }
+    const division = await input(state, { action: 'status' }, 'Tudo junto')
+    expect(division.state.draft.division).toBe('single')
+    expect(division.send[0]?.text).toMatch(/qual a validade/i)
+
+    const date = await input(division.state, { action: 'status', validity: '05/10/2026' }, '05/10/2026')
+    expect(date.state.draft.validity).toBe('05/10/2026')
+    expect(date.send[0]?.text).toMatch(/preciso confirmar/i)
+    expect(date.state.draft.products[0]).toMatchObject({ brand: '', variant: '', weight: '' })
+
+    const sameImage = await input(state, { action: 'update' }, 'Mesma imagem')
+    expect(sameImage.state.draft.division).toBe('single')
+    const noValidity = await input(sameImage.state, { action: 'status' }, 'Sem validade')
+    expect(noValidity.state.draft.validity).toBe('sem validade')
+  })
+
   it('passa da escolha aos dados, revisa a foto e só então libera a geração', async () => {
     const initial = await beginOrder({ products: [product()], division: 'single' })
     const selected = await input(initial.state, { action: 'choose_header', choice: 1 }, '1')

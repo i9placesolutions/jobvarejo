@@ -60,6 +60,17 @@ export interface ConversationState {
 export type ConversationSend = { type: 'text' | 'image' | 'document' | 'video'; text: string; key?: string; url?: string; artifactId?: string; formatId?: string; purpose?: 'final' | 'preview' | 'review' }
 export const newConversationState = (): ConversationState => ({ phase: 'collecting', draft: { formats: [], products: [] }, choices: [], choiceOffset: 0, candidates: [], artifacts: [], turns: 0 })
 const explicit = (text: string) => !/\b(n[aã]o|errad[oa]s?|incorret[oa]s?|trocar|corrigir|exceto|menos|salvo|alterar|mudar|ajustar)\b/i.test(text) && /\b(sim|confirm(ar|o|a)|aprov(ar|o|a)|corret[oa]s?|certo|pode (gerar|fazer|usar)|todas? (ok|certas?))\b/i.test(text)
+const divisionReply = (text: string): ConversationState['draft']['division'] | undefined => {
+  const reply = text.trim().toLocaleLowerCase('pt-BR')
+  if (/^(?:tudo junto|todos? juntos?|mesma imagem|uma (?:s[oó] )?imagem|imagem [uú]nica|p[aá]gina [uú]nica|uma p[aá]gina)[.!]?$/.test(reply)) return 'single'
+  if (/^(?:dividir em p[aá]ginas|v[aá]rias p[aá]ginas|por p[aá]ginas)[.!]?$/.test(reply)) return 'pages'
+  if (/^(?:por departamentos?|dividir por departamentos?)[.!]?$/.test(reply)) return 'department'
+}
+const validityReply = (text: string): string | undefined => {
+  const reply = text.trim()
+  if (/^sem validade[.!]?$/i.test(reply)) return 'sem validade'
+  if (reply.length <= 160 && !reply.includes('?') && /\b(?:0?[1-9]|[12]\d|3[01])\s*[/-]\s*(?:0?[1-9]|1[0-2])(?:\s*[/-]\s*\d{2,4})?\b/.test(reply)) return reply
+}
 const summary = (s: ConversationState) => {
   const d = s.draft
   const items = d.products.map((p, i) => `${i + 1}. ${p.name} | ${p.brand} | ${p.variant} | ${p.weight} | ${p.price}${p.condition ? ` | ${p.condition}` : ''}`).join('\n')
@@ -110,6 +121,16 @@ export async function advanceConversation(input: {
 }): Promise<{ state: ConversationState; send: ConversationSend[]; generate: boolean; missingTheme?: boolean }> {
   let s = structuredClone(input.state), p = proposalSchema.parse(input.proposal)
   const send: ConversationSend[] = [], say = (text: string) => send.push({ type: 'text', text: `${input.name}, ${text}` })
+  // Short answers to the current question are deterministic. A model can omit
+  // the field or classify the answer as status, leaving the customer in a loop.
+  if (s.draft.products.length && !s.draft.division) {
+    const division = divisionReply(input.text)
+    if (division) p = { ...p, action: 'update', division }
+  }
+  if (s.draft.division && s.draft.validity === undefined) {
+    const validity = validityReply(input.text)
+    if (validity) p = { ...p, action: 'update', validity }
+  }
   s.turns++
   if (s.turns > 60) { say('vamos revisar este pedido com o atendimento antes de continuar. Seu rascunho permanece salvo.'); return { state: s, send, generate: false } }
   if (s.order && s.order.accountId !== input.accountId) throw new Error('ACCOUNT_MISMATCH')
@@ -187,10 +208,10 @@ export async function advanceConversation(input: {
   if (d.products.length && !d.division) { say('é tudo na mesma imagem ou você quer dividir em páginas ou por departamento? Os formatos escolhidos usarão a mesma lista.'); return { state: s, send, generate: false } }
   if (d.division === 'department' && d.products.some(item => !item.department)) { say('informe o departamento dos itens para eu separar corretamente.'); return { state: s, send, generate: false } }
   if (d.kind === 'video' && d.products.length > 6) { say('cada vídeo aceita até seis ofertas. Escolha os seis itens deste vídeo; depois fazemos os demais em outro vídeo.'); return { state: s, send, generate: false } }
+  if (d.validity === undefined) { say('qual a validade das ofertas? Informe a data (por exemplo, 05/10/2026) ou diga “sem validade”.'); return { state: s, send, generate: false } }
   const missing = d.products.flatMap((item, i) => ['name', 'brand', 'variant', 'weight', 'price'].filter(k => !(item as any)[k]?.trim()).map(k => `${i + 1} (${item.name || 'produto'}): ${k}`))
   if (missing.length) { say(`preciso confirmar: ${missing.join('; ')}. Se um campo não se aplicar, informe “sem marca” ou “não se aplica”.`); return { state: s, send, generate: false } }
   if (d.kind === 'studio' && !d.products.length && (!d.institutionalText?.title || !d.institutionalText.message || !d.institutionalText.callToAction)) { say('qual título, mensagem e chamada devem aparecer na arte?'); return { state: s, send, generate: false } }
-  if (d.validity === undefined) { say('qual a validade das ofertas? Informe as datas completas, ou diga “sem validade”.'); return { state: s, send, generate: false } }
 
   if (!s.order || s.phase === 'collecting') {
     // An incomplete model response must not leave the video waiting for a new
