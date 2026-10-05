@@ -92,7 +92,8 @@ export const applyManualCardConfiguration = (
 }
 
 export const prepareManualCardImages = (
-  fabric: any, image: any, cardWidth: number, cardHeight: number, cardLayout: any
+  fabric: any, image: any, cardWidth: number, cardHeight: number, cardLayout: any,
+  requestedCount?: number
 ): any[] => {
   if (!image) return []
   autoTrimFabricImage(image, { preserveVisualPosition: false })
@@ -100,7 +101,7 @@ export const prepareManualCardImages = (
   const imageLayout = resolveProductCardConfigurationProfile(configuration, cardWidth, cardHeight).elements.image
   const areaWidth = cardWidth * Math.min(imageLayout.width, 2 * Math.min(imageLayout.x, 100 - imageLayout.x)) / 100
   const areaHeight = cardHeight * Math.min(imageLayout.height, 2 * Math.min(imageLayout.y, 100 - imageLayout.y)) / 100
-  const count = planAutomaticProductImageFill(areaWidth, areaHeight, Number(image.width), Number(image.height)).length
+  const count = planAutomaticProductImageFill(areaWidth, areaHeight, Number(image.width), Number(image.height), requestedCount).length
   return [image, ...Array.from({ length: count - 1 }, (_, index) => {
     const props = image.toObject()
     delete props.type

@@ -330,17 +330,22 @@ describe('adapter de render da criação WhatsApp', () => {
     // A importação manual do Editor Rápido já nasce com preenchimento
     // automático de imagens e com a receita de Cards da conta.
     const wideImage = `data:image/png;base64,${(await sharp({ create: { width: 600, height: 200, channels: 4, background: '#60a533' } }).png().toBuffer()).toString('base64')}`
+    const accountCardLayout = createDefaultProductCardConfiguration()
+    accountCardLayout.profiles!.featured.elements.image.width = 30
     const manualPages = await renderEditableFlyerCanvas({
       canvas,
       products: [product('one', 'R$ 19,90'), product('two', 'R$ 29,90'), product('three', 'R$ 39,90'), product('four', 'R$ 49,90')]
         .map(item => ({ ...item, imageDataUrl: wideImage })),
-      division: 'single', formatId: 'stories', cardLayout: createDefaultProductCardConfiguration()
+      division: 'single', formatId: 'stories', cardLayout: accountCardLayout
     })
     const manualCards = manualPages[0]!.canvas.objects.filter((item: any) => item.name === 'product-card')
     expect(manualCards.map((item: any) => item.productItemId)).toEqual(['one', 'two', 'three', 'four'])
     expect(manualCards.every((item: any) => item.__cardLabelTemplateId === '')).toBe(true)
-    expect(manualCards.some((item: any) => item.objects.filter((child: any) => /^(smart_image|extra_image_)/.test(child.name)).length > 1)).toBe(true)
+    expect(manualCards.every((item: any) => item.objects.filter((child: any) => /^(smart_image|extra_image_)/.test(child.name)).length === 2)).toBe(true)
     for (const card of manualCards) {
+      expect(card._productData.imageFillCount).toBe(2)
+      expect(card.objects.find((item: any) => item.name === 'smart_image').width *
+        card.objects.find((item: any) => item.name === 'smart_image').scaleX).toBeLessThan(card._cardWidth * 0.31)
       expect(card.width).toBeLessThan(card._cardWidth * 1.05)
       expect(card.height).toBeLessThan(card._cardHeight * 1.05)
       expect(card.objects.filter((item: any) => item.name === 'priceGroup')).toHaveLength(1)

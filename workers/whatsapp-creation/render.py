@@ -242,6 +242,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
       "groups": [{"department": label, "products": group} for label, group in groups],
       "capacity": max_slots,
       "formatId": payload.get("formatId"),
+      "cardLayout": payload.get("cardLayout"),
       "width": page_size[0],
       "height": page_size[1],
     }
@@ -454,7 +455,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 const scale = Math.min(width * .85 / image.width, height * .5 / image.height);
                 image.set({left: 0, top: 0, originX: 'center', originY: 'center', scaleX: scale, scaleY: scale,
                   selectable: true, evented: true, name: 'smart_image'});
-                children.push(...JobVarejoNative.prepareManualCardImages(fabric, image, width, height, input.cardLayout));
+                children.push(...JobVarejoNative.prepareManualCardImages(fabric, image, width, height, input.cardLayout, 2));
               }
               const titleText = [product.name, product.brand, product.variant, product.weight].filter(Boolean).join(' ');
               const title = new fabric.Textbox(styles.prodNameTransform === 'upper' ? titleText.toLocaleUpperCase('pt-BR') : titleText, {
@@ -516,7 +517,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 parentZoneId: zone._customId || zone.id || zone.name,
                 productZoneId: zone._customId || zone.id || zone.name,
                 productItemId: product.id, _zoneOrder: i, _cardWidth: width, _cardHeight: height,
-                _productData: {...product, imageDataUrl: undefined, autoFillImages: true},
+                _productData: {...product, imageDataUrl: undefined, autoFillImages: true, imageFillCount: 2},
                 __cardLabelTemplateId: labelId || '',
                 subTargetCheck: true, interactive: true, selectable: true, evented: true,
                 objectCaching: false});
