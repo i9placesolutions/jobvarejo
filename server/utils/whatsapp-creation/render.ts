@@ -6,7 +6,8 @@ import { existsSync } from 'node:fs'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { basename, join, resolve, sep } from 'node:path'
 import { createError, type H3Event } from 'h3'
-import type { BusinessProfile } from '~/utils/businessProfile'
+import { formatBusinessAddressValues, formatBusinessContactValues, normalizeBusinessEntries, type BusinessProfile } from '~/utils/businessProfile'
+import { getDynamicBusinessTextCase, transformDynamicBusinessText } from '~/utils/dynamicBusinessFields'
 import { normalizeCreationTheme, type CreationHeader } from './catalog'
 import type { AuthenticatedUser } from '../auth'
 import {
@@ -755,8 +756,24 @@ export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile
               }
             }
           } else {
-            object.text = values[matchedField] || ''
-            if (!values[matchedField]) object.visible = false
+            let value = values[matchedField] || ''
+            if (matchedField === 'whatsapp' || matchedField === 'address') {
+              const contact = matchedField === 'whatsapp'
+              const entries = normalizeBusinessEntries(
+                contact ? profile.whatsappNumbers : profile.addresses,
+                contact ? profile.whatsapp : profile.address,
+                matchedField,
+                contact ? 80 : 300
+              )
+              const selected = object.businessProfileEntryIndex === 0 ? entries.slice(0, 1) : entries
+              value = contact ? formatBusinessContactValues(selected) : formatBusinessAddressValues(selected)
+            }
+            const textCase = getDynamicBusinessTextCase(object)
+            object.text = transformDynamicBusinessText(value, textCase)
+            object.__rawText = value
+            object.__textCase = textCase
+            object.dynamicTextCase = textCase
+            if (!value) object.visible = false
           }
         }
       }

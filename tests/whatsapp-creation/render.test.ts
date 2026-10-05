@@ -42,7 +42,7 @@ const orderId = '33333333-3333-4333-8333-333333333333'
 
 const profile = {
   companyName: 'Mercado Central', logo: '', phone: '11999999999', whatsapp: '+5511999999999',
-  whatsappNumbers: [], address: 'Rua Central, 10', addresses: [], instagram: '@mercadocentral',
+  whatsappNumbers: [{ id: 'main', label: '', value: '+5511999999999' }], address: 'Rua Central, 10', addresses: [{ id: 'main', label: '', value: 'Rua Central, 10' }], instagram: '@mercadocentral',
   facebook: '', website: '', slogan: '', cep: '', hours: '', paymentNotes: '', footerPaymentImages: [], paymentMethods: []
 } satisfies BusinessProfile
 
@@ -102,16 +102,18 @@ describe('adapter de render da criação WhatsApp', () => {
     const canvas = { objects: [
       { type: 'textbox', businessProfileField: 'companyName', text: 'Loja do template', visible: true },
       { type: 'textbox', businessProfileField: 'address', text: 'Endereço do template', visible: true },
+      { type: 'textbox', businessProfileField: 'whatsapp', businessProfileEntryIndex: 0, dynamicTextCase: 'upper', text: 'Número do template', visible: true },
       { type: 'Image', quickLogoSlot: true, src: 'imagens/logo-dono.png', visible: true },
       { type: 'image', quickLogoBackdrop: true, visible: true }
     ] }
     hydrateFlyerBusinessFields(canvas, profile, 'data:image/png;base64,YQ==')
     expect(canvas.objects[0]).toMatchObject({ text: 'Mercado Central', visible: true })
     expect(canvas.objects[1]).toMatchObject({ text: 'Rua Central, 10', visible: true })
-    expect(canvas.objects[2]).toMatchObject({ src: 'data:image/png;base64,YQ==', visible: true })
+    expect(canvas.objects[2]).toMatchObject({ text: '(11) 99999-9999', __rawText: '(11) 99999-9999', visible: true })
+    expect(canvas.objects[3]).toMatchObject({ src: 'data:image/png;base64,YQ==', visible: true })
 
     const noLogo = hydrateFlyerBusinessFields(JSON.parse(JSON.stringify(canvas)), profile, '')
-    expect(noLogo.objects[2]).toMatchObject({ src: '', visible: false })
+    expect(noLogo.objects[3]).toMatchObject({ src: '', visible: false })
   })
 
   it('usa somente a validade aprovada no slot nativo e esconde datas antigas quando vazia', () => {
