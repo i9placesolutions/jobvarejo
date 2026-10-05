@@ -127,6 +127,19 @@ describe('adapter de render da criação WhatsApp', () => {
     expect(noValidity.objects[0]).toMatchObject({ text: '', _customId: 'validity-1', visible: false })
   })
 
+  it('formata uma data aprovada com a mesma regra de validade do Editor Rápido', () => {
+    const canvas = { objects: [{ type: 'textbox', name: 'header-validity',
+      quickDataField: 'validity', quickValidityLayout: 'inline-footer',
+      quickValidityWhileStocks: true, quickValidityDateFormat: 'numeric',
+      text: 'OFERTAS VÁLIDAS ENQUANTO DURAREM OS ESTOQUES', visible: true }] }
+    hydrateFlyerBusinessFields(canvas, profile, '', { validity: '05/10/2026', conditions: '' })
+    expect(canvas.objects[0]).toMatchObject({
+      text: 'OFERTA VÁLIDA DE 5 DE OUTUBRO OU ENQUANTO DURAREM OS ESTOQUES',
+      quickValidityStartDate: '2026-10-05', quickValidityEndDate: '2026-10-05',
+      quickValidityMode: 'single_day', visible: true
+    })
+  })
+
   it('recusa cabeçalho que não consegue mostrar logo ou contatos do perfil', () => {
     const canvas = { objects: [
       { type: 'image', quickLogoSlot: true },
@@ -223,6 +236,27 @@ describe('adapter de render da criação WhatsApp', () => {
       'assert [len(group) for _,group in pages] == [9,1] and sum(len(group) for _,group in pages) == len(items)',
       'assert len(module._product_groups(items[:9], "single", len(slots))[0][1]) == 9'
     ].join('; ')
+    execFileSync('python3', ['-c', python, workerPath], { stdio: 'pipe' })
+  })
+
+  it.skipIf(!pythonWithPlaywright)('carrega e mede Barlow e Inter locais no Chromium antes do render', () => {
+    const workerPath = `${process.cwd()}/workers/whatsapp-creation/render.py`
+    const python = [
+      'import importlib.util, json, sys',
+      'from playwright.sync_api import sync_playwright',
+      'spec = importlib.util.spec_from_file_location("creation_renderer", sys.argv[1])',
+      'module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)',
+      'css, faces = module._font_stylesheet({"objects":[{"fontFamily":"Barlow"},{"fontFamily":"Inter"}]})',
+      'with sync_playwright() as playwright:',
+      ' browser = playwright.chromium.launch(headless=True, executable_path=__import__("os").environ.get("WHATSAPP_CREATION_CHROMIUM_EXECUTABLE"), args=["--no-sandbox", "--disable-dev-shm-usage"])',
+      ' page = browser.new_page()',
+      ' page.set_content("<!doctype html><style>" + css + "</style><canvas></canvas>", wait_until="load")',
+      ' metrics = page.evaluate("""async faces => { const loaded = await Promise.all([document.fonts.load(\'700 32px "Barlow"\', \'Font check 123\'), document.fonts.load(\'700 32px "Inter"\', \'Font check 123\')]); await document.fonts.ready; const ctx = document.querySelector(\'canvas\').getContext(\'2d\'); const widths = {}; for (const family of [\'Barlow\', \'Inter\', \'serif\']) { ctx.font = `700 32px "${family}"`; widths[family] = ctx.measureText(\'Font check 123\').width; } return {loaded: loaded.map(fonts => fonts.length), checks: [document.fonts.check(\'700 32px "Barlow"\', \'Font check 123\'), document.fonts.check(\'700 32px "Inter"\', \'Font check 123\')], widths}; }""", faces)',
+      ' assert metrics["loaded"] == [1, 1] and metrics["checks"] == [True, True], metrics',
+      ' assert metrics["widths"]["Barlow"] > 0 and metrics["widths"]["Inter"] > 0, metrics',
+      ' assert metrics["widths"]["Barlow"] != metrics["widths"]["serif"] and metrics["widths"]["Inter"] != metrics["widths"]["serif"], metrics',
+      ' browser.close()'
+    ].join('\n')
     execFileSync('python3', ['-c', python, workerPath], { stdio: 'pipe' })
   })
 

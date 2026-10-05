@@ -46,6 +46,7 @@ import { checkArtAssets } from '../art-studio'
 import { cartazistaPdfSize } from '~/utils/cartazista/pdf'
 import { bindAccountLogoToFlyerCanvas } from '~/utils/accountFlyerTemplatePreview'
 import { restoreCanvasStickerOutlines } from '~/utils/editorStickerOutline'
+import { isSplitFooterValidity, resolveSplitFooterValidityText, splitFooterValidityText } from '~/utils/splitFooterValidity'
 
 const execute = promisify(execFile)
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -706,12 +707,22 @@ async function embedFlyerAssets(canvas: any, userId: string, templateOwnerId: st
 }
 
 export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile, logoDataUrl: string, order?: Pick<CreationOrder, 'validity' | 'conditions'>): any {
+  const literalValidity = String(order?.validity || '').trim()
+  const normalizedDate = (literal: string): string | null => {
+    const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(literal) || /^(\d{4})-(\d{2})-(\d{2})$/.exec(literal)
+    if (!match) return null
+    const iso = literal.includes('-') ? literal : `${match[3]}-${match[2]}-${match[1]}`
+    const [year, month, day] = iso.split('-').map(Number)
+    const date = new Date(Date.UTC(year!, month! - 1, day!))
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day ? iso : null
+  }
+  const date = normalizedDate(literalValidity)
   const values: Record<string, string> = {
     companyname: profile.companyName, name: profile.companyName, phone: profile.phone || profile.whatsapp,
     whatsapp: profile.whatsapp, address: profile.address, instagram: profile.instagram,
     facebook: profile.facebook, website: profile.website, slogan: profile.slogan,
     hours: profile.hours, paymentnotes: profile.paymentNotes,
-    validity: order?.validity || '', validitydate: order?.validity || '', condition: order?.conditions || '', conditions: order?.conditions || ''
+    validity: literalValidity, validitydate: literalValidity, condition: order?.conditions || '', conditions: order?.conditions || ''
   }
   const visit = (objects: any[]): void => {
     for (const object of objects || []) {
@@ -726,8 +737,26 @@ export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile
       const semanticField = field || (name === 'headervalidity' ? 'validity' : '')
       const matchedField = semanticField in values ? semanticField : Object.keys(values).find((candidate) => name === candidate || name.endsWith(`dynamic${candidate}`))
         if (matchedField && typeof object.text === 'string') {
-          object.text = values[matchedField] || ''
-          if (!values[matchedField]) object.visible = false
+          if (matchedField === 'validity' && date && isSplitFooterValidity(object)) {
+            const state = { startDate: date, endDate: date, mode: 'single_day',
+              whileStocks: object.quickValidityWhileStocks !== false, dateFormat: object.quickValidityDateFormat || 'numeric' }
+            object.text = resolveSplitFooterValidityText(object, objects, state)
+            object.quickValidityStartDate = date
+            object.quickValidityEndDate = date
+            object.quickValidityMode = 'single_day'
+            object.visible = !!object.text
+            const copy = splitFooterValidityText({ ...state, layout: object.quickValidityLayout, copyStyle: object.quickValidityCopyStyle })
+            for (const sibling of objects) {
+              if (sibling.parentFrameId !== object.parentFrameId) continue
+              if (sibling.name === 'validity-heading' || sibling.name === 'stock-validity') {
+                sibling.text = sibling.name === 'validity-heading' ? copy.heading : copy.stock
+                sibling.visible = !!sibling.text
+              }
+            }
+          } else {
+            object.text = values[matchedField] || ''
+            if (!values[matchedField]) object.visible = false
+          }
         }
       }
       if (Array.isArray(object.objects)) visit(object.objects)

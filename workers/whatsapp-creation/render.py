@@ -14,8 +14,115 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
+FONT_FACES = {
+    "barlow": ("Barlow", [
+        ("Barlow-Regular.ttf", 400),
+        ("Barlow-SemiBold.ttf", 600),
+        ("Barlow-Bold.ttf", 700),
+        ("Barlow-ExtraBold.ttf", 800),
+        ("Barlow-Black.ttf", 900),
+    ]),
+    "barlowcondensed": ("Barlow Condensed", [
+        ("BarlowCondensed-Regular.ttf", 400),
+        ("BarlowCondensed-SemiBold.ttf", 600),
+        ("BarlowCondensed-Bold.ttf", 700),
+        ("BarlowCondensed-ExtraBold.ttf", 800),
+    ]),
+    "inter": ("Inter", [("Inter-Variable.ttf", "100 900")]),
+    "anton": ("Anton", [("Anton-Regular.ttf", 400)]),
+    "audiowide": ("Audiowide", [("Audiowide-Regular.ttf", 400)]),
+    "bebasneue": ("Bebas Neue", [("BebasNeue-Regular.ttf", 400)]),
+    "caveat": ("Caveat", [("Caveat[wght].ttf", "100 900")]),
+    "consumidorreferencia": ("Consumidor Referencia", [("ConsumidorReferencia-Regular.ttf", 400)]),
+    "knewave": ("Knewave", [("Knewave-Regular.ttf", 400)]),
+    "montserrat": ("Montserrat", [("Montserrat[wght].ttf", "100 900")]),
+    "oswald": ("Oswald", [("Oswald[wght].ttf", "200 900")]),
+    "patuaone": ("Patua One", [("PatuaOne-Regular.ttf", 400)]),
+    "robotoslab": ("Roboto Slab", [("RobotoSlab[wght].ttf", "100 900")]),
+    "russoone": ("Russo One", [("RussoOne-Regular.ttf", 400)]),
+}
+SYSTEM_FONT_FAMILIES = {
+    "arial", "courier", "couriernew", "georgia", "monospace", "sansserif",
+    "serif", "systemui", "times", "timesnewroman", "verdana",
+}
+
+
 def fail(message: str) -> None:
     raise ValueError(message)
+
+
+def _font_directory_candidates(worker_file: Path = Path(__file__)):
+    repository_root = worker_file.resolve().parents[2]
+    return (
+        repository_root / "public/art-studio/fonts",
+        repository_root / ".output/public/art-studio/fonts",
+    )
+
+
+def _font_file(filename: str, worker_file: Path = Path(__file__)) -> Path:
+    for directory in _font_directory_candidates(worker_file):
+        candidate = directory / filename
+        if candidate.is_file():
+            return candidate
+    fail(f"Arquivo de fonte essencial não encontrado: {filename}.")
+
+
+def _font_family_key(value):
+    return re.sub(r"[^a-z0-9]", "", str(value or "").strip().strip("'\"").lower())
+
+
+def _requested_font_families(canvas):
+    requested = {"barlow", "inter"}
+
+    def visit(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key in ("fontFamily", "prodNameFont") and isinstance(child, str) and child.strip():
+                    family_key = _font_family_key(child.split(",", 1)[0])
+                    if family_key not in SYSTEM_FONT_FAMILIES:
+                        requested.add(family_key)
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    # The catalog embeds many unused label templates. Only the objects that
+    # will actually render may require a bundled font.
+    visit(canvas.get("objects", []))
+    templates = canvas.get("__labelTemplates", [])
+    selected_ids = {"tpl_default"}
+    for obj in _visit_objects(canvas.get("objects", [])):
+        if obj.get("isProductZone") or obj.get("isGridZone"):
+            styles = obj.get("_zoneGlobalStyles") or {}
+            selected_ids.add(str(styles.get("splashTemplateId") or obj.get("_zoneTemplateSnapshotId") or "tpl_default"))
+    for template in templates if isinstance(templates, list) else []:
+        if str(template.get("id")) in selected_ids:
+            visit(template.get("group"))
+    # Generic browser font families do not have asset files in the catalog.
+    requested.difference_update({"arial", "helvetica", "sansserif", "serif", "georgia", "timesnewroman", "monospace"})
+    return requested
+
+
+def _font_stylesheet(canvas, worker_file: Path = Path(__file__)):
+    requested = _requested_font_families(canvas)
+    css = []
+    descriptors = []
+    for key in sorted(requested):
+        family = FONT_FACES.get(key)
+        if family is None:
+            fail(f"A fonte solicitada pelo modelo não está disponível localmente: {key or '(vazia)'}.")
+        family_name, faces = family
+        for filename, weight in faces:
+            path = _font_file(filename, worker_file)
+            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+            css.append(
+                "@font-face{" +
+                f"font-family:{json.dumps(family_name)};font-style:normal;" +
+                f"font-weight:{weight};font-display:block;src:url(data:font/ttf;base64,{encoded}) format('truetype')" +
+                "}"
+            )
+            descriptors.append({"family": family_name, "weight": weight})
+    return "\n".join(css), descriptors
 
 
 def _visit_objects(nodes):
@@ -136,9 +243,10 @@ def render(payload, output_dir: Path, fabric_path: Path):
       "width": page_size[0],
       "height": page_size[1],
     }
-    html = """<!doctype html><html><head><meta charset=\"utf-8\"></head><body>
+    font_css, font_descriptors = _font_stylesheet(canvas)
+    html = """<!doctype html><html><head><meta charset=\"utf-8\"><style>%s</style></head><body>
       <canvas id=\"canvas\"></canvas><script>window.__RENDER_INPUT__ = %s;</script>
-      </body></html>""" % json.dumps(browser_payload, ensure_ascii=False).replace("</", "<\\/")
+      </body></html>""" % (font_css, json.dumps(browser_payload, ensure_ascii=False).replace("</", "<\\/"))
 
     output = []
     with sync_playwright() as playwright:
@@ -148,7 +256,29 @@ def render(payload, output_dir: Path, fabric_path: Path):
         page = browser.new_page(viewport={"width": page_size[0], "height": page_size[1]}, device_scale_factor=1)
         page.route("**/*", lambda route: route.abort() if route.request.url.startswith(("http://", "https://")) else route.continue_())
         page.set_content(html, wait_until="load")
+        page.evaluate("""async descriptors => {
+          const essential = ['Barlow', 'Inter'];
+          const loadedFaces = await Promise.all(descriptors.map(face => document.fonts.load(`${face.weight === '100 900' || face.weight === '200 900' ? '700' : face.weight} 32px \"${face.family}\"`, 'Font check 123')));
+          await document.fonts.ready;
+          const ctx = document.createElement('canvas').getContext('2d');
+          const measured = {};
+          for (const family of essential) {
+            if (!descriptors.some((face, index) => face.family === family && loadedFaces[index].length > 0)) {
+              throw new Error(`Fonte essencial não foi carregada no Chromium: ${family}.`);
+            }
+            const loaded = document.fonts.check(`700 32px \"${family}\"`, 'Font check 123');
+            ctx.font = `700 32px \"${family}\"`;
+            const width = ctx.measureText('Font check 123').width;
+            if (!loaded || !Number.isFinite(width) || width <= 0) throw new Error(`Fonte essencial indisponível no Chromium: ${family}.`);
+            measured[family] = width;
+          }
+          return measured;
+        }""", font_descriptors)
         page.add_script_tag(path=str(fabric_path))
+        native_layout_path = Path(__file__).with_name("native-layout.js")
+        if not native_layout_path.is_file():
+            fail("Regras nativas do Editor Rápido indisponíveis para renderização.")
+        page.add_script_tag(path=str(native_layout_path))
         result = page.evaluate("""async () => {
           const input = window.__RENDER_INPUT__;
           const fabric = window.fabric;
@@ -168,7 +298,10 @@ def render(payload, output_dir: Path, fabric_path: Path):
               for (const key of ['name', 'isProductZone', 'isGridZone', 'isFrame', '_customId',
                 '_zoneGlobalStyles', '_zoneStateSnapshot', '_zonePadding',
                 '_zoneTemplateSnapshot', '_zoneTemplateSnapshotId',
-                'structureByProductCount', 'structureByProductCountByPreviewFormat']) {
+                'structureByProductCount', 'structureByProductCountByPreviewFormat',
+                'structureVariantsByProductCountByPreviewFormat',
+                'structureVariantByProductCountByPreviewFormat',
+                'quickValidityLayout', 'dynamicFieldBaseFontSize', 'parentFrameId']) {
                 if (saved[key] !== undefined) object[key] = saved[key];
               }
             });
@@ -214,7 +347,9 @@ def render(payload, output_dir: Path, fabric_path: Path):
             const validity = all.find(o => o.name === 'header-validity');
             if (validity) {
               if (!String(validity.text || '').trim()) validity.visible = false;
-              else {
+              else if (validity.quickValidityLayout === 'inline-footer') {
+                JobVarejoNative.layoutInlineFooterValidity(all);
+              } else {
                 const maxWidth = Number(validity.width) * Math.abs(Number(validity.scaleX) || 1);
                 const maxHeight = Number(validity.height) * Math.abs(Number(validity.scaleY) || 1);
                 let fontSize = Number(validity.fontSize) || 24;
@@ -247,15 +382,24 @@ def render(payload, output_dir: Path, fabric_path: Path):
                     : String(input.formatId || '').toLowerCase() === 'square' ? 'post'
                     : String(input.formatId || '').toLowerCase() === 'tv' ? 'banner'
                     : String(input.formatId || '').toLowerCase() === 'print' ? 'a4' : 'feed';
-                  const recipes = zone.structureByProductCountByPreviewFormat?.[format] || zone.structureByProductCount || {};
-                  const recipe = recipes[String(count)] || zone.structureByProductCount?.[String(count)] || {};
-                  const columns = Math.max(1, Math.min(count, Number(recipe.columns) || Math.ceil(Math.sqrt(count * contentBounds.width / Math.max(1, contentBounds.height)))));
-                  const rows = Math.max(Number(recipe.rows) || 0, Math.ceil(count / columns));
-                  const padding = Number(recipe.padding ?? zone._zonePadding ?? 20);
+                  const recipe = JobVarejoNative.resolveProductZoneStructure(zone, count, format) || {};
+                  const padding = Number(recipe.padding ?? zone._zonePadding ?? zone.padding ?? 20);
                   const gapX = Number(recipe.gapHorizontal ?? zone.gapHorizontal ?? 15);
                   const gapY = Number(recipe.gapVertical ?? zone.gapVertical ?? 15);
-                  const cellWidth = (contentBounds.width - padding * 2 - gapX * (columns - 1)) / columns;
-                  const cellHeight = (contentBounds.height - padding * 2 - gapY * (rows - 1)) / rows;
+                  const grid = JobVarejoNative.calculateGridLayout({
+                    x: contentBounds.left, y: contentBounds.top,
+                    width: contentBounds.width, height: contentBounds.height,
+                    padding, gapHorizontal: gapX, gapVertical: gapY,
+                    columns: recipe.columns ?? zone.columns ?? 0,
+                    rows: recipe.rows ?? zone.rows ?? 0,
+                    layoutDirection: recipe.layoutDirection ?? zone.layoutDirection ?? 'horizontal',
+                    cardAspectRatio: recipe.cardAspectRatio ?? zone.cardAspectRatio ?? 'fill',
+                    lastRowBehavior: recipe.lastRowBehavior ?? zone.lastRowBehavior ?? 'fill',
+                    verticalAlign: recipe.verticalAlign ?? zone.verticalAlign ?? 'stretch'
+                  }, count, format);
+                  const columns = grid.cols;
+                  const cellWidth = grid.itemWidth;
+                  const cellHeight = grid.itemHeight;
                   if (cellWidth < 40 || cellHeight < 40) throw new Error('A estrutura salva não comporta estes produtos.');
                   const slots = Array.from({length: count}, (_, index) => ({
                     zoneIndex: 0,
@@ -356,9 +500,11 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 subTargetCheck: true, interactive: true, selectable: true, evented: true,
                 objectCaching: false});
               c.add(card);
+              JobVarejoNative.fitResponsiveProductTypography(card, width, height, Number(styles.prodNameScale ?? 1), false);
               zone.contentStatus = 'filled';
               if (zone._zoneStateSnapshot?.zone) zone._zoneStateSnapshot.zone.contentStatus = 'filled';
             }
+            JobVarejoNative.harmonizeProductCardTypography(c.getObjects().filter(o => o.isProductCard === true));
             if (entry.department && sortedZones.length === 1) {
               const bounds = sortedZones[0].getBoundingRect();
               const labelHeight = Math.min(44, bounds.height * .06);
