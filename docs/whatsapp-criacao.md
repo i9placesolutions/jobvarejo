@@ -48,7 +48,7 @@ Leases serializam a conversa; envios ficam numa outbox. Timeout de envio é ince
 - JOBVAREJO_WHATSAPP_SERVICE_KEY (mínimo 32 bytes)
 - JOBVAREJO_UAZAPI_INSTANCE_TOKEN / JOBVAREJO_UAZAPI_INSTANCE_ID / JOBVAREJO_UAZAPI_INSTANCE_NAME
 - JOBVAREJO_UAZAPI_URL
-- JOBVAREJO_OPENROUTER_MODEL (padrão xiaomi/mimo-v2.6-flash)
+- JOBVAREJO_OPENROUTER_MODEL (padrão do backend xiaomi/mimo-v2.6-flash; o nó `Interpretar pedido` do n8n substitui por `google/gemini-3.1-flash-lite`, com `provider.allow_fallbacks=true`, desde 05/10/2026 após limite 429 do provedor anterior)
 - JOBVAREJO_OPENROUTER_AUDIO_MODEL (padrão google/gemini-2.5-flash-lite)
 
 A voz e o render de vídeo usam o worker nativo ElevenLabs/Remotion já configurado. Os fluxos não têm loops aguardando resposta humana nem retries HTTP automáticos de operações pagas/envios. Não salvar dados de execução no n8n, pois o envelope e os anexos contêm dados privados.

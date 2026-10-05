@@ -139,4 +139,36 @@ describe('catálogo de criação pelo WhatsApp', () => {
     expect(candidates[0]?.previewUrl).toContain('/imagens/arroz-exato.png')
     expect(mocks.query.mock.calls[0]?.[0]).toContain("s3_key like 'imagens/%'")
   })
+
+  it('não confunde ingrediente ou sabor com a identidade do produto', async () => {
+    mocks.query.mockResolvedValue({ rows: [
+      { id: 1, product_name: 'Mistura para bolo sabor cenoura', search_term: 'cenoura', brand: '', flavor: 'Cenoura', weight: '', image_url: 'x', s3_key: 'imagens/mistura-cenoura.png', usage_count: 100 },
+      { id: 2, product_name: 'Massa para bolo sabor cenoura', search_term: 'cenoura', brand: '', flavor: 'Cenoura', weight: '', image_url: 'x', s3_key: 'imagens/massa-cenoura.png', usage_count: 200 }
+    ] })
+
+    await expect(listProductCandidates(accountId, { name: 'Cenoura' })).resolves.toEqual([])
+  })
+
+  it('mantém verduras como identidade própria e aceita pedido explícito de massa sabor cenoura', async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [
+      { id: 1, product_name: 'Beterraba', search_term: 'beterraba', brand: '', flavor: '', weight: '', image_url: 'x', s3_key: 'imagens/beterraba.png', usage_count: 1 }
+    ] })
+    await expect(listProductCandidates(accountId, { name: 'Beterraba' })).resolves.toMatchObject([
+      { name: 'Beterraba', key: 'imagens/beterraba.png' }
+    ])
+
+    mocks.query.mockResolvedValueOnce({ rows: [
+      { id: 2, product_name: 'Repolho', search_term: 'repolho', brand: '', flavor: '', weight: '', image_url: 'x', s3_key: 'imagens/repolho.png', usage_count: 1 }
+    ] })
+    await expect(listProductCandidates(accountId, { name: 'Repolho' })).resolves.toMatchObject([
+      { name: 'Repolho', key: 'imagens/repolho.png' }
+    ])
+
+    mocks.query.mockResolvedValueOnce({ rows: [
+      { id: 3, product_name: 'Massa para bolo sabor cenoura', search_term: 'cenoura', brand: '', flavor: 'Cenoura', weight: '', image_url: 'x', s3_key: 'imagens/massa-cenoura.png', usage_count: 1 }
+    ] })
+    await expect(listProductCandidates(accountId, { name: 'Massa bolo cenoura' })).resolves.toMatchObject([
+      { name: 'Massa para bolo sabor cenoura', key: 'imagens/massa-cenoura.png' }
+    ])
+  })
 })

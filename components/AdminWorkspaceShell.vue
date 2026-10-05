@@ -30,8 +30,8 @@ const emit = defineEmits<{
 
 const auth = useAuth()
 const route = useRoute()
-const { isMobile } = useResponsive()
-const dashMobile = computed(() => isMobile.value)
+const { screenWidth } = useResponsive()
+const dashMobile = computed(() => screenWidth.value < 1024)
 const showMobileDrawer = ref(false)
 const searchQuery = ref('')
 
@@ -53,6 +53,9 @@ const handleSignOut = async () => {
 const closeDrawer = () => {
   showMobileDrawer.value = false
 }
+
+watch(dashMobile, closeDrawer)
+watch(() => route.path, closeDrawer)
 
 const isActive = (key: NonNullable<typeof props.activeNav>) => {
   if (props.activeNav === key) return true
@@ -81,6 +84,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
             type="button"
             class="admin-shell__icon-btn"
             aria-label="Abrir menu"
+            :aria-expanded="showMobileDrawer"
             @click="showMobileDrawer = true"
           >
             <MenuIcon class="h-5 w-5" />
@@ -99,6 +103,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
             v-model="searchQuery"
             type="search"
             placeholder="Buscar projetos…"
+            aria-label="Buscar projetos"
             class="admin-shell__search-input"
           >
         </div>
@@ -190,34 +195,24 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   --jv-muted: #60758f;
   --jv-line: #d7e4f1;
   height: 100vh;
-  width: 100vw;
+  height: 100dvh;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   position: relative;
   color: var(--jv-ink);
-  background:
-    radial-gradient(circle at 8% -12%, rgba(58, 131, 213, .18), transparent 31rem),
-    radial-gradient(circle at 104% 24%, rgba(72, 157, 128, .12), transparent 27rem),
-    linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+  background: #f6f8fb;
   font-family: "Plus Jakarta Sans", "Barlow", ui-sans-serif, system-ui, sans-serif;
-}
-
-.admin-shell::before {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  pointer-events: none;
-  opacity: .32;
-  background-image: radial-gradient(rgba(62, 121, 184, .17) .75px, transparent .75px);
-  background-size: 18px 18px;
-  content: '';
 }
 
 .admin-shell__frame {
   position: relative;
   z-index: 1;
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   width: 100%;
   max-width: 1920px;
   margin: 0 auto;
@@ -231,14 +226,11 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 72px;
-  height: 72px;
-  padding: 0 20px;
-  border-bottom: 1px solid rgba(190, 211, 233, .76);
-  background: rgba(255, 255, 255, .84);
-  box-shadow: 0 8px 28px rgba(26, 68, 113, .045);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  flex: 0 0 auto;
+  min-height: 60px;
+  padding: env(safe-area-inset-top, 0px) clamp(12px, 1.5vw, 24px) 0;
+  border-bottom: 1px solid var(--jv-line);
+  background: #fff;
   z-index: 20;
 }
 
@@ -247,6 +239,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .admin-shell__brand-link {
@@ -257,7 +250,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
 }
 
 .admin-shell__brand-link img {
-  height: 36px;
+  height: 30px;
   width: auto;
 }
 
@@ -284,7 +277,8 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
 .admin-shell__search {
   flex: 1;
   max-width: 420px;
-  margin: 0 24px;
+  min-width: 0;
+  margin: 0 12px;
 }
 
 .admin-shell__search-input {
@@ -298,6 +292,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
 }
 
 .admin-shell__avatar {
+  flex: 0 0 auto;
   width: 28px;
   height: 28px;
   border-radius: 999px;
@@ -318,8 +313,8 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
 
 .admin-shell__role {
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: #edf4ff;
+  color: #2160b4;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -341,25 +336,26 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   display: flex;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
 }
 
 .admin-shell__sidebar {
-  width: 256px;
+  width: clamp(208px, 17vw, 232px);
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   border-right: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(12px);
+  background: #fff;
 }
 
 .admin-shell__nav {
-  padding: 16px 12px 8px;
+  padding: 10px 10px 6px;
   flex: 0 0 auto;
 }
 
 .admin-shell__nav--drawer {
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   padding: 12px;
@@ -368,7 +364,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
 .admin-shell__bottom {
   margin-top: auto;
   flex: 0 0 auto;
-  padding: 8px 12px 12px;
+  padding: 6px 10px 10px;
 }
 
 .admin-shell__section {
@@ -387,7 +383,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   gap: 10px;
   min-height: 38px;
   padding: 0 10px;
-  border-radius: 12px;
+  border-radius: 8px;
   color: #355074;
   font-size: 13px;
   font-weight: 600;
@@ -397,6 +393,10 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   cursor: pointer;
   text-align: left;
 }
+
+.admin-shell__nav-item svg { flex-shrink: 0; }
+.admin-shell__nav-item:focus-visible,
+.admin-shell__icon-btn:focus-visible { outline: 2px solid var(--jv-blue); outline-offset: 2px; }
 
 .admin-shell__nav-item:hover,
 .admin-shell__nav-item.active {
@@ -423,6 +423,8 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   flex: 1;
   overflow: auto;
   min-width: 0;
+  min-height: 0;
+  scrollbar-width: thin;
 }
 
 .admin-shell__icon-btn {
@@ -431,16 +433,32 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 16px;
+  border-radius: 10px;
   background: transparent;
   color: #64748b;
   cursor: pointer;
 }
 
-@media (max-width: 768px) {
-  .admin-shell__topbar {
-    padding: 0 12px;
-  }
+@media (max-width: 1279px) {
+  .admin-shell__brand-copy { display: none; }
+  .admin-shell__name { max-width: 100px; }
+}
+
+@media (max-width: 1023px) {
+  .admin-shell__topbar { min-height: calc(56px + env(safe-area-inset-top, 0px)); gap: 8px; }
+  .admin-shell__brand { flex: 1; gap: 4px; }
+  .admin-shell__brand-link img { height: 28px; max-width: 120px; object-fit: contain; }
+  .admin-shell__nav-item { min-height: 44px; }
+}
+
+@media (max-width: 359px) {
+  .admin-shell__topbar { padding-inline: 8px; gap: 4px; }
+  .admin-shell__brand-link img { max-width: 96px; height: auto; }
+}
+
+@media (max-height: 600px) and (min-width: 1024px) {
+  .admin-shell__nav-item { min-height: 34px; font-size: 12px; }
+  .admin-shell__section { margin-block: 8px 4px; }
 }
 
 @media print {

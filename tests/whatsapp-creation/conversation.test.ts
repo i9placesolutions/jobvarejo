@@ -23,7 +23,7 @@ vi.mock('../../server/utils/whatsapp-creation/catalog', () => ({
 vi.mock('../../server/utils/whatsapp-creation/media', () => ({ ownedStorageBytes: mocks.storageBytes }))
 vi.mock('../../server/utils/whatsapp-creation/product-review', () => ({ createProductReviewBoards: mocks.productReview }))
 
-const { advanceConversation, newConversationState } = await import('../../server/utils/whatsapp-creation/conversation')
+const { advanceConversation, interpretationRequest, newConversationState } = await import('../../server/utils/whatsapp-creation/conversation')
 
 const accountId = '11111111-1111-4111-8111-111111111111'
 const otherAccountId = '22222222-2222-4222-8222-222222222222'
@@ -78,6 +78,15 @@ beforeEach(() => {
 })
 
 describe('workflow da conversa de criação via WhatsApp', () => {
+  it('instrui a IA a preservar dados ambíguos e distinguir lista substituta, adição, foto e preço', () => {
+    const request = interpretationRequest(newConversationState(), 'cenoura esta errado', 'Rafa')
+    const systemPrompt = String(request.messages[0]?.content)
+    expect(systemPrompt).toMatch(/lista substitui\/troca a anterior/i)
+    expect(systemPrompt).toMatch(/não envie products/i)
+    expect(systemPrompt).toMatch(/correção de preço explícita/i)
+    expect(systemPrompt).toMatch(/foto citada pelo nome de um único produto/i)
+  })
+
   it('envia quatro prévias personalizadas com legendas 1 a 4 na ordem do catálogo', async () => {
     const headers = Array.from({ length: 4 }, (_, index) => ({ ...header, id: `header-${index + 1}`, name: `Modelo ${index + 1}` }))
     mocks.headers.mockResolvedValue({ headers, hasMore: false, missingTheme: false })
@@ -313,6 +322,67 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(rejected.state.draft.products).toHaveLength(2)
     expect(rejected.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
     expect(rejected.send[0]?.text).toMatch(/itens 2 foram rejeitadas/i)
+  })
+
+  it('preserva o preço e guarda o produto quando a reclamação não diz o que está errado', async () => {
+    const first = await beginOrder({ products: [product('rice'), product('carrot', { name: 'Cenoura', price: 'R$ 2,99' })], division: 'single' })
+    const review = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const malformed = await input(review.state, {
+      action: 'update', products: [product('rice'), product('carrot', { name: 'Cenoura', price: '' })]
+    }, 'cenoura esta errado')
+
+    expect(malformed.state.phase).toBe('data')
+    expect(malformed.state.draft.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 2,99' })
+    expect(malformed.state.order?.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 2,99' })
+    expect(malformed.state.pendingCorrectionItemId).toBe(review.state.order?.products[1]?.id)
+    expect(malformed.send[0]?.text).toMatch(/foto, o nome ou o preço/i)
+
+    const clarified = await input(malformed.state, { action: 'update', products: [] }, 'a foto')
+    expect(clarified.state.draft.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 2,99' })
+    expect(clarified.state.pendingCorrectionItemId).toBeUndefined()
+    expect(clarified.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
+    expect(clarified.send[0]?.text).toMatch(/fotos dos itens 2 foram rejeitadas/i)
+  })
+
+  it('resolve reclamação de foto pelo nome único e pergunta o item na reclamação genérica', async () => {
+    const first = await beginOrder({ products: [product('rice'), product('carrot', { name: 'Cenoura', price: 'R$ 2,99' })], division: 'single' })
+    const review = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+
+    const generic = await input(review.state, { action: 'update', products: [], itemNumbers: [1] }, 'a foto esta errada')
+    expect(generic.state.draft.products).toHaveLength(2)
+    expect(generic.state.candidates).toHaveLength(2)
+    expect(generic.send[0]?.text).toMatch(/qual produto está com a foto errada/i)
+
+    const named = await input(review.state, { action: 'update', products: [], itemNumbers: [1] }, 'troque a foto da Cenoura')
+    expect(named.state.draft.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 2,99' })
+    expect(named.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
+    expect(named.send[0]?.text).toMatch(/fotos dos itens 2 foram rejeitadas/i)
+  })
+
+  it('associa uma foto recebida ao produto pelo nome sem aceitar lista ou número inventados', async () => {
+    mocks.productCandidates.mockResolvedValue([])
+    const first = await beginOrder({ products: [product('rice'), product('carrot', { name: 'Cenoura', price: 'R$ 2,99' })], division: 'single' })
+    const review = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const uploaded = { key: `whatsapp-creation/${accountId}/inbound/cenoura.png`, hash: 'carrot-photo-hash' }
+    const assigned = await input(review.state, { action: 'update', products: [], itemNumbers: [1] }, 'foto da Cenoura', { uploaded })
+
+    expect(assigned.state.draft.products).toHaveLength(2)
+    expect(assigned.state.draft.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 2,99' })
+    expect(assigned.state.pendingUploaded).toBeUndefined()
+    expect(assigned.state.candidates).toContainEqual(expect.objectContaining({ itemId: review.state.order!.products[1]!.id, ...uploaded }))
+  })
+
+  it('aplica uma correção explícita de preço sem tratá-la como reclamação de foto', async () => {
+    const first = await beginOrder({ products: [product('rice'), product('carrot', { name: 'Cenoura', price: 'R$ 2,99' })], division: 'single' })
+    const review = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const correctedProducts = [product('rice'), product('carrot', { name: 'Cenoura', price: 'R$ 3,99' })]
+    const corrected = await input(review.state, { action: 'update', products: correctedProducts }, 'o preço da Cenoura está errado, é R$ 3,99')
+
+    expect(corrected.state.draft.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 3,99' })
+    expect(corrected.state.phase).toBe('data')
+    expect(corrected.state.order?.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 3,99' })
+    expect(corrected.state.candidates).toHaveLength(2)
+    expect(corrected.send[0]?.text).toMatch(/confira fotos e preços/i)
   })
 
   it('invalidates data and photo approvals when an image is replaced', async () => {

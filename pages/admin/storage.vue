@@ -353,7 +353,7 @@ onMounted(() => { void fetchStats() })
         </div>
 
         <div v-if="stats" class="admin-card admin-card--pad mt-6">
-          <div class="flex flex-wrap items-center gap-x-7 gap-y-2 text-sm">
+          <div class="flex flex-wrap items-center gap-x-7 gap-y-2 break-all text-sm">
             <div><span class="text-[color:var(--jv-muted)]">Bucket:</span> <strong>{{ stats.bucket }}</strong></div>
             <div><span class="text-[color:var(--jv-muted)]">Endpoint:</span> <strong>{{ stats.endpoint }}</strong></div>
             <div><span class="text-[color:var(--jv-muted)]">Total:</span> <strong>{{ stats.total.size }}</strong> <span class="text-[color:var(--jv-muted)]">({{ stats.total.objects }} objetos)</span></div>
@@ -365,7 +365,7 @@ onMounted(() => { void fetchStats() })
           <button v-for="item in stats.prefixes" :key="item.prefix" type="button"
             class="admin-card p-4 text-left transition-all hover:border-blue-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             @click="openFolder(item.prefix)">
-            <span class="flex items-center gap-2 font-semibold text-[color:var(--jv-navy)]"><Folder class="h-5 w-5 text-blue-600" />{{ item.prefix }}</span>
+            <span class="flex items-center gap-2 break-all font-semibold text-[color:var(--jv-navy)]"><Folder class="h-5 w-5 shrink-0 text-blue-600" />{{ item.prefix }}</span>
             <span class="mt-2 block text-xs text-[color:var(--jv-muted)]">{{ item.size }} · {{ item.objects }} objetos</span>
             <span v-if="item.truncated" class="mt-2 inline-block text-xs font-semibold text-amber-700">Contagem parcial</span>
           </button>
@@ -374,7 +374,7 @@ onMounted(() => { void fetchStats() })
         <section class="admin-card mt-6 overflow-hidden" aria-label="Explorador de arquivos">
           <div class="border-b border-[color:var(--jv-line)] bg-slate-50/60 px-4 py-4 sm:px-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="flex min-w-0 items-center gap-1 overflow-x-auto text-sm">
+              <div class="flex min-w-0 max-w-full items-center gap-1 overflow-x-auto text-sm">
                 <button type="button" class="font-semibold text-[color:var(--jv-blue)]" @click="goToRoot"><HardDrive class="inline h-4 w-4" /> Bucket</button>
                 <template v-for="crumb in breadcrumbs" :key="crumb.key">
                   <ChevronRight class="h-4 w-4 shrink-0 text-slate-400" />
@@ -455,7 +455,7 @@ onMounted(() => { void fetchStats() })
     </div>
 
     <div v-if="dialog" class="fixed inset-0 z-200 flex items-center justify-center bg-slate-950/50 p-4" @click.self="closeDialog">
-      <div class="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" :aria-label="dialog">
+      <div class="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl bg-white p-4 shadow-2xl sm:p-5" role="dialog" aria-modal="true" :aria-label="dialog">
         <div class="flex items-start justify-between gap-3">
           <div><h2 class="text-lg font-bold text-[color:var(--jv-navy)]">{{ dialog === 'create-folder' ? 'Criar pasta' : dialog === 'create-file' ? 'Criar arquivo' : dialog === 'rename' ? 'Renomear' : dialog === 'move' ? 'Mover' : 'Excluir' }}</h2><p class="mt-1 break-all text-xs text-slate-500">{{ selection?.key || currentPrefix }}</p></div>
           <button class="rounded-lg p-2 hover:bg-slate-100" aria-label="Fechar" @click="closeDialog"><X class="h-4 w-4" /></button>

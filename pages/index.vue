@@ -9,7 +9,8 @@ import { getProjectPreviewSource } from '~/utils/dashboardProjectPreview'
 import { saveProjectAsFlyerTemplate } from '~/utils/flyerTemplateApi'
 import { formatNotificationDateTime } from '~/utils/notificationDateTime'
 
-const { isMobile: dashMobile, isTablet: dashTablet } = useResponsive()
+const { screenWidth } = useResponsive()
+const dashMobile = computed(() => screenWidth.value < 1024)
 const showMobileDrawer = ref(false)
 
 // Page config - middleware handles auth check
@@ -1596,7 +1597,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </DashboardMobileDrawer>
 
         <!-- Sidebar (hidden on mobile) -->
-        <aside v-show="!dashMobile" class="dash-sidebar w-64 h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
+        <aside v-show="!dashMobile" class="dash-sidebar w-56 h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
 
           <!-- Nav Section -->
           <div class="px-3 pt-4 pb-1 shrink-0 overflow-y-auto max-h-[78%]">
@@ -1684,7 +1685,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </aside>
 
         <!-- Main Content -->
-        <main class="dash-main flex-1 flex flex-col overflow-hidden relative z-10">
+        <main ref="projectGridViewportEl" class="dash-main flex-1 min-w-0 min-h-0 flex flex-col overflow-y-auto overflow-x-hidden relative z-10">
 
           <section v-if="!searchQuery && !activeFolderId" class="dash-admin-hero" aria-labelledby="admin-dashboard-title">
             <div class="dash-admin-hero__copy">
@@ -1821,7 +1822,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           </div>
 
           <!-- Content Grid -->
-          <div ref="projectGridViewportEl" :class="['flex-1 overflow-y-auto', dashMobile ? 'px-4 pb-28 dash-mobile-scroll' : 'px-7 pb-7']">
+          <div :class="['dash-project-viewport min-w-0 flex-none overflow-visible', dashMobile ? 'px-4 pb-28 dash-mobile-scroll' : 'px-7 pb-7']">
             <div v-if="isLoadingProjects" class="flex items-center justify-center h-full">
               <div class="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin opacity-70"></div>
             </div>
@@ -2605,6 +2606,9 @@ const handleDropOnRoot = async (event: DragEvent) => {
 
 /* ─── Modals ──────────────────────────────────────────── */
 .dash-modal {
+  max-height: calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: #ffffff;
   border: 1px solid rgba(0,0,0,0.1);
   border-radius: 16px;
@@ -2701,10 +2705,10 @@ input:focus-visible {
   --jv-line: #d7e4f1;
   position: relative;
   color: var(--jv-ink);
-  background:
-    radial-gradient(circle at 8% -12%, rgba(58, 131, 213, .18), transparent 31rem),
-    radial-gradient(circle at 104% 24%, rgba(72, 157, 128, .12), transparent 27rem),
-    linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  background: #f5f7fa;
   font-family: "Plus Jakarta Sans", "Barlow", ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -2713,9 +2717,7 @@ input:focus-visible {
   z-index: 0;
   inset: 0;
   pointer-events: none;
-  opacity: .32;
-  background-image: radial-gradient(rgba(62, 121, 184, .17) .75px, transparent .75px);
-  background-size: 18px 18px;
+  opacity: 0;
   content: '';
 }
 
@@ -2724,13 +2726,13 @@ input:focus-visible {
 }
 
 .dash-admin .dash-topbar {
-  min-height: 72px;
-  height: 72px;
+  min-height: 62px;
+  height: 62px;
   border-bottom: 1px solid rgba(190, 211, 233, .76);
   background: rgba(255, 255, 255, .84);
-  box-shadow: 0 8px 28px rgba(26, 68, 113, .045);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 2px 8px rgba(26, 68, 113, .035);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .dash-brand-link {
@@ -2854,6 +2856,7 @@ input:focus-visible {
 }
 
 .dash-admin .dash-sidebar {
+  width: 224px;
   border-right-color: rgba(210, 225, 239, .9);
   background: rgba(255, 255, 255, .78);
   box-shadow: 10px 0 30px rgba(26, 68, 113, .025);
@@ -2901,29 +2904,36 @@ input:focus-visible {
 
 .dash-admin .dash-main {
   background: transparent;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.dash-admin .dash-project-viewport {
+  min-height: 180px;
 }
 
 .dash-admin-hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(348px, .72fr);
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, .72fr);
   align-items: center;
-  gap: 34px;
-  min-height: 184px;
-  margin: 23px 28px 1px;
-  padding: 27px 31px;
+  gap: clamp(14px, 2vw, 28px);
+  min-height: 142px;
+  margin: 16px 24px 0;
+  padding: clamp(16px, 2vw, 22px) clamp(18px, 2.3vw, 26px);
   overflow: hidden;
-  color: #eff7ff;
-  border: 1px solid rgba(161, 203, 246, .42);
-  border-radius: 22px;
-  background: linear-gradient(124deg, #173d70 0%, #1e579d 64%, #2f78c9 100%);
-  box-shadow: 0 22px 46px rgba(23, 61, 112, .17);
+  border: 1px solid #dce6f0;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #f1f7fd 0%, #eaf3fb 100%);
+  color: #233b56;
+  box-shadow: 0 5px 15px rgba(23, 61, 112, .055);
 }
 
 .dash-admin-hero::before,
 .dash-admin-hero::after {
   position: absolute;
-  border: 1px solid rgba(203, 229, 255, .2);
+  border: 1px solid rgba(95, 143, 188, .1);
   border-radius: 50%;
   content: '';
 }
@@ -2933,7 +2943,7 @@ input:focus-visible {
   height: 310px;
   top: -207px;
   right: 13%;
-  box-shadow: 0 0 0 34px rgba(196, 226, 255, .06), 0 0 0 70px rgba(196, 226, 255, .035);
+  box-shadow: 0 0 0 34px rgba(196, 226, 255, .025), 0 0 0 70px rgba(196, 226, 255, .015);
 }
 
 .dash-admin-hero::after {
@@ -2942,7 +2952,7 @@ input:focus-visible {
   right: -54px;
   bottom: -103px;
   border-width: 27px;
-  border-color: rgba(180, 220, 255, .12);
+  border-color: rgba(95, 143, 188, .06);
 }
 
 .dash-admin-hero__copy,
@@ -2956,59 +2966,58 @@ input:focus-visible {
   align-items: center;
   gap: 8px;
   margin: 0;
-  color: #b8dcff;
-  font-size: 10px;
+  color: #52769a;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: .11em;
   text-transform: uppercase;
 }
 
 .dash-admin-hero h1 {
-  margin: 12px 0 11px;
-  color: #fff;
-  font-size: clamp(25px, 2.5vw, 37px);
+  margin: 8px 0 7px;
+  color: #233b56;
+  font-size: clamp(21px, 2vw, 29px);
   font-weight: 700;
   letter-spacing: -.06em;
   line-height: .99;
 }
 
 .dash-admin-hero h1 span {
-  color: #bfe2ff;
+  color: #2160b4;
 }
 
 .dash-admin-hero__copy > p:last-child {
   max-width: 540px;
   margin: 0;
-  color: #d4e9ff;
-  font-size: 12px;
-  line-height: 1.65;
+  color: #60758f;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .dash-admin-hero__overview {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .dash-admin-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .dash-admin-metrics > div {
   min-width: 0;
-  padding: 12px 13px;
-  border: 1px solid rgba(206, 231, 255, .25);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, .12);
-  backdrop-filter: blur(8px);
+  padding: 8px 10px;
+  border: 1px solid #d9e5f1;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .78);
 }
 
 .dash-admin-metrics span {
   display: block;
   overflow: hidden;
-  color: #d5eaff;
-  font-size: 9px;
+  color: #71869b;
+  font-size: 8px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3017,24 +3026,24 @@ input:focus-visible {
 .dash-admin-metrics strong {
   display: block;
   margin-top: 4px;
-  color: #fff;
-  font-size: 22px;
+  color: #1d4e80;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: -.05em;
 }
 
 .dash-admin-hero__create {
   display: inline-flex;
-  min-height: 39px;
+  min-height: 34px;
   align-items: center;
   justify-content: center;
   gap: 8px;
   color: #194e8d;
-  border: 1px solid #d7eaff;
-  border-radius: 11px;
+  border: 1px solid #c7dced;
+  border-radius: 10px;
   background: #fff;
-  box-shadow: 0 9px 18px rgba(12, 47, 88, .12);
-  font-size: 11px;
+  box-shadow: 0 3px 8px rgba(12, 47, 88, .08);
+  font-size: 10px;
   font-weight: 800;
   transition: transform .18s ease, background-color .18s ease, box-shadow .18s ease;
 }
@@ -3043,6 +3052,11 @@ input:focus-visible {
   background: #ecf6ff;
   box-shadow: 0 12px 24px rgba(12, 47, 88, .18);
   transform: translateY(-2px);
+}
+
+.dash-admin .dash-modal {
+  max-height: calc(100dvh - 1rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  margin-bottom: 0;
 }
 
 .dash-admin .dash-page-title {
@@ -3105,6 +3119,7 @@ input:focus-visible {
 .dash-admin .dash-folder-card,
 .dash-admin .dash-project-card,
 .dash-admin .dash-project-list-item {
+  min-width: 0;
   border-color: #d9e5f1;
   background: rgba(255, 255, 255, .92);
   box-shadow: 0 9px 22px rgba(31, 77, 125, .045);
@@ -3144,47 +3159,167 @@ input:focus-visible {
   outline-color: rgba(33, 96, 180, .78);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .dash-admin .dash-topbar {
-    min-height: calc(64px + env(safe-area-inset-top, 0px));
+    min-height: calc(56px + env(safe-area-inset-top, 0px));
     height: auto;
   }
 
   .dash-brand-link img {
-    width: 121px;
+    width: clamp(94px, 15vw, 121px);
   }
 
   .dash-admin-hero {
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 10px;
     min-height: 0;
-    margin: 12px 16px 0;
-    padding: 23px 21px 20px;
-    border-radius: 19px;
+    margin: 10px clamp(12px, 3vw, 20px) 0;
+    padding: 14px clamp(13px, 3vw, 20px);
+    border-radius: 14px;
   }
 
   .dash-admin-hero h1 {
-    font-size: 29px;
+    max-width: 25ch;
+    margin-block: 6px;
+    font-size: clamp(20px, 5.3vw, 27px);
+    line-height: 1.05;
   }
 
   .dash-admin-hero__copy > p:last-child {
-    font-size: 11px;
+    font-size: 10px;
+    line-height: 1.35;
   }
 
   .dash-admin-metrics > div {
-    padding: 10px 9px;
+    padding: 6px 8px;
   }
 
   .dash-admin-metrics strong {
-    font-size: 20px;
+    margin-top: 2px;
+    font-size: 16px;
   }
 
   .dash-admin-hero__create {
-    width: 100%;
+    min-height: 30px;
+    justify-self: start;
+    padding: 0 12px;
   }
 
   .dash-admin .dash-page-header {
-    padding-top: 18px;
+    padding-top: 12px;
+  }
+
+  .dash-admin .dash-sidebar {
+    width: 224px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dash-admin .dash-topbar {
+    gap: 6px;
+    padding-inline: 10px;
+  }
+
+  .dash-admin .dash-brand {
+    gap: 3px;
+  }
+
+  .dash-admin .dash-brand > button {
+    width: 34px;
+    height: 36px;
+    margin-left: 0;
+  }
+
+  .dash-admin .dash-brand-link img {
+    width: 96px;
+  }
+
+  .dash-admin .dash-topbar-actions {
+    gap: 4px;
+  }
+
+  .dash-admin .dash-topbar-icon,
+  .dash-admin .dash-user-menu {
+    width: 36px;
+    height: 36px;
+  }
+
+  .dash-admin .dash-page-header {
+    gap: 8px;
+    padding-top: 8px;
+    padding-bottom: 6px;
+  }
+
+  .dash-admin .dash-page-title {
+    font-size: 16px;
+  }
+
+  .dash-admin-metrics {
+    gap: 4px;
+  }
+
+  .dash-admin .dash-project-card,
+  .dash-admin .dash-folder-card {
+    min-width: 0;
+  }
+}
+
+@media (max-height: 620px) {
+  .dash-admin .dash-topbar {
+    min-height: 48px;
+    height: 48px;
+  }
+
+  .dash-admin .dash-mobile-search {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .dash-admin .dash-mobile-search input {
+    height: 36px;
+  }
+
+  .dash-admin-hero {
+    gap: 7px;
+    margin-top: 7px;
+    padding-block: 10px;
+  }
+
+  .dash-admin-hero h1 {
+    margin-block: 4px;
+    font-size: clamp(18px, 2vw, 24px);
+  }
+
+  .dash-admin .dash-page-header {
+    padding-top: 7px;
+    padding-bottom: 6px;
+  }
+
+  .dash-admin .dash-mobile-toolbar {
+    padding-bottom: 6px;
+  }
+}
+
+@media (max-width: 360px) {
+  .dash-admin .dash-topbar > .dash-brand {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .dash-admin .dash-brand-link img {
+    width: 86px;
+  }
+
+  .dash-admin .dash-mobile-search {
+    padding-inline: 12px;
+  }
+
+  .dash-admin .dash-mobile-toolbar {
+    gap: 8px;
+  }
+
+  .dash-admin .dash-card-info h3 {
+    font-size: 12px;
   }
 }
 

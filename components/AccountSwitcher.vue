@@ -225,6 +225,9 @@ const selectAccount = async () => {
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 24px 50px rgba(24, 53, 86, .18), 0 4px 12px rgba(24, 53, 86, .06);
+  max-height: calc(100dvh - 80px - env(safe-area-inset-top, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .account-switcher__popover-head {
@@ -337,7 +340,7 @@ const selectAccount = async () => {
   cursor: progress;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   .account-switcher--topbar .account-switcher__trigger {
     width: 42px;
     min-width: 42px;
@@ -352,7 +355,7 @@ const selectAccount = async () => {
 
   .account-switcher--topbar .account-switcher__popover {
     position: fixed;
-    top: 66px;
+    top: calc(62px + env(safe-area-inset-top, 0px));
     right: 12px;
   }
 }
@@ -360,7 +363,7 @@ const selectAccount = async () => {
 @media (max-width: 360px) {
   .account-switcher__popover {
     position: fixed;
-    top: 66px;
+    top: calc(62px + env(safe-area-inset-top, 0px));
     right: 12px;
     left: 12px;
     width: auto;

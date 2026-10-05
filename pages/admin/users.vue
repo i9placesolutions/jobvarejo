@@ -320,17 +320,17 @@ const removeUser = async () => {
 </template>
 
 <style scoped>
-.users-page { width: min(1120px, 100%); margin: 0 auto; padding: 30px 24px 60px; color: #172b45; }
+.users-page { width: min(1120px, 100%); min-width: 0; margin: 0 auto; padding: clamp(16px, 2vw, 28px) clamp(12px, 2vw, 24px) 32px; color: #172b45; container-type: inline-size; }
 .users-heading { margin-bottom: 22px; }
 .users-heading p { margin: 0 0 5px; color: #2563eb; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
-.users-heading h1 { margin: 0 0 7px; font-size: clamp(25px, 3vw, 36px); font-weight: 800; }
-.users-heading span { color: #64748b; }
-.users-card { margin-top: 18px; padding: 22px; border: 1px solid #dbe5f0; border-radius: 18px; background: #fff; box-shadow: 0 10px 35px #172b4509; }
+.users-heading h1 { margin: 0 0 7px; font-size: clamp(21px, 2vw, 28px); font-weight: 700; line-height: 1.25; }
+.users-heading span { color: #64748b; font-size: 13px; line-height: 1.5; }
+.users-card { min-width: 0; margin-top: 16px; padding: clamp(14px, 1.8vw, 20px); border: 1px solid #dbe5f0; border-radius: 12px; background: #fff; }
 .users-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-.users-section-heading h2 { margin: 0; font-size: 19px; font-weight: 800; }
+.users-section-heading h2 { margin: 0; font-size: 16px; font-weight: 700; }
 .users-section-heading button, .users-list-item button { color: #2563eb; font-weight: 700; }
 .users-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.users-form > label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
+.users-form > label { min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
 .users-help { grid-column: 1 / -1; margin: -4px 0 0; color: #64748b; font-size: 13px; }
 .users-form input:not([type=checkbox]), .users-form select, .users-search { box-sizing: border-box; width: 100%; height: 42px; min-height: 42px; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; font-size: 14px; line-height: 20px; }
 .users-password-field { position: relative; display: block; }
@@ -351,8 +351,8 @@ const removeUser = async () => {
 .users-permissions-head { color: #64748b; font-size: 12px; font-weight: 800; }
 .users-save { grid-column: 1 / -1; justify-self: start; min-height: 42px; padding: 0 20px; border-radius: 10px; background: #2563eb; color: white; font-weight: 800; }
 .users-save:disabled { opacity: .6; }
-.users-list-item { display: grid; grid-template-columns: minmax(0, 1fr) 130px 100px 60px; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid #e2e8f0; }
-.users-list-item-admin { grid-template-columns: minmax(0, 1fr) 130px 100px auto auto; }
+.users-list-item { display: grid; grid-template-columns: minmax(0, 1fr) 110px 70px auto; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid #e2e8f0; font-size: 13px; }
+.users-list-item-admin { grid-template-columns: minmax(0, 1fr) 110px 70px auto auto; }
 .users-list-item .users-admin-actions { display: flex; flex-direction: row; align-items: center; gap: 10px; }
 .users-admin-actions button, .users-dialog-actions button { color: #2563eb; font-weight: 700; }
 .users-list-item button:disabled, .users-dialog-actions button:disabled { cursor: not-allowed; opacity: .55; }
@@ -360,16 +360,30 @@ const removeUser = async () => {
 .users-search { margin-bottom: 15px; }
 .users-list-item div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .users-list-item small { color: #64748b; overflow-wrap: anywhere; }
+.users-list-item strong, .users-heading, .users-help, .users-removal-dialog { overflow-wrap: anywhere; }
 .users-role, .users-active, .users-inactive { font-size: 12px; font-weight: 800; }
 .users-active { color: #047857; } .users-inactive { color: #b91c1c; }
 .users-notice, .users-error { padding: 10px 14px; border-radius: 9px; }
 .users-notice { background: #ecfdf5; color: #047857; } .users-error { background: #fef2f2; color: #b91c1c; }
 .users-dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 20px; background: #0f172a88; }
-.users-removal-dialog { width: min(520px, 100%); padding: 24px; border: 1px solid #dbe5f0; border-radius: 16px; background: #fff; box-shadow: 0 24px 80px #0f172a33; }
+.users-removal-dialog { width: min(520px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; overscroll-behavior: contain; padding: clamp(16px, 3vw, 24px); border: 1px solid #dbe5f0; border-radius: 12px; background: #fff; box-shadow: 0 24px 80px #0f172a33; }
 .users-removal-dialog h2 { margin: 0 0 14px; font-size: 21px; }
 .users-removal-dialog p { margin: 0 0 12px; color: #475569; line-height: 1.55; }
 .users-removal-dialog label { display: flex; flex-direction: column; gap: 7px; margin-top: 18px; font-size: 13px; }
 .users-removal-dialog input { box-sizing: border-box; width: 100%; height: 42px; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 9px; font-size: 14px; }
-.users-dialog-actions { display: flex; justify-content: flex-end; gap: 16px; margin-top: 20px; }
-@media (max-width: 700px) { .users-page { padding: 18px 12px 40px; } .users-card { padding: 15px; } .users-form { grid-template-columns: 1fr; } .users-list-item { grid-template-columns: 1fr auto; } .users-admin-actions { grid-column: 1 / -1; justify-content: flex-start; } }
+.users-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 16px; margin-top: 20px; }
+@container (max-width: 760px) {
+  .users-list-item, .users-list-item-admin { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .users-list-item > div:first-child, .users-list-item .users-admin-actions { grid-column: 1 / -1; }
+  .users-list-item button { min-height: 36px; text-align: left; }
+}
+@container (max-width: 520px) {
+  .users-form { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .users-section-heading { flex-wrap: wrap; margin-bottom: 14px; }
+  .users-permissions { padding: 10px; }
+}
+@media (max-width: 1023px) {
+  .users-form input:not([type=checkbox]), .users-form select, .users-search, .users-removal-dialog input { font-size: 16px; min-height: 44px; }
+  .users-save, .users-admin-actions button, .users-dialog-actions button, .users-list-item > button { min-height: 44px; }
+}
 </style>

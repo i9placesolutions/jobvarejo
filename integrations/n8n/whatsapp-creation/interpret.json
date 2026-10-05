@@ -153,7 +153,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "jsonBody": "={{ JSON.stringify({ ...$json.request, model: 'google/gemini-3.1-flash-lite', provider: { ...$json.request.provider, allow_fallbacks: true } }) }}",
         "options": {
           "timeout": 90000,
           "redirect": {

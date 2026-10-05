@@ -410,6 +410,7 @@ const normalizeProductText = (value: unknown): string => String(value ?? '')
   .replace(/(\d)[,](\d)/g, '$1.$2').replace(/[^a-z0-9.]+/g, ' ').trim().replace(/\s+/g, ' ')
 
 const normalizeWeight = (value: unknown): string => normalizeProductText(value).replace(/\s+/g, '')
+const PRODUCT_NAME_UNIT_TOKENS = new Set(['kg', 'g', 'mg', 'ml', 'l', 'un', 'pct', 'cx', 'fardo', 'fd'])
 
 const escapeLike = (value: string): string => value.replace(/[\\%_]/g, '\\$&')
 
@@ -439,14 +440,24 @@ export async function listProductCandidates(
   const requestedBrand = normalizeProductText(product.brand)
   const requestedVariant = normalizeProductText(product.variant)
   const requestedWeight = normalizeWeight(product.weight)
-  const nameTokens = requestedName.split(' ').filter(token => token.length > 1)
+  const nameTokens = requestedName.split(' ').filter(token => token.length > 1 &&
+    !PRODUCT_NAME_UNIT_TOKENS.has(token) && !/^\d+(?:\.\d+)?$/.test(token))
   return (rows || [])
     .map(row => {
       const name = text(row.product_name || row.search_term)
+      const productName = normalizeProductText(row.product_name || row.search_term)
+      const productNameTokens = productName.split(' ').filter(Boolean)
       const variant = text(row.flavor)
       const key = normalizeStoragePath(row.s3_key)
       const searchable = normalizeProductText([name, row.search_term, row.brand, row.flavor, row.weight].join(' '))
-      if (!key.startsWith('imagens/') || nameTokens.some(token => !searchable.includes(token))) return null
+      // A search term can be an ingredient/flavor ("cenoura") even when the
+      // catalog item is another product ("massa para bolo sabor cenoura").
+      // For a one-word request, require that word to identify the product name
+      // itself. Keep multi-word matching across searchable metadata so brand and
+      // package details stored in separate columns continue to match.
+      const simpleNameIsProductIdentity = nameTokens.length !== 1 || productNameTokens[0] === nameTokens[0]
+      if (!key.startsWith('imagens/') || !simpleNameIsProductIdentity ||
+        nameTokens.some(token => !searchable.includes(token))) return null
       const brand = text(row.brand)
       const weight = text(row.weight)
       if (requestedBrand && normalizeProductText(brand) !== requestedBrand) return null
