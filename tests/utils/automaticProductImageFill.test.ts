@@ -33,6 +33,17 @@ it('desenha a pilha de cima para baixo para as cópias inferiores ficarem à fre
     expect(plan[index]!.scale).toBe(plan[0]!.scale)
   }
 })
+it('mantém duas fotos grandes e pareadas na área configurada em Cards', () => {
+  const plan = planAutomaticProductImageFill(426, 448, 512, 415, 2)
+  expect(plan).toHaveLength(2)
+  expect(plan[0]!.left).toBeCloseTo(plan[1]!.left)
+  expect(plan[1]!.top).toBeGreaterThan(plan[0]!.top)
+  expect(plan[0]!.scale * 512).toBeGreaterThan(390)
+  for (const image of plan) {
+    expect(Math.abs(image.left) + 256 * image.scale).toBeLessThanOrEqual(213.001)
+    expect(Math.abs(image.top) + 207.5 * image.scale).toBeLessThanOrEqual(224.001)
+  }
+})
 it('abandona duas cópias quando o novo espaço pede uma imagem', () => {
   const before = planAutomaticProductImageFill(200, 400, 100, 100)
   const after = planAutomaticProductImageFill(200, 200, 100, 100)

@@ -6,7 +6,10 @@ export const planAutomaticProductImageFill = (width: number, height: number, ima
     const crossScale = vertical ? aw / iw : ah / ih
     const length = vertical ? ih : iw
     const available = vertical ? ah : aw
-    const step = count > 1 ? Math.min(length, Math.max(length * (vertical ? 0.58 : 0.66), (available / crossScale - length) / (count - 1))) : 0
+    // A pilha de duas imagens pode se sobrepor mais: assim produtos quase
+    // quadrados usam a largura grande configurada em Cards sem sair da área.
+    const minimumStep = vertical && requestedCount === 2 ? 0.4 : vertical ? 0.58 : 0.66
+    const step = count > 1 ? Math.min(length, Math.max(length * minimumStep, (available / crossScale - length) / (count - 1))) : 0
     return { dx: vertical ? 0 : step, dy: vertical ? step : 0 }
   }
   let best = { count: 1, vertical: false, scale: single, score: 0 }
