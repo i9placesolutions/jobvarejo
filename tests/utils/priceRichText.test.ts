@@ -94,6 +94,19 @@ const createSplitParent = () => {
 }
 
 describe('priceRichText — inteiro e centavos em um único texto', () => {
+  it('mantém o centro autorado ao trocar dois dígitos por um, sem deriva ao voltar', () => {
+    const object: any = new FakeRichText('22,99', { left: -40, top: 0, originX: 'left',
+      __priceRichText: true, group: { __preserveManualLayout: true } })
+    object.getRelativeCenterPoint = () => ({ x: object.left + object.getScaledWidth() / 2, y: object.top })
+    object.setPositionByOrigin = (center: any) => { object.left = center.x - object.getScaledWidth() / 2 }
+    const center = object.getRelativeCenterPoint().x
+    applyRichPriceTextValue(object, '4,99')
+    expect(object.getRelativeCenterPoint().x).toBe(center)
+    expect(object.left).toBeGreaterThan(-40)
+    applyRichPriceTextValue(object, '22,99')
+    expect(object.left).toBe(-40)
+  })
+
   it('cria estilos independentes por faixa de caracteres', () => {
     const definition = createRichPriceTextDefinition({
       text: '10,99',

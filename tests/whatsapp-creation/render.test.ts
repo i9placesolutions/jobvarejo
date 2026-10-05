@@ -28,7 +28,7 @@ import type { BusinessProfile } from '../../utils/businessProfile'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import sharp from 'sharp'
-import { createDefaultProductCardConfiguration } from '../../utils/product-card-configuration'
+import { createDefaultProductCardConfiguration, resolveProductCardConfigurationProfile } from '../../utils/product-card-configuration'
 
 const pythonWithPlaywright = (() => {
   try {
@@ -60,9 +60,6 @@ const order = (imageKey = `imagens/${userId}/rice.png`, imageHash = 'hash') => {
   return approveData(value, userId)
 }
 
-function pngDataUrl(): string {
-  return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jgT8AAAAASUVORK5CYII='
-}
 
 describe('adapter de render da criação WhatsApp', () => {
   it('usa a etiqueta Padrão atual da conta e mantém a escolha explícita do modelo', () => {
@@ -272,13 +269,15 @@ describe('adapter de render da criação WhatsApp', () => {
       ' page = browser.new_page()',
       ' page.set_content("<!doctype html><style>" + css + "</style><canvas></canvas>", wait_until="load")',
       ' metrics = page.evaluate("""async faces => { const loaded = await Promise.all([document.fonts.load(\'700 32px "Barlow"\', \'Font check 123\'), document.fonts.load(\'700 32px "Inter"\', \'Font check 123\')]); await document.fonts.ready; const ctx = document.querySelector(\'canvas\').getContext(\'2d\'); const widths = {}; for (const family of [\'Barlow\', \'Inter\', \'serif\']) { ctx.font = `700 32px "${family}"`; widths[family] = ctx.measureText(\'Font check 123\').width; } return {loaded: loaded.map(fonts => fonts.length), checks: [document.fonts.check(\'700 32px "Barlow"\', \'Font check 123\'), document.fonts.check(\'700 32px "Inter"\', \'Font check 123\')], widths}; }""", faces)',
+      ' italic = page.evaluate("""async () => { const faces = await document.fonts.load(\'italic 900 40px "Barlow"\', \'4,99\'); return faces.map(face => ({style: face.style, weight: face.weight, status: face.status})); }""")',
+      ' assert italic == [{"style":"italic", "weight":"900", "status":"loaded"}], italic',
       ' assert metrics["loaded"] == [1, 1] and metrics["checks"] == [True, True], metrics',
       ' assert metrics["widths"]["Barlow"] > 0 and metrics["widths"]["Inter"] > 0, metrics',
       ' assert metrics["widths"]["Barlow"] != metrics["widths"]["serif"] and metrics["widths"]["Inter"] != metrics["widths"]["serif"], metrics',
       ' browser.close()'
     ].join('\n')
     execFileSync('python3', ['-c', python, workerPath], { stdio: 'pipe' })
-  })
+  }, 30_000)
 
   it('mantém o contorno sticker da logo também no PNG da oferta completa', async () => {
     const redLogo = await sharp({ create: { width: 100, height: 70, channels: 4, background: '#00000000' } })
@@ -319,9 +318,10 @@ describe('adapter de render da criação WhatsApp', () => {
         { type: 'Rect', left: 0, top: 0, width: 1080, height: 1920, fill: 'transparent', isFrame: true, _customId: 'frame-1', name: 'frameRoot' }
       ]
     }
+    const productImage = `data:image/png;base64,${(await sharp({ create: { width: 80, height: 120, channels: 4, background: '#60a533' } }).png().toBuffer()).toString('base64')}`
     const product = (id: string, price: string) => ({
       id, name: `Produto ${id}`, brand: 'Marca', variant: 'Variante', weight: '5 kg', price,
-      imageDataUrl: pngDataUrl()
+      imageDataUrl: productImage
     })
     const pages = await renderEditableFlyerCanvas({ canvas, products: [product('one', 'R$ 19,90'), product('two', 'R$ 29,90'), product('three', 'R$ 39,90'), product('four', 'R$ 49,90')], division: 'single', formatId: 'stories' })
     expect(pages).toHaveLength(1)
@@ -352,19 +352,44 @@ describe('adapter de render da criação WhatsApp', () => {
     const accountCanvas = JSON.parse(JSON.stringify(canvas))
     const accountLabel = JSON.parse(JSON.stringify(label))
     accountLabel.objects[0].fill = '#345678'
+    // A etiqueta salva tem dois dígitos; um preço com um dígito precisa
+    // reindexar a vírgula/centavos e manter o offset autorado no Mini Editor.
+    Object.assign(accountLabel.objects[2], {
+      __priceRichText: true, fontFamily: 'Barlow', fontStyle: 'italic', fontWeight: 900,
+      __priceRichIntegerStyle: { fontSize: 38, fontFamily: 'Barlow', fontStyle: 'italic', fontWeight: 900 },
+      __priceRichDecimalStyle: { fontSize: 19, fontFamily: 'Barlow', fontStyle: 'italic', fontWeight: 900 },
+      __priceRichIntegerScale: 1, __priceRichDecimalScale: 0.5,
+      __priceRichDecimalOffsetX: 0.75, __priceRichDecimalOffsetY: -14,
+      styles: [
+        { start: 0, end: 2, style: { fontSize: 38 } },
+        { start: 2, end: 5, style: { fontSize: 19 } }
+      ]
+    })
     applyFlyerAccountLabelTemplates(accountCanvas, [{ id: 'tpl_default', name: 'Padrão da conta', group: accountLabel }])
     const manualPages = await renderEditableFlyerCanvas({
       canvas: accountCanvas,
-      products: [product('one', 'R$ 19,90'), product('two', 'R$ 29,90'), product('three', 'R$ 39,90'), product('four', 'R$ 49,90')]
+      products: [product('one', 'R$ 4,99'), product('two', 'R$ 22,99'), product('three', 'R$ 5,99'), product('four', 'R$ 4,99')]
         .map(item => ({ ...item, imageDataUrl: wideImage })),
       division: 'single', formatId: 'stories', cardLayout: accountCardLayout
     })
     const manualCards = manualPages[0]!.canvas.objects.filter((item: any) => item.name === 'product-card')
+    const rich = manualCards[0].objects.find((item: any) => item.name === 'priceGroup').objects
+      .find((item: any) => item.name === 'price_value_text')
+    expect(rich.text).toBe('4,99')
+    expect(rich.__priceRichDecimalOffsetY).toBe(-14)
+    expect(rich.styles.find((span: any) => span.start === 1)).toMatchObject({ end: 4, style: { fontSize: 19 } })
     expect(manualCards.map((item: any) => item.productItemId)).toEqual(['one', 'two', 'three', 'four'])
     expect(manualCards.every((item: any) => item.__cardLabelTemplateId === 'tpl_default')).toBe(true)
     expect(manualCards.every((item: any) => item.objects.filter((child: any) => /^(smart_image|extra_image_)/.test(child.name)).length === 2)).toBe(true)
     for (const card of manualCards) {
       expect(card._productData.imageFillCount).toBe(2)
+      const recipe = resolveProductCardConfigurationProfile(accountCardLayout, card._cardWidth, card._cardHeight).elements
+      const images = card.objects.filter((item: any) => /^(smart_image|extra_image_)/.test(item.name))
+      expect((images[0].left + images[1].left) / 2).toBeCloseTo((recipe.image.x / 100 - 0.5) * card._cardWidth, 2)
+      expect((images[0].top + images[1].top) / 2).toBeCloseTo((recipe.image.y / 100 - 0.5) * card._cardHeight, 2)
+      expect(card.objects.find((item: any) => item.name === 'smart_title').left)
+        .toBeCloseTo((recipe.name.x / 100 - 0.5) * card._cardWidth, 2)
+
       expect(card.objects.find((item: any) => item.name === 'smart_image').width *
         card.objects.find((item: any) => item.name === 'smart_image').scaleX).toBeLessThan(card._cardWidth * 0.31)
       expect(card.width).toBeLessThan(card._cardWidth * 1.05)

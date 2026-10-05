@@ -249,6 +249,12 @@ export const applyRichPriceTextValue = (object: any, rawPrice: unknown): string 
 
   const parts = splitPriceParts(rawPrice)
   const text = `${parts.integer},${parts.dec}`
+  // A etiqueta autorada define o centro do campo numérico. Ao mudar de
+  // dois dígitos para um, preservar só `left` desloca o valor para a esquerda.
+  // A mesma regra vale no editor manual e no render por WhatsApp.
+  const authoredCenter = object.group?.__preserveManualLayout === true && object.text !== text
+    ? object.getRelativeCenterPoint?.()
+    : null
   const integerStyle = getRichPriceSegmentStyle(object, 'integer')
   const decimalStyle = getRichPriceSegmentStyle(object, 'decimal')
   const integerScale = resolveScale(object, 'integer', integerStyle)
@@ -267,6 +273,7 @@ export const applyRichPriceTextValue = (object: any, rawPrice: unknown): string 
   object.text = text
   object.styles = buildRichPriceStyles(text, integerStyle, decimalStyle)
   object.initDimensions?.()
+  if (authoredCenter) object.setPositionByOrigin?.(authoredCenter, 'center', 'center')
   object.setCoords?.()
   return text
 }

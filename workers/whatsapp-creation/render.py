@@ -21,6 +21,11 @@ FONT_FACES = {
         ("Barlow-Bold.ttf", 700),
         ("Barlow-ExtraBold.ttf", 800),
         ("Barlow-Black.ttf", 900),
+        ("Barlow-Italic.ttf", 400, "italic"),
+        ("Barlow-SemiBoldItalic.ttf", 600, "italic"),
+        ("Barlow-BoldItalic.ttf", 700, "italic"),
+        ("Barlow-ExtraBoldItalic.ttf", 800, "italic"),
+        ("Barlow-BlackItalic.ttf", 900, "italic"),
     ]),
     "barlowcondensed": ("Barlow Condensed", [
         ("BarlowCondensed-Regular.ttf", 400),
@@ -114,16 +119,18 @@ def _font_stylesheet(canvas, worker_file: Path = Path(__file__)):
         if family is None:
             fail(f"A fonte solicitada pelo modelo não está disponível localmente: {key or '(vazia)'}.")
         family_name, faces = family
-        for filename, weight in faces:
+        for face in faces:
+            filename, weight = face[:2]
+            style = face[2] if len(face) > 2 else "normal"
             path = _font_file(filename, worker_file)
             encoded = base64.b64encode(path.read_bytes()).decode("ascii")
             css.append(
                 "@font-face{" +
-                f"font-family:{json.dumps(family_name)};font-style:normal;" +
+                f"font-family:{json.dumps(family_name)};font-style:{style};" +
                 f"font-weight:{weight};font-display:block;src:url(data:font/ttf;base64,{encoded}) format('truetype')" +
                 "}"
             )
-            descriptors.append({"family": family_name, "weight": weight})
+            descriptors.append({"family": family_name, "weight": weight, "style": style})
     return "\n".join(css), descriptors
 
 
@@ -261,7 +268,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
         page.set_content(html, wait_until="load")
         page.evaluate("""async descriptors => {
           const essential = ['Barlow', 'Inter'];
-          const loadedFaces = await Promise.all(descriptors.map(face => document.fonts.load(`${face.weight === '100 900' || face.weight === '200 900' ? '700' : face.weight} 32px \"${face.family}\"`, 'Font check 123')));
+          const loadedFaces = await Promise.all(descriptors.map(face => document.fonts.load(`${face.style || 'normal'} ${face.weight === '100 900' || face.weight === '200 900' ? '700' : face.weight} 32px \"${face.family}\"`, 'Font check 123')));
           await document.fonts.ready;
           const ctx = document.createElement('canvas').getContext('2d');
           const measured = {};
@@ -445,85 +452,24 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 : (palette.cardColor || styles.cardColor || '#ffffff');
               const nameColor = highlighted ? (palette.highlightProdNameColor || styles.prodNameColor || '#111111')
                 : (palette.prodNameColor || styles.prodNameColor || '#111111');
-              const bg = new fabric.Rect({left: 0, top: 0, originX: 'center', originY: 'center', width, height,
-                fill: cardColor, stroke: styles.cardBorderColor || '#000000', strokeWidth: Number(styles.cardBorderWidth ?? 0),
-                rx: Number(styles.cardBorderRadius ?? 8), ry: Number(styles.cardBorderRadius ?? 8),
-                selectable: false, evented: false, name: 'offerBackground'});
-              const children = [bg];
-              if (product.imageDataUrl) {
-                const image = await fabric.FabricImage.fromURL(product.imageDataUrl, {crossOrigin: 'anonymous'});
-                const scale = Math.min(width * .85 / image.width, height * .5 / image.height);
-                image.set({left: 0, top: 0, originX: 'center', originY: 'center', scaleX: scale, scaleY: scale,
-                  selectable: true, evented: true, name: 'smart_image'});
-                children.push(...JobVarejoNative.prepareManualCardImages(fabric, image, width, height, input.cardLayout, 2));
-              }
               const titleText = [product.name, product.brand, product.variant, product.weight].filter(Boolean).join(' ');
-              const title = new fabric.Textbox(styles.prodNameTransform === 'upper' ? titleText.toLocaleUpperCase('pt-BR') : titleText, {
-                left: 0, top: -height * .45 + Number(styles.prodNameOffsetY || 0), originX: 'center', originY: 'top',
-                width: width - 20, fontFamily: styles.prodNameFont || 'Arial',
-                fontSize: Math.max(10, Math.min(width, height) * .09 * Number(styles.prodNameScale || 1)),
-                fontWeight: styles.prodNameWeight || 900, lineHeight: Number(styles.prodNameLineHeight || 1),
-                textAlign: styles.prodNameAlign || 'center', fill: nameColor,
-                selectable: true, evented: true, name: 'smart_title'});
-              children.push(title);
-              if (product.condition) children.push(new fabric.Textbox(product.condition, {
-                left: 0, top: -height * .45 + title.getScaledHeight() + Math.max(4, height * .015),
-                originX: 'center', originY: 'top', width: width * .9,
-                fontFamily: styles.prodNameFont || 'Arial', fontSize: Math.max(10, Math.min(width, height) * .045),
-                fontWeight: 900, textAlign: 'center', fill: styles.limitColor || '#ef4444',
-                selectable: true, evented: true, name: 'smart_limit'}));
               const labelId = String(styles.splashTemplateId || zone._zoneTemplateSnapshotId || '').trim();
               const templates = input.canvas.__labelTemplates || [];
               const template = labelId ? templates.find(item => String(item.id) === labelId) : null;
               const savedLabel = template?.group || zone._zoneTemplateSnapshot || zone._zoneStateSnapshot?.labelTemplate?.snapshot;
-              const price = String(product.price || '').trim().replace(/^R\$\s*/i, '').replace(/^(\d+)\.(\d{2})$/, '$1,$2');
-              let label;
-              if (savedLabel && Array.isArray(savedLabel.objects)) {
-                const labelJson = JSON.parse(JSON.stringify(savedLabel));
-                const walkLabel = nodes => {
-                  for (const node of nodes || []) {
-                    const name = String(node.name || '');
-                    if (name === 'price_value_text' || name === 'smart_price') node.text = price;
-                    if (name === 'price_integer_text' || name === 'priceInteger') node.text = price.split(',')[0];
-                    if (name === 'price_decimal_text' || name === 'priceDecimal') node.text = ',' + (price.split(',')[1] || '00');
-                    if (name === 'price_unit_text' || name === 'priceUnit') { node.text = product.unit || ''; node.visible = !!product.unit; }
-                    walkLabel(node.objects);
-                  }
-                };
-                walkLabel(labelJson.objects);
-                [label] = await fabric.util.enlivenObjects([labelJson]);
-                const restoreNames = (live, saved) => {
-                  if (saved.name) live.set('name', saved.name);
-                  (live.getObjects?.() || []).forEach((child, index) => restoreNames(child, saved.objects?.[index] || {}));
-                };
-                restoreNames(label, labelJson);
-                const labelScale = Math.min(width * .64 / Math.max(1, label.width), height * .18 / Math.max(1, label.height));
-                label.set({left: 0, top: height / 2 - label.height * labelScale / 2 - height * .05,
-                  originX: 'center', originY: 'center', scaleX: labelScale, scaleY: labelScale});
-              } else if (!labelId) {
-                label = JobVarejoNative.createManualDefaultPriceGroup(fabric, price, width, height, product.unit || '');
-                const labelHeight = label.getScaledHeight?.() || label.height;
-                label.set({left: 0, top: height / 2 - labelHeight / 2 - height * .05,
-                  originX: 'center', originY: 'center'});
-              } else {
-                throw new Error('A etiqueta escolhida no modelo não está disponível.');
-              }
-              label.set({selectable: true, evented: true, name: 'priceGroup',
-                objectCaching: false, statefullCache: false, dirty: true});
-              children.push(label);
-              const card = new fabric.Group(children, {
-                left: left + width / 2, top: top + height / 2, originX: 'center', originY: 'center',
-                name: 'product-card', isSmartObject: true, isProductCard: true,
-                parentZoneId: zone._customId || zone.id || zone.name,
-                productZoneId: zone._customId || zone.id || zone.name,
-                productItemId: product.id, _zoneOrder: i, _cardWidth: width, _cardHeight: height,
-                _productData: {...product, imageDataUrl: undefined, autoFillImages: true, imageFillCount: 2},
-                __cardLabelTemplateId: labelId || '',
-                subTargetCheck: true, interactive: true, selectable: true, evented: true,
-                objectCaching: false});
-              JobVarejoNative.applyManualCardConfiguration(fabric, card, width, height, {
-                ...styles, cardLayout: input.cardLayout
-              });
+              if (labelId && !savedLabel) throw new Error('A etiqueta escolhida no modelo não está disponível.');
+              const zoneId = zone._customId || zone.id || zone.name;
+              const card = await JobVarejoNative.createManualProductCard(fabric, {
+                ...product,
+                name: styles.prodNameTransform === 'upper' ? titleText.toLocaleUpperCase('pt-BR') : titleText,
+                limit: product.condition || '',
+                autoFillImages: true, imageFillCount: 2, zoneInstanceId: zoneId
+              }, left + width / 2, top + height / 2, width, height, zoneId,
+                savedLabel ? { ...(template || {}), id: labelId, group: savedLabel } : undefined,
+                { ...styles, cardLayout: input.cardLayout || styles.cardLayout,
+                  productPalette: { ...palette, cardColor, prodNameColor: nameColor } });
+              card.set({isProductCard: true, parentZoneId: zoneId, productZoneId: zoneId,
+                productItemId: product.id, _zoneOrder: i});
               c.add(card);
               zone.contentStatus = 'filled';
               if (zone._zoneStateSnapshot?.zone) zone._zoneStateSnapshot.zone.contentStatus = 'filled';
