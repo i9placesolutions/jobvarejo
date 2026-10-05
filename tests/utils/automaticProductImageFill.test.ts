@@ -38,10 +38,56 @@ it('mantém duas fotos grandes e pareadas na área configurada em Cards', () => 
   expect(plan).toHaveLength(2)
   expect(plan[0]!.left).toBeCloseTo(plan[1]!.left)
   expect(plan[1]!.top).toBeGreaterThan(plan[0]!.top)
-  expect(plan[0]!.scale * 512).toBeGreaterThan(390)
+  expect(plan[0]!.scale * 512).toBeCloseTo(426)
   for (const image of plan) {
     expect(Math.abs(image.left) + 256 * image.scale).toBeLessThanOrEqual(213.001)
     expect(Math.abs(image.top) + 207.5 * image.scale).toBeLessThanOrEqual(224.001)
+  }
+})
+it('usa a sobra horizontal para manter escala máxima de uma imagem retrato', () => {
+  const plan = planAutomaticProductImageFill(300, 400, 200, 400, 2)
+  expect(plan).toHaveLength(2)
+  expect(plan[0]!.scale).toBe(1)
+  expect(plan[0]!.top).toBeCloseTo(plan[1]!.top)
+  expect(plan[1]!.left).toBeGreaterThan(plan[0]!.left)
+  for (const image of plan) {
+    expect(Math.abs(image.left) + 100 * image.scale).toBeLessThanOrEqual(150.001)
+    expect(Math.abs(image.top) + 200 * image.scale).toBeLessThanOrEqual(200.001)
+  }
+})
+it('respeita a direção pedida mesmo quando isso exige reduzir a escala', () => {
+  const plan = planAutomaticProductImageFill(426, 448, 512, 415, 2, 'horizontal')
+  expect(plan).toHaveLength(2)
+  expect(plan[0]!.top).toBeCloseTo(plan[1]!.top)
+  expect(plan[1]!.left).toBeGreaterThan(plan[0]!.left)
+  expect(plan[0]!.scale).toBeLessThan(426 / 512)
+  for (const image of plan) {
+    expect(Math.abs(image.left) + 256 * image.scale).toBeLessThanOrEqual(213.001)
+    expect(Math.abs(image.top) + 207.5 * image.scale).toBeLessThanOrEqual(224.001)
+  }
+})
+it('respeita a direção vertical explícita e preserva a escala quando há sobra', () => {
+  const plan = planAutomaticProductImageFill(426, 448, 512, 415, 2, 'vertical')
+  expect(plan).toHaveLength(2)
+  expect(plan[0]!.left).toBeCloseTo(plan[1]!.left)
+  expect(plan[1]!.top).toBeGreaterThan(plan[0]!.top)
+  expect(plan[0]!.scale * 512).toBeCloseTo(426)
+  for (const image of plan) {
+    expect(Math.abs(image.left) + 256 * image.scale).toBeLessThanOrEqual(213.001)
+    expect(Math.abs(image.top) + 207.5 * image.scale).toBeLessThanOrEqual(224.001)
+  }
+})
+it('reduz apenas o necessário para revelar a segunda cópia em uma área quadrada sem sobra', () => {
+  const plan = planAutomaticProductImageFill(200, 200, 200, 200, 2)
+  const minimumVisibleOffsetRatio = 0.18
+  expect(plan).toHaveLength(2)
+  expect(plan[0]!.scale).toBeCloseTo(1 / (1 + minimumVisibleOffsetRatio))
+  expect(plan[0]!.top).toBeCloseTo(plan[1]!.top)
+  expect(plan[1]!.left - plan[0]!.left).toBeCloseTo(200 * plan[0]!.scale * minimumVisibleOffsetRatio)
+  expect(plan[1]!.left).toBeGreaterThan(plan[0]!.left)
+  for (const image of plan) {
+    expect(Math.abs(image.left) + 100 * image.scale).toBeLessThanOrEqual(100.001)
+    expect(Math.abs(image.top) + 100 * image.scale).toBeLessThanOrEqual(100.001)
   }
 })
 it('abandona duas cópias quando o novo espaço pede uma imagem', () => {

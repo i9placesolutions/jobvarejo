@@ -2,6 +2,46 @@ export const planAutomaticProductImageFill = (width: number, height: number, ima
   const iw = Math.max(1, imageWidth), ih = Math.max(1, imageHeight)
   const aw = Math.max(1, width), ah = Math.max(1, height)
   const single = Math.min(aw / iw, ah / ih)
+  if (requestedCount === 2) {
+    // Duas cópias preservam o contain individual sempre que já houver espaço
+    // livre em um eixo. Esse espaço vira deslocamento entre centros, expondo
+    // a segunda imagem sem diminuir a primeira. Em áreas sem sobra, exigimos
+    // 18% do tamanho renderizado como deslocamento mínimo: essa faixa visível
+    // torna as cópias distinguíveis e define a menor redução necessária.
+    const minimumVisibleOffsetRatio = 0.18
+    const orientations = direction === 'auto'
+      ? [false, true]
+      : [direction === 'vertical']
+    const candidates = orientations.map(vertical => {
+      const imageLength = vertical ? ih : iw
+      const availableLength = vertical ? ah : aw
+      const singleLength = imageLength * single
+      const freeLength = Math.max(0, availableLength - singleLength)
+      const minimumOffset = singleLength * minimumVisibleOffsetRatio
+      const scale = freeLength >= minimumOffset
+        ? single
+        : Math.min(single, availableLength / (imageLength * (1 + minimumVisibleOffsetRatio)))
+      const offset = freeLength >= minimumOffset
+        ? freeLength
+        : imageLength * scale * minimumVisibleOffsetRatio
+      return { vertical, scale, offset }
+    })
+    // maximize the image first; on a tie, use the axis that exposes more of
+    // the second copy. The candidate order keeps horizontal as stable tie-break.
+    const best = candidates.reduce((current, candidate) =>
+      candidate.scale > current.scale + 1e-9 ||
+      (Math.abs(candidate.scale - current.scale) <= 1e-9 && candidate.offset > current.offset)
+        ? candidate
+        : current
+    )
+    const dx = best.vertical ? 0 : best.offset
+    const dy = best.vertical ? best.offset : 0
+    return [-1, 1].map(side => ({
+      left: side * dx / 2,
+      top: side * dy / 2,
+      scale: best.scale
+    }))
+  }
   const steps = (count: number, vertical: boolean) => {
     const crossScale = vertical ? aw / iw : ah / ih
     const length = vertical ? ih : iw
