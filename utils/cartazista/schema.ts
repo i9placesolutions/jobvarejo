@@ -2,6 +2,23 @@ import { z } from 'zod'
 import { CARTAZISTA_MODEL_KEYS, CARTAZISTA_FORMATS, CARTAZISTA_THEMES } from '~/types/cartazista'
 
 const headerAsset = z.string().max(2048).regex(/^(?:\/video-studio\/templates\/[a-zA-Z0-9/_\-.]+|\/api\/storage\/p\?key=[a-zA-Z0-9%/_\-.]+)$/)
+const referenceArtworkBox = z.tuple([
+  z.number().finite().min(0).max(1), z.number().finite().min(0).max(1),
+  z.number().finite().positive().max(1), z.number().finite().positive().max(1)
+]).refine(([x, y, width, height]) => x + width <= 1 && y + height <= 1)
+const referenceArtwork = z.object({
+  src: headerAsset,
+  width: z.number().finite().positive().max(100_000),
+  height: z.number().finite().positive().max(100_000),
+  headerBottom: z.number().finite().positive().max(1),
+  logoMask: referenceArtworkBox,
+  logoBox: referenceArtworkBox,
+  socialMask: referenceArtworkBox,
+  instagramBox: referenceArtworkBox,
+  additionalMasks: z.array(z.object({box: referenceArtworkBox, color: z.string().regex(/^#[\da-fA-F]{6}$/)})).max(12).optional(),
+  colors: z.object({ logo: z.string().regex(/^#[\da-fA-F]{6}$/), social: z.string().regex(/^#[\da-fA-F]{6}$/), logoText: z.string().regex(/^#[\da-fA-F]{6}$/) }),
+  sourceIndex: z.number().int().nonnegative()
+}).refine(value => [value.logoMask, value.logoBox, value.socialMask, value.instagramBox, ...(value.additionalMasks || []).map(mask => mask.box)].every(([, y, , height]) => y + height <= value.headerBottom), 'As caixas devem ficar dentro do recorte do cabeçalho.')
 
 const product = z.object({
   id: z.string().min(1).max(120),
@@ -27,6 +44,7 @@ const settings = z.object({
   foldGuide: z.boolean().optional(),
   removeBackground: z.boolean().optional(),
   header: z.object({
+    referenceArtwork: referenceArtwork.optional(),
     backgroundCropY: z.number().min(0).max(1).optional(),
     retailFinish: z.object({ decoration: headerAsset.optional(), labelFill: z.string().regex(/^#[0-9a-fA-F]{6}$/), labelInk: z.string().regex(/^#[0-9a-fA-F]{6}$/), labelEdge: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
     tagline: z.string().max(100).optional(),

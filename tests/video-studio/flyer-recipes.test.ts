@@ -16,15 +16,23 @@ describe('Encartes em vídeo',()=>{
   }
   for(const format of ['vertical','horizontal'] as const){
    const layout=r[format],a=layout.name
-   expect(a[0]).toBe(layout.price[0]);expect(a[2]).toBe(layout.price[2]);expect(a[1]+a[3]).toBe(layout.price[1]-12)
-   for(const key of ['seal','logo','price'] as const){
+   if(!r.referenceArtwork){
+    expect(a[0]).toBe(layout.price[0]);expect(a[2]).toBe(layout.price[2]);expect(a[1]+a[3]).toBe(layout.price[1]-12)
+   }
+   for(const key of (r.referenceArtwork?['seal','logo','product','price','validity','condition'] as const:['seal','logo','price'] as const)){
     const b=layout[key]
     const intersects=a[0]<b[0]+b[2]&&a[0]+a[2]>b[0]&&a[1]<b[1]+b[3]&&a[1]+a[3]>b[1]
     expect(intersects,`${r.name} ${format}: nome separado de ${key}`).toBe(false)
    }
   }
   // Reserva real após o zoom contínuo de 4,5% usado pela composição.
-  for(const key of ['seal','logo'] as const){const [x,y,w,h]=r.vertical[key];expect((y-960)*1.045+960,`${r.name}: topo seguro de ${key}`).toBeGreaterThan(12);expect((y+h-960)*1.045+960,`${r.name}: base segura de ${key}`).toBeLessThan(1920)}
+  for(const key of ['seal','logo'] as const){
+   // O header de referência é encaixado por fitReferenceHeader e começa na borda original; a caixa genérica seal não representa esse recorte.
+   if(key==='seal'&&r.referenceArtwork)continue
+   const [x,y,w,h]=r.vertical[key]
+   expect((y-960)*1.045+960,`${r.name}: topo seguro de ${key}`).toBeGreaterThan(12)
+   expect((y+h-960)*1.045+960,`${r.name}: base segura de ${key}`).toBeLessThan(1920)
+  }
   const before=structuredClone(r.motion);doc.motion!.atmosphere.push('dust');expect(r.motion).toEqual(before)
   doc.brand.name='Minha loja';doc.validity='20 A 27/09/2026';doc.voice.id='voz-pessoal';applyVideoTemplate(doc,r.id)
   expect(doc.brand.name).toBe('Minha loja');expect(doc.validity).toBe('20 A 27/09/2026');expect(doc.voice.id).toBe('voz-pessoal')

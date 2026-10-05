@@ -12,17 +12,25 @@ const hasCatalogAsset=(path:string)=>{
 }
 describe('Cobertura do catálogo de encartes',()=>{
  const recipes=Object.values(FLYER_RECIPES)
- it('identifica cada encarte por ID e mantém uma trilha própria por modelo',()=>{
+ it('identifica cada encarte e mantém trilhas UUID próprias e mídias de áudio válidas',()=>{
   expect(recipes.length).toBeGreaterThanOrEqual(103)
   expect(recipes.some(r=>r.sourceProject==='d6e5df76-0d63-41fa-8cbd-edd5bf29a259')).toBe(true)
   expect(new Set(recipes.map(r=>r.sourceProject)).size).toBe(recipes.length)
-  expect(new Set(recipes.map(r=>r.music)).size).toBe(recipes.length)
+  const modelTracks=recipes.filter(r=>r.music.startsWith('model-')),reference=recipes.filter(r=>r.referenceArtwork)
+  expect(new Set(modelTracks.map(r=>r.music)).size).toBe(modelTracks.length)
   const hashes=recipes.map(r=>{expect(isBuiltinMusic(r.music)).toBe(true);const path=`audio/${r.music}.mp3`;expect(hasCatalogAsset(path)).toBe(true);return catalog.assets[path].sha256})
-  expect(new Set(hashes).size).toBe(recipes.length)
+  const modelHashes=modelTracks.map(r=>catalog.assets[`audio/${r.music}.mp3`].sha256)
+  expect(new Set(modelHashes).size).toBe(modelTracks.length)
+  expect(new Set(reference.map(r=>r.music)).size).toBeGreaterThan(1)
+  expect(new Set(reference.map(r=>catalog.assets[`audio/${r.music}.mp3`].sha256)).size).toBeGreaterThan(1)
  })
  it('não deixa referências de arte quebradas e preserva os fundos vetoriais',()=>{
-  for(const r of recipes){expect(Boolean(r.seal||r.nativeTitle)).toBe(true);expect(Boolean(r.background||r.backgroundGradient)).toBe(true)
+  for(const r of recipes){expect(Boolean(r.seal||r.nativeTitle||r.referenceArtwork)).toBe(true)
+   const explicitBackground=Boolean(r.background||r.backgroundGradient)
+   const animatedPaletteBackground=Boolean(r.referenceArtwork&&/^#[0-9a-f]{6}$/i.test(r.base)&&r.backgroundKind&&r.motion.atmosphere.length)
+   expect(explicitBackground||animatedPaletteBackground).toBe(true)
    for(const a of [r.background,r.seal,r.energyBackground,r.energyBackgroundVertical].filter(Boolean))expect(hasCatalogAsset(`templates/${a}`)).toBe(true)
+   if(r.referenceArtwork)expect(hasCatalogAsset(r.referenceArtwork.src.replace('/video-studio/',''))).toBe(true)
   }
  })
  it('preserva a paleta do encarte em todos os modelos sem sobreposição genérica',()=>{

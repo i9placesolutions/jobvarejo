@@ -6,6 +6,7 @@ import {
   LayoutTemplate,
   LogOut,
   Menu as MenuIcon,
+  MessageCircle,
   Mic2,
   Radio,
   SlidersHorizontal,
@@ -16,7 +17,7 @@ import {
 import { useResponsive } from '~/composables/useResponsive'
 
 const props = withDefaults(defineProps<{
-  activeNav?: 'library' | 'musicgpt' | 'storage' | 'art-studio' | 'videos' | 'cartazista' | 'cartazes' | 'radio' | 'builder' | 'cards' | 'zones' | 'encartes'
+  activeNav?: 'library' | 'musicgpt' | 'storage' | 'whatsapp' | 'art-studio' | 'videos' | 'cartazista' | 'cartazes' | 'radio' | 'builder' | 'cards' | 'zones' | 'encartes'
   showSearch?: boolean
 }>(), {
   activeNav: 'library',
@@ -57,6 +58,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   if (props.activeNav === key) return true
   if (key === 'musicgpt') return route.path.startsWith('/admin/musicgpt')
   if (key === 'storage') return route.path.startsWith('/admin/storage')
+  if (key === 'whatsapp') return route.path.startsWith('/admin/whatsapp')
   if (key === 'videos') return route.path.startsWith('/videos')
   if (key === 'radio') return route.path.startsWith('/radio-indoor')
   if (key === 'encartes') return route.path.startsWith('/flyer-templates') || route.path.startsWith('/quick-editor')
@@ -129,6 +131,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
             <p class="admin-shell__section">Configuração</p>
             <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/users" class="admin-shell__nav-item" @click="closeDrawer"><User class="h-3.5 w-3.5" /> Usuários e acessos</NuxtLink>
             <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/musicgpt" class="admin-shell__nav-item" :class="{ active: isActive('musicgpt') }" @click="closeDrawer"><Mic2 class="h-3.5 w-3.5 text-blue-600" /> MusicGPT</NuxtLink>
+            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/whatsapp" class="admin-shell__nav-item" :class="{ active: isActive('whatsapp') }" @click="closeDrawer"><MessageCircle class="h-3.5 w-3.5 text-emerald-600" /> WhatsApp</NuxtLink>
             <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/storage" class="admin-shell__nav-item" :class="{ active: isActive('storage') }" @click="closeDrawer"><HardDrive class="h-3.5 w-3.5 text-slate-400" /> Storage</NuxtLink>
             <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value || (auth.user.value?.role === 'editor' && auth.can('encartes'))" to="/card-configurations" class="admin-shell__nav-item" :class="{ active: isActive('cards') }" @click="closeDrawer"><SlidersHorizontal class="h-3.5 w-3.5 text-blue-600" /> Configuração de cards</NuxtLink>
             <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value || (auth.user.value?.role === 'editor' && auth.can('encartes'))" to="/zone-structures" class="admin-shell__nav-item" :class="{ active: isActive('zones') }" @click="closeDrawer"><Grid3X3 class="h-3.5 w-3.5 text-blue-600" /> Estrutura de zonas</NuxtLink>
@@ -158,6 +161,7 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
             <p class="admin-shell__section">Configuração</p>
             <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/users" class="admin-shell__nav-item"><User class="h-4 w-4" /> Usuários e acessos</NuxtLink>
             <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/musicgpt" class="admin-shell__nav-item" :class="{ active: isActive('musicgpt') }"><Mic2 class="h-4 w-4 text-blue-600" /> MusicGPT</NuxtLink>
+            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/whatsapp" class="admin-shell__nav-item" :class="{ active: isActive('whatsapp') }"><MessageCircle class="h-4 w-4 text-emerald-600" /> WhatsApp</NuxtLink>
             <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/storage" class="admin-shell__nav-item" :class="{ active: isActive('storage') }"><HardDrive class="h-4 w-4 text-slate-400" /> Storage</NuxtLink>
             <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value || (auth.user.value?.role === 'editor' && auth.can('encartes'))" to="/card-configurations" class="admin-shell__nav-item" :class="{ active: isActive('cards') }"><SlidersHorizontal class="h-4 w-4 text-blue-600" /> Configuração de cards</NuxtLink>
             <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value || (auth.user.value?.role === 'editor' && auth.can('encartes'))" to="/zone-structures" class="admin-shell__nav-item" :class="{ active: isActive('zones') }"><Grid3X3 class="h-4 w-4 text-blue-600" /> Estrutura de zonas</NuxtLink>

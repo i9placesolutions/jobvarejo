@@ -442,3 +442,36 @@ watch(() => props.currentPageId, closeMenus)
  .quick-mode-page-toolbar[data-mobile-expanded=false] .quick-mode-page-toolbar__actions {display:none;}
 }
 </style>
+
+<style scoped>
+@media (min-width: 768px) and (max-width: 1499px) {
+  .quick-mode-page-toolbar {
+    width: calc(100% - 16px);
+    max-width: none;
+    flex-wrap: wrap;
+  }
+
+  .quick-mode-page-toolbar__identity {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+
+  .quick-mode-page-toolbar__actions {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .quick-mode-page-toolbar__menu-wrap {
+    flex: 1 1 145px;
+    min-width: 0;
+  }
+
+  .quick-mode-page-toolbar__menu-wrap > .quick-mode-page-toolbar__action,
+  .quick-mode-page-toolbar__actions > .quick-mode-page-toolbar__action {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+}
+</style>

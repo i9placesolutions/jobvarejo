@@ -5,7 +5,7 @@ import {
   prepareArtLogo
 } from '~/server/utils/art-studio-logo'
 import { artLayerImageSrc } from '~/utils/art-studio/logo'
-import { ART_STARTER_TEMPLATES } from '~/utils/art-studio/catalog'
+import { ART_GENERATION_BASE_COMPOSITION } from '~/utils/art-studio/catalog'
 describe('Logo do estúdio — contrato das ofertas', () => {
   it('auto trim remove margens transparentes sem cortar conteúdo opaco preto', async () => {
     const logo = await sharp({
@@ -84,7 +84,7 @@ describe('Logo do estúdio — contrato das ofertas', () => {
   })
   it('URL do preview reflete configurações sem alterar a referência salva', () => {
     const layer = {
-      ...ART_STARTER_TEMPLATES[0]!.composition.layers.at(-1)!,
+      ...ART_GENERATION_BASE_COMPOSITION.layers.at(-1)!,
       src: '/api/art-studio/brand-logo',
       autoTrim: true
     }

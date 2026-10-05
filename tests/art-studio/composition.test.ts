@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ART_STARTER_TEMPLATES } from '~/utils/art-studio/catalog'
+import { ART_GENERATION_BASE_COMPOSITION } from '~/utils/art-studio/catalog'
 import { artCompositionSchema } from '~/server/utils/art-studio-schema'
 import { normalizeArtTemplateBindings } from '~/server/utils/art-studio'
 import {
@@ -10,21 +10,16 @@ import {
 } from '~/utils/art-studio/composition'
 
 describe('Estúdio de Artes — contrato independente', () => {
-  it('todos os modelos iniciais são composições válidas com camadas únicas e logo dinâmica', () => {
-    for (const template of ART_STARTER_TEMPLATES) {
-      expect(
-        artCompositionSchema.safeParse(template.composition).success,
-        template.name
-      ).toBe(true)
-      expect(
-        template.composition.layers.some(
-          (l) => l.binding === 'logo' && l.src === ''
-        )
-      ).toBe(true)
-    }
+  it('a base de geração é válida, editável e tem logo dinâmica', () => {
+    expect(artCompositionSchema.safeParse(ART_GENERATION_BASE_COMPOSITION).success).toBe(true)
+    expect(
+      ART_GENERATION_BASE_COMPOSITION.layers.some(
+        (layer) => layer.binding === 'logo' && layer.src === '' && !layer.locked
+      )
+    ).toBe(true)
   })
   it('personalização não modifica o modelo nem mistura dados entre clientes', () => {
-    const template = ART_STARTER_TEMPLATES[0]!.composition,
+    const template = ART_GENERATION_BASE_COMPOSITION,
       original = JSON.stringify(template)
     const a = personalizeArt(template, {
       companyName: 'Loja A',
@@ -41,7 +36,7 @@ describe('Estúdio de Artes — contrato independente', () => {
     expect(JSON.stringify(template)).toBe(original)
   })
   it('substitui uma logo legada pela marca da conta ativa e limpa o slot sem cadastro', () => {
-    const source = cloneArt(ART_STARTER_TEMPLATES[0]!.composition)
+    const source = cloneArt(ART_GENERATION_BASE_COMPOSITION)
     const legacy = source.layers.find((layer) => layer.binding === 'logo')!
     legacy.binding = ''
     legacy.id = 'legacy-store-image'
@@ -63,7 +58,7 @@ describe('Estúdio de Artes — contrato independente', () => {
     ).toBe('')
   })
   it('remove URLs de logo legadas quando um modelo é publicado', () => {
-    const source = cloneArt(ART_STARTER_TEMPLATES[0]!.composition)
+    const source = cloneArt(ART_GENERATION_BASE_COMPOSITION)
     const legacy = source.layers.find((layer) => layer.binding === 'logo')!
     legacy.binding = ''
     legacy.id = 'store-logo'
@@ -76,7 +71,7 @@ describe('Estúdio de Artes — contrato independente', () => {
     })
   })
   it('redimensiona sem perder vínculo, rotação, imagens ou posição proporcional', () => {
-    const source = cloneArt(ART_STARTER_TEMPLATES[0]!.composition),
+    const source = cloneArt(ART_GENERATION_BASE_COMPOSITION),
       result = resizeArt(source, 1080, 1920)
     expect(result.layers[0]!.y).toBeCloseTo((source.layers[0]!.y * 1920) / 1350)
     expect(result.layers.find((l) => l.binding === 'logo')?.binding).toBe(
@@ -86,7 +81,7 @@ describe('Estúdio de Artes — contrato independente', () => {
     expect(source.height).toBe(1350)
   })
   it('mantém identidade da imagem em JSON após substituir, mover e salvar', () => {
-    const doc = cloneArt(ART_STARTER_TEMPLATES[0]!.composition),
+    const doc = cloneArt(ART_GENERATION_BASE_COMPOSITION),
       logo = doc.layers.find((l) => l.binding === 'logo')!
     logo.src = '/api/art-studio/assets/11111111-1111-4111-8111-111111111111'
     logo.x = 125
@@ -101,18 +96,18 @@ describe('Estúdio de Artes — contrato independente', () => {
     '/api/storage/proxy?key=private',
     '/api/art-studio/assets/../../other'
   ])('rejeita origem de imagem não autorizada: %s', (src) => {
-    const doc = cloneArt(ART_STARTER_TEMPLATES[0]!.composition)
+    const doc = cloneArt(ART_GENERATION_BASE_COMPOSITION)
     doc.layers.find((l) => l.kind === 'image')!.src = src
     expect(artCompositionSchema.safeParse(doc).success).toBe(false)
   })
   it('aceita o endpoint autenticado da logo dinâmica', () => {
-    const doc = personalizeArt(ART_STARTER_TEMPLATES[0]!.composition, {
+    const doc = personalizeArt(ART_GENERATION_BASE_COMPOSITION, {
       logo: '/api/art-studio/brand-logo'
     })
     expect(artCompositionSchema.safeParse(doc).success).toBe(true)
   })
   it('rejeita dimensões abusivas, IDs duplicados e fonte fora do catálogo', () => {
-    const doc = cloneArt(ART_STARTER_TEMPLATES[0]!.composition)
+    const doc = cloneArt(ART_GENERATION_BASE_COMPOSITION)
     expect(
       artCompositionSchema.safeParse({ ...doc, width: 99999 }).success
     ).toBe(false)
@@ -127,7 +122,7 @@ describe('Estúdio de Artes — contrato independente', () => {
   })
   it('recorta sem distorcer e respeita os controles horizontal/vertical', () => {
     const layer = {
-      ...ART_STARTER_TEMPLATES[0]!.composition.layers.at(-1)!,
+      ...ART_GENERATION_BASE_COMPOSITION.layers.at(-1)!,
       width: 200,
       height: 200,
       fit: 'cover' as const,
@@ -151,7 +146,7 @@ describe('Estúdio de Artes — contrato independente', () => {
 })
 
 it('remoção de logo do cadastro esvazia somente o slot, preservando posição e tamanho', () => {
-  const source = personalizeArt(ART_STARTER_TEMPLATES[0]!.composition, {
+  const source = personalizeArt(ART_GENERATION_BASE_COMPOSITION, {
     logo: '/api/art-studio/brand-logo'
   })
   const original = source.layers.find((l) => l.binding === 'logo')!

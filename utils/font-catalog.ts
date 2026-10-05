@@ -10,6 +10,7 @@ export const DEFAULT_EDITOR_FONT_FAMILY = 'Barlow'
 // - "Family:400,700,900"
 export const GOOGLE_WEBFONT_FAMILIES: string[] = [
   'Barlow:100,100italic,200,200italic,300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
+  'Barlow Condensed:100,100italic,200,200italic,300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
   'Inter:400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
   'Roboto:300,300italic,400,400italic,500,500italic,700,700italic,900,900italic',
   'Montserrat:300,300italic,400,400italic,500,500italic,600,600italic,700,700italic,800,800italic,900,900italic',
@@ -59,6 +60,7 @@ export const GOOGLE_WEBFONT_FAMILIES: string[] = [
 // This list is used in dropdowns/autocomplete. Include a few system fallbacks too.
 export const AVAILABLE_FONT_FAMILIES: string[] = [
   DEFAULT_EDITOR_FONT_FAMILY,
+  'Barlow Condensed',
   'Arial',
   'Georgia',
   'Times New Roman',
@@ -137,6 +139,7 @@ const FONT_FAMILIES_WITH_ITALIC = new Set<string>([
   'Times New Roman',
   'Courier New',
   'Barlow',
+  'Barlow Condensed',
   'Inter',
   'Roboto',
   'Montserrat',

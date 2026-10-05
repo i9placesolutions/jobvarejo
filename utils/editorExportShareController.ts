@@ -2,6 +2,9 @@ import { restoreCanvasStickerOutlines } from './editorStickerOutline'
 import { confirmInSystem, alertInSystem } from '~/utils/systemMessages'
 import { waitForFabricImagesDecoded } from './fabricImageHelpers'
 import { collectObjectsDeep } from './fabricObjectClassifiers'
+import { layoutInlineFooterValidity } from './inlineFooterValidityLayout'
+import { collectEditorWebFonts, createEditorFontLoader } from './editorFontLoading'
+import { cache as fabricCache } from 'fabric'
 import { isValidClipPath } from '~/utils/canvasValidation'
 import { isQuickLogoPlaceholder } from './quickLogoSlot'
 import {
@@ -63,6 +66,20 @@ export type EditorExportShareContext = {
 }
 
 const loadEditorExportPipeline = () => import('~/utils/editorExportPipeline')
+
+const ensureExportFonts = createEditorFontLoader(async families => {
+    const WebFontModule = await import('webfontloader')
+    const WebFont = WebFontModule.default || WebFontModule
+    await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Tempo limite ao carregar fontes.')), 3500)
+        WebFont.load({
+            google: { families },
+            timeout: 3000,
+            active: () => { clearTimeout(timeout); resolve() },
+            inactive: () => { clearTimeout(timeout); reject(new Error('Fontes temporariamente indisponíveis.')) }
+        })
+    })
+})
 
 type ScopedBlobExport = {
     blob: Blob
@@ -178,6 +195,37 @@ const finalizeExportRaster = async (
     })
 }
 
+export const prepareCanvasTypographyForOutput = async (canvas: any): Promise<void> => {
+    if (!canvas) return
+    const families = collectEditorWebFonts(canvas)
+    if (families.length) await ensureExportFonts(families).catch(() => undefined)
+    if (typeof document !== 'undefined') {
+        const fontsReady = document.fonts?.ready
+        if (fontsReady) {
+            // Font loading normally settles through WebFontLoader's timeout,
+            // but exports must remain usable if a browser never settles it.
+            await Promise.race([
+                Promise.resolve(fontsReady).catch(() => undefined),
+                new Promise<void>(resolve => setTimeout(resolve, 3500))
+            ])
+        }
+    }
+    const objects = collectObjectsDeep(canvas)
+    try {
+        fabricCache.clearFontCache()
+    } catch {
+        // Continue with Fabric's current measurements if cache access is unavailable.
+    }
+    objects.forEach((object: any) => {
+        if (!['i-text', 'textbox', 'text'].includes(String(object?.type || '').toLowerCase())) return
+        object.initDimensions?.()
+        object.set?.('dirty', true)
+        object.dirty = true
+        object.setCoords?.()
+    })
+    layoutInlineFooterValidity(objects)
+}
+
 const runWithNeutralViewport = async <T>(
     ctx: EditorExportShareContext,
     action: () => Promise<T> | T
@@ -185,7 +233,7 @@ const runWithNeutralViewport = async <T>(
     if (!ctx.canvas.value) return await action()
 
     const c: any = ctx.canvas.value
-    if (typeof document !== 'undefined') await document.fonts?.ready
+    await prepareCanvasTypographyForOutput(c)
     await waitForFabricImagesDecoded(c)
     const prevVpt = Array.isArray(c.viewportTransform) ? [...c.viewportTransform] : [1, 0, 0, 1, 0, 0]
     const prevRenderOnAddRemove = c.renderOnAddRemove

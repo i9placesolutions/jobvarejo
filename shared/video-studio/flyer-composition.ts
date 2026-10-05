@@ -16,6 +16,8 @@ import {musicGain,flyerSoundCues} from './sound-design'
 import {VideoPriceLabel} from './label-renderer'
 import {productLayers} from './product-layout'
 import {EditableElement} from './editable-element'
+import {fitReferenceHeader} from '../retail-reference-artwork'
+import {ReferenceArtwork,referenceArtworkEndingProps} from './reference-artwork'
 const div=(style:React.CSSProperties,...children:React.ReactNode[])=>h('div',{style},...children)
 const box=([left,top,width,height]:LayoutBox):React.CSSProperties=>({position:'absolute',left,top,width,height})
 const font:React.CSSProperties={fontFamily:'ShowcaseCondensed',fontWeight:800,lineHeight:1.02,textAlign:'center',color:'var(--video-text-color, white)'}
@@ -61,6 +63,9 @@ function Identity({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
  const progress=mix(f,first-4,first+7,0,1),end=mix(f,outro-4,outro+5,0,1)
  const interpolateBox=(a:LayoutBox,b:LayoutBox,t:number)=>a.map((v,i)=>v+(b[i]!-v)*t) as unknown as LayoutBox
  const sealBox=interpolateBox(p?[95,190,890,1100]:[220,65,1480,900],layout.seal,progress)
+ const referenceIntroBox=r.referenceArtwork?fitReferenceHeader(p?{x:40,y:75,width:1000,height:1240}:{x:95,y:45,width:1730,height:920},r.referenceArtwork):undefined
+ const referenceOfferBox=r.referenceArtwork?fitReferenceHeader({x:layout.seal[0],y:layout.seal[1],width:layout.seal[2],height:layout.seal[3]},r.referenceArtwork):undefined
+ const referenceBox=referenceIntroBox&&referenceOfferBox?interpolateBox([referenceIntroBox.x,referenceIntroBox.y,referenceIntroBox.width,referenceIntroBox.height], [referenceOfferBox.x,referenceOfferBox.y,referenceOfferBox.width,referenceOfferBox.height],progress):undefined
  const nativeLines=(r.nativeTitle||r.campaign).split('\n').flatMap(line=>line.length>10?line.split(' '):[line]),nativeSize=(width:number,height:number)=>Math.min(width/(Math.max(...nativeLines.map(line=>line.length))*.6),height/(nativeLines.length*1.08))
  const introContentHeight=r.nativeTitle?nativeSize(890,1100)*nativeLines.length*1.02:Math.min(1100,890/Math.max(.2,r.sealAspect||1))
  const introLogoTop=190+1100/2+introContentHeight/2+24
@@ -72,8 +77,13 @@ function Identity({props,r}:{props:VideoRenderProps;r:FlyerRecipe}){
  return h(AbsoluteFill,null,
  r.mascot&&mascotBox?div({position:'absolute',left:p?20:20,top:p?610:535,width:p?1040:650,height:p?34:28,opacity:progress*(1-end),borderTop:'6px solid #ffe197',borderBottom:'6px solid #63300d',borderRadius:5,background:'repeating-linear-gradient(2deg,#98531f 0px,#c1843d 4px,#e0aa5d 7px,#a76129 11px)',boxShadow:'0 12px 18px #0009'}):null,
  r.mascot&&mascotBox?h(EditableElement,{props,scene:sceneId,id:'mascot',style:{...box(mascotBox),opacity:progress*(1-end),translate:`0px ${Math.max(0,1-progress)*70}px`}},h(Img,{src:(props.templateBase||'/video-studio/templates')+'/'+r.mascot,style:{width:'100%',height:'100%',objectFit:'contain',objectPosition:'center bottom'}})):null,
- h(EditableElement,{props,scene:sceneId,id:'seal',style:{...box(sealBox),opacity:sealAlpha,scale:seal.scale,rotate:`${seal.rotation+Math.sin(f/39)*.65}deg`}},r.seal?h(Img,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,style:{width:'100%',height:'100%',objectFit:'contain',filter:`drop-shadow(0 14px 12px #0006) brightness(${props.document.effects.includes('glow')?1+Math.max(0,Math.sin((f%95)/95*Math.PI))*.12*props.document.intensity:1})`}}):div({...font,fontSize:nativeSize(sealBox[2],sealBox[3]),height:'100%',display:'flex',alignItems:'center',justifyContent:'center',whiteSpace:'pre',color:r.nativeTitleColor||r.accent,textShadow:'0 5px #573205,0 10px #382003,0 18px 20px #0008'},nativeLines.join('\n'))),
- h(EditableElement,{props,scene:sceneId,id:'logo',style:{...box(logoBox),opacity:logoAlpha,scale:logo.scale,translate:`0px ${logo.y}px`}},h(Logo,{props,width:logoBox[2],height:logoBox[3]})))
+ r.referenceArtwork&&referenceBox
+  ?h(React.Fragment,null,
+   h(ReferenceArtwork,{props,recipe:r,frame:{x:referenceBox[0],y:referenceBox[1],width:referenceBox[2],height:referenceBox[3]},scene:sceneId,artOpacity:sealAlpha,identityOpacity:logoAlpha*(1-end),rotation:seal.rotation+Math.sin(f/39)*.65,scale:seal.scale,translateY:seal.y}),
+   h(EditableElement,{props,scene:sceneId,id:'logo',style:{...box(logoBox),opacity:logoAlpha*end,scale:logo.scale,translate:`0px ${logo.y}px`}},h(Logo,{props,width:logoBox[2],height:logoBox[3]})))
+  :h(React.Fragment,null,
+   h(EditableElement,{props,scene:sceneId,id:'seal',style:{...box(sealBox),opacity:sealAlpha,scale:seal.scale,rotate:`${seal.rotation+Math.sin(f/39)*.65}deg`}},r.seal?h(Img,{src:(props.templateBase||'/video-studio/templates')+'/'+r.seal,style:{width:'100%',height:'100%',objectFit:'contain',filter:`drop-shadow(0 14px 12px #0006) brightness(${props.document.effects.includes('glow')?1+Math.max(0,Math.sin((f%95)/95*Math.PI))*.12*props.document.intensity:1})`}}):div({...font,fontSize:nativeSize(sealBox[2],sealBox[3]),height:'100%',display:'flex',alignItems:'center',justifyContent:'center',whiteSpace:'pre',color:r.nativeTitleColor||r.accent,textShadow:'0 5px #573205,0 10px #382003,0 18px 20px #0008'},nativeLines.join('\n'))),
+   h(EditableElement,{props,scene:sceneId,id:'logo',style:{...box(logoBox),opacity:logoAlpha,scale:logo.scale,translate:`0px ${logo.y}px`}},h(Logo,{props,width:logoBox[2],height:logoBox[3]}))))
 }
 function Price({props,price,unit}:{props:VideoRenderProps;r:FlyerRecipe;price:string;unit:string}){
  return props.label?h(VideoPriceLabel,{label:props.label,price,unit,colors:props.document.appearance}):div({...font,fontSize:34,paddingTop:40},'SELECIONE UMA ETIQUETA')
@@ -92,11 +102,12 @@ function Offer({props,r,scene,index}:{props:VideoRenderProps;r:FlyerRecipe;scene
 }
 export function FlyerComposition(props:VideoRenderProps){
  const r=personalizedRecipe(flyerRecipe(props.document.theme)!,props.document),d=props.document,{durationInFrames}=useVideoConfig(),f=useCurrentFrame(),m=motionSettings(d.motion),base=props.audioBase||'/video-studio/audio',fonts=props.fontBase||'/art-studio/fonts'
+ const endingProps=referenceArtworkEndingProps(props,Boolean(r.referenceArtwork))
  useRetailFonts(fonts)
  const cue=(id:typeof m.accentSound,from:number,gain:number,key:string)=>h(Sequence,{key,from,durationInFrames:Math.min(durationInFrames-from,Math.ceil((SOUND_EFFECTS.find(s=>s.id===id)?.seconds||1)*30))},h(Audio,{src:base+'/'+soundAsset(id),volume:d.audio.effectsVolume*gain}))
  return h(AbsoluteFill,{style:{background:r.base,overflow:'hidden',opacity:mix(f,durationInFrames-5,durationInFrames,1,0)}},
 
- h(RetailCamera,{props},h(Backdrop,{props,r}),h(Identity,{props,r}),...props.scenes.filter(s=>s.id!=='intro').map(s=>h(Sequence,{key:s.id,from:s.from,durationInFrames:s.frames},s.id==='outro'?h(Ending,{props}):h(Offer,{props,r,scene:s,index:d.offers.findIndex(o=>o.id===s.id)})))),
+ h(RetailCamera,{props},h(Backdrop,{props,r}),h(Identity,{props,r}),...props.scenes.filter(s=>s.id!=='intro').map(s=>h(Sequence,{key:s.id,from:s.from,durationInFrames:s.frames},s.id==='outro'?h(Ending,{props:endingProps}):h(Offer,{props,r,scene:s,index:d.offers.findIndex(o=>o.id===s.id)})))),
  h(CatalogTransition,{props}),
  ...props.scenes.map(s=>s.audio&&d.voice.enabled?h(Sequence,{key:'voice'+s.id,from:s.from,durationInFrames:s.frames},h(Audio,{src:s.audio,playbackRate:s.playbackRate||1,volume:d.audio.voiceVolume})):null),
  ...flyerSoundCues(d,props.scenes,props.format).filter(c=>c.frame<durationInFrames).map(c=>cue(c.sound,c.frame,c.gain,c.key)),

@@ -98,5 +98,333 @@
     "background": "/api/storage/p?key=projects%2Feb847e8e-7c19-4bee-8042-376528ce6192%2F4c988cb9-53e0-4655-b5e7-7f62d5ba3b2f%2Frevision-1%2Fassets%2Fbackground-feed.png",
     "seal": "/api/storage/p?key=projects%2Feb847e8e-7c19-4bee-8042-376528ce6192%2F4c988cb9-53e0-4655-b5e7-7f62d5ba3b2f%2Frevision-1%2Fassets%2Fseal.png",
     "backgroundCropY": 0
+  },
+  "54313655-e0e0-4329-b7f8-4cb946d04f6f": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-01.png"
+  },
+  "8e96897b-2b05-4776-ba8f-c14d922c25e8": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-02.png"
+  },
+  "73a04751-a29b-4608-91fd-a767a839d3ec": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-03.png"
+  },
+  "2d9e4876-64ca-49ad-a083-3f43ae6c6da3": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-04.png"
+  },
+  "3738ea85-0568-4b52-8adb-b8ffdb76622a": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-05.png"
+  },
+  "1546c2f6-b813-43e1-8972-8120e0ecaca3": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-06.png"
+  },
+  "0a827471-dcd9-47bc-ab04-b979a291230b": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-07.png"
+  },
+  "5dd095d2-20ea-4ee7-b732-97e9f366ce95": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-08.png"
+  },
+  "780acb69-2730-486f-9fb3-931f6a52ebac": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-09.png"
+  },
+  "eb90e873-79fe-4c27-b11c-903c0e8ca0fa": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-10.png"
+  },
+  "e8488be1-9437-4e34-8b90-576ec20df6eb": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-11.png"
+  },
+  "80879760-a15e-41a3-ae8b-d4a3c5c914c2": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-12.png"
+  },
+  "c32cb344-3c05-4680-b9cd-46b2ccda314f": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-13.png"
+  },
+  "9319d8ee-1a70-48d0-8a72-e4bcb08519e0": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-14.png"
+  },
+  "a51c9306-7c50-4d0f-8904-9d71c0fea5a1": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-15.png"
+  },
+  "a32e27ba-3743-473e-a324-254509beb0a0": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-16.png"
+  },
+  "8307967a-abe0-41b6-9395-2b5193fbab06": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-17.png"
+  },
+  "f9f00449-2ecf-4549-9ddc-bd52e4a59115": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-18.png"
+  },
+  "2140f3d5-90e8-46e8-83de-109e1a269cfa": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-19.png"
+  },
+  "855e0232-b889-43f2-aa13-2241815a3b24": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-20.png"
+  },
+  "74663811-7525-4317-816b-d10688f3ac3b": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-21.png"
+  },
+  "1958ed9c-e9fa-41a1-aa04-80768b01a81b": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-22.png"
+  },
+  "5aca2162-8830-44d0-87cc-3bb75fbfed3f": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-23.png"
+  },
+  "e3722ffb-8f9c-40a9-b066-0675af8f838b": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-24.png"
+  },
+  "707fbcf1-4cd0-4840-b83a-0c91d2358764": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-25.png"
+  },
+  "edd87fd6-fda0-4f4a-8be8-9971551de06e": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-26.png"
+  },
+  "41cd7bb0-c6fc-4f32-90c9-d3e76ec62962": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-27.png"
+  },
+  "b4e57e35-ba31-4d54-9808-f2258ca1ee96": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-28.png"
+  },
+  "bb298435-0931-4dba-9e1e-72768d2529a1": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-29.png"
+  },
+  "90e4f481-2bc5-49cd-9e3b-eba46c8dd2d4": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-30.png"
+  },
+  "bfea1c16-31dd-44c3-9e6a-0e7d767ee017": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-31.png"
+  },
+  "a0f9c956-db84-4572-a20a-b753b0c90280": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-32.png"
+  },
+  "006b6c0b-bc57-4a5f-8934-7a1e58d59fc2": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-33.png"
+  },
+  "3ec876e0-fd90-4810-9df7-db3f4b06b54c": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-34.png"
+  },
+  "a345640a-dcdc-4141-a095-06102abd0261": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-35.png"
+  },
+  "945c62f6-3d67-43a8-a65f-1f485ab09d26": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-36.png"
+  },
+  "43458426-f6d0-4f4e-95a9-8a4a66439bb2": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-37.png"
+  },
+  "5b119b4e-1e14-4c2a-a49e-fea2271a18fb": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-38.png"
+  },
+  "833ad9de-ba96-41ba-9960-a481d4a830e9": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-39.png"
+  },
+  "e60405ff-7588-4db9-a1e1-dd383ff36cc8": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-40.png"
+  },
+  "6881d70b-3151-40f3-a5f6-45a8ecd338ad": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-41.png"
+  },
+  "680234c9-b509-4065-9218-ade15cebe097": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-42.png"
+  },
+  "6e77f547-1f1a-4f69-9baf-ee86afa3df54": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-43.png"
+  },
+  "dff348c7-e0c7-444b-b670-52eeb9adebc8": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-44.png"
+  },
+  "5342f7a0-8788-41ba-9d19-bcb275c771be": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-45.png"
+  },
+  "9a6bd22c-de48-4ec8-bed9-cad66e2df438": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-46.png"
+  },
+  "414f11e5-dd1a-4f40-b08e-31f936e71137": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-47.png"
+  },
+  "0a36ce05-5501-49e1-917c-2075573b65da": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-48.png"
+  },
+  "52cba409-1786-4984-93ff-7c1acf92ebac": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-49.png"
+  },
+  "57243a46-e54c-446d-be46-eae91590e7d0": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-50.png"
+  },
+  "9196d894-9bc3-4f84-8e7c-9b2a4303a3a8": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-51.png"
+  },
+  "a2c08fff-fe3e-495a-90fc-15b0ca9375f7": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-52.png"
+  },
+  "a96cebcb-7aa8-4b8a-8404-8f3bc4e34fa6": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-54.png"
+  },
+  "d2a7c14d-c5ea-4dde-a8b3-3a81ca1fd210": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-55.png"
+  },
+  "c5d3027d-6b85-4f41-8deb-a9d5f6102ec2": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-56.png"
+  },
+  "15d6938e-7f25-4fa2-ad40-75759e8572d8": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-57.png"
+  },
+  "4181d131-a37e-438e-a538-89ffa390d5c5": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-58.png"
+  },
+  "22cb819d-2396-4973-8575-961e3c0ea2dc": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-59.png"
+  },
+  "d85cdcd0-8414-4f29-b5f6-6346706b8b9b": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-60.png"
+  },
+  "8b49ddca-5d61-4c80-acc2-84f7144e08c7": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-61.png"
+  },
+  "50d5638b-04c6-42c0-ac04-0ce746b54b92": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-62.png"
+  },
+  "5d7ad5f8-7f1a-4595-a94e-ea1ca22802e2": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-63.png"
+  },
+  "d1af0878-5496-4a9a-bd48-bb04134f8631": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-64.png"
+  },
+  "8cf977ec-2209-4ef8-b127-99b01d27cacb": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-65.png"
+  },
+  "f1248610-3d05-47d1-a06d-7b97768732ec": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-66.png"
+  },
+  "faac7976-acb2-440e-918e-1de5b2b88787": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-67.png"
+  },
+  "c28822ac-658c-47b4-83ef-9864ccdaa4ca": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-68.png"
+  },
+  "2c10b91a-4e8d-4964-bfd0-ce23c0a36b0e": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-69.png"
+  },
+  "f1b32c45-0472-45ed-8b2b-26331167253c": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-70.png"
+  },
+  "1cc26539-1206-4ef2-88d4-bdc8d082bf07": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-71.png"
+  },
+  "ab12a9f0-51c1-41f8-afdb-857d022b947e": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-72.png"
+  },
+  "38492bf8-8b72-41b1-a04a-21b7a48742cf": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-73.png"
+  },
+  "704ce8ed-b349-4d9c-acc4-fcde1aee8b9d": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-74.png"
+  },
+  "8fa2423d-7910-4cba-b401-49c577fb06c6": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-75.png"
+  },
+  "1715136d-2fb9-41c6-a6c7-eb6c893e1ec0": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-76.png"
+  },
+  "abe0da88-a912-4813-9c25-61285aaa35c1": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-77.png"
+  },
+  "e74b89ba-f4e0-42c8-b220-c50a6503dca8": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-78.png"
+  },
+  "1ac0937c-0cfb-490a-be8b-3dd09744eb99": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-79.png"
+  },
+  "1fed7aa9-503a-4b37-95e9-e5abe1988e8d": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-80.png"
+  },
+  "5bd50f2f-f3fc-49f2-9613-a74f42323489": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-81.png"
+  },
+  "e80ca4a5-ad06-483a-ac2b-423710086770": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-82.png"
+  },
+  "93d3d733-ac8d-47b4-9d7d-9ab3c6d9e040": {
+    "background": "",
+    "seal": "/video-studio/templates/catalog/reference-20261004-83.png"
   }
 }

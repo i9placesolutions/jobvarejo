@@ -21,7 +21,8 @@ import {
 import {
   artError,
   personalizeArt,
-  resizeArt
+  artForSize,
+  artHasOrientation
 } from '~/utils/art-studio/composition'
 import { normalizeBusinessProfile } from '~/utils/businessProfile'
 definePageMeta({ layout: false, middleware: 'auth', ssr: false })
@@ -114,12 +115,7 @@ const visible = computed(() =>
       normalize(
         [t.name, t.category, t.collection, ...t.tags].join(' ')
       ).includes(normalize(search.value)) &&
-      (format.value === 'all' ||
-        (format.value === 'square'
-          ? t.composition.width === t.composition.height
-          : format.value === 'portrait'
-            ? t.composition.width < t.composition.height
-            : t.composition.width > t.composition.height))
+      artHasOrientation(t.composition, format.value)
   )
 )
 const filteredDesigns = computed(() =>
@@ -176,7 +172,7 @@ const preview = async (template: ArtTemplate) => {
 const previewComposition = computed(() => {
   if (!picked.value) return null
   const [w, h] = selectedSize.value.split('x').map(Number)
-  return resizeArt(previewForActiveAccount(picked.value.composition), w!, h!)
+  return artForSize(previewForActiveAccount(picked.value.composition), w!, h!)
 })
 const start = () => {
   if (!picked.value) return
@@ -200,8 +196,7 @@ const start = () => {
         {{ error }} <button @click="load">Tentar novamente</button>
       </div>
       <div v-if="!databaseReady" class="art-alert" role="status">
-        Os modelos estão disponíveis para explorar. Configure o banco do Estúdio
-        de Artes para salvar trabalhos e enviar imagens.
+        O Estúdio de Artes está indisponível no momento. Tente novamente mais tarde.
       </div>
       <section class="catalog-hero">
         <div>
@@ -265,7 +260,7 @@ const start = () => {
           </button>
         </div>
         <section
-          v-if="!search && category === 'Todos' && active === 'catalog'"
+          v-if="collections.length && !search && category === 'Todos' && active === 'catalog'"
           class="collections"
         >
           <div class="section-heading">

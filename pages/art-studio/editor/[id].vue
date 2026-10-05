@@ -651,10 +651,7 @@ const saveTemplate = async () => {
     composition
   }
   try {
-    const existing =
-      editingTemplate.value && !editingTemplate.value.id.startsWith('starter-')
-        ? editingTemplate.value
-        : null
+    const existing = editingTemplate.value
     const result = existing
       ? await $fetch<ArtTemplate>(`/api/art-studio/templates/${existing.id}`, {
           method: 'PUT',
@@ -762,7 +759,7 @@ onMounted(async () => {
           route.query.size ||
           `${doc.value.width}x${doc.value.height}`
       ).split(',')
-      const formats = rawSizes
+      const formats = [...new Set(rawSizes)]
         .filter((size) =>
           ART_FORMATS.some((f) => `${f.width}x${f.height}` === size)
         )
@@ -773,16 +770,26 @@ onMounted(async () => {
       if (formats.length) {
         const existing = [doc.value, ...(doc.value.alternates || [])],
           results: ArtComposition[] = []
-        for (const format of formats) {
-          const source =
-            existing.find(
-              (p) => p.width === format.width && p.height === format.height
-            ) || doc.value
-          const assembled = await $fetch<{ compositions: ArtComposition[] }>(
-            '/api/art-studio/compose',
-            { method: 'POST', body: { composition: source, formats: [format] } }
-          )
-          results.push(...assembled.compositions)
+        const missing = formats.filter((format) => !existing.some(
+          (page) => page.width === format.width && page.height === format.height
+        ))
+        // Modelos preparados mantêm exatamente a tipografia e a montagem publicadas.
+        const assembled = missing.length
+          ? await $fetch<{ compositions: ArtComposition[] }>('/api/art-studio/compose', {
+              method: 'POST', body: { composition: doc.value, formats: missing }
+            })
+          : { compositions: [] }
+        const available = [...existing, ...assembled.compositions]
+        const preferred = String(route.query.size || '')
+        const ordered = [...formats].sort((a, b) =>
+          Number(`${b.width}x${b.height}` === preferred) - Number(`${a.width}x${a.height}` === preferred)
+        )
+        for (const format of ordered) {
+          const source = available.find((page) => page.width === format.width && page.height === format.height)
+          if (!source) throw new Error('O motor não retornou todos os formatos solicitados.')
+          const page = cloneArt(source)
+          delete page.alternates
+          results.push(page)
         }
         if (results[0])
           doc.value = { ...results[0], alternates: results.slice(1) }
@@ -1654,7 +1661,7 @@ onBeforeUnmount(() => {
         <div class="panel-title">
           <h2>
             {{
-              editingTemplate && !editingTemplate.id.startsWith('starter-')
+              editingTemplate
                 ? 'Atualizar modelo'
                 : 'Novo modelo para o catálogo'
             }}

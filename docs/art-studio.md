@@ -4,10 +4,10 @@ Módulo independente dos editores de ofertas. Rotas `/art-studio` e `/art-studio
 
 ## Uso
 
-- Catálogo: 12 modelos iniciais próprios, categorias, coleções, busca, filtro de formato e prévia antes de criar.
+- Catálogo: modelos cadastrados e persistidos em `art_studio_templates`, com categorias, coleções, busca, filtro de formato e prévia antes de criar. O endpoint não injeta modelos locais; se a tabela não existir, informa `databaseReady: false` e devolve catálogo vazio.
 - Cliente: escolhe modelo/formato, edita textos/fontes/cores, arrasta/redimensiona elementos, substitui fotos, recorta com sliders, troca ícones, administra camadas, salva/reabre e exporta PNG.
 - `Minhas artes` lista trabalhos da conta autenticada.
-- Super admin: `Administrar → Criar modelo`. Mesmo editor independente, em modo de autoria. Define vínculos dinâmicos por camada, importa/exporta composição JSON e publica ou retira modelo do catálogo. Modelos iniciais são imutáveis; editar um gera uma cópia administrável. Rascunhos não são listados para clientes. Categoria/coleção são configuráveis ao salvar; as opções no catálogo são derivadas dos modelos publicados.
+- Super admin: `Administrar → Criar modelo`. Mesmo editor independente, em modo de autoria. Define vínculos dinâmicos por camada, importa/exporta composição JSON e publica ou retira modelo do catálogo. Rascunhos não são listados para clientes. Categoria/coleção são configuráveis ao salvar; as opções no catálogo são derivadas dos modelos publicados.
 - Logo: slot com `binding: 'logo'`. O cliente recebe `/api/art-studio/brand-logo`, resolvido pelo servidor a partir de `profiles.business_profile` do usuário autenticado. Não há logo de admin copiada entre contas. A logo é atual ao carregar; posição/tamanho/enquadramento ficam no documento. Se não cadastrada, mantém slot vazio. A troca da logo abre o cadastro da loja e preserva o vínculo. Auto trim remove somente margens transparentes; fundo e contorno são configuráveis. O contorno usa o mesmo EDT, preenchimento de vazios e supersampling 2x das ofertas, também na preparação das imagens para o Python.
 - Os demais campos são preenchidos na criação; o botão “Atualizar dados da loja” reaplica os vínculos. Editar manualmente um texto remove seu vínculo para não sobrescrevê-lo depois.
 
@@ -22,10 +22,10 @@ A prévia leve do catálogo usa SVG e quebra aproximada. A montagem automática 
 O worker `workers/art_studio.py` está integrado ao Nitro:
 
 - `POST /api/art-studio/compose`: recebe uma composição e até oito tamanhos, reposiciona camadas proporcionalmente e ajusta os textos com métricas Pillow.
-- `POST /api/art-studio/generate`: super admin informa tema, título, mensagem e paleta; Python monta os modelos editáveis nos formatos escolhidos.
+- `POST /api/art-studio/generate`: super admin informa tema, título, mensagem e paleta; Python monta os modelos editáveis nos formatos escolhidos a partir de uma composição-base explícita do gerador, independente dos modelos persistidos no catálogo. As camadas de texto, formas e vínculo dinâmico da logo continuam editáveis.
 - `POST /api/art-studio/render`: resolve imagens autorizadas e a logo da conta, renderiza PNGs com Pillow e devolve PNG individual ou ZIP com todos os formatos.
 
-No editor: “Montar modelo automaticamente”, “Formatos” e “Baixar todos os formatos (Python)”. Ao escolher um modelo no catálogo, a montagem inicial também passa pelo Python. Cada tamanho é editável individualmente e persistido em `composition.alternates`; mudar um formato não altera os demais. Os cinco presets acompanham as dimensões dos modelos de ofertas: feed 1080×1350, quadrado 1080×1080, stories 1080×1920, A4 794×1123 e banner 1920×1080. A4 neste preset usa as dimensões existentes do sistema; não é um arquivo de impressão de 300 DPI.
+No editor: “Montar modelo automaticamente”, “Formatos” e “Baixar todos os formatos (Python)”. Ao escolher um modelo no catálogo, suas composições específicas em `composition.alternates` são preservadas; o Python monta apenas os formatos que ainda não têm composição própria. Cada tamanho é editável individualmente e persistido; mudar um formato não altera os demais. Os cinco presets acompanham as dimensões dos modelos de ofertas: feed 1080×1350, quadrado 1080×1080, stories 1080×1920, A4 794×1123 e banner 1920×1080. A4 neste preset usa as dimensões existentes do sistema; não é um arquivo de impressão de 300 DPI.
 
 O worker não acessa rede, banco ou secrets: o Nitro autoriza e entrega os bytes. Processos sem shell, diretório temporário privado, timeout de 90s, até dois workers simultâneos por processo Nitro, até oito formatos e limites de imagens. A conexão não consome créditos de IA; é composição determinística editável. Executável: `ART_STUDIO_PYTHON`, depois `PRODUCT_IMAGE_PYTHON`, depois `python3`. O Docker existente já instala Pillow no ambiente de imagens e agora valida este worker/fontes no build, sem alterar o worker de produtos.
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Bell, ChevronDown, Check, User, Zap, Store, Menu as MenuIcon, LayoutTemplate, ShieldCheck, ArrowUpRight, Clapperboard, Radio, Mic2, HardDrive } from 'lucide-vue-next'
+import { Search, Plus, Grid, List, FolderOpen, Star, Sparkles, LogOut, Folder, FolderPlus, MoreVertical, Pencil, Trash2, Copy, Clock, Bell, ChevronDown, Check, User, Zap, Store, Menu as MenuIcon, LayoutTemplate, ShieldCheck, ArrowUpRight, Clapperboard, Radio, Mic2, HardDrive, MessageCircle } from 'lucide-vue-next'
 	import FolderTreeItem from '~/components/FolderTreeItem.vue'
 	import ConfirmDialog from '~/components/ui/ConfirmDialog.vue'
 	import FilterDropdown from '~/components/ui/FilterDropdown.vue'
@@ -1579,6 +1579,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <p class="sidebar-section-label px-2 mb-1">Configuração</p>
               <NuxtLink to="/admin/users" class="dash-nav-item w-full" @click="showMobileDrawer = false"><User class="w-3.5 h-3.5 shrink-0"/><span class="flex-1 text-left">Usuários e acessos</span></NuxtLink>
               <NuxtLink to="/admin/musicgpt" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Mic2 class="w-3.5 h-3.5 shrink-0 text-violet-400"/><span class="flex-1 text-left">MusicGPT</span></NuxtLink>
+              <NuxtLink v-if="auth.isAdmin.value" to="/admin/whatsapp" class="dash-nav-item w-full" @click="showMobileDrawer = false"><MessageCircle class="w-3.5 h-3.5 shrink-0 text-emerald-500"/><span class="flex-1 text-left">WhatsApp</span></NuxtLink>
               <NuxtLink to="/admin/storage" class="dash-nav-item w-full" @click="showMobileDrawer = false"><HardDrive class="w-3.5 h-3.5 shrink-0 text-slate-400"/><span class="flex-1 text-left">Storage</span></NuxtLink>
               <div class="sidebar-divider mx-1 my-2"></div>
               <button @click="navigateTo('/profile'); showMobileDrawer = false" class="dash-nav-item w-full">
@@ -1649,6 +1650,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
             <NuxtLink to="/admin/musicgpt" class="dash-nav-item w-full" aria-label="Abrir MusicGPT">
               <Mic2 class="w-4 h-4 shrink-0 text-violet-400" />
               <span class="flex-1 text-left">MusicGPT</span>
+            </NuxtLink>
+            <NuxtLink v-if="auth.isAdmin.value" to="/admin/whatsapp" class="dash-nav-item w-full" aria-label="Abrir WhatsApp">
+              <MessageCircle class="w-4 h-4 shrink-0 text-emerald-500" />
+              <span class="flex-1 text-left">WhatsApp</span>
             </NuxtLink>
             <NuxtLink to="/admin/storage" class="dash-nav-item w-full" aria-label="Abrir Storage">
               <HardDrive class="w-4 h-4 shrink-0 text-slate-400" />

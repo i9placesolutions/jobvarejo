@@ -556,7 +556,7 @@ const openPageHistory = () => {
   <div class="h-screen h-dvh flex flex-col bg-[#0f0f0f] overflow-hidden">
     <!-- Project Name Header -->
     <div :class="['border-b border-blue-300/20 flex items-center justify-between px-3 bg-[#173d70] shrink-0', isMobile ? 'min-h-[calc(40px+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]' : 'h-8']">
-      <div class="flex items-center gap-2 min-w-0">
+      <div class="flex flex-1 items-center gap-2 min-w-0 mr-2">
         <WorkspaceMenuButton />
         <button
           @click="navigateTo(editorExitPath)"
@@ -570,7 +570,7 @@ const openPageHistory = () => {
         <span class="text-xs font-medium text-white truncate">{{ activePage?.name || 'Sem título' }}</span>
         <span
           v-if="activePageFormatSummary && (!isQuickMode || !isMobile)"
-          class="hidden max-w-[220px] shrink-0 truncate rounded border border-sky-300/25 bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-sky-200 sm:inline-flex"
+          class="hidden max-w-[220px] shrink-0 truncate rounded border border-sky-300/25 bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-sky-200 lg:inline-flex"
           :title="`Formato em edição: ${activePageFormatSummary}`"
         >
           {{ activePageFormatSummary }}

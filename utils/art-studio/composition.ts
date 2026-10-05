@@ -161,3 +161,20 @@ export const stableArtString = (value: unknown): string => {
         : v
   return JSON.stringify(order(value))
 }
+
+/** Prefere a montagem própria do formato; redimensiona só quando ela não existe. */
+export const artForSize = (source: ArtComposition, width: number, height: number): ArtComposition => {
+  const existing = [source, ...(source.alternates || [])].find(
+    (page) => page.width === width && page.height === height
+  )
+  const result = existing ? cloneArt(existing) : resizeArt(source, width, height)
+  delete result.alternates
+  return result
+}
+
+export const artHasOrientation = (source: ArtComposition, orientation: string): boolean =>
+  orientation === 'all' || [source, ...(source.alternates || [])].some((page) =>
+    orientation === 'square' ? page.width === page.height :
+    orientation === 'portrait' ? page.width < page.height :
+    orientation === 'landscape' ? page.width > page.height : false
+  )

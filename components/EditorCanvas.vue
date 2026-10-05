@@ -21,8 +21,10 @@ import { reconcileQuickPageFormatGeometry } from '~/utils/quickPageFormatGeometr
 import { appendPageCopySuffix, normalizePageCopyName } from '~/utils/pageCopyNaming'
 import { resolveProductCardDropSwapTarget } from '~/utils/productCardDropSwap'
 import { repairDynamicTextLayoutBounds } from '~/utils/dynamicTextLayoutBounds'
+import { layoutInlineFooterValidity } from '~/utils/inlineFooterValidityLayout'
 import { compactBusinessFooter } from '~/utils/compactBusinessFooter'
 import { normalizeQuickBusinessFooter } from '~/utils/quickBusinessFooterTypography'
+import { resolveQuickLogoSlotCenter } from '~/utils/quickLogoSlotGeometry'
 import { syncProductNameColor } from '~/utils/productNameColors'
 import { isProductNameText, collectProductNameTexts } from '~/utils/productNameTypographyScope'
 import { upgradeProductNameLineHeightDefaults } from '~/utils/productNameLineHeightDefaults'
@@ -6414,7 +6416,7 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
     const timeoutMs = getCanvasLoadTimeoutMs(sessionId)
     try {
         sanitizeCanvasJsonBeforeLoad(json)
-        loadFonts(json)
+        await loadFonts(json)
         if (isQuickMode.value && Array.isArray(json?.objects)) upgradeProductNameLineHeightDefaults(json.objects)
         // Fabric carrega as imagens com CORS; um preloader paralelo duplicava as requisições.
         if (sessionId !== activePageLoadSessionId || isCanvasDestroyed.value) {
@@ -6442,6 +6444,7 @@ const loadFromJSONWithImageProgress = async (json: any, sessionId: number): Prom
         })
         await Promise.race([loadPromise, timeoutPromise])
         if (sessionId !== activePageLoadSessionId || isCanvasDestroyed.value) throw new Error('Load session became stale')
+        layoutInlineFooterValidity(collectObjectsDeep(canvas.value))
         restoreCanvasStickerOutlines(canvas.value)
         return failedImages
     } catch (error) {
@@ -14484,13 +14487,19 @@ const ensureEditorFonts = createEditorFontLoader(async families => {
     const WebFontModule = await import('webfontloader');
     const WebFont = WebFontModule.default || WebFontModule;
     await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Tempo limite ao carregar fontes.')), 3500);
         WebFont.load({
             google: { families },
+            timeout: 3000,
             active: () => {
+                clearTimeout(timeout);
                 if (!isCanvasDestroyed.value) refreshLoadedFontMetrics();
                 resolve();
             },
-            inactive: () => reject(new Error('Fontes temporariamente indisponíveis.'))
+            inactive: () => {
+                clearTimeout(timeout);
+                reject(new Error('Fontes temporariamente indisponíveis.'));
+            }
         });
     });
 });
@@ -14532,14 +14541,17 @@ const refreshLoadedFontMetrics = () => {
         // Re-run manual template fitting now that real font metrics are available.
         // This is what keeps the product card label identical to the mini editor.
         refreshManualLabelTemplateMetricsAfterFontLoad(canvas.value);
+        // The inline footer uses measured glyph widths, so fit it again after
+        // Fabric has remeasured text with the loaded font.
+        layoutInlineFooterValidity(collectObjectsDeep(canvas.value));
         safeRequestRenderAll();
     }
 };
 
-const loadFonts = (source: any = canvas.value?.getObjects?.() || []) => {
+const loadFonts = async (source: any = canvas.value?.getObjects?.() || []): Promise<void> => {
     if (!import.meta.client || isCanvasDestroyed.value) return;
     const families = collectEditorWebFonts(source);
-    if (families.length) void ensureEditorFonts(families).catch(() => {
+    if (families.length) await ensureEditorFonts(families).catch(() => {
         // Mantém as fontes de fallback; uma atualização futura pode tentar novamente.
     });
 };
@@ -18796,21 +18808,13 @@ const getQuickLogoSlotMetrics = (sourceObject: any = null) => {
     const maxHeight = Number.isFinite(storedMaxHeight) && storedMaxHeight > 0
         ? Math.max(36, Math.min(frameHeight, storedMaxHeight))
         : defaultMaxHeight
-    const storedCenterX = Number(sourceObject?.quickLogoCenterX)
-    const storedCenterY = Number(sourceObject?.quickLogoCenterY)
-    const objectLeft = Number(sourceObject?.left)
-    const objectTop = Number(sourceObject?.top)
-    const hasImagePosition = sourceObject?.type === 'image' && Number.isFinite(objectLeft) && Number.isFinite(objectTop)
-    const centerX = hasImagePosition
-        ? objectLeft
-        : Number.isFinite(storedCenterX)
-            ? storedCenterX
-            : frameLeft + padding + maxWidth / 2
-    const centerY = hasImagePosition
-        ? objectTop
-        : Number.isFinite(storedCenterY)
-            ? storedCenterY
-            : frameTop + padding + maxHeight / 2
+    const { centerX, centerY } = resolveQuickLogoSlotCenter(
+        sourceObject,
+        sourceObject?.quickLogoCenterX,
+        sourceObject?.quickLogoCenterY,
+        frameLeft + padding + maxWidth / 2,
+        frameTop + padding + maxHeight / 2
+    )
 
     return {
         maxWidth,
@@ -31263,5 +31267,12 @@ main {
 <style scoped>
 @media(max-width:767px) {
  .quick-mode-stage {padding-bottom:calc(140px + env(safe-area-inset-bottom,0px)) !important;}
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+    .quick-mode-stage {
+        padding-right: 8px;
+        padding-left: 8px;
+    }
 }
 </style>

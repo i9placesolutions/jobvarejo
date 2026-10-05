@@ -1,4 +1,5 @@
 import type { ArtComposition } from '~/types/art-studio'
+import type { RetailReferenceArtwork } from '~/shared/retail-reference-artwork'
 
 export const CARTAZISTA_MODEL_KEYS = [
   'gondola',
@@ -100,6 +101,7 @@ export type CartazistaSettings = {
 }
 
 export type CartazistaHeader = {
+  referenceArtwork?: RetailReferenceArtwork
   backgroundCropY?: number
   tagline?: string
   retailFinish?: { decoration?: string; labelFill: string; labelInk: string; labelEdge: string }

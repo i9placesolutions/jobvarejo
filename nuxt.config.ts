@@ -260,6 +260,10 @@ export default defineNuxtConfig({
                id.includes('/utils/storageUrlHelpers')
              ) return 'editor-core-tools'
 
+            // O catálogo é consumido por várias telas de vídeo; mantê-lo fora
+            // do chunk compartilhado evita incluir todas as receitas junto à UI.
+            if (id.includes('/shared/video-studio/generated-flyer-recipes.json')) return 'video-recipe-catalog'
+
             if (!id.includes('node_modules')) return
 
             if (id.includes('/fabric/')) return 'vendor-fabric'
@@ -290,6 +294,7 @@ export default defineNuxtConfig({
     },
     '/videos': { ssr: false },
     '/admin/users': { ssr: false },
+    '/admin/whatsapp': { ssr: false },
     // As galerias de modelos dependem da conta selecionada no cookie; renderizar
     // no servidor pode misturar a sessão inicial com a conta ativa no browser.
     '/flyer-templates': { ssr: false },

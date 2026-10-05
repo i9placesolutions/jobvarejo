@@ -925,3 +925,17 @@ const onZoomInput = (event: Event) => {
  .quick-mode-canvas-controls__tool-button {min-height:48px;}
 }
 </style>
+
+<style scoped>
+@media (min-width: 768px) and (max-width: 1199px) {
+  .quick-mode-canvas-controls {
+    width: min(100%, calc(100vw - 24px));
+    justify-content: center;
+  }
+
+  .quick-mode-canvas-controls__primary-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+</style>

@@ -110,6 +110,8 @@ export function selectCatalogTemplateAssets(document,format,{recipe,backgroundAs
   const energy=chosen&&backgroundAsset?backgroundAsset(chosen,format):format==='vertical'?(recipe.energyBackgroundVertical||recipe.energyBackground):recipe.energyBackground
   const background=chosen?undefined:format==='horizontal'?(recipe.backgroundHorizontal||recipe.background):recipe.background
   for(const asset of [background,chosen?undefined:recipe.backgroundVideo,energy,recipe.seal,recipe.mascot])if(asset)assets.add(`templates/${asset}`)
+  const referenceSource=recipe.referenceArtwork?.src
+  if(typeof referenceSource==='string'&&referenceSource.startsWith('/video-studio/templates/'))assets.add(referenceSource.slice('/video-studio/'.length))
   if(document?.effects?.includes('fire')||document?.effects?.includes('smoke'))assets.add('templates/impact-fire-v2.png')
   if(document?.effects?.includes('fire')||document?.effects?.includes('fire-jets'))assets.add('templates/retail-fire-curtain-v1.png')
  }else{

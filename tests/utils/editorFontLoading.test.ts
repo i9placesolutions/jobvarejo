@@ -11,6 +11,12 @@ describe('fontes usadas na arte', () => {
     expect(collectEditorWebFonts([{ type: 'text', fontFamily: 'Minha Fonte' }, { type: 'text', fontFamily: 'Anton', fontWeight: 900 }])).toEqual(['Anton:400'])
     expect(collectEditorWebFonts({ objects: [] })).toEqual([])
   })
+  it('carrega Barlow Condensed nos pesos definidos no catálogo', () => {
+    expect(collectEditorWebFonts([{ type: 'text', fontFamily: 'Barlow Condensed', fontWeight: 800 }]))
+      .toEqual(['Barlow Condensed:800'])
+    expect(collectEditorWebFonts([{ type: 'text', fontFamily: 'Barlow Condensed', fontWeight: 800, fontStyle: 'italic' }]))
+      .toEqual(['Barlow Condensed:800italic'])
+  })
   it('não duplica variantes pendentes e carrega uma nova variante sob demanda', async () => {
     let release!: () => void
     const load = vi.fn((_families: string[]) => new Promise<void>(resolve => { release = resolve }))

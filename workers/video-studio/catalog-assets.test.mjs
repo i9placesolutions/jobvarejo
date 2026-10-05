@@ -83,3 +83,10 @@ test('template selection downloads only the active format/background and effects
   'templates/base.png','templates/loop.mp4','templates/energy.png','templates/seal.png','templates/mascot.png',
  ])
 })
+
+test('reference artwork shares the catalog asset selected for the flyer seal',()=>{
+ const recipe={background:'base.png',seal:'catalog/reference-20261004-01.png',referenceArtwork:{src:'/video-studio/templates/catalog/reference-20261004-01.png'}}
+ assert.deepEqual(selectCatalogTemplateAssets({background:undefined,effects:[]},'vertical',{recipe}),[
+  'templates/base.png','templates/catalog/reference-20261004-01.png',
+ ])
+})

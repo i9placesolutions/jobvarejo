@@ -4,7 +4,7 @@ import {
   parseArtInput,
   artCompositionSchema
 } from '~/server/utils/art-studio-schema'
-import { ART_STARTER_TEMPLATES } from '~/utils/art-studio/catalog'
+import { ART_GENERATION_BASE_COMPOSITION } from '~/utils/art-studio/catalog'
 import { cloneArt } from '~/utils/art-studio/composition'
 import { runArtPython } from '~/server/utils/art-studio-python'
 import { enforceRateLimit } from '~/server/utils/rate-limit'
@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
     }),
     await readBody(event)
   )
-  const composition = cloneArt(ART_STARTER_TEMPLATES[10]!.composition)
+  const composition = cloneArt(ART_GENERATION_BASE_COMPOSITION)
   composition.background = data.background
   for (const layer of composition.layers) {
     layer.fill = data.color

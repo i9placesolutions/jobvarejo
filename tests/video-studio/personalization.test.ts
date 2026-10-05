@@ -1,6 +1,7 @@
 import {describe,it,expect} from 'vitest'
 import {newVideoFromTemplate} from '../../shared/video-studio/templates'
 import {FLYER_RECIPES} from '../../shared/video-studio/flyer-recipes'
+import type {FlyerRecipe} from '../../shared/video-studio/flyer-recipes'
 import {personalizedRecipe,showVideoAlcoholBadge} from '../../shared/video-studio/personalization'
 import {videoDocumentSchema} from '../../server/utils/video-studio/schema'
 import {videoOfferFromList} from '../../shared/video-studio/list-import'
@@ -9,7 +10,7 @@ import {productLayers} from '../../shared/video-studio/product-layout'
 
 describe('personalização privada de vídeos',()=>{
  it('aplica a hierarquia de Reels ao catálogo inteiro, com nome fora da foto e preço destacado',()=>{
-  for(const recipe of Object.values(FLYER_RECIPES)){
+  for(const recipe of Object.values(FLYER_RECIPES).filter(r=>!r.referenceArtwork)){
    const l=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id)).vertical
    expect(l.name[1]-(l.seal[1]+l.seal[3])).toBe(24)
    expect(l.product[1]-(l.name[1]+l.name[3])).toBe(20)
@@ -61,8 +62,33 @@ describe('personalização privada de vídeos',()=>{
   expect(JSON.stringify(recipe)).toBe(before)
   expect(personalizedRecipe(recipe,newVideoFromTemplate(recipe.id)).seal).toBe(recipe.seal)
  })
+ it('preserva as geometrias declaradas apenas enquanto a campanha usa o título da referência',()=>{
+  const base=Object.values(FLYER_RECIPES).find(r=>r.seal)!
+  const recipe={...structuredClone(base),referenceArtwork:{src:'/video-studio/templates/catalog/reference.png',width:1000,height:1500,headerBottom:.25,logoMask:[.6,.02,.3,.1],logoBox:[.61,.03,.28,.08],socialMask:[.6,.13,.3,.04],instagramBox:[.61,.135,.28,.03],colors:{logo:'#ffffff',social:'#123456',logoText:'#ffffff'},sourceIndex:1}} as FlyerRecipe
+  const original=JSON.stringify({vertical:recipe.vertical,horizontal:recipe.horizontal})
+  const standard=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id))
+  expect(standard.referenceArtwork).toEqual(recipe.referenceArtwork)
+  expect(JSON.stringify({vertical:standard.vertical,horizontal:standard.horizontal})).toBe(original)
+
+  const changed=newVideoFromTemplate(recipe.id);changed.campaign='Campanha da minha loja'
+  const personalized=personalizedRecipe(recipe,changed)
+  const legacy=personalizedRecipe({...recipe,referenceArtwork:undefined},changed)
+  expect(personalized.referenceArtwork).toBeUndefined()
+  expect(personalized.seal).toBe('')
+  expect(personalized.nativeTitle).toBe(changed.campaign)
+  expect(personalized.vertical).toEqual(legacy.vertical)
+  expect(personalized.horizontal).toEqual(legacy.horizontal)
+ })
+ it('mantém as geometrias dos cabeçalhos registrados sem personalização',()=>{
+  for(const recipe of Object.values(FLYER_RECIPES).filter(r=>r.referenceArtwork)){
+   const personalized=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id))
+   expect(personalized.referenceArtwork).toEqual(recipe.referenceArtwork)
+   expect(personalized.vertical).toEqual(recipe.vertical)
+   expect(personalized.horizontal).toEqual(recipe.horizontal)
+  }
+ })
  it('reserva faixa acima da foto em todos os modelos TV',()=>{
-  for(const recipe of Object.values(FLYER_RECIPES)){
+  for(const recipe of Object.values(FLYER_RECIPES).filter(r=>!r.referenceArtwork)){
    const result=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id))
    const [x,y,w,h]=result.horizontal.product,[nx,ny,nw,nh]=result.horizontal.name
    expect(ny+nh+25).toBeLessThanOrEqual(y)
