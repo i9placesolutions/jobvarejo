@@ -90,11 +90,13 @@ def _requested_font_families(canvas):
     # will actually render may require a bundled font.
     visit(canvas.get("objects", []))
     templates = canvas.get("__labelTemplates", [])
-    selected_ids = {"tpl_default"}
+    selected_ids = set()
     for obj in _visit_objects(canvas.get("objects", [])):
         if obj.get("isProductZone") or obj.get("isGridZone"):
             styles = obj.get("_zoneGlobalStyles") or {}
-            selected_ids.add(str(styles.get("splashTemplateId") or obj.get("_zoneTemplateSnapshotId") or "tpl_default"))
+            selected_id = str(styles.get("splashTemplateId") or obj.get("_zoneTemplateSnapshotId") or "").strip()
+            if selected_id:
+                selected_ids.add(selected_id)
     for template in templates if isinstance(templates, list) else []:
         if str(template.get("id")) in selected_ids:
             visit(template.get("group"))
@@ -282,6 +284,15 @@ def render(payload, output_dir: Path, fabric_path: Path):
         result = page.evaluate("""async () => {
           const input = window.__RENDER_INPUT__;
           const fabric = window.fabric;
+          // Chromium renders from a local document without a secure origin.
+          // The shared Cards recipe assigns IDs to automatic image copies.
+          if (!globalThis.crypto.randomUUID) globalThis.crypto.randomUUID = () => {
+            const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+            bytes[6] = (bytes[6] & 15) | 64;
+            bytes[8] = (bytes[8] & 63) | 128;
+            const hex = [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+            return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+          };
           if (!fabric?.StaticCanvas) throw new Error('Bundle Fabric indisponível.');
           const renderOne = async (entry, pageIndex) => {
             const source = JSON.parse(JSON.stringify(input.canvas));
@@ -443,7 +454,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 const scale = Math.min(width * .85 / image.width, height * .5 / image.height);
                 image.set({left: 0, top: 0, originX: 'center', originY: 'center', scaleX: scale, scaleY: scale,
                   selectable: true, evented: true, name: 'smart_image'});
-                children.push(image);
+                children.push(...JobVarejoNative.prepareManualCardImages(fabric, image, width, height, input.cardLayout));
               }
               const titleText = [product.name, product.brand, product.variant, product.weight].filter(Boolean).join(' ');
               const title = new fabric.Textbox(styles.prodNameTransform === 'upper' ? titleText.toLocaleUpperCase('pt-BR') : titleText, {
@@ -462,32 +473,42 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 selectable: true, evented: true, name: 'smart_limit'}));
               const labelId = String(styles.splashTemplateId || zone._zoneTemplateSnapshotId || '').trim();
               const templates = input.canvas.__labelTemplates || [];
-              const template = labelId ? templates.find(item => String(item.id) === labelId) : templates.find(item => item.id === 'tpl_default');
+              const template = labelId ? templates.find(item => String(item.id) === labelId) : null;
               const savedLabel = template?.group || zone._zoneTemplateSnapshot || zone._zoneStateSnapshot?.labelTemplate?.snapshot;
-              if (!savedLabel || !Array.isArray(savedLabel.objects)) throw new Error('O modelo não tem etiqueta nativa editável para preencher.');
-              const labelJson = JSON.parse(JSON.stringify(savedLabel));
               const price = String(product.price || '').trim().replace(/^R\$\s*/i, '').replace(/^(\d+)\.(\d{2})$/, '$1,$2');
-              const walkLabel = nodes => {
-                for (const node of nodes || []) {
-                  const name = String(node.name || '');
-                  if (name === 'price_value_text' || name === 'smart_price') node.text = price;
-                  if (name === 'price_integer_text' || name === 'priceInteger') node.text = price.split(',')[0];
-                  if (name === 'price_decimal_text' || name === 'priceDecimal') node.text = ',' + (price.split(',')[1] || '00');
-                  if (name === 'price_unit_text' || name === 'priceUnit') { node.text = product.unit || ''; node.visible = !!product.unit; }
-                  walkLabel(node.objects);
-                }
-              };
-              walkLabel(labelJson.objects);
-              const [label] = await fabric.util.enlivenObjects([labelJson]);
-              const restoreNames = (live, saved) => {
-                if (saved.name) live.set('name', saved.name);
-                (live.getObjects?.() || []).forEach((child, index) => restoreNames(child, saved.objects?.[index] || {}));
-              };
-              restoreNames(label, labelJson);
-              const labelScale = Math.min(width * .64 / Math.max(1, label.width), height * .18 / Math.max(1, label.height));
-              label.set({left: 0, top: height / 2 - label.height * labelScale / 2 - height * .05,
-                originX: 'center', originY: 'center', scaleX: labelScale, scaleY: labelScale,
-                selectable: true, evented: true, name: 'priceGroup'});
+              let label;
+              if (savedLabel && Array.isArray(savedLabel.objects)) {
+                const labelJson = JSON.parse(JSON.stringify(savedLabel));
+                const walkLabel = nodes => {
+                  for (const node of nodes || []) {
+                    const name = String(node.name || '');
+                    if (name === 'price_value_text' || name === 'smart_price') node.text = price;
+                    if (name === 'price_integer_text' || name === 'priceInteger') node.text = price.split(',')[0];
+                    if (name === 'price_decimal_text' || name === 'priceDecimal') node.text = ',' + (price.split(',')[1] || '00');
+                    if (name === 'price_unit_text' || name === 'priceUnit') { node.text = product.unit || ''; node.visible = !!product.unit; }
+                    walkLabel(node.objects);
+                  }
+                };
+                walkLabel(labelJson.objects);
+                [label] = await fabric.util.enlivenObjects([labelJson]);
+                const restoreNames = (live, saved) => {
+                  if (saved.name) live.set('name', saved.name);
+                  (live.getObjects?.() || []).forEach((child, index) => restoreNames(child, saved.objects?.[index] || {}));
+                };
+                restoreNames(label, labelJson);
+                const labelScale = Math.min(width * .64 / Math.max(1, label.width), height * .18 / Math.max(1, label.height));
+                label.set({left: 0, top: height / 2 - label.height * labelScale / 2 - height * .05,
+                  originX: 'center', originY: 'center', scaleX: labelScale, scaleY: labelScale});
+              } else if (!labelId) {
+                label = JobVarejoNative.createManualDefaultPriceGroup(fabric, price, width, height, product.unit || '');
+                const labelHeight = label.getScaledHeight?.() || label.height;
+                label.set({left: 0, top: height / 2 - labelHeight / 2 - height * .05,
+                  originX: 'center', originY: 'center'});
+              } else {
+                throw new Error('A etiqueta escolhida no modelo não está disponível.');
+              }
+              label.set({selectable: true, evented: true, name: 'priceGroup',
+                objectCaching: false, statefullCache: false, dirty: true});
               children.push(label);
               const card = new fabric.Group(children, {
                 left: left + width / 2, top: top + height / 2, originX: 'center', originY: 'center',
@@ -495,12 +516,14 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 parentZoneId: zone._customId || zone.id || zone.name,
                 productZoneId: zone._customId || zone.id || zone.name,
                 productItemId: product.id, _zoneOrder: i, _cardWidth: width, _cardHeight: height,
-                _productData: {...product, imageDataUrl: undefined},
-                __cardLabelTemplateId: labelId || 'tpl_default',
+                _productData: {...product, imageDataUrl: undefined, autoFillImages: true},
+                __cardLabelTemplateId: labelId || '',
                 subTargetCheck: true, interactive: true, selectable: true, evented: true,
                 objectCaching: false});
+              JobVarejoNative.applyManualCardConfiguration(fabric, card, width, height, {
+                ...styles, cardLayout: input.cardLayout
+              });
               c.add(card);
-              JobVarejoNative.fitResponsiveProductTypography(card, width, height, Number(styles.prodNameScale ?? 1), false);
               zone.contentStatus = 'filled';
               if (zone._zoneStateSnapshot?.zone) zone._zoneStateSnapshot.zone.contentStatus = 'filled';
             }

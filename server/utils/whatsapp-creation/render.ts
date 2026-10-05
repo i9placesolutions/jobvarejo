@@ -47,6 +47,7 @@ import { cartazistaPdfSize } from '~/utils/cartazista/pdf'
 import { bindAccountLogoToFlyerCanvas } from '~/utils/accountFlyerTemplatePreview'
 import { restoreCanvasStickerOutlines } from '~/utils/editorStickerOutline'
 import { isSplitFooterValidity, resolveSplitFooterValidityText, splitFooterValidityText } from '~/utils/splitFooterValidity'
+import { createDefaultProductCardConfiguration, normalizeProductCardConfiguration } from '~/utils/product-card-configuration'
 
 const execute = promisify(execFile)
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -767,6 +768,10 @@ export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile
 }
 
 async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profile: BusinessProfile, formats: CreationFormat[], images: Map<string, { bytes: Buffer; dataUrl: string }>): Promise<CreationArtifactResult> {
+  const cardConfigRow = await pgOneOrNull<{ configuration: unknown }>(
+    'select configuration from public.product_card_configurations where user_id=$1 limit 1', [user.id]
+  )
+  const cardLayout = normalizeProductCardConfiguration(cardConfigRow?.configuration ?? createDefaultProductCardConfiguration())
   const projectTemplate = await pgOneOrNull<any>(
     `select id,user_id,name,canvas_data,template_config,updated_at,is_template
        from public.projects project
@@ -796,7 +801,7 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
       return { ...product, imageDataUrl: image.dataUrl, condition: product.condition || order.conditions, validity: order.validity }
     })
     if (!flyerDivisionSupportsProductCount(items.length, order.division, format)) fail(422, 'Story com mais de nove produtos precisa ser dividido em páginas.')
-    const pages = await renderEditableFlyerCanvas({ canvas: preparedCanvas, products: items, division: order.division, formatId: format.id })
+    const pages = await renderEditableFlyerCanvas({ canvas: preparedCanvas, products: items, division: order.division, formatId: format.id, cardLayout })
     for (const result of pages) payloadPages.push({ format, page: result, productIds: result.productIds, department: result.department || null })
   }
   const projectId = deterministicUuid(`${user.id}:${order.id}:${order.revision}:encarte`)
@@ -883,7 +888,7 @@ export async function applyFlyerLogoStickers(png: Buffer, canvas: any): Promise<
   }
 }
 
-export async function renderEditableFlyerCanvas(input: { canvas: any; products: Array<CreationProduct & { imageDataUrl: string }>; division: CreationOrder['division']; formatId: string }): Promise<Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }>> {
+export async function renderEditableFlyerCanvas(input: { canvas: any; products: Array<CreationProduct & { imageDataUrl: string }>; division: CreationOrder['division']; formatId: string; cardLayout?: ReturnType<typeof createDefaultProductCardConfiguration> }): Promise<Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }>> {
   if (flyerRenders >= 1) fail(503, 'O renderizador de encartes está ocupado. Tente novamente em instantes.')
   flyerRenders++
   let dir: string | undefined

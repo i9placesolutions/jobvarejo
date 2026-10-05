@@ -27,6 +27,7 @@ import type { BusinessProfile } from '../../utils/businessProfile'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import sharp from 'sharp'
+import { createDefaultProductCardConfiguration } from '../../utils/product-card-configuration'
 
 const pythonWithPlaywright = (() => {
   try {
@@ -323,6 +324,25 @@ describe('adapter de render da criação WhatsApp', () => {
     expect(objects.some((item: any) => item.isProductZone === true && item.name === 'productZone')).toBe(true)
     expect(cards[0]).toMatchObject({ isProductCard: true, isSmartObject: true, productItemId: 'one', productZoneId: 'zone-1' })
     expect(objects.some((item: any) => item.isFrame === true && item._customId === 'frame-1')).toBe(true)
+
+    // A importação manual do Editor Rápido já nasce com preenchimento
+    // automático de imagens e com a receita de Cards da conta.
+    const wideImage = `data:image/png;base64,${(await sharp({ create: { width: 600, height: 200, channels: 4, background: '#60a533' } }).png().toBuffer()).toString('base64')}`
+    const manualPages = await renderEditableFlyerCanvas({
+      canvas,
+      products: [product('one', 'R$ 19,90'), product('two', 'R$ 29,90'), product('three', 'R$ 39,90'), product('four', 'R$ 49,90')]
+        .map(item => ({ ...item, imageDataUrl: wideImage })),
+      division: 'single', formatId: 'stories', cardLayout: createDefaultProductCardConfiguration()
+    })
+    const manualCards = manualPages[0]!.canvas.objects.filter((item: any) => item.name === 'product-card')
+    expect(manualCards.map((item: any) => item.productItemId)).toEqual(['one', 'two', 'three', 'four'])
+    expect(manualCards.every((item: any) => item.__cardLabelTemplateId === '')).toBe(true)
+    expect(manualCards.some((item: any) => item.objects.filter((child: any) => /^(smart_image|extra_image_)/.test(child.name)).length > 1)).toBe(true)
+    for (const card of manualCards) {
+      expect(card.width).toBeLessThan(card._cardWidth * 1.05)
+      expect(card.height).toBeLessThan(card._cardHeight * 1.05)
+      expect(card.objects.filter((item: any) => item.name === 'priceGroup')).toHaveLength(1)
+    }
 
     const many = Array.from({ length: 10 }, (_, index) => product(String(index), 'R$ 19,90'))
     const split = await renderEditableFlyerCanvas({ canvas, products: many, division: 'pages', formatId: 'stories' })
