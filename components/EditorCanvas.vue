@@ -507,6 +507,11 @@ import { layoutCustomPriceGroup as layoutCustomPriceGroupHelper } from '~/utils/
 import { createPriceGroupLayout } from '~/utils/priceGroupLayout'
 import { createPriceGroupBuilders } from '~/utils/priceGroupBuilders'
 import { createPriceGroupPricing } from '~/utils/priceGroupPricing'
+import { createEnsureSinglePriceCurrencyCircleAnchor, createReadSingleManualPriceAnchors } from '~/utils/manualPriceAnchors'
+import { createManualPriceTemplateHelpers } from '~/utils/manualPriceTemplateHelpers'
+import { restoreLegacyManualPriceNames } from '~/utils/legacyManualPriceNames'
+import { createFardoSpecialPricing } from '~/utils/fardoSpecialPriceGroupPricing'
+import { createRedBurstPriceLayout } from '~/utils/redBurstPriceLayout'
 import { syncPriceTemplateStyle } from '~/utils/priceTemplateStyleSync'
 import { createPriceTemplateFitting } from '~/utils/priceTemplateFitting'
 import { createResizeSmartObject } from '~/utils/editorResizeSmartObject'
@@ -23347,22 +23352,12 @@ const getSinglePriceCurrencyCircleCandidate = (objects: any[], currencyTextOverr
         isTextLikeObject
     )
 
-const ensureSinglePriceCurrencyCircleAnchor = (priceGroup: any, objects?: any[]): any | null => {
-    const all = Array.isArray(objects)
-        ? objects
-        : (priceGroup && typeof priceGroup.getObjects === 'function' ? collectObjectsDeep(priceGroup) : []);
-    const currencyText = getSinglePriceCurrencyTextCandidate(all);
-    const currencyCircle = getSinglePriceCurrencyCircleCandidate(all, currencyText);
-    if (
-        currencyCircle &&
-        typeof currencyCircle.set === 'function' &&
-        String(currencyCircle?.name || '') !== 'price_currency_bg'
-    ) {
-        currencyCircle.set('name', 'price_currency_bg');
-        currencyCircle.setCoords?.();
-    }
-    return currencyCircle;
-};
+const ensureSinglePriceCurrencyCircleAnchor = createEnsureSinglePriceCurrencyCircleAnchor({
+    collectObjectsDeep,
+    getSinglePriceCurrencyTextCandidate,
+    getSinglePriceCurrencyCircleCandidate: (objects: any[], currencyText?: any) =>
+        getSinglePriceCurrencyCircleCandidate(objects, currencyText)
+})
 
 // hasCollapsedSinglePriceTemplateGeometry extraido para utils/priceLayoutClassifiers.ts.
 // Wrapper local injeta classifiers + measure helpers.
@@ -23632,149 +23627,20 @@ const normalizeManualPriceChain = (group: any, cacheKey: string, integer: any, d
 
 // MANUAL_SINGLE_ANCHOR_VERSION extraida para utils/labelTemplateHelpers.ts.
 
-const readSingleManualPriceAnchors = (priceGroup: any, opts: { force?: boolean } = {}) => {
-    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return null;
-    const cached = (priceGroup as any).__manualSingleAnchors;
-    // Anchor cache can become stale if it was computed before webfonts loaded.
-    // Allow callers to force a recompute (used by fitting code after price text changes).
-    if (
-        !opts.force &&
-        cached &&
-        typeof cached === 'object' &&
-        Number((cached as any).__version) === MANUAL_SINGLE_ANCHOR_VERSION
-    ) return cached;
-
-    const all = collectObjectsDeep(priceGroup);
-    const priceBg = getSinglePriceBackgroundCandidate(all);
-    const currency = getSinglePriceCurrencyTextCandidate(all);
-    const currencyCircle = ensureSinglePriceCurrencyCircleAnchor(priceGroup, all);
-    const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer');
-    const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
-    const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
-    if (!priceBg || !integer || !decimal) return null;
-
-    // Ensure text objects have up-to-date width/height before measuring bounds.
-	    [currency, integer, decimal, unit].forEach((obj: any) => {
-	        if (!obj) return;
-	        if (isTextLikeObject(obj) && typeof obj.initDimensions === 'function') obj.initDimensions();
-	    });
-
-	    const getOriginalNumber = (obj: any, key: string, fallback: any) => {
-	        const raw = Number(obj?.[key]);
-	        return Number.isFinite(raw) ? raw : Number(fallback);
-	    };
-	    const getOriginalHorizontalBounds = (obj: any) => {
-	        if (!isObjectShownForBounds(obj)) return null;
-	        const widthRaw = getOriginalNumber(obj, '__originalWidth', obj?.width ?? 0);
-	        const scaleX = Math.abs(getOriginalNumber(obj, '__originalScaleX', obj?.scaleX ?? 1)) || 1;
-	        const width = widthRaw * scaleX;
-	        if (!Number.isFinite(width) || width <= 0) return null;
-	        const x = getOriginalNumber(obj, '__originalLeft', obj?.left ?? 0);
-	        const ox = String((obj as any)?.__originalOriginX || obj?.originX || 'left');
-	        if (ox === 'center') return { left: x - (width / 2), right: x + (width / 2) };
-	        if (ox === 'right') return { left: x - width, right: x };
-	        return { left: x, right: x + width };
-	    };
-	    const measureOriginalHorizontalBounds = (objects: any[]) => {
-	        const bounds = (objects || [])
-	            .map((obj: any) => getOriginalHorizontalBounds(obj))
-	            .filter(Boolean) as Array<{ left: number; right: number }>;
-	        if (!bounds.length) return null;
-	        const left = Math.min(...bounds.map((b) => b.left));
-	        const right = Math.max(...bounds.map((b) => b.right));
-	        return { left, right, width: Math.max(0, right - left) };
-	    };
-	    const getOriginalTop = (obj: any, fallback: any) => {
-	        const raw = Number((obj as any)?.__originalTop);
-	        return Number.isFinite(raw) ? raw : Number(fallback);
-	    };
-	    const bgBounds = getOriginalHorizontalBounds(priceBg) || getObjectHorizontalBoundsLocal(priceBg);
-	    const intBounds = getOriginalHorizontalBounds(integer) || getObjectHorizontalBoundsLocal(integer);
-	    const decBounds = getOriginalHorizontalBounds(decimal) || getObjectHorizontalBoundsLocal(decimal);
-	    const unitShown = isObjectShownForBounds(unit) && String(unit?.text || '').trim().length > 0;
-	    const chain = [integer, decimal, unitShown ? unit : null].filter(Boolean) as any[];
-	    const chainBounds = measureOriginalHorizontalBounds(chain) || measureHorizontalBoundsLocal(chain);
-	    const curBounds = getOriginalHorizontalBounds(currency) || getObjectHorizontalBoundsLocal(currency);
-	    const full = [currency, ...chain].filter((o: any) => isObjectShownForBounds(o));
-	    const fullBounds = measureOriginalHorizontalBounds(full) || measureHorizontalBoundsLocal(full);
-
-    // Anchor the chain start to the integer's authored left edge.
-    // This prevents "R$ outside" glitches if centering cannot run due to missing bounds.
-    const intX = intBounds ? intBounds.left : Number(integer?.left ?? 0);
-
-    const fallbackPad = Math.max(8, (Math.abs(Number(priceBg.width || 0) * Number(priceBg.scaleX ?? 1)) || 120) * 0.08);
-    const padLeft = bgBounds && fullBounds
-        ? clamp(fullBounds.left - bgBounds.left, 4, 80)
-        : fallbackPad;
-    const padRight = bgBounds && fullBounds
-        ? clamp(bgBounds.right - fullBounds.right, 4, 80)
-        : fallbackPad;
-
-	    const intDecGap = (intBounds && decBounds)
-	        ? clamp(decBounds.left - intBounds.right, PRICE_INTEGER_DECIMAL_GAP_PX, 60)
-	        : PRICE_INTEGER_DECIMAL_GAP_PX;
-	    const currencyGap = (curBounds && chainBounds)
-	        ? clamp(chainBounds.left - curBounds.right, -8, 36)
-	        : 6;
-	    const decimalCenterX = decBounds ? ((decBounds.left + decBounds.right) / 2) : Number(decimal?.left || 0);
-	    const unitBounds = unitShown ? getObjectHorizontalBoundsLocal(unit) : null;
-	    const unitCenterX = unitBounds ? ((unitBounds.left + unitBounds.right) / 2) : Number(unit?.left || decimalCenterX);
-	    const unitCenterOffsetX = unitShown
-	        ? clamp(unitCenterX - decimalCenterX, -80, 80)
-	        : 0;
-        const hasCurrencyCircle = !!(currencyCircle && isObjectShownForBounds(currencyCircle));
-        const currencyBaseLeft = hasCurrencyCircle && currency
-            ? getOriginalNumber(currency, '__originalLeft', currency.left || 0)
-            : 0;
-        const currencyBaseTop = hasCurrencyCircle && currency
-            ? getOriginalNumber(currency, '__originalTop', currency.top || 0)
-            : 0;
-        const currencyCircleBaseLeft = hasCurrencyCircle
-            ? getOriginalNumber(currencyCircle, '__originalLeft', currencyCircle?.left || 0)
-            : 0;
-        const currencyCircleBaseTop = hasCurrencyCircle
-            ? getOriginalNumber(currencyCircle, '__originalTop', currencyCircle?.top || 0)
-            : 0;
-        const currencyOffsetX = hasCurrencyCircle && currency
-            ? clamp(currencyBaseLeft - currencyCircleBaseLeft, -120, 120)
-            : 0;
-        const currencyOffsetY = hasCurrencyCircle && currency
-            ? clamp(currencyBaseTop - currencyCircleBaseTop, -120, 120)
-            : 0;
-        const bgCenterX = bgBounds
-            ? ((bgBounds.left + bgBounds.right) / 2)
-            : 0;
-        const chainTargetCenterX = chainBounds
-            ? ((chainBounds.left + chainBounds.right) / 2)
-            : bgCenterX;
-        const fullTargetCenterX = fullBounds
-            ? ((fullBounds.left + fullBounds.right) / 2)
-            : (chainBounds
-                ? ((chainBounds.left + chainBounds.right) / 2)
-                : bgCenterX);
-        const targetCenterX = hasCurrencyCircle ? chainTargetCenterX : fullTargetCenterX;
-
-	    const anchors = {
-            __version: MANUAL_SINGLE_ANCHOR_VERSION,
-	        targetCenterX,
-	        intX,
-	        intY: getOriginalTop(integer, integer.top || 0),
-	        decY: getOriginalTop(decimal, decimal.top || 0),
-	        unitY: getOriginalTop(unit, unit?.top || decimal.top || 0),
-	        unitCenterOffsetX,
-	        currencyY: getOriginalTop(currency, currency?.top || integer.top || 0),
-            currencyOffsetX,
-            currencyOffsetY,
-            currencyOriginX: String((currency as any)?.__originalOriginX || currency?.originX || 'center'),
-            currencyOriginY: String((currency as any)?.__originalOriginY || currency?.originY || 'center'),
-	        intDecGap,
-	        currencyGap,
-	        padLeft,
-        padRight
-    };
-    (priceGroup as any).__manualSingleAnchors = anchors;
-    return anchors;
-};
+const readSingleManualPriceAnchors = createReadSingleManualPriceAnchors({
+    MANUAL_SINGLE_ANCHOR_VERSION,
+    collectObjectsDeep,
+    getSinglePriceBackgroundCandidate,
+    getSinglePriceCurrencyTextCandidate,
+    ensureSinglePriceCurrencyCircleAnchor,
+    findByName,
+    isTextLikeObject,
+    isObjectShownForBounds,
+    getObjectHorizontalBoundsLocal,
+    measureHorizontalBoundsLocal,
+    clamp,
+    PRICE_INTEGER_DECIMAL_GAP_PX
+})
 
 if (false) {
 const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
@@ -24030,98 +23896,8 @@ const fitManualSinglePriceValuesIntoTemplate = (priceGroup: any) => {
 };
 }
 
-const constrainSinglePriceTextInsideBackground = (priceGroup: any) => {
-    if (!priceGroup || typeof priceGroup.getObjects !== 'function') return;
-    const all = collectObjectsDeep(priceGroup);
-    if (findByName(all, 'atac_retail_bg')) return;
-
-    const background = getSinglePriceBackgroundCandidate(all);
-    const richPrice = findByName(all, 'price_value_text') || findByName(all, 'smart_price');
-    const integer = findByName(all, 'price_integer_text') || findByName(all, 'priceInteger') || findByName(all, 'price_integer');
-    const decimal = findByName(all, 'price_decimal_text') || findByName(all, 'priceDecimal') || findByName(all, 'price_decimal');
-    const unit = findByName(all, 'price_unit_text') || findByName(all, 'priceUnit') || findByName(all, 'price_unit');
-    const currency = getSinglePriceCurrencyTextCandidate(all);
-    const currencyCircle = ensureSinglePriceCurrencyCircleAnchor(priceGroup, all);
-    if (!background || (!richPrice && (!integer || !decimal))) return;
-
-    [currency, richPrice, integer, decimal, unit].forEach((obj: any) => {
-        if (obj && isTextLikeObject(obj)) obj.initDimensions?.();
-    });
-
-    const bgBounds = getObjectHorizontalBoundsLocal(background);
-    const bgWidth = bgBounds ? Math.max(0, bgBounds.right - bgBounds.left) : 0;
-    if (!bgBounds || bgWidth <= 0) return;
-
-    const unitVisible = isObjectShownForBounds(unit) && String(unit?.text || '').trim().length > 0;
-    const chain = [richPrice || integer, richPrice ? null : decimal, unitVisible ? unit : null].filter(Boolean) as any[];
-    const hasCurrencyCircle = !!(currencyCircle && isObjectShownForBounds(currencyCircle));
-    const fitTargets = hasCurrencyCircle
-        ? chain
-        : [currency, ...chain].filter((obj: any) => isObjectShownForBounds(obj));
-    if (!fitTargets.length) return;
-
-    const pad = clamp(bgWidth * 0.1, 7, 34);
-    const currencyGap = clamp(bgWidth * 0.018, 2, 10);
-    const circleBounds = hasCurrencyCircle ? getObjectHorizontalBoundsLocal(currencyCircle) : null;
-    const leftLimit = hasCurrencyCircle && circleBounds
-        ? Math.min(bgBounds.right - pad, circleBounds.right + currencyGap)
-        : bgBounds.left + pad;
-    const rightLimit = bgBounds.right - pad;
-    const availableW = Math.max(8, rightLimit - leftLimit);
-
-    const scaleTargets = (targets: any[], scale: number) => {
-        targets.forEach((obj: any) => {
-            if (!obj || typeof obj.set !== 'function') return;
-            obj.set({
-                scaleX: Number(obj.scaleX || 1) * scale,
-                scaleY: Number(obj.scaleY || 1) * scale
-            });
-            obj.initDimensions?.();
-            obj.setCoords?.();
-        });
-    };
-    const moveTargets = (targets: any[], dx: number) => {
-        targets.forEach((obj: any) => {
-            if (!obj || typeof obj.set !== 'function') return;
-            obj.set({ left: Number(obj.left || 0) + dx });
-            obj.setCoords?.();
-        });
-    };
-
-    let bounds = measureHorizontalBoundsLocal(fitTargets);
-    if (!bounds) return;
-    if (bounds.width > availableW) {
-        scaleTargets(fitTargets, clamp(availableW / bounds.width, 0.28, 1));
-        bounds = measureHorizontalBoundsLocal(fitTargets);
-        if (!bounds) return;
-    }
-
-    let dx = 0;
-    if (bounds.left < leftLimit) dx += leftLimit - bounds.left;
-    if ((bounds.right + dx) > rightLimit) dx += rightLimit - (bounds.right + dx);
-    if (Math.abs(dx) > 0.001) moveTargets(fitTargets, dx);
-
-    if (currency && hasCurrencyCircle) {
-        const circleH = getObjectHorizontalBoundsLocal(currencyCircle);
-        const currencyBoundsH = getObjectHorizontalBoundsLocal(currency);
-        if (circleH && currencyBoundsH) {
-            const circleCenterX = (circleH.left + circleH.right) / 2;
-            const currencyCenterX = (currencyBoundsH.left + currencyBoundsH.right) / 2;
-            currency.set?.({ left: Number(currency.left || 0) + (circleCenterX - currencyCenterX) });
-        }
-        const circleV = getObjectVerticalBoundsLocal(currencyCircle);
-        const currencyBoundsV = getObjectVerticalBoundsLocal(currency);
-        if (circleV && currencyBoundsV) {
-            const circleCenterY = (circleV.top + circleV.bottom) / 2;
-            const currencyCenterY = (currencyBoundsV.top + currencyBoundsV.bottom) / 2;
-            currency.set?.({ top: Number(currency.top || 0) + (circleCenterY - currencyCenterY) });
-        }
-        currency.setCoords?.();
-    }
-
-    priceGroup.dirty = true;
-    priceGroup.setCoords?.();
-};
+const constrainSinglePriceTextInsideBackground = (priceGroup: any) =>
+    manualPriceTemplateHelpers.constrainSinglePriceTextInsideBackground(priceGroup)
 
 const expandManualTemplateWidthForDynamicPrice = (priceGroup: any) => {
     if (!priceGroup || typeof priceGroup.getObjects !== 'function') return;
@@ -24516,146 +24292,7 @@ const fitManualAtacarejoValuesIntoTemplate = (priceGroup: any) => {
  */
 // repairAtacarejoTextNames extraido para utils/priceLayoutClassifiers.ts.
 
-const applyFardoSpecialPricingToPriceGroup = (pg: any, data: any) => {
-    if (!pg || typeof pg.getObjects !== 'function') return
-    if (pg.getObjects().some((node: any) => node.name === WHOLESALE_REFERENCE_MARKER)) {
-        applyWholesaleReferenceProductData(pg, data)
-        return
-    }
-    const all = collectObjectsDeep(pg)
-    repairAtacarejoTextNames(all)
-    const byName = (name: string) => all.filter((o: any) => o?.name === name)
-    const find = (name: string) => findByName(all, name)
 
-    const retailBg = find('atac_retail_bg')
-    if (!retailBg) return
-    const bannerBg = find('atac_banner_bg')
-    const wholesaleBg = find('atac_wholesale_bg')
-    const configuredDisplayUnit = String((pg as any).__atacDisplayUnit || 'UND').trim()
-    const inferredProductUnit = inferUnitLabelFromProduct(data)
-    const configuredUnitNorm = normalizeUnitForLabel(configuredDisplayUnit)
-    const displayUnit = inferredProductUnit && configuredUnitNorm === 'UN'
-        ? inferredProductUnit
-        : configuredDisplayUnit
-    const state = data?.offerFormat === 'wholesale-pack-v1'
-        ? resolveWholesalePackPriceState(data)
-        : resolveFardoSpecialPriceState(data, {
-        autoCollapseMissingPrices: (pg as any).__autoCollapseMissingPrices !== false,
-        displayUnit,
-        compactPackLine: (pg as any).__atacPackLineCompact !== false,
-        derivePackPrice: true,
-        keepBannerWhenNoCondition: (pg as any).__atacConditionFormat === 'always'
-    })
-
-    // A two-tier template can coexist with a previous single-price snapshot.
-    // Hide those legacy nodes so a missing tier never leaves a stray value behind.
-    ;[
-        'price_unit_text', 'priceUnit', 'price_unit', 'price_integer_text', 'priceInteger',
-        'price_integer', 'price_decimal_text', 'priceDecimal', 'price_decimal',
-        'price_currency_text', 'price_currency', 'priceSymbol', 'price_value_text', 'smart_price'
-    ].forEach((name) => byName(name).forEach((obj: any) => setVisible(obj, false)))
-
-    const retailCurrency = find('retail_currency_text')
-    const retailInteger = find('retail_integer_text')
-    const retailDecimal = find('retail_decimal_text')
-    const retailRichPrice = find('retail_price_text')
-    const retailUnit = find('retail_unit_text')
-    const retailPack = find('retail_pack_line_text')
-    const wholesaleCurrency = find('wholesale_currency_text')
-    const wholesaleInteger = find('wholesale_integer_text')
-    const wholesaleDecimal = find('wholesale_decimal_text')
-    const wholesaleRichPrice = find('wholesale_price_text')
-    const wholesaleUnit = find('wholesale_unit_text')
-    const wholesalePack = find('wholesale_pack_line_text')
-    const bannerText = find('wholesale_banner_text')
-
-    const setTier = (tier: any, visible: boolean, nodes: any[]) => {
-        setVisible(nodes[0], visible)
-        nodes.slice(1).forEach((obj: any) => setVisible(obj, visible && tier.hasValue))
-    }
-    setTier(state.retail, state.showRetail, [retailBg, retailCurrency, retailRichPrice || retailInteger, ...(retailRichPrice ? [] : [retailDecimal]), retailUnit, retailPack])
-    setTier(state.special, state.showSpecial, [wholesaleBg, wholesaleCurrency, wholesaleRichPrice || wholesaleInteger, ...(wholesaleRichPrice ? [] : [wholesaleDecimal]), wholesaleUnit, wholesalePack])
-
-    if (retailCurrency) setText(retailCurrency, 'R$')
-    if (wholesaleCurrency) setText(wholesaleCurrency, 'R$')
-    if (state.retail.hasValue) {
-        if (retailRichPrice) {
-            applyRichPriceTextValue(retailRichPrice, state.retail.price)
-        } else {
-            const parts = splitPriceParts(state.retail.price)
-            setText(retailInteger, parts.integer)
-            setText(retailDecimal, `,${parts.dec}`)
-        }
-    }
-    if (state.special.hasValue) {
-        if (wholesaleRichPrice) {
-            applyRichPriceTextValue(wholesaleRichPrice, state.special.price)
-        } else {
-            const parts = splitPriceParts(state.special.price)
-            setText(wholesaleInteger, parts.integer)
-            setText(wholesaleDecimal, `,${parts.dec}`)
-        }
-    }
-    if (retailUnit) setText(retailUnit, state.retail.unitText)
-    if (wholesaleUnit) setText(wholesaleUnit, state.special.unitText)
-    if (retailPack) {
-        setText(retailPack, state.retail.packLine || '')
-        setVisible(retailPack, state.showRetail && !!state.retail.packLine)
-    }
-    if (wholesalePack) {
-        setText(wholesalePack, state.special.packLine || '')
-        setVisible(wholesalePack, state.showSpecial && !!state.special.packLine)
-    }
-
-    if (bannerBg) setVisible(bannerBg, state.showBanner)
-    if (bannerText) {
-        setText(bannerText, state.conditionText || 'OFERTA ESPECIAL')
-        setVisible(bannerText, state.showBanner)
-    }
-
-    // Ensure duplicated/unnamed tier children follow the same visibility rule.
-    all.forEach((obj: any) => {
-        const name = String(obj?.name || '')
-        if (name.startsWith('retail_') && name !== 'retail_pack_line_text') {
-            setVisible(obj, state.showRetail && state.retail.hasValue)
-        }
-        if (name.startsWith('wholesale_') && name !== 'wholesale_banner_text' && name !== 'wholesale_pack_line_text') {
-            setVisible(obj, state.showSpecial && state.special.hasValue)
-        }
-    })
-    if (retailPack) setVisible(retailPack, state.showRetail && !!state.retail.packLine)
-    if (wholesalePack) setVisible(wholesalePack, state.showSpecial && !!state.special.packLine)
-
-    const preserveTemplateVisual = shouldPreserveManualTemplateVisual(pg)
-    const referencePackaging = find(WHOLESALE_REFERENCE_MARKER)
-    if (referencePackaging) {
-        const aliases: Record<string, string> = { CX: 'CAIXA', FD: 'FARDO', PCT: 'PACOTE', UN: 'UNIDADE' }
-        const raw = String(data?.packageLabel || '').toUpperCase()
-        const quantity = Number(data?.packQuantity)
-        setText(referencePackaging, [aliases[raw] || raw, quantity > 1 ? `C/ ${quantity} UNIDADES` : ''].filter(Boolean).join('\n'))
-        setText(retailPack, data?.pricePack && data?.priceUnit ? `UNID R$ ${formatPriceValue(data.priceUnit)}` : '')
-        setText(wholesalePack, data?.priceSpecial && data?.priceSpecialUnit ? `UNID R$ ${formatPriceValue(data.priceSpecialUnit)}` : '')
-        setVisible(retailPack, state.showRetail && !!data?.pricePack && !!data?.priceUnit)
-        setVisible(wholesalePack, state.showSpecial && !!data?.priceSpecial && !!data?.priceSpecialUnit)
-        setVisible(find('reference_retail_heading'), state.showRetail)
-        setVisible(find('reference_special_heading'), state.showSpecial)
-        // Quando a referência lateral tiver apenas uma faixa, recolhe a área
-        // da faixa ausente antes de medir o conteúdo. Assim a embalagem não
-        // fica cortada e o preço especial não deixa um vão em branco.
-        // Cada card decide individualmente se ainda precisa do selo
-        // "CENSURADO". Ao preencher o preço promocional deste produto, a
-        // faixa real aparece sem alterar os demais cards da página.
-        reflowWholesaleReferencePriceLabel(pg, { showCensored: data?.showCensored ?? !state.special.hasValue })
-    }
-    const forceCanonicalAtac = (pg as any).__forceAtacarejoCanonical === true
-    if (preserveTemplateVisual && !forceCanonicalAtac && !referencePackaging) {
-        fitManualAtacarejoValuesIntoTemplate(pg)
-    }
-    all.forEach((obj: any) => obj?.setCoords?.())
-    pg.dirty = true
-    pg.setCoords?.()
-    if (!referencePackaging) safeAddWithUpdate(pg)
-}
 
 if (false) {
 const applyAtacarejoPricingToPriceGroup = (pg: any, data: any) => {
@@ -25275,62 +24912,22 @@ const normalizeVisibleTemplateScale = normalizeVisibleScale;
 
 // reviveRedBurstObjectNode extraido para utils/redBurstTemplateRevive.ts.
 
-function ensureRedBurstPriceGroupVisibility(priceGroup: any): boolean {
-    if (!isRedBurstPriceGroup(priceGroup)) return false;
-    const all = collectObjectsDeep(priceGroup);
-    const priceBg = findByName(all, 'price_bg');
-    const headerBg = findByName(all, 'price_header_bg');
-    const headerText = findByName(all, 'price_header_text');
-    const currencyText = findByName(all, 'price_currency_text');
-    const richPrice = findByName(all, 'price_value_text');
-    const priceInteger = findByName(all, 'price_integer_text');
-    const priceDecimal = findByName(all, 'price_decimal_text');
-    let changed = false;
-
-    const ensureShellVisible = (obj: any) => {
-        if (!obj || typeof obj.set !== 'function') return;
-        const next: Record<string, any> = {};
-        if (obj.visible === false) next.visible = true;
-        const opacity = Number(obj.opacity ?? 1);
-        if (!Number.isFinite(opacity) || opacity <= 0) next.opacity = 1;
-        if (Object.keys(next).length) {
-            obj.set(next);
-            obj.setCoords?.();
-            changed = true;
-        }
-    };
-
-    ensureShellVisible(priceBg);
-    ensureShellVisible(headerBg);
-    changed = reviveRedBurstObjectNode(headerText, {
-        fallbackFill: '#ffd94c',
-        fallbackFontSize: 28,
-        fallbackText: 'OFERTA'
-    }) || changed;
-    changed = reviveRedBurstObjectNode(currencyText, {
-        fallbackFill: '#ffffff',
-        fallbackFontSize: 30,
-        fallbackText: 'R$'
-    }) || changed;
-    changed = reviveRedBurstObjectNode(priceInteger || richPrice, {
-        fallbackFill: '#ffffff',
-        fallbackFontSize: 92,
-        fallbackText: '0'
-    }) || changed;
-    if (priceDecimal) {
-        changed = reviveRedBurstObjectNode(priceDecimal, {
-            fallbackFill: '#ffffff',
-            fallbackFontSize: 44,
-            fallbackText: ',00'
-        }) || changed;
-    }
-
-    if (changed) {
-        priceGroup.dirty = true;
-        priceGroup.setCoords?.();
-    }
-    return changed;
-}
+const manualPriceTemplateHelpers = createManualPriceTemplateHelpers({
+    isRedBurstPriceGroup,
+    collectObjectsDeep,
+    findByName,
+    isTextLikeObject,
+    reviveRedBurstObjectNode,
+    getSinglePriceBackgroundCandidate,
+    getSinglePriceCurrencyTextCandidate,
+    ensureSinglePriceCurrencyCircleAnchor,
+    isObjectShownForBounds,
+    getObjectHorizontalBoundsLocal,
+    getObjectVerticalBoundsLocal,
+    measureHorizontalBoundsLocal,
+    clamp
+})
+const ensureRedBurstPriceGroupVisibility = manualPriceTemplateHelpers.ensureRedBurstPriceGroupVisibility
 
 // collectTemplateJsonNodesDeep extraido para utils/canvasJsonClassifiers.ts.
 
@@ -25383,6 +24980,27 @@ const syncCurrentPriceTemplateStyle = (group: any) => {
     }, fabric)
 }
 
+const applyFardoSpecialPricingToPriceGroup = createFardoSpecialPricing({
+    applyWholesaleReferenceProductData,
+    collectObjectsDeep,
+    repairAtacarejoTextNames,
+    findByName,
+    inferUnitLabelFromProduct,
+    normalizeUnitForLabel,
+    resolveWholesalePackPriceState,
+    resolveFardoSpecialPriceState,
+    WHOLESALE_REFERENCE_MARKER,
+    setVisible,
+    applyRichPriceTextValue,
+    splitPriceParts,
+    setText,
+    formatPriceValue,
+    reflowWholesaleReferencePriceLabel,
+    shouldPreserveManualTemplateVisual,
+    fitManualAtacarejoValuesIntoTemplate,
+    safeAddWithUpdate
+}).applyFardoSpecialPricingToPriceGroup
+
 const priceGroupPricing = createPriceGroupPricing({
     syncTemplateStyle: syncCurrentPriceTemplateStyle,
     applyFardoSpecialPricingToPriceGroup,
@@ -25428,186 +25046,20 @@ const restoreMissingManualTemplateFlagsInCanvas = (canvasInstance: any, reason: 
     return restored
 }
 
-function tuneRedBurstPriceGroupLayout(priceGroup: any) {
-    if (!isRedBurstPriceGroup(priceGroup)) return false;
-    ensureRedBurstPriceGroupVisibility(priceGroup);
-    // Mini Editor templates must keep authored header geometry (width/position/font size).
-    // Red burst tuning should only auto-fit header text for non-manual/legacy groups.
-    const preserveManualHeaderGeometry =
-        shouldPreserveManualTemplateVisual(priceGroup) &&
-        (priceGroup as any)?.__allowRedBurstHeaderAutofit !== true;
-    const preserveManualPriceGeometry =
-        shouldPreserveManualTemplateVisual(priceGroup) &&
-        (priceGroup as any)?.__allowRedBurstPriceAutofit !== true;
-    const all = collectObjectsDeep(priceGroup);
-    const priceBg = findByName(all, 'price_bg');
-    const headerBg = findByName(all, 'price_header_bg');
-    const headerText = findByName(all, 'price_header_text');
-    const headerUnitText = findByName(all, 'price_header_unit_text');
-    const currencyText = findByName(all, 'price_currency_text');
-    const richPrice = findByName(all, 'price_value_text');
-    const priceInteger = findByName(all, 'price_integer_text');
-    const priceDecimal = findByName(all, 'price_decimal_text');
-    const valueText = richPrice || priceInteger;
-    if (!priceBg || !headerBg || !headerText || !currencyText || !valueText || (!richPrice && !priceDecimal)) return false;
-
-    const bgW = Math.max(1, Number(priceBg.width || 0));
-    const bgH = Math.max(1, Number(priceBg.height || 0));
-    const headerW = Math.max(1, Number(headerBg.width || (bgW * 0.92)));
-    const headerH = Math.max(1, Number(headerBg.height || (bgH * 0.27)));
-    const headerY = Number(headerBg.top || (-(bgH / 2) + headerH * 0.72));
-    const ensureTextDims = (obj: any) => {
-        if (!isTextLikeObject(obj)) return;
-        if (typeof obj.initDimensions === 'function') obj.initDimensions();
-    };
-
-    if (headerUnitText && isTextLikeObject(headerUnitText)) {
-        headerUnitText.set({ text: '', visible: false });
-        ensureTextDims(headerUnitText);
-    }
-
-    if (isTextLikeObject(headerText)) {
-        const originalHeaderFont = Number((headerText as any).__originalFontSize || headerText.fontSize || Math.max(16, headerH * 0.56));
-        if (!preserveManualHeaderGeometry) {
-            headerText.set({
-                originX: 'center',
-                originY: 'center',
-                left: 0,
-                top: headerY + (headerH * 0.01),
-                width: headerW * 0.9,
-                fontSize: originalHeaderFont,
-                scaleX: 1,
-                scaleY: 1
-            });
-            ensureTextDims(headerText);
-            const headerMaxW = headerW * 0.9;
-            const measuredHeaderW = Number(headerText.getScaledWidth?.() || 0);
-            if (measuredHeaderW > headerMaxW && measuredHeaderW > 0) {
-                const ratio = clamp(headerMaxW / measuredHeaderW, 0.55, 1);
-                headerText.set({ fontSize: Math.max(12, originalHeaderFont * ratio) });
-                ensureTextDims(headerText);
-            }
-        } else {
-            // Keep exactly what was authored in Mini Editor (only refresh text metrics).
-            ensureTextDims(headerText);
-        }
-    }
-
-    if (!isTextLikeObject(currencyText) || !isTextLikeObject(valueText) || (!richPrice && !isTextLikeObject(priceDecimal))) {
-        return false;
-    }
-
-    if (preserveManualPriceGeometry) {
-        readSingleManualPriceAnchors(priceGroup) || readSingleManualPriceAnchors(priceGroup, { force: true });
-        fitManualSinglePriceValuesIntoTemplate(priceGroup);
-        const allParts = priceGroup.getObjects?.() || [];
-        allParts.forEach((obj: any) => obj?.setCoords?.());
-        priceGroup.dirty = true;
-        priceGroup.setCoords?.();
-        return true;
-    }
-
-    const originalCurrencyFont = Number((currencyText as any).__originalFontSize || currencyText.fontSize || Math.max(20, bgH * 0.2));
-    const originalIntegerFont = richPrice
-        ? getRichPriceSegmentFontSize(richPrice, 'integer', Math.max(56, bgH * 0.78))
-        : Number((priceInteger as any).__originalFontSize || priceInteger.fontSize || Math.max(56, bgH * 0.78));
-    const originalDecimalFont = richPrice
-        ? getRichPriceSegmentFontSize(richPrice, 'decimal', Math.max(28, bgH * 0.44))
-        : Number((priceDecimal as any).__originalFontSize || priceDecimal.fontSize || Math.max(28, bgH * 0.44));
-
-    const priceBaselineY = bgH * 0.2;
-    const innerLeftPad = bgW * 0.08;
-    const innerRightPad = bgW * 0.06;
-    const textGap = Math.max(2, bgW * 0.008);
-    const currencyGap = Math.max(4, bgW * 0.02);
-
-    currencyText.set({
-        originX: 'center',
-        originY: 'center',
-        fontSize: originalCurrencyFont,
-        scaleX: 1,
-        scaleY: 1,
-        top: priceBaselineY + (bgH * 0.01)
-    });
-    if (richPrice) {
-        setRichPriceSegmentStyle(richPrice, 'integer', { fontSize: originalIntegerFont });
-        setRichPriceSegmentStyle(richPrice, 'decimal', { fontSize: originalDecimalFont });
-        richPrice.set({
-            originX: 'left',
-            originY: 'center',
-            scaleX: 1,
-            scaleY: 1,
-            top: priceBaselineY + (bgH * 0.01)
-        });
-    } else {
-        priceInteger.set({
-            originX: 'left',
-            originY: 'center',
-            fontSize: originalIntegerFont,
-            scaleX: 1,
-            scaleY: 1,
-            top: priceBaselineY + (bgH * 0.01)
-        });
-        priceDecimal.set({
-            originX: 'left',
-            originY: 'center',
-            fontSize: originalDecimalFont,
-            scaleX: 1,
-            scaleY: 1,
-            top: priceBaselineY - (bgH * 0.145)
-        });
-    }
-
-    ensureTextDims(currencyText);
-    ensureTextDims(valueText);
-    if (priceDecimal) ensureTextDims(priceDecimal);
-
-    const currencyX = -(bgW / 2) + innerLeftPad + (Number(currencyText.getScaledWidth?.() || 0) / 2);
-    currencyText.set({ left: currencyX });
-    ensureTextDims(currencyText);
-
-    const layoutPriceTexts = () => {
-        const currencyW = Number(currencyText.getScaledWidth?.() || 0);
-        const intW = Number(valueText.getScaledWidth?.() || 0);
-        const decW = richPrice ? 0 : Number(priceDecimal?.getScaledWidth?.() || 0);
-        const textStartX = currencyX + (currencyW / 2) + currencyGap;
-        const maxRight = (bgW / 2) - innerRightPad;
-        const availableW = Math.max(1, maxRight - textStartX);
-        const totalW = intW + textGap + decW;
-        return { textStartX, totalW, availableW };
-    };
-
-    let integerFont = originalIntegerFont;
-    let decimalFont = originalDecimalFont;
-    for (let i = 0; i < 4; i++) {
-        const layout = layoutPriceTexts();
-        if (layout.totalW <= layout.availableW) break;
-        const ratio = clamp(layout.availableW / layout.totalW, 0.7, 1);
-        integerFont = Math.max(36, integerFont * ratio);
-        decimalFont = Math.max(20, decimalFont * ratio);
-        if (richPrice) {
-            setRichPriceSegmentStyle(richPrice, 'integer', { fontSize: integerFont });
-            setRichPriceSegmentStyle(richPrice, 'decimal', { fontSize: decimalFont });
-            richPrice.set({ scaleX: 1, scaleY: 1 });
-            ensureTextDims(richPrice);
-        } else {
-            priceInteger.set({ fontSize: integerFont, scaleX: 1, scaleY: 1 });
-            priceDecimal.set({ fontSize: decimalFont, scaleX: 1, scaleY: 1 });
-            ensureTextDims(priceInteger);
-            ensureTextDims(priceDecimal);
-        }
-    }
-
-    const finalLayout = layoutPriceTexts();
-    valueText.set({ left: finalLayout.textStartX });
-    ensureTextDims(valueText);
-    if (!richPrice) {
-        const intWFinal = Number(priceInteger.getScaledWidth?.() || 0);
-        priceDecimal.set({ left: finalLayout.textStartX + intWFinal + textGap });
-        ensureTextDims(priceDecimal);
-    }
-    return true;
-}
+const redBurstPriceLayout = createRedBurstPriceLayout({
+    isRedBurstPriceGroup,
+    ensureRedBurstPriceGroupVisibility,
+    shouldPreserveManualTemplateVisual,
+    collectObjectsDeep,
+    findByName,
+    isTextLikeObject,
+    clamp,
+    readSingleManualPriceAnchors,
+    fitManualSinglePriceValuesIntoTemplate,
+    getRichPriceSegmentFontSize,
+    setRichPriceSegmentStyle
+})
+const tuneRedBurstPriceGroupLayout = redBurstPriceLayout.tuneRedBurstPriceGroupLayout
 
 /**
  * Preserve manual layout edits from mini editor:
@@ -26333,6 +25785,7 @@ async function instantiatePriceGroupFromTemplate(tpl: LabelTemplate, opts?: { at
     const enlivened = g.getObjects();
     if (!enlivened.length) throw new Error('Template group failed to enliven objects');
     restoreNamesFromJson(enlivened, objectsJson);
+    restoreLegacyManualPriceNames(g, isTextLikeObject);
     migratePriceGroupToRichText(g, fabric);
     const cloneSafe = <T>(value: T): T => {
         try {

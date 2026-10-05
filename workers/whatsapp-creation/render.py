@@ -33,6 +33,20 @@ FONT_FACES = {
         ("BarlowCondensed-Bold.ttf", 700),
         ("BarlowCondensed-ExtraBold.ttf", 800),
     ]),
+    "firasans": ("Fira Sans", [
+        ("FiraSans-Light.ttf", 300),
+        ("FiraSans-LightItalic.ttf", 300, "italic"),
+        ("FiraSans-Regular.ttf", 400),
+        ("FiraSans-Italic.ttf", 400, "italic"),
+        ("FiraSans-Medium.ttf", 500),
+        ("FiraSans-MediumItalic.ttf", 500, "italic"),
+        ("FiraSans-Bold.ttf", 700),
+        ("FiraSans-BoldItalic.ttf", 700, "italic"),
+        ("FiraSans-ExtraBold.ttf", 800),
+        ("FiraSans-ExtraBoldItalic.ttf", 800, "italic"),
+        ("FiraSans-Black.ttf", 900),
+        ("FiraSans-BlackItalic.ttf", 900, "italic"),
+    ]),
     "inter": ("Inter", [("Inter-Variable.ttf", "100 900")]),
     "anton": ("Anton", [("Anton-Regular.ttf", 400)]),
     "audiowide": ("Audiowide", [("Audiowide-Regular.ttf", 400)]),
@@ -348,31 +362,18 @@ def render(payload, output_dir: Path, fabric_path: Path):
             if (!zones.length) throw new Error(`Fabric não carregou a zona de produtos (${all.length}/${source.objects.length} objetos).`);
             const cards = all.filter(o => o.isProductCard === true || o.name === 'productCard');
             cards.forEach(o => c.remove(o));
-            const instagram = all.find(o => o.name === 'header-instagram' && typeof o.text === 'string');
-            if (instagram && instagram.visible !== false) {
-              JobVarejoNative.layoutHeaderInstagram(all);
-            }
-            const validity = all.find(o => o.name === 'header-validity');
-            if (validity) {
-              if (!String(validity.text || '').trim()) validity.visible = false;
-              else if (validity.quickValidityLayout === 'inline-footer') {
-                JobVarejoNative.layoutInlineFooterValidity(all);
-              } else {
-                const maxWidth = Number(validity.width) * Math.abs(Number(validity.scaleX) || 1);
-                const maxHeight = Number(validity.height) * Math.abs(Number(validity.scaleY) || 1);
-                let fontSize = Number(validity.fontSize) || 24;
-                validity.set({splitByGrapheme: false});
-                for (let attempt = 0; attempt < 24; attempt++) {
-                  validity.set({fontSize});
-                  validity.initDimensions?.();
-                  const lineCount = Array.isArray(validity._textLines) ? validity._textLines.length : 1;
-                  const measuredHeight = Number(validity.height) * Math.abs(Number(validity.scaleY) || 1);
-                  if (lineCount <= 1 && measuredHeight <= maxHeight + 1) break;
-                  fontSize *= .88;
-                }
-                validity.setCoords();
+            JobVarejoNative.layoutManualFlyerComposition(all, (props, index) => {
+              const backdrop = new fabric.Rect({...props, _customId: crypto.randomUUID()});
+              const frame = all.find(item => item.isFrame && item._customId === props.parentFrameId);
+              if (frame?.clipContent) {
+                const bounds = frame.getBoundingRect();
+                backdrop.clipPath = new fabric.Rect({left: bounds.left, top: bounds.top,
+                  width: bounds.width, height: bounds.height, absolutePositioned: true, strokeWidth: 0});
               }
-            }
+              c.insertAt(index, backdrop);
+              all.splice(index, 0, backdrop);
+              return backdrop;
+            });
             const sortedZones = zones.sort((a, b) => a.top - b.top || a.left - b.left);
             const zoneSlots = sortedZones.length > 1
               ? sortedZones.slice(0, input.capacity).map((zone, zoneIndex) => {
@@ -390,33 +391,8 @@ def render(payload, output_dir: Path, fabric_path: Path):
                     : String(input.formatId || '').toLowerCase() === 'square' ? 'post'
                     : String(input.formatId || '').toLowerCase() === 'tv' ? 'banner'
                     : String(input.formatId || '').toLowerCase() === 'print' ? 'a4' : 'feed';
-                  const recipe = JobVarejoNative.resolveProductZoneStructure(zone, count, format) || {};
-                  const padding = Number(recipe.padding ?? zone._zonePadding ?? zone.padding ?? 20);
-                  const gapX = Number(recipe.gapHorizontal ?? zone.gapHorizontal ?? 15);
-                  const gapY = Number(recipe.gapVertical ?? zone.gapVertical ?? 15);
-                  const grid = JobVarejoNative.calculateGridLayout({
-                    x: contentBounds.left, y: contentBounds.top,
-                    width: contentBounds.width, height: contentBounds.height,
-                    padding, gapHorizontal: gapX, gapVertical: gapY,
-                    columns: recipe.columns ?? zone.columns ?? 0,
-                    rows: recipe.rows ?? zone.rows ?? 0,
-                    layoutDirection: recipe.layoutDirection ?? zone.layoutDirection ?? 'horizontal',
-                    cardAspectRatio: recipe.cardAspectRatio ?? zone.cardAspectRatio ?? 'fill',
-                    lastRowBehavior: recipe.lastRowBehavior ?? zone.lastRowBehavior ?? 'fill',
-                    verticalAlign: recipe.verticalAlign ?? zone.verticalAlign ?? 'stretch'
-                  }, count, format);
-                  const columns = grid.cols;
-                  const cellWidth = grid.itemWidth;
-                  const cellHeight = grid.itemHeight;
-                  if (cellWidth < 40 || cellHeight < 40) throw new Error('A estrutura salva não comporta estes produtos.');
-                  const slots = Array.from({length: count}, (_, index) => ({
-                    zoneIndex: 0,
-                    left: contentBounds.left + padding + (index % columns) * (cellWidth + gapX),
-                    top: contentBounds.top + padding + Math.floor(index / columns) * (cellHeight + gapY),
-                    width: cellWidth,
-                    height: cellHeight
-                  }));
-                  return slots;
+                  return JobVarejoNative.calculateManualProductSlots(zone, count, format, contentBounds)
+                    .map(slot => ({ ...slot, zoneIndex: 0 }));
                 })();
             const zoneState = sortedZones.map(zone => ({visible: zone.visible, excludeFromExport: zone.excludeFromExport}));
             sortedZones.forEach(zone => { zone.visible = false; zone.excludeFromExport = true; });
@@ -433,8 +409,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 : String(input.formatId || '').toLowerCase() === 'print' ? 'a4' : 'feed';
               const recipe = zone.structureByProductCountByPreviewFormat?.[format]?.[String(entry.products.length)]
                 || zone.structureByProductCount?.[String(entry.products.length)] || {};
-              const highlighted = Number(recipe.highlightCount || 0) > 0 &&
-                (recipe.highlightIndexes || []).includes(i + 1);
+              const highlighted = slot.highlighted === true;
               const cardColor = styles.isProdBgTransparent ? 'transparent'
                 : styles.cardColorMode === 'manual' ? (styles.cardColor || '#ffffff')
                 : highlighted ? (palette.highlightCardColor || styles.highlightCardColor || '#ffffff')
@@ -455,7 +430,8 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 autoFillImages: true, imageFillCount: 2, zoneInstanceId: zoneId
               }, left + width / 2, top + height / 2, width, height, zoneId,
                 savedLabel ? { ...(template || {}), id: labelId, group: savedLabel } : undefined,
-                { ...styles, cardLayout: input.cardLayout || styles.cardLayout,
+                { ...styles, __refCellW: slot.refCellWidth, __refCellH: slot.refCellHeight,
+                  cardLayout: input.cardLayout || styles.cardLayout,
                   productPalette: { ...palette, cardColor, prodNameColor: nameColor } });
               card.set({isProductCard: true, parentZoneId: zoneId, productZoneId: zoneId,
                 productItemId: product.id, _zoneOrder: i});

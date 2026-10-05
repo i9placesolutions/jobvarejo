@@ -50,6 +50,7 @@ import { restoreCanvasStickerOutlines } from '~/utils/editorStickerOutline'
 import { isSplitFooterValidity, resolveSplitFooterValidityText, splitFooterValidityText } from '~/utils/splitFooterValidity'
 import { createDefaultProductCardConfiguration, normalizeProductCardConfiguration } from '~/utils/product-card-configuration'
 import { BUILTIN_DEFAULT_LABEL_TEMPLATE_ID } from '~/utils/labelTemplateHelpers'
+import flyerCatalogKeys from '~/shared/whatsapp-creation/flyer-catalog-keys.json'
 
 const execute = promisify(execFile)
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -679,12 +680,37 @@ async function getTemplateCanvasPage(project: any, format: CreationFormat, forma
   return { page, canvas }
 }
 
+export function resolvePublishedFlyerCatalogKey(src: string): string | null {
+  if (!src.startsWith('/api/storage/p?')) return null
+  const key = new URL(src, 'http://local').searchParams.get('key')
+  return key && (flyerCatalogKeys as string[]).includes(key) ? key : null
+}
+
+export async function readFlyerPaymentIcon(src: string): Promise<Buffer | null> {
+  // Somente arquivos nativos do catálogo de bandeiras; não aceita caminhos arbitrários.
+  if (!/^\/cartoes\/cartao-[0-9]+\.png$/.test(src)) return null
+  const roots = [resolve(process.cwd(), 'public'), resolve(process.cwd(), '.output/public')]
+  const file = roots.map(root => resolve(root, src.slice(1))).find(existsSync)
+  if (!file) return fail(422, 'Uma bandeira de pagamento do modelo não está disponível no servidor.')
+  const bytes = await readFile(file)
+  if (bytes.length > MAX_IMAGE_BYTES) return fail(413, 'A bandeira de pagamento excede o tamanho permitido.')
+  return bytes
+}
+
 async function embedFlyerAssets(canvas: any, userId: string, templateOwnerId: string, logo: { bytes: Buffer; dataUrl: string } | null, profile: BusinessProfile, order: CreationOrder): Promise<any> {
   hydrateFlyerBusinessFields(canvas, profile, logo?.dataUrl || '', order)
   const visit = async (objects: any[]): Promise<void> => {
     for (const object of objects) {
       if (!object || typeof object !== 'object') continue
       if (String(object.type || '').toLowerCase() === 'image' && object.src && !String(object.src).startsWith('data:image/')) {
+        const catalogKey = resolvePublishedFlyerCatalogKey(String(object.src))
+        if (catalogKey) {
+          const image = await s3Object(catalogKey)
+          object.src = dataUri(image.bytes, image.mimeType)
+          continue
+        }
+        const paymentIcon = await readFlyerPaymentIcon(String(object.src))
+        if (paymentIcon) { object.src = dataUri(paymentIcon, 'image/png'); continue }
         const config = useRuntimeConfig()
         const key = extractStorageKeyFromRef(object.src, { bucket: config.wasabiBucket, endpoint: config.wasabiEndpoint })
         if (!key || !isValidStoragePath(key) || !(key.startsWith(`projects/${templateOwnerId}/`) || key.startsWith('templates/') || isPublicStorageKey(key))) return fail(403, 'O cabeçalho contém uma imagem fora do catálogo autorizado.')

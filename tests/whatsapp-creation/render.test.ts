@@ -9,6 +9,8 @@ import {
 } from '../../shared/whatsapp-creation'
 import {
   deterministicUuid,
+  readFlyerPaymentIcon,
+  resolvePublishedFlyerCatalogKey,
   flyerTemplateRevision,
   flyerThemeMatchesOrder,
   flyerDivisionSupportsProductCount,
@@ -256,14 +258,14 @@ describe('adapter de render da criação WhatsApp', () => {
     execFileSync('python3', ['-c', python, workerPath], { stdio: 'pipe' })
   })
 
-  it.skipIf(!pythonWithPlaywright)('carrega e mede Barlow e Inter locais no Chromium antes do render', () => {
+  it.skipIf(!pythonWithPlaywright)('carrega Barlow, Inter e Fira Sans originais no Chromium antes do render', () => {
     const workerPath = `${process.cwd()}/workers/whatsapp-creation/render.py`
     const python = [
       'import importlib.util, json, sys',
       'from playwright.sync_api import sync_playwright',
       'spec = importlib.util.spec_from_file_location("creation_renderer", sys.argv[1])',
       'module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)',
-      'css, faces = module._font_stylesheet({"objects":[{"fontFamily":"Barlow"},{"fontFamily":"Inter"}]})',
+      'css, faces = module._font_stylesheet({"objects":[{"fontFamily":"Barlow"},{"fontFamily":"Inter"},{"fontFamily":"Fira Sans"}]})',
       'with sync_playwright() as playwright:',
       ' browser = playwright.chromium.launch(headless=True, executable_path=__import__("os").environ.get("WHATSAPP_CREATION_CHROMIUM_EXECUTABLE"), args=["--no-sandbox", "--disable-dev-shm-usage"])',
       ' page = browser.new_page()',
@@ -271,6 +273,8 @@ describe('adapter de render da criação WhatsApp', () => {
       ' metrics = page.evaluate("""async faces => { const loaded = await Promise.all([document.fonts.load(\'700 32px "Barlow"\', \'Font check 123\'), document.fonts.load(\'700 32px "Inter"\', \'Font check 123\')]); await document.fonts.ready; const ctx = document.querySelector(\'canvas\').getContext(\'2d\'); const widths = {}; for (const family of [\'Barlow\', \'Inter\', \'serif\']) { ctx.font = `700 32px "${family}"`; widths[family] = ctx.measureText(\'Font check 123\').width; } return {loaded: loaded.map(fonts => fonts.length), checks: [document.fonts.check(\'700 32px "Barlow"\', \'Font check 123\'), document.fonts.check(\'700 32px "Inter"\', \'Font check 123\')], widths}; }""", faces)',
       ' italic = page.evaluate("""async () => { const faces = await document.fonts.load(\'italic 900 40px "Barlow"\', \'4,99\'); return faces.map(face => ({style: face.style, weight: face.weight, status: face.status})); }""")',
       ' assert italic == [{"style":"italic", "weight":"900", "status":"loaded"}], italic',
+      ' fira = page.evaluate("""async () => { const faces = await document.fonts.load(\'italic 900 40px "Fira Sans"\', \'4,99\'); return faces.map(face => ({style: face.style, weight: face.weight, status: face.status})); }""")',
+      ' assert fira == [{"style":"italic", "weight":"900", "status":"loaded"}], fira',
       ' assert metrics["loaded"] == [1, 1] and metrics["checks"] == [True, True], metrics',
       ' assert metrics["widths"]["Barlow"] > 0 and metrics["widths"]["Inter"] > 0, metrics',
       ' assert metrics["widths"]["Barlow"] != metrics["widths"]["serif"] and metrics["widths"]["Inter"] != metrics["widths"]["serif"], metrics',
@@ -404,4 +408,21 @@ describe('adapter de render da criação WhatsApp', () => {
     expect(split.map((page) => page.productIds)).toEqual([many.slice(0, 9).map(item => item.id), ['9']])
     await expect(renderEditableFlyerCanvas({ canvas, products: many, division: 'single', formatId: 'stories' })).rejects.toThrow(/prévia editável/)
   }, 100_000)
+})
+
+ describe('bandeiras nativas dos modelos', () => {
+  it('carrega a bandeira real e rejeita caminhos fora do catálogo', async () => {
+    const image = await readFlyerPaymentIcon('/cartoes/cartao-82.png')
+    expect(image?.subarray(1, 4).toString()).toBe('PNG')
+    for (const path of ['/cartoes/../../.env', '/cartoes/cartao-82.png/../secret', '/cartoes/%2e%2e/.env', 'https://example.com/cartoes/cartao-82.png']) {
+      expect(await readFlyerPaymentIcon(path)).toBeNull()
+    }
+  })
+})
+
+it('aceita somente o fundo exato publicado na coleção de encartes', () => {
+  const key = 'video-studio/catalog/0220c187da0bf6ff9642ff4b0c6c78f7edda06d0164f5e5690b919508f582761/templates/catalog/reference-20261004-01.png'
+  expect(resolvePublishedFlyerCatalogKey('/api/storage/p?key=' + encodeURIComponent(key))).toBe(key)
+  expect(resolvePublishedFlyerCatalogKey('/api/storage/p?key=video-studio/private/secret.png')).toBeNull()
+  expect(resolvePublishedFlyerCatalogKey('/api/storage/p?key=' + encodeURIComponent(key.replace('0220', 'abcd')))).toBeNull()
 })

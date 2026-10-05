@@ -3038,7 +3038,8 @@ export const createEditorProductGridController = (ctx: EditorProductGridContext)
             const maxPadByWidth = (zoneRect.width - (colCount * minSlotSize) - ((colCount - 1) * gapX)) / 2;
             const maxPadByHeight = (zoneRect.height - (rowCount * minSlotSize) - ((rowCount - 1) * gapY)) / 2;
             const padLimit = Math.max(0, Math.min(maxPadByWidth, maxPadByHeight));
-            padding = clamp(padding, 0, padLimit);
+            // O padding mínimo também precisa entrar no cálculo da área útil.
+            padding = Math.max(2, clamp(padding, 0, padLimit));
 
             const usableW = Math.max(2, zoneRect.width - (padding * 2));
             const usableH = Math.max(2, zoneRect.height - (padding * 2));
