@@ -45,6 +45,10 @@ it('mantém toda a validade horizontal em uma linha ao atualizar o período', ()
  expect(text).not.toMatch(/[\r\n]/)
  expect(resolveSplitFooterValidityText(field, [], {mode:'while_stocks'})).toBe('OFERTA VÁLIDA ENQUANTO DURAREM OS ESTOQUES')
  expect(resolveSplitFooterValidityText(field, [], {})).toBe('')
+ expect(resolveSplitFooterValidityText(field, [], {startDate:'2026-10-05',endDate:'2026-10-05',mode:'single_day',dateFormat:'numeric'}))
+   .toBe('OFERTA VÁLIDA DE 05/10/2026 OU ENQUANTO DURAREM OS ESTOQUES')
+ expect(resolveSplitFooterValidityText(field, [], {startDate:'2026-10-05',endDate:'2026-10-08',mode:'date_range',dateFormat:'numeric'}))
+   .toBe('OFERTA VÁLIDA DE 05/10/2026 A 08/10/2026 OU ENQUANTO DURAREM OS ESTOQUES')
 })
 
 it('usa dias com dois dígitos e estoque sem "OU" no estilo padded da faixa', () => {

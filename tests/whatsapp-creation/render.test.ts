@@ -135,7 +135,7 @@ describe('adapter de render da criação WhatsApp', () => {
       text: 'OFERTAS VÁLIDAS ENQUANTO DURAREM OS ESTOQUES', visible: true }] }
     hydrateFlyerBusinessFields(canvas, profile, '', { validity: '05/10/2026', conditions: '' })
     expect(canvas.objects[0]).toMatchObject({
-      text: 'OFERTA VÁLIDA DE 5 DE OUTUBRO OU ENQUANTO DURAREM OS ESTOQUES',
+      text: 'OFERTA VÁLIDA DE 05/10/2026 OU ENQUANTO DURAREM OS ESTOQUES',
       quickValidityStartDate: '2026-10-05', quickValidityEndDate: '2026-10-05',
       quickValidityMode: 'single_day', visible: true
     })

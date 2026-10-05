@@ -33,6 +33,13 @@ export const splitFooterValidityText = (value: { startDate?: string; endDate?: s
       ? formatOfferDateInterval(first, last)
       : first || last).toLocaleUpperCase('pt-BR')
   }
+  if (value.layout === 'inline-footer' && value.dateFormat === 'numeric' && !stocksOnly) {
+    const first = formatOfferDate(value.startDate, 'numeric')
+    const last = formatOfferDate(value.endDate, 'numeric')
+    period = start && end && value.mode !== 'single_day' && value.startDate !== value.endDate
+      ? formatOfferDateInterval(first, last).toLocaleUpperCase('pt-BR')
+      : first || last
+  }
   if (value.layout === 'calendar-card') {
     if (value.dateFormat !== 'long' && start && end && !stocksOnly && value.mode !== 'single_day' && start.year === end.year && start.month === end.month && value.startDate !== value.endDate) {
       // E só representa dois dias quando são consecutivos; intervalos maiores usam A.
