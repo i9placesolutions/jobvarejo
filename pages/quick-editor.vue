@@ -360,7 +360,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AdminWorkspaceShell active-nav="encartes">
+  <AdminWorkspaceShell active-nav="encartes" class="quick-entry-shell">
   <main class="quick-entry min-h-screen bg-[linear-gradient(180deg,#f7f8fc_0%,#f8fafc_46%,#f1f5f9_100%)] text-slate-900">
     <header class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/85 shadow-[0_1px_16px_rgba(15,23,42,0.04)] backdrop-blur-xl">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -392,19 +392,19 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <section class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
-      <div class="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-950 via-blue-950 to-sky-900 px-5 py-7 text-white shadow-2xl shadow-blue-950/15 sm:px-9 sm:py-10 lg:px-12">
+    <section class="quick-entry-content mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+      <div class="quick-entry-hero relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-950 via-blue-950 to-sky-900 px-5 py-7 text-white shadow-2xl shadow-blue-950/15 sm:px-9 sm:py-10 lg:px-12">
         <div class="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-blue-400/20 blur-3xl" aria-hidden="true" />
         <div class="pointer-events-none absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-sky-400/15 blur-3xl" aria-hidden="true" />
-        <div class="relative grid items-center gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+        <div class="quick-entry-hero__grid relative grid items-center gap-8 lg:grid-cols-[1.15fr_0.85fr]">
           <div>
             <div class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
               <Sparkles class="h-3.5 w-3.5 text-amber-300" />
               Edição rápida
             </div>
-            <h1 class="mt-4 max-w-xl text-3xl font-bold tracking-[-0.04em] text-white sm:text-4xl lg:text-[2.75rem]">Comece pelo encarte certo.</h1>
-            <p class="mt-3 max-w-xl text-sm leading-6 text-blue-100/80 sm:text-base">Os temas aparecem em uma ordem diferente para cada empresa. Filtre por categoria ou pesquise pelo nome; depois, preencha os produtos e publique.</p>
-            <div class="mt-6 flex flex-wrap gap-2 text-xs font-semibold">
+            <h1 class="quick-entry-hero__title mt-4 max-w-xl text-3xl font-bold tracking-[-0.04em] text-white sm:text-4xl lg:text-[2.75rem]">Comece pelo encarte certo.</h1>
+            <p class="quick-entry-hero__description mt-3 max-w-xl text-sm leading-6 text-blue-100/80 sm:text-base">Os temas aparecem em uma ordem diferente para cada empresa. Filtre por categoria ou pesquise pelo nome; depois, preencha os produtos e publique.</p>
+            <div class="quick-entry-hero__badges mt-6 flex flex-wrap gap-2 text-xs font-semibold">
               <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-2 text-blue-50">
                 <LayoutTemplate class="h-3.5 w-3.5 text-blue-200" />
                 {{ isOpening ? 'Carregando modelos…' : `${templates.length} ${templates.length === 1 ? 'modelo disponível' : 'modelos disponíveis'}` }}
@@ -415,7 +415,7 @@ onUnmounted(() => {
               </span>
             </div>
           </div>
-          <div class="relative hidden min-h-48 items-center justify-center lg:flex" aria-hidden="true">
+          <div class="quick-entry-hero__illustration relative hidden min-h-48 items-center justify-center lg:flex" aria-hidden="true">
             <div class="absolute h-44 w-44 rounded-full border border-white/10" />
             <div class="absolute h-32 w-32 rounded-full border border-white/10" />
             <div class="relative w-64 rotate-[-4deg] rounded-2xl border border-white/20 bg-white/95 p-3 text-slate-900 shadow-2xl shadow-black/20">
@@ -438,7 +438,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="mt-6 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200/80 bg-white/80 p-1.5 shadow-sm sm:inline-flex" role="tablist" aria-label="Edição rápida">
+      <div class="quick-entry-tabs mt-6 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200/80 bg-white/80 p-1.5 shadow-sm sm:inline-flex" role="tablist" aria-label="Edição rápida">
         <button id="quick-tab-models" type="button" role="tab" aria-controls="quick-panel-models"
           :aria-selected="activeTab === 'models'" :tabindex="activeTab === 'models' ? 0 : -1"
           class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:px-6"
@@ -798,5 +798,52 @@ onUnmounted(() => {
 <style scoped>
 .quick-entry {
   font-family: "Plus Jakarta Sans", Barlow, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* A densidade acompanha a área de conteúdo, incluindo a largura da navegação. */
+.quick-entry { container-type: inline-size; container-name: quick-entry; }
+.quick-entry-hero { padding: 24px 28px; border-radius: 22px; }
+.quick-entry-hero__grid { gap: 24px; grid-template-columns: minmax(0, 1fr) 220px; }
+.quick-entry-hero__title { margin-top: 12px; font-size: clamp(24px, 3cqi, 34px); line-height: 1.15; max-width: none; }
+.quick-entry-hero__description { margin-top: 10px; font-size: 13px; line-height: 1.65; max-width: 620px; }
+.quick-entry-hero__badges { margin-top: 16px; font-size: 11px; }
+.quick-entry-hero__badges > span { padding: 6px 10px; }
+.quick-entry-hero__illustration { min-height: 150px; }
+.quick-entry-hero__illustration > div.relative { width: 200px; }
+.quick-entry-tabs { margin-top: 16px; border-radius: 12px; padding: 4px; }
+.quick-entry-tabs > button { min-height: 40px; padding: 8px 16px; font-size: 12px; border-radius: 9px; }
+@container quick-entry (max-width: 1100px) {
+  .quick-entry-content { padding: 20px; }
+  .quick-entry-hero { padding: 20px 24px; }
+  .quick-entry-hero__grid { grid-template-columns: minmax(0, 1fr) 180px; gap: 20px; }
+  .quick-entry-hero__illustration > div.relative { width: 170px; }
+  .quick-entry-hero__illustration > span { display: none; }
+  .quick-entry-tabs + section, .quick-entry-tabs ~ section { margin-top: 20px; }
+}
+@container quick-entry (max-width: 700px) {
+  .quick-entry-hero__grid { grid-template-columns: minmax(0, 1fr); }
+  .quick-entry-hero__illustration { display: none; }
+}
+@container quick-entry (max-width: 480px) {
+  .quick-entry-content { padding: 16px 12px; }
+  .quick-entry-hero { padding: 18px; border-radius: 16px; }
+  .quick-entry-hero__title { font-size: 24px; }
+  .quick-entry-hero__badges { gap: 6px; }
+  .quick-entry-tabs > button { min-height: 44px; padding: 8px 10px; }
+}
+@media (min-width: 769px) and (max-width: 1440px), (min-width: 769px) and (max-height: 800px) {
+  .quick-entry-shell :deep(.admin-shell__topbar) { height: 56px; min-height: 56px; padding: 0 16px; }
+  .quick-entry-shell :deep(.admin-shell__sidebar) { width: 212px; flex-shrink: 0; }
+  .quick-entry-shell :deep(.admin-shell__brand-link img) { height: 30px; }
+  .quick-entry-shell :deep(.admin-shell__brand-copy small) { display: none; }
+  .quick-entry-shell :deep(.admin-shell__nav) { padding: 10px 8px 6px; }
+  .quick-entry-shell :deep(.admin-shell__nav-item) { min-height: 34px; font-size: 12px; border-radius: 8px; gap: 8px; }
+  .quick-entry-shell :deep(.admin-shell__section) { margin-top: 8px; font-size: 9px; }
+  .quick-entry > header > div { padding-top: 8px; padding-bottom: 8px; }
+}
+@media (max-height: 800px) and (min-width: 769px) {
+  .quick-entry-content { padding-top: 16px; padding-bottom: 20px; }
+  .quick-entry-hero { padding-top: 18px; padding-bottom: 18px; }
+  .quick-entry-hero__illustration { min-height: 120px; }
 }
 </style>

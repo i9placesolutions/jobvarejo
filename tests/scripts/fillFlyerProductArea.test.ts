@@ -81,6 +81,26 @@ describe('fillFlyerProductArea', () => {
     expect(second.canvas).toEqual(first.canvas)
   })
 
+  it('extends a Polygon panel with scaleY, preserves intrinsic dimensions, and is idempotent', () => {
+    const source = fixture()
+    const polygonPanel = panel(source)
+    polygonPanel.type = 'Polygon'
+    polygonPanel.points = [{ x: 0, y: 0 }, { x: 940, y: 0 }, { x: 940, y: 530 }, { x: 0, y: 530 }]
+    const originalHeight = polygonPanel.height
+    const first = fillFlyerProductArea(source)
+    const updated = panel(first.canvas)
+
+    expect(first.skipReason).toBeUndefined()
+    expect(updated.height).toBe(originalHeight)
+    expect(updated.scaleY).toBeCloseTo(589 / originalHeight)
+    expect(renderedTop(updated)).toBe(531)
+    expect(renderedBottom(updated)).toBe(1120)
+
+    const second = fillFlyerProductArea(first.canvas)
+    expect(second.changes).toEqual([])
+    expect(second.canvas).toEqual(first.canvas)
+  })
+
   it('blocks seals and any other visible foreground that intersects the new corridor', () => {
     for (const foreground of [
       { type: 'Image', name: 'promo-seal', left: 200, top: 530, width: 80, height: 30, scaleX: 1, scaleY: 1, angle: 0, visible: true, originX: 'left', originY: 'top' },

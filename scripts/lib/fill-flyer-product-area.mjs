@@ -26,12 +26,18 @@ function bounds(object) {
   return { left: x, top: y, right: x + renderedWidth, bottom: y + renderedHeight, width: renderedWidth, height: renderedHeight, scaleX, scaleY }
 }
 
-function setVerticalBounds(object, top, bottom) {
+function setVerticalBounds(object, top, bottom, preserveIntrinsicHeight = false) {
   const geometry = bounds(object)
   if (!geometry || !(bottom > top)) return false
-  const height = (bottom - top) / geometry.scaleY
   const origin = String(object.originY || 'top').toLowerCase()
-  object.height = height
+  const preserveShape = preserveIntrinsicHeight && String(object.type || '').toLowerCase() !== 'rect'
+  if (preserveShape) {
+    const intrinsicHeight = finite(object.height)
+    if (!(intrinsicHeight > 0)) return false
+    object.scaleY = (bottom - top) / intrinsicHeight
+  } else {
+    object.height = (bottom - top) / geometry.scaleY
+  }
   object.top = top + (bottom - top) * originFactor(origin, 'top', 'center', 'bottom')
   return true
 }
@@ -183,7 +189,7 @@ export function fillFlyerProductArea(source) {
     }
   }
 
-  if (panelBounds && !setVerticalBounds(panel, nextPanelTop, panelBounds.bottom)) {
+  if (panelBounds && !setVerticalBounds(panel, nextPanelTop, panelBounds.bottom, true)) {
     return skip(canvas, 'Não foi possível ampliar o painel de fundo.')
   }
 
