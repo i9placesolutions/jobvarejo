@@ -420,6 +420,16 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(oneApproved.send.find(message => message.purpose === 'final')).toMatchObject({ formatId: 'stories', key: 'whatsapp-creation/file-story.png' })
     expect(oneApproved.state.phase).toBe('preview')
     expect(oneApproved.state.order?.previewApprovals.map(approval => approval.formatId)).toEqual(['stories'])
+
+    const redone = await input(state, { action: 'status' }, 'Refazer prévia')
+    expect(redone.generate).toBe(true)
+    expect(redone.state.phase).toBe('rendering')
+    expect(redone.state.order?.revision).toBe(order.revision + 1)
+    expect(redone.state.order?.dataApprovedRevision).toBe(redone.state.order?.revision)
+    expect(redone.state.order?.images[0]?.approvedRevision).toBe(redone.state.order?.revision)
+    expect(redone.state.order?.previews).toEqual([])
+    expect(redone.state.artifacts).toEqual([])
+    expect(redone.send.map(message => message.text).join(' ')).toMatch(/refazer a prévia/i)
   })
 
   it('rejeita estado de pedido pertencente a outra conta', async () => {

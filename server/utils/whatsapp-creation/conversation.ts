@@ -180,6 +180,20 @@ export async function advanceConversation(input: {
   const asksStatus = /\b(?:status|andamento|como (?:est[aá]|t[aá]) (?:o |meu )?pedido)\b/i.test(input.text)
   if (canResume && /^(?:tentar novamente|tente novamente|repetir|retomar)[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'update', products: undefined }
   else if (p.action === 'status' && canResume && !asksStatus) p = { ...p, action: 'update', products: undefined }
+  if (s.phase === 'preview' && s.order?.kind === 'encarte' &&
+    /^(?:refazer(?:\s+(?:a|essa))?\s+(?:pr[eé]via|arte|encarte)|gerar\s+(?:a\s+)?pr[eé]via\s+novamente)[.!]?$/i.test(input.text.trim())) {
+    // A new renderer can replace an obsolete preview without making the
+    // customer approve unchanged product data and photos a second time.
+    assertCanRender(s.order, input.accountId)
+    const approvedImages = s.order.products.map(product => s.order!.images.find(image => image.itemId === product.id)!)
+    s.order = approveData(updateOrder(s.order, input.accountId, {}), input.accountId)
+    for (const image of approvedImages) s.order = approveImage(s.order, input.accountId, image)
+    assertCanRender(s.order, input.accountId)
+    s.artifacts = []
+    s.phase = 'rendering'
+    say('Vou refazer a prévia com o modelo escolhido e as fotos já confirmadas.')
+    return { state: s, send, generate: true }
+  }
   if (p.action === 'status') {
     const nextStep = s.phase === 'header' ? 'Escolha o número do cabeçalho ou diga “ver mais”.'
       : s.phase === 'data' ? 'Confira a imagem dos produtos. Responda “Confirmado” ou diga o número a corrigir.'
