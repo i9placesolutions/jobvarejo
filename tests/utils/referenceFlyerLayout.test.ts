@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { splitFooterValidityText } from '../../utils/splitFooterValidity'
 import { compactBusinessFooter } from '../../utils/compactBusinessFooter'
 import { layoutOfferValidityBanner } from '../../utils/offerValidityBanner'
+import { layoutHeaderInstagram } from '../../utils/referenceFlyerLayout'
 
 const object=(values:any):any=>({type:'rect',left:0,top:0,width:100,height:20,scaleX:1,scaleY:1,visible:true,parentFrameId:'f',...values,
  set(p:any){Object.assign(this,p)},setCoords(){},getBoundingRect(){return{left:this.left,top:this.top,width:this.width*this.scaleX,height:this.height*this.scaleY}}})
@@ -108,6 +109,34 @@ it('preserva a transformação manual do ícone sem interromper o layout automá
 
  expect([icon.left,icon.top,icon.scaleX,icon.scaleY]).toEqual(iconGeometry)
  expect(field.scaleX).toBeLessThan(1)
+})
+
+it('centraliza ícone e usuário no painel Instagram sem deslocar o título nem redimensionar o painel',()=>{
+ const panel=object({name:'header-instagram-panel',left:588.6,top:395,width:469.8,height:76,fill:'#192106'})
+ const title=text({name:'header-social-caption',text:'SIGA NOSSO INSTAGRAM',left:700,top:397,width:250,height:18})
+ const band=object({name:'header-instagram-background',left:698.028,top:419,width:250.944,height:52})
+ const icon=object({name:'header-icon-instagram',left:714.028,top:429,width:22.2,height:22.2,scaleX:1.4414,scaleY:1.4414})
+ const field=text({name:'header-instagram',businessProfileField:'instagram',text:'@supermercadorodriguesrv',left:758.028,top:429.18,width:337.6406,height:31.64,
+  fontFamily:'Barlow',fontSize:28,fontWeight:900,fill:'#ffffff',charSpacing:0,originX:'left',originY:'top'})
+ const panelGeometry=[panel.left,panel.top,panel.width,panel.height]
+ const titleGeometry=[title.left,title.top,title.width,title.height,title.text]
+ const fontStyle=[field.fontFamily,field.fontWeight,field.fill,field.text]
+ const nodes=[panel,title,band,icon,field]
+
+ layoutHeaderInstagram(nodes)
+
+ const panelBounds=panel.getBoundingRect(), iconBounds=icon.getBoundingRect(), fieldBounds=field.getBoundingRect()
+ const groupLeft=Math.min(iconBounds.left,fieldBounds.left), groupRight=Math.max(iconBounds.left+iconBounds.width,fieldBounds.left+fieldBounds.width)
+ expect([panel.left,panel.top,panel.width,panel.height]).toEqual(panelGeometry)
+ expect([title.left,title.top,title.width,title.height,title.text]).toEqual(titleGeometry)
+ expect([field.fontFamily,field.fontWeight,field.fill,field.text]).toEqual(fontStyle)
+ expect((groupLeft+groupRight)/2).toBeCloseTo(panelBounds.left+panelBounds.width/2,6)
+ expect(iconBounds.top+iconBounds.height/2).toBeCloseTo(fieldBounds.top+fieldBounds.height/2,6)
+ expect(groupLeft).toBeGreaterThanOrEqual(panelBounds.left)
+ expect(groupRight).toBeLessThanOrEqual(panelBounds.left+panelBounds.width)
+ expect(iconBounds.top).toBeGreaterThanOrEqual(panelBounds.top)
+ expect(iconBounds.top+iconBounds.height).toBeLessThanOrEqual(panelBounds.top+panelBounds.height)
+ expect(layoutHeaderInstagram(nodes)).toBe(false)
 })
 
 it('mantém contatos e ícones dentro do rodapé com altura reduzida',()=>{

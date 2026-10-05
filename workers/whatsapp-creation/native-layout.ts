@@ -5,6 +5,7 @@ export { createManualProductCard } from './native-card'
 export { calculateGridLayout } from '../../utils/product-zone-helpers'
 export { resolveProductZoneStructure } from '../../utils/product-zone-structure'
 export { fitResponsiveProductTypography, harmonizeProductCardTypography } from '../../utils/productCardResponsiveTypography'
+export { layoutHeaderInstagram } from '../../utils/referenceFlyerLayout'
 export { layoutInlineFooterValidity } from '../../utils/inlineFooterValidityLayout'
 
 import { createPriceGroupBuilders } from '../../utils/priceGroupBuilders'

@@ -350,18 +350,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
             cards.forEach(o => c.remove(o));
             const instagram = all.find(o => o.name === 'header-instagram' && typeof o.text === 'string');
             if (instagram && instagram.visible !== false) {
-              const panel = all.find(o => o.name === 'header-instagram-panel');
-              const panelBounds = panel?.getBoundingRect();
-              const maxRight = Math.min(input.width - 20, panelBounds ? panelBounds.left + panelBounds.width - 12 : input.width - 20);
-              const available = Math.max(40, maxRight - instagram.getBoundingRect().left);
-              const measure = new fabric.Text(instagram.text, {
-                fontFamily: instagram.fontFamily, fontWeight: instagram.fontWeight,
-                fontSize: instagram.fontSize, charSpacing: instagram.charSpacing
-              });
-              const ratio = Math.min(1, available / Math.max(1, measure.width));
-              instagram.set({width: available, fontSize: Math.max(10, Number(instagram.fontSize || 20) * ratio)});
-              instagram.initDimensions?.();
-              instagram.setCoords();
+              JobVarejoNative.layoutHeaderInstagram(all);
             }
             const validity = all.find(o => o.name === 'header-validity');
             if (validity) {

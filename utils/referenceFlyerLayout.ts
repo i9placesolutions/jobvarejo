@@ -93,8 +93,12 @@ export const layoutHeaderInstagram = (objects: any[]): boolean => {
     if (visible) {
       const b = bounds(band), s = b.height / 52
       const inset = 16 * s, iconSize = icon ? 32 * s : 0, gap = icon ? 12 * s : 0
-      const maxWidth = Number(band.headerInstagramMaxWidth) || b.width
-      const centerX = Number.isFinite(band.headerInstagramCenterX) ? band.headerInstagramCenterX : b.left + b.width / 2
+      const panel = siblings.find(o => o.name === 'header-instagram-panel')
+      const panelBounds = panel ? bounds(panel) : null
+      const maxWidth = Number(band.headerInstagramMaxWidth) || panelBounds?.width || b.width
+      const centerX = Number.isFinite(band.headerInstagramCenterX)
+        ? band.headerInstagramCenterX
+        : panelBounds ? panelBounds.left + panelBounds.width / 2 : b.left + b.width / 2
       assign(band, { headerInstagramMaxWidth: maxWidth, headerInstagramCenterX: centerX })
       const width = Math.max(1, maxWidth - inset * 2 - iconSize - gap - 2), height = Math.max(1, b.height - 14 * s)
       const manualFieldLayout = field.__manualTransform || field.__manualTypography
