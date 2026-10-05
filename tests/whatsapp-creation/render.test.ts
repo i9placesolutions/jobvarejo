@@ -15,6 +15,7 @@ import {
   assertFlyerProfileBindings,
   hydrateFlyerBusinessFields,
   renderEditableFlyerCanvas,
+  applyFlyerAccountLabelTemplates,
   applyFlyerLogoStickers,
   approvedProductImages,
   isPublishedArtAssetStorageKey,
@@ -64,6 +65,22 @@ function pngDataUrl(): string {
 }
 
 describe('adapter de render da criação WhatsApp', () => {
+  it('usa a etiqueta Padrão atual da conta e mantém a escolha explícita do modelo', () => {
+    const canvas = { __labelTemplates: [
+      { id: 'tpl_default', name: 'Padrão antigo', group: { objects: [{ name: 'price_bg', fill: '#111111' }] } },
+      { id: 'custom-label', name: 'Escolhida no modelo', group: { objects: [{ name: 'price_bg', fill: '#222222' }] } }
+    ], objects: [
+      { isProductZone: true, _zoneGlobalStyles: { prodNameFont: 'Barlow' } },
+      { isProductZone: true, _zoneGlobalStyles: { splashTemplateId: 'custom-label' } }
+    ] }
+    applyFlyerAccountLabelTemplates(canvas, [
+      { id: 'tpl_default', name: 'Padrão da conta', group: { objects: [{ name: 'price_bg', fill: '#ff0000' }] } }
+    ])
+    expect(canvas.objects[0]?._zoneGlobalStyles).toMatchObject({ prodNameFont: 'Barlow', splashTemplateId: 'tpl_default' })
+    expect(canvas.objects[1]?._zoneGlobalStyles.splashTemplateId).toBe('custom-label')
+    expect(canvas.__labelTemplates.find((item: any) => item.id === 'tpl_default')?.group.objects[0]?.fill).toBe('#ff0000')
+    expect(canvas.__labelTemplates.find((item: any) => item.id === 'custom-label')?.group.objects[0]?.fill).toBe('#222222')
+  })
   it('recorta a miniatura na fronteira real entre cabeçalho e produtos', () => {
     const canvas = { objects: [
       { name: 'header-validity', top: 492 },
@@ -332,15 +349,19 @@ describe('adapter de render da criação WhatsApp', () => {
     const wideImage = `data:image/png;base64,${(await sharp({ create: { width: 600, height: 200, channels: 4, background: '#60a533' } }).png().toBuffer()).toString('base64')}`
     const accountCardLayout = createDefaultProductCardConfiguration()
     accountCardLayout.profiles!.featured.elements.image.width = 30
+    const accountCanvas = JSON.parse(JSON.stringify(canvas))
+    const accountLabel = JSON.parse(JSON.stringify(label))
+    accountLabel.objects[0].fill = '#345678'
+    applyFlyerAccountLabelTemplates(accountCanvas, [{ id: 'tpl_default', name: 'Padrão da conta', group: accountLabel }])
     const manualPages = await renderEditableFlyerCanvas({
-      canvas,
+      canvas: accountCanvas,
       products: [product('one', 'R$ 19,90'), product('two', 'R$ 29,90'), product('three', 'R$ 39,90'), product('four', 'R$ 49,90')]
         .map(item => ({ ...item, imageDataUrl: wideImage })),
       division: 'single', formatId: 'stories', cardLayout: accountCardLayout
     })
     const manualCards = manualPages[0]!.canvas.objects.filter((item: any) => item.name === 'product-card')
     expect(manualCards.map((item: any) => item.productItemId)).toEqual(['one', 'two', 'three', 'four'])
-    expect(manualCards.every((item: any) => item.__cardLabelTemplateId === '')).toBe(true)
+    expect(manualCards.every((item: any) => item.__cardLabelTemplateId === 'tpl_default')).toBe(true)
     expect(manualCards.every((item: any) => item.objects.filter((child: any) => /^(smart_image|extra_image_)/.test(child.name)).length === 2)).toBe(true)
     for (const card of manualCards) {
       expect(card._productData.imageFillCount).toBe(2)
@@ -349,6 +370,7 @@ describe('adapter de render da criação WhatsApp', () => {
       expect(card.width).toBeLessThan(card._cardWidth * 1.05)
       expect(card.height).toBeLessThan(card._cardHeight * 1.05)
       expect(card.objects.filter((item: any) => item.name === 'priceGroup')).toHaveLength(1)
+      expect(card.objects.find((item: any) => item.name === 'priceGroup')?.objects.find((item: any) => item.name === 'price_bg')?.fill).toBe('#345678')
     }
 
     const many = Array.from({ length: 10 }, (_, index) => product(String(index), 'R$ 19,90'))

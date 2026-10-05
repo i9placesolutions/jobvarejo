@@ -49,6 +49,7 @@ import { bindAccountLogoToFlyerCanvas } from '~/utils/accountFlyerTemplatePrevie
 import { restoreCanvasStickerOutlines } from '~/utils/editorStickerOutline'
 import { isSplitFooterValidity, resolveSplitFooterValidityText, splitFooterValidityText } from '~/utils/splitFooterValidity'
 import { createDefaultProductCardConfiguration, normalizeProductCardConfiguration } from '~/utils/product-card-configuration'
+import { BUILTIN_DEFAULT_LABEL_TEMPLATE_ID } from '~/utils/labelTemplateHelpers'
 
 const execute = promisify(execFile)
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -708,6 +709,55 @@ async function embedFlyerAssets(canvas: any, userId: string, templateOwnerId: st
   return bindAccountLogoToFlyerCanvas(canvas, { logoSrc: logo?.dataUrl || '', logoSize, logoPreference: profile.logoPreference })
 }
 
+export const applyFlyerAccountLabelTemplates = (canvas: any, templates: Array<{ id: string; name: string; group: any }>): any => {
+  const catalog = new Map(templates.map(template => [String(template.id), template]))
+  const zones: any[] = []
+  const visit = (objects: any[]): void => {
+    for (const object of objects || []) {
+      if (object?.isProductZone === true || object?.isGridZone === true) zones.push(object)
+      if (Array.isArray(object?.objects)) visit(object.objects)
+    }
+  }
+  visit(canvas?.objects)
+  const existing = Array.isArray(canvas?.__labelTemplates) ? canvas.__labelTemplates : []
+  canvas.__labelTemplates = [
+    ...existing.filter((template: any) => !catalog.has(String(template?.id || ''))),
+    ...templates
+  ]
+  for (const zone of zones) {
+    const styles = zone._zoneGlobalStyles && typeof zone._zoneGlobalStyles === 'object' ? zone._zoneGlobalStyles : {}
+    const selectedId = String(styles.splashTemplateId || zone._zoneTemplateSnapshotId || '').trim()
+    if (!selectedId && catalog.has(BUILTIN_DEFAULT_LABEL_TEMPLATE_ID)) {
+      zone._zoneGlobalStyles = { ...styles, splashTemplateId: BUILTIN_DEFAULT_LABEL_TEMPLATE_ID }
+    }
+  }
+  return canvas
+}
+
+const loadFlyerAccountLabelTemplates = async (canvas: any, userId: string): Promise<any> => {
+  const ids = new Set<string>([BUILTIN_DEFAULT_LABEL_TEMPLATE_ID])
+  const visit = (objects: any[]): void => {
+    for (const object of objects || []) {
+      if (object?.isProductZone === true || object?.isGridZone === true) {
+        const selectedId = String(object?._zoneGlobalStyles?.splashTemplateId || object?._zoneTemplateSnapshotId || '').trim()
+        if (selectedId) ids.add(selectedId)
+      }
+      if (Array.isArray(object?.objects)) visit(object.objects)
+    }
+  }
+  visit(canvas?.objects)
+  const { rows } = await pgQuery<{ id: string; name: string; group: any }>(
+    `select distinct on (coalesce(template_key,id))
+       coalesce(template_key,id) as id,name,"group"
+     from public.label_templates
+     where (user_id=$1 or user_id is null)
+       and coalesce(template_key,id)=any($2::text[])
+     order by coalesce(template_key,id),case when user_id=$1 then 0 else 1 end,updated_at desc`,
+    [userId, [...ids]]
+  )
+  return applyFlyerAccountLabelTemplates(canvas, rows)
+}
+
 export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile, logoDataUrl: string, order?: Pick<CreationOrder, 'validity' | 'conditions'>): any {
   const literalValidity = String(order?.validity || '').trim()
   const normalizedDate = (literal: string): string | null => {
@@ -811,7 +861,9 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
     const themeCandidates = [page.templateThemeId, page.templateThemeName, templateConfig.category,
       templateConfig.subcategory, templateConfig.theme, templateConfig.themeName].filter((candidate) => String(candidate || '').trim())
     if (themeCandidates.length && !flyerThemeMatchesOrder(order.theme, themeCandidates)) fail(422, `O modelo não é compatível com o tema ${order.theme}.`)
-    const preparedCanvas = await embedFlyerAssets(canvas, user.id, sourceOwnerId, logo, profile, order)
+    const preparedCanvas = await loadFlyerAccountLabelTemplates(
+      await embedFlyerAssets(canvas, user.id, sourceOwnerId, logo, profile, order), user.id
+    )
     const items = order.products.map((product) => {
       const image = images.get(product.id)
       if (!image) return fail(422, `A foto de “${product.name}” não está disponível.`)
