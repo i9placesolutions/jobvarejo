@@ -30,7 +30,7 @@ import sharp from 'sharp'
 
 const pythonWithPlaywright = (() => {
   try {
-    execFileSync(process.env.PRODUCT_IMAGE_PYTHON || 'python3', ['-c', 'from pathlib import Path; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); assert Path(p.chromium.executable_path).is_file(); p.stop()'], { stdio: 'ignore' })
+    execFileSync(process.env.PRODUCT_IMAGE_PYTHON || 'python3', ['-c', 'import os; from pathlib import Path; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); assert Path(os.environ.get("WHATSAPP_CREATION_CHROMIUM_EXECUTABLE") or p.chromium.executable_path).is_file(); p.stop()'], { stdio: 'ignore' })
     return true
   } catch { return false }
 })()
@@ -247,33 +247,53 @@ describe('adapter de render da criação WhatsApp', () => {
     expect(white).toBeGreaterThan(0)
   })
 
-  it.skipIf(!pythonWithPlaywright)('usa Chromium e Fabric para gerar PNG real com nome e preço editáveis e respeita páginas', async () => {
+  it.skipIf(!pythonWithPlaywright)('preenche a estrutura 2 por 2 com cartões e etiquetas nativas editáveis', async () => {
+    const label = { type: 'Group', version: '7.1.0', name: 'priceGroup', left: 0, top: 0, originX: 'center', originY: 'center', objects: [
+      { type: 'Rect', version: '7.1.0', name: 'price_bg', left: 0, top: 0, originX: 'center', originY: 'center', width: 160, height: 60, fill: '#111111' },
+      { type: 'Text', version: '7.1.0', name: 'price_currency_text', text: 'R$', left: -55, top: 0, originX: 'center', originY: 'center', fontSize: 22, fill: '#ffff00' },
+      { type: 'IText', version: '7.1.0', name: 'price_value_text', text: '22,99', left: 10, top: 0, originX: 'center', originY: 'center', fontSize: 38, fill: '#ffffff' }
+    ] }
     const canvas = {
       version: '7.1.0', width: 1080, height: 1920, background: '#fff',
+      __labelTemplates: [{ id: 'tpl_default', name: 'Padrão', group: label }],
       objects: [
-        { type: 'rect', left: 80, top: 80, width: 900, height: 1600, fill: '#fff', isProductZone: true, _customId: 'zone-1', name: 'productZone' },
-        { type: 'rect', left: 0, top: 0, width: 1080, height: 1920, fill: 'transparent', isFrame: true, _customId: 'frame-1', name: 'frameRoot' }
+        { type: 'Group', left: 540, top: 880, originX: 'center', originY: 'center', width: 900, height: 1600,
+          objects: [{ type: 'Rect', left: 0, top: 0, originX: 'center', originY: 'center', width: 900, height: 1600, fill: 'transparent' }],
+          isProductZone: true, isGridZone: true, _customId: 'zone-1', name: 'productZone',
+          _zoneGlobalStyles: { cardColorMode: 'auto', templateProductPalette: { cardColor: '#fbfff4', prodNameColor: '#244525' } },
+          structureByProductCountByPreviewFormat: { story: { '4': { columns: 2, rows: 2, padding: 8, gapHorizontal: 8, gapVertical: 8 } } } },
+        { type: 'Rect', left: 0, top: 0, width: 1080, height: 1920, fill: 'transparent', isFrame: true, _customId: 'frame-1', name: 'frameRoot' }
       ]
     }
     const product = (id: string, price: string) => ({
       id, name: `Produto ${id}`, brand: 'Marca', variant: 'Variante', weight: '5 kg', price,
       imageDataUrl: pngDataUrl()
     })
-    const pages = await renderEditableFlyerCanvas({ canvas, products: [product('one', 'R$ 19,90')], division: 'single', formatId: 'stories' })
+    const pages = await renderEditableFlyerCanvas({ canvas, products: [product('one', 'R$ 19,90'), product('two', 'R$ 29,90'), product('three', 'R$ 39,90'), product('four', 'R$ 49,90')], division: 'single', formatId: 'stories' })
     expect(pages).toHaveLength(1)
     const rendered = pages[0]!.png
     expect(rendered.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
     expect([rendered.readUInt32BE(16), rendered.readUInt32BE(20)]).toEqual([1080, 1920])
     const objects = pages[0]!.canvas.objects
-    expect(objects.some((item: any) => item.name === 'product-name-one' && item.text?.includes('Produto one'))).toBe(true)
-    expect(objects.some((item: any) => item.name === 'product-price-one' && item.text === 'R$ 19,90')).toBe(true)
+    const cards = objects.filter((item: any) => item.name === 'product-card')
+    expect(cards).toHaveLength(4)
+    expect(cards[0].left).toBeLessThan(cards[1].left)
+    expect(cards[0].top).toBeLessThan(cards[2].top)
+    expect(cards[1].top).toBeCloseTo(cards[0].top)
+    expect(cards[2].left).toBeCloseTo(cards[0].left)
+    expect(cards[0].objects.find((item: any) => item.name === 'offerBackground')?.fill).toBe('#fbfff4')
+    const nativeLabel = cards[0].objects.find((item: any) => item.name === 'priceGroup')
+    expect(nativeLabel.objects.find((item: any) => item.name === 'price_value_text')?.text).toBe('19,90')
+    expect(cards[0].objects.some((item: any) => item.name === 'smart_title' && item.text?.includes('Produto one'))).toBe(true)
+    expect(pages[0]!.canvas.__labelTemplates).toHaveLength(1)
     expect(objects.some((item: any) => item.isProductZone === true && item.name === 'productZone')).toBe(true)
-    expect(objects.some((item: any) => item.isProductCard === true && item.productItemId === 'one' && item.productZoneId === 'zone-1')).toBe(true)
+    expect(cards[0]).toMatchObject({ isProductCard: true, isSmartObject: true, productItemId: 'one', productZoneId: 'zone-1' })
     expect(objects.some((item: any) => item.isFrame === true && item._customId === 'frame-1')).toBe(true)
 
-    const split = await renderEditableFlyerCanvas({ canvas, products: [product('one', 'R$ 19,90'), product('two', 'R$ 29,90')], division: 'pages', formatId: 'stories' })
+    const many = Array.from({ length: 10 }, (_, index) => product(String(index), 'R$ 19,90'))
+    const split = await renderEditableFlyerCanvas({ canvas, products: many, division: 'pages', formatId: 'stories' })
     expect(split).toHaveLength(2)
-    expect(split.map((page) => page.productIds)).toEqual([['one'], ['two']])
-    await expect(renderEditableFlyerCanvas({ canvas, products: [product('one', 'R$ 19,90'), product('two', 'R$ 29,90')], division: 'single', formatId: 'stories' })).rejects.toThrow(/comporta/)
+    expect(split.map((page) => page.productIds)).toEqual([many.slice(0, 9).map(item => item.id), ['9']])
+    await expect(renderEditableFlyerCanvas({ canvas, products: many, division: 'single', formatId: 'stories' })).rejects.toThrow(/prévia editável/)
   }, 100_000)
 })

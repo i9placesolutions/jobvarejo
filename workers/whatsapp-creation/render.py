@@ -132,6 +132,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
       "canvas": canvas,
       "groups": [{"department": label, "products": group} for label, group in groups],
       "capacity": max_slots,
+      "formatId": payload.get("formatId"),
       "width": page_size[0],
       "height": page_size[1],
     }
@@ -141,7 +142,9 @@ def render(payload, output_dir: Path, fabric_path: Path):
 
     output = []
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+        browser_path = os.environ.get("WHATSAPP_CREATION_CHROMIUM_EXECUTABLE")
+        browser = playwright.chromium.launch(headless=True, executable_path=browser_path,
+                                             args=["--no-sandbox", "--disable-dev-shm-usage"])
         page = browser.new_page(viewport={"width": page_size[0], "height": page_size[1]}, device_scale_factor=1)
         page.route("**/*", lambda route: route.abort() if route.request.url.startswith(("http://", "https://")) else route.continue_())
         page.set_content(html, wait_until="load")
@@ -158,6 +161,17 @@ def render(payload, output_dir: Path, fabric_path: Path):
             });
             await c.loadFromJSON(source);
             const all = c.getObjects();
+            // Fabric can omit custom flags when loading sparse or older saved
+            // objects. The persisted zone recipe remains the source of truth.
+            all.forEach((object, index) => {
+              const saved = source.objects[index] || {};
+              for (const key of ['name', 'isProductZone', 'isGridZone', 'isFrame', '_customId',
+                '_zoneGlobalStyles', '_zoneStateSnapshot', '_zonePadding',
+                '_zoneTemplateSnapshot', '_zoneTemplateSnapshotId',
+                'structureByProductCount', 'structureByProductCountByPreviewFormat']) {
+                if (saved[key] !== undefined) object[key] = saved[key];
+              }
+            });
             const isLogoSlot = o => o.quickLogoSlot === true || String(o.businessProfileField || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === 'logo' || /^(?:header|footer|account|business)(?:dynamic)?logo/.test(String(o.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ''));
             const logoSlots = all.filter(isLogoSlot);
             for (const logo of logoSlots) {
@@ -179,8 +193,24 @@ def render(payload, output_dir: Path, fabric_path: Path):
               logo.setCoords();
             }
             const zones = all.filter(o => o.isProductZone === true || o.isGridZone === true);
+            if (!zones.length) throw new Error(`Fabric não carregou a zona de produtos (${all.length}/${source.objects.length} objetos).`);
             const cards = all.filter(o => o.isProductCard === true || o.name === 'productCard');
             cards.forEach(o => c.remove(o));
+            const instagram = all.find(o => o.name === 'header-instagram' && typeof o.text === 'string');
+            if (instagram && instagram.visible !== false) {
+              const panel = all.find(o => o.name === 'header-instagram-panel');
+              const panelBounds = panel?.getBoundingRect();
+              const maxRight = Math.min(input.width - 20, panelBounds ? panelBounds.left + panelBounds.width - 12 : input.width - 20);
+              const available = Math.max(40, maxRight - instagram.getBoundingRect().left);
+              const measure = new fabric.Text(instagram.text, {
+                fontFamily: instagram.fontFamily, fontWeight: instagram.fontWeight,
+                fontSize: instagram.fontSize, charSpacing: instagram.charSpacing
+              });
+              const ratio = Math.min(1, available / Math.max(1, measure.width));
+              instagram.set({width: available, fontSize: Math.max(10, Number(instagram.fontSize || 20) * ratio)});
+              instagram.initDimensions?.();
+              instagram.setCoords();
+            }
             const validity = all.find(o => o.name === 'header-validity');
             if (validity) {
               if (!String(validity.text || '').trim()) validity.visible = false;
@@ -207,21 +237,32 @@ def render(payload, output_dir: Path, fabric_path: Path):
                   return {zoneIndex, left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height};
                 })
               : (() => {
-                  const bounds = sortedZones[0].getBoundingRect();
+                  const zone = sortedZones[0];
+                  const bounds = zone.getBoundingRect();
                   const departmentHeaderHeight = entry.department ? Math.min(44, bounds.height * .06) : 0;
                   const contentBounds = {left: bounds.left, top: bounds.top + departmentHeaderHeight,
                     width: bounds.width, height: bounds.height - departmentHeaderHeight};
-                  const aspect = contentBounds.width / Math.max(1, contentBounds.height);
-                  const columns = Math.max(1, Math.min(input.capacity, Math.ceil(Math.sqrt(input.capacity * aspect))));
-                  const rows = Math.ceil(input.capacity / columns);
-                  const cellWidth = contentBounds.width / columns, cellHeight = contentBounds.height / rows;
-                  const gap = Math.min(Math.max(4, Math.min(contentBounds.width, contentBounds.height) * .015), Math.min(cellWidth, cellHeight) * .12);
-                  const slots = Array.from({length: input.capacity}, (_, index) => ({
+                  const count = entry.products.length;
+                  const format = String(input.formatId || '').toLowerCase() === 'stories' ? 'story'
+                    : String(input.formatId || '').toLowerCase() === 'square' ? 'post'
+                    : String(input.formatId || '').toLowerCase() === 'tv' ? 'banner'
+                    : String(input.formatId || '').toLowerCase() === 'print' ? 'a4' : 'feed';
+                  const recipes = zone.structureByProductCountByPreviewFormat?.[format] || zone.structureByProductCount || {};
+                  const recipe = recipes[String(count)] || zone.structureByProductCount?.[String(count)] || {};
+                  const columns = Math.max(1, Math.min(count, Number(recipe.columns) || Math.ceil(Math.sqrt(count * contentBounds.width / Math.max(1, contentBounds.height)))));
+                  const rows = Math.max(Number(recipe.rows) || 0, Math.ceil(count / columns));
+                  const padding = Number(recipe.padding ?? zone._zonePadding ?? 20);
+                  const gapX = Number(recipe.gapHorizontal ?? zone.gapHorizontal ?? 15);
+                  const gapY = Number(recipe.gapVertical ?? zone.gapVertical ?? 15);
+                  const cellWidth = (contentBounds.width - padding * 2 - gapX * (columns - 1)) / columns;
+                  const cellHeight = (contentBounds.height - padding * 2 - gapY * (rows - 1)) / rows;
+                  if (cellWidth < 40 || cellHeight < 40) throw new Error('A estrutura salva não comporta estes produtos.');
+                  const slots = Array.from({length: count}, (_, index) => ({
                     zoneIndex: 0,
-                    left: contentBounds.left + (index % columns) * cellWidth + gap / 2,
-                    top: contentBounds.top + Math.floor(index / columns) * cellHeight + gap / 2,
-                    width: cellWidth - gap,
-                    height: cellHeight - gap
+                    left: contentBounds.left + padding + (index % columns) * (cellWidth + gapX),
+                    top: contentBounds.top + padding + Math.floor(index / columns) * (cellHeight + gapY),
+                    width: cellWidth,
+                    height: cellHeight
                   }));
                   return slots;
                 })();
@@ -233,41 +274,90 @@ def render(payload, output_dir: Path, fabric_path: Path):
               const left = slot.width ? slot.left : zone.left || 0, top = slot.height ? slot.top : zone.top || 0;
               const width = slot.width || zone.width * (zone.scaleX || 1), height = slot.height || zone.height * (zone.scaleY || 1);
               const styles = zone._zoneGlobalStyles || {};
-              const cardColor = styles.cardColor || '#ffffff';
-              const cardBorderColor = styles.cardBorderColor || '#dedede';
-              const cardBorderRadius = Number(styles.cardBorderRadius || 8);
-              const priceColor = styles.splashFill || styles.splashColor || '#d82027';
-              const priceTextColor = styles.splashTextColor || styles.priceTextColor || '#ffffff';
-              const pad = Math.max(8, Math.min(width, height) * .035);
-              c.add(new fabric.Rect({left, top, originX: 'left', originY: 'top', width, height, fill: cardColor, stroke: cardBorderColor, strokeWidth: Number(styles.cardBorderWidth ?? 2),
-                rx: Math.min(cardBorderRadius, width * .1), ry: Math.min(cardBorderRadius, height * .1), selectable: true, evented: true,
-                isProductCard: true, productItemId: product.id, productZoneId: zone._customId || zone.id || zone.name, name: `product-card-${product.id}`}));
+              const palette = {...(styles.templateProductPalette || {}), ...(styles.productPalette || {})};
+              const format = String(input.formatId || '').toLowerCase() === 'stories' ? 'story'
+                : String(input.formatId || '').toLowerCase() === 'square' ? 'post'
+                : String(input.formatId || '').toLowerCase() === 'tv' ? 'banner'
+                : String(input.formatId || '').toLowerCase() === 'print' ? 'a4' : 'feed';
+              const recipe = zone.structureByProductCountByPreviewFormat?.[format]?.[String(entry.products.length)]
+                || zone.structureByProductCount?.[String(entry.products.length)] || {};
+              const highlighted = Number(recipe.highlightCount || 0) > 0 &&
+                (recipe.highlightIndexes || []).includes(i + 1);
+              const cardColor = styles.isProdBgTransparent ? 'transparent'
+                : styles.cardColorMode === 'manual' ? (styles.cardColor || '#ffffff')
+                : highlighted ? (palette.highlightCardColor || styles.highlightCardColor || '#ffffff')
+                : (palette.cardColor || styles.cardColor || '#ffffff');
+              const nameColor = highlighted ? (palette.highlightProdNameColor || styles.prodNameColor || '#111111')
+                : (palette.prodNameColor || styles.prodNameColor || '#111111');
+              const bg = new fabric.Rect({left: 0, top: 0, originX: 'center', originY: 'center', width, height,
+                fill: cardColor, stroke: styles.cardBorderColor || '#000000', strokeWidth: Number(styles.cardBorderWidth ?? 0),
+                rx: Number(styles.cardBorderRadius ?? 8), ry: Number(styles.cardBorderRadius ?? 8),
+                selectable: false, evented: false, name: 'offerBackground'});
+              const children = [bg];
               if (product.imageDataUrl) {
                 const image = await fabric.FabricImage.fromURL(product.imageDataUrl, {crossOrigin: 'anonymous'});
-                const maxWidth = width - pad * 2, maxHeight = height * .48;
-                const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
-                image.set({left: left + (width - image.width * scale) / 2, top: top + pad, originX: 'left', originY: 'top', scaleX: scale, scaleY: scale,
-                  selectable: true, evented: true, productItemId: product.id, name: `product-image-${product.id}`});
-                c.add(image);
+                const scale = Math.min(width * .85 / image.width, height * .5 / image.height);
+                image.set({left: 0, top: 0, originX: 'center', originY: 'center', scaleX: scale, scaleY: scale,
+                  selectable: true, evented: true, name: 'smart_image'});
+                children.push(image);
               }
-              const nameTop = top + height * .54;
-              c.add(new fabric.Textbox([product.name, product.brand, product.variant, product.weight].filter(Boolean).join(' · '), {
-                left: left + pad, top: nameTop, originX: 'left', originY: 'top', width: width - pad * 2, height: product.condition || product.validity ? height * .14 : height * .19,
-                fontFamily: styles.prodNameFont || 'Arial', fontSize: Math.max(14, Math.min(Number(styles.prodNameSize || 30), height * .07)), fontWeight: styles.prodNameWeight || 'bold',
-                textAlign: styles.prodNameAlign || 'center', fill: styles.prodNameColor || '#222222', splitByGrapheme: true, selectable: true, evented: true,
-                productItemId: product.id, name: `product-name-${product.id}`}));
-              const commercialNote = [product.condition, product.validity ? `Válido: ${product.validity}` : ''].filter(Boolean).join(' · ');
-              if (commercialNote) c.add(new fabric.Textbox(commercialNote, {left: left + pad, top: top + height * .68, originX: 'left', originY: 'top',
-                width: width - pad * 2, height: height * .08, fontFamily: 'Arial', fontSize: Math.max(11, Math.min(18, height * .04)),
-                textAlign: 'center', fill: styles.limitColor || '#333333', splitByGrapheme: true, selectable: true, evented: true,
-                productItemId: product.id, name: `product-condition-${product.id}`}));
-              c.add(new fabric.Rect({left: left + pad, top: top + height * .77, originX: 'left', originY: 'top', width: width - pad * 2, height: height * .17,
-                fill: priceColor, rx: 10, ry: 10, selectable: true, evented: true, productItemId: product.id,
-                name: `product-price-background-${product.id}`}));
-              c.add(new fabric.Textbox(product.price, {left: left + pad * 1.4, top: top + height * .78, originX: 'left', originY: 'top',
-                width: width - pad * 2.8, height: height * .15, fontFamily: styles.priceFont || 'Arial', fontSize: Math.max(20, Math.min(Number(styles.priceFontSize || 44), height * .11)),
-                fontWeight: 'bold', textAlign: 'center', fill: priceTextColor, selectable: true, evented: true,
-                productItemId: product.id, name: `product-price-${product.id}`}));
+              const titleText = [product.name, product.brand, product.variant, product.weight].filter(Boolean).join(' ');
+              const title = new fabric.Textbox(styles.prodNameTransform === 'upper' ? titleText.toLocaleUpperCase('pt-BR') : titleText, {
+                left: 0, top: -height * .45 + Number(styles.prodNameOffsetY || 0), originX: 'center', originY: 'top',
+                width: width - 20, fontFamily: styles.prodNameFont || 'Arial',
+                fontSize: Math.max(10, Math.min(width, height) * .09 * Number(styles.prodNameScale || 1)),
+                fontWeight: styles.prodNameWeight || 900, lineHeight: Number(styles.prodNameLineHeight || 1),
+                textAlign: styles.prodNameAlign || 'center', fill: nameColor,
+                selectable: true, evented: true, name: 'smart_title'});
+              children.push(title);
+              if (product.condition) children.push(new fabric.Textbox(product.condition, {
+                left: 0, top: -height * .45 + title.getScaledHeight() + Math.max(4, height * .015),
+                originX: 'center', originY: 'top', width: width * .9,
+                fontFamily: styles.prodNameFont || 'Arial', fontSize: Math.max(10, Math.min(width, height) * .045),
+                fontWeight: 900, textAlign: 'center', fill: styles.limitColor || '#ef4444',
+                selectable: true, evented: true, name: 'smart_limit'}));
+              const labelId = String(styles.splashTemplateId || zone._zoneTemplateSnapshotId || '').trim();
+              const templates = input.canvas.__labelTemplates || [];
+              const template = labelId ? templates.find(item => String(item.id) === labelId) : templates.find(item => item.id === 'tpl_default');
+              const savedLabel = template?.group || zone._zoneTemplateSnapshot || zone._zoneStateSnapshot?.labelTemplate?.snapshot;
+              if (!savedLabel || !Array.isArray(savedLabel.objects)) throw new Error('O modelo não tem etiqueta nativa editável para preencher.');
+              const labelJson = JSON.parse(JSON.stringify(savedLabel));
+              const price = String(product.price || '').trim().replace(/^R\$\s*/i, '').replace(/^(\d+)\.(\d{2})$/, '$1,$2');
+              const walkLabel = nodes => {
+                for (const node of nodes || []) {
+                  const name = String(node.name || '');
+                  if (name === 'price_value_text' || name === 'smart_price') node.text = price;
+                  if (name === 'price_integer_text' || name === 'priceInteger') node.text = price.split(',')[0];
+                  if (name === 'price_decimal_text' || name === 'priceDecimal') node.text = ',' + (price.split(',')[1] || '00');
+                  if (name === 'price_unit_text' || name === 'priceUnit') { node.text = product.unit || ''; node.visible = !!product.unit; }
+                  walkLabel(node.objects);
+                }
+              };
+              walkLabel(labelJson.objects);
+              const [label] = await fabric.util.enlivenObjects([labelJson]);
+              const restoreNames = (live, saved) => {
+                if (saved.name) live.set('name', saved.name);
+                (live.getObjects?.() || []).forEach((child, index) => restoreNames(child, saved.objects?.[index] || {}));
+              };
+              restoreNames(label, labelJson);
+              const labelScale = Math.min(width * .64 / Math.max(1, label.width), height * .18 / Math.max(1, label.height));
+              label.set({left: 0, top: height / 2 - label.height * labelScale / 2 - height * .05,
+                originX: 'center', originY: 'center', scaleX: labelScale, scaleY: labelScale,
+                selectable: true, evented: true, name: 'priceGroup'});
+              children.push(label);
+              const card = new fabric.Group(children, {
+                left: left + width / 2, top: top + height / 2, originX: 'center', originY: 'center',
+                name: 'product-card', isSmartObject: true, isProductCard: true,
+                parentZoneId: zone._customId || zone.id || zone.name,
+                productZoneId: zone._customId || zone.id || zone.name,
+                productItemId: product.id, _zoneOrder: i, _cardWidth: width, _cardHeight: height,
+                _productData: {...product, imageDataUrl: undefined},
+                __cardLabelTemplateId: labelId || 'tpl_default',
+                subTargetCheck: true, interactive: true, selectable: true, evented: true,
+                objectCaching: false});
+              c.add(card);
+              zone.contentStatus = 'filled';
+              if (zone._zoneStateSnapshot?.zone) zone._zoneStateSnapshot.zone.contentStatus = 'filled';
             }
             if (entry.department && sortedZones.length === 1) {
               const bounds = sortedZones[0].getBoundingRect();
@@ -287,10 +377,11 @@ def render(payload, output_dir: Path, fabric_path: Path):
             const preservedKeys = new Set();
             const collect = node => { if (Array.isArray(node)) node.forEach(collect); else if (node && typeof node === 'object') { Object.keys(node).forEach(key => { if (!['group', 'canvas', 'objects', 'layoutManager', 'clipPath'].includes(key)) preservedKeys.add(key); }); Object.values(node).forEach(collect); } };
             collect(input.canvas);
-            ['isProductZone','isGridZone','isProductCard','productItemId','productZoneId','name','businessProfileField','quickLogoSlot','quickLogoBackdrop','excludeFromExport','isFrame','clipContent','parentFrameId','_customId','_zoneGlobalStyles','_productGridConfig','rows','columns','gridRows','gridColumns','productsPerRow'].forEach(key => preservedKeys.add(key));
+            ['isProductZone','isGridZone','isProductCard','isSmartObject','productItemId','productZoneId','parentZoneId','_zoneOrder','_cardWidth','_cardHeight','_productData','__cardLabelTemplateId','name','businessProfileField','quickLogoSlot','quickLogoBackdrop','excludeFromExport','isFrame','clipContent','parentFrameId','_customId','_zoneGlobalStyles','_productGridConfig','rows','columns','gridRows','gridColumns','productsPerRow','contentStatus'].forEach(key => preservedKeys.add(key));
             // toJSON() is Fabric's no-argument JSON.stringify alias; use toObject()
             // when serializing the editable custom metadata required by the editor.
             const data = JSON.parse(JSON.stringify(c.toObject([...preservedKeys])));
+            data.__labelTemplates = input.canvas.__labelTemplates || [];
             await c.dispose();
             return JSON.stringify({png, canvas: data, productIds: entry.products.map(p => p.id), department: entry.department});
           };

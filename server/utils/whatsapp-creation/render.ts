@@ -864,7 +864,8 @@ export async function renderEditableFlyerCanvas(input: { canvas: any; products: 
     const inputFile = join(dir, 'input.json')
     await writeFile(inputFile, JSON.stringify(input), { mode: 0o600 })
     const python = process.env.PRODUCT_IMAGE_PYTHON || process.env.WHATSAPP_CREATION_PYTHON || 'python3'
-    const result = await execute(python, [worker, '--input', inputFile, '--output-dir', dir], { timeout: 90_000, maxBuffer: MAX_WORKER_BYTES, env: { PATH: process.env.PATH, LANG: 'en_US.UTF-8', PYTHONIOENCODING: 'utf-8', PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH } })
+    const result = await execute(python, [worker, '--input', inputFile, '--output-dir', dir], { timeout: 90_000, maxBuffer: MAX_WORKER_BYTES, env: { PATH: process.env.PATH, LANG: 'en_US.UTF-8', PYTHONIOENCODING: 'utf-8', PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH,
+      PYTHONPATH: process.env.PYTHONPATH, WHATSAPP_CREATION_CHROMIUM_EXECUTABLE: process.env.WHATSAPP_CREATION_CHROMIUM_EXECUTABLE } })
     const manifest = JSON.parse(result.stdout)
     if (!Array.isArray(manifest.pages) || !manifest.pages.length || manifest.pages.length > 100) fail(502, 'O renderizador não retornou páginas válidas.')
     const pages: Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }> = []
