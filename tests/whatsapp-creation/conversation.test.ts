@@ -23,7 +23,7 @@ vi.mock('../../server/utils/whatsapp-creation/catalog', () => ({
 vi.mock('../../server/utils/whatsapp-creation/media', () => ({ ownedStorageBytes: mocks.storageBytes }))
 vi.mock('../../server/utils/whatsapp-creation/product-review', () => ({ createProductReviewBoards: mocks.productReview }))
 
-const { advanceConversation, interpretationRequest, newConversationState } = await import('../../server/utils/whatsapp-creation/conversation')
+const { advanceConversation, interpretationRequest, isRegenerateRequest, newConversationState } = await import('../../server/utils/whatsapp-creation/conversation')
 
 const accountId = '11111111-1111-4111-8111-111111111111'
 const otherAccountId = '22222222-2222-4222-8222-222222222222'
@@ -900,5 +900,17 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(selected.state.draft.products.map(item => item.name)).toEqual(products.map(item => item.name))
     expect(selected.send.map(message => message.text).join(' ')).toMatch(/seis ofertas/i)
     expect(mocks.productCandidates).not.toHaveBeenCalled()
+  })
+})
+
+describe('pedido para gerar a arte de novo', () => {
+  it('entende pedidos naturais de nova prévia do encarte', () => {
+    for (const text of ['GERE OUTRA PREVIA', 'quero que gere outra previsa agora', 'Refazer prévia', 'refaz o encarte', 'manda uma nova arte', 'gera de novo', 'faz outra versão'])
+      expect(isRegenerateRequest(text), text).toBe(true)
+  })
+
+  it('não confunde correção, aprovação ou conversa com novo render', () => {
+    for (const text of ['gere outra prévia com o arroz a 5,99', 'a foto do coco está errada, refaz', 'pode enviar', 'ficou ótimo', 'quero outro encarte de açougue para amanhã com vários produtos e preços diferentes', 'faz outro encarte', 'cria um encarte novo'])
+      expect(isRegenerateRequest(text), text).toBe(false)
   })
 })

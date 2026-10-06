@@ -93,7 +93,22 @@ const materialReference = (kind?: CreationKind) => kind === 'encarte' ? 'esse en
 const continueOrNewQuestion = (kind?: CreationKind) => `Quer continuar ${materialReference(kind)} ou começar outro?`
 const isContinueOrDeclineNew = (text: string) => /\b(?:continuar|continua|continuando|esse mesmo|esta mesmo|seguir com esse|pode seguir|mantem esse)\b/.test(normalizedText(text)) || /\b(?:nao quero|nao vou|nao precisa|sem)\b.{0,24}\b(?:outro|outra|novo|nova|comecar|fazer|criar)\b/.test(normalizedText(text))
 const isAffirmativeChoice = (text: string) => /^(?:sim|ok|t[aá] certo|est[aá] certo|perfeito|pode seguir)[.!]?$/i.test(text.trim())
-const referencesAnotherHeader = (text: string) => /\b(?:cabecalho|modelo|template)\b/.test(normalizedText(text))
+/**
+ * Pedido natural para gerar a arte de novo (“gere outra prévia”, “refaz o encarte”,
+ * “manda uma nova arte”). Mensagens com valores ou correções seguem o fluxo de ajuste.
+ */
+export const isRegenerateRequest = (text: string): boolean => {
+  const normalized = normalizedText(text)
+  if (!normalized || normalized.length > 80 || /\d/.test(normalized) || correctionSignal(text)) return false
+  // “Outro encarte”/“novo pedido” é material novo, não uma nova versão do atual.
+  if (/\b(?:outro|novo)\s+(?:pedido|encarte|video|cartaz)\b|\b(?:pedido|encarte)\s+novo\b/.test(normalized)) return false
+  if (/^(?:refazer|refaz|refaca|gerar de novo|gera de novo|gere de novo|de novo|novamente|outra|outra vez)[.!]?$/.test(normalized)) return true
+  const verb = /\b(?:gera|gere|gerar|faz|faca|fazer|refaz|refaca|refazer|monta|monte|montar|cria|crie|criar|manda|mande|mandar|envia|envie|enviar)\b/.test(normalized)
+  const again = /\b(?:outra|outro|nova|novo|de novo|novamente)\b/.test(normalized) || /\b(?:refaz|refaca|refazer)\b/.test(normalized)
+  const target = /\b(?:previa|previsa|previas|arte|encarte|imagem|versao)\b/.test(normalized)
+  return verb && again && target
+}
+const referencesAnotherHeader =(text: string) => /\b(?:cabecalho|modelo|template)\b/.test(normalizedText(text))
 const hasOrderMaterial = (state: ConversationState) => {
   const draft = state.draft
   const order = state.order
@@ -440,8 +455,7 @@ export async function advanceConversation(input: {
   }
   if (canResume && /^(?:tentar novamente|tente novamente|repetir|retomar)[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'update', products: undefined }
   else if (p.action === 'status' && canResume && !asksStatus && !continuingPendingChoice) p = { ...p, action: 'update', products: undefined }
-  if (s.phase === 'preview' && s.order?.kind === 'encarte' &&
-    /^(?:refazer(?:\s+(?:a|essa))?\s+(?:pr[eé]via|arte|encarte)|gerar\s+(?:a\s+)?pr[eé]via\s+novamente)[.!]?$/i.test(input.text.trim())) {
+  if (s.phase === 'preview' && s.order?.kind === 'encarte' && isRegenerateRequest(input.text)) {
     // A new renderer can replace an obsolete preview without making the
     // customer approve unchanged product data and photos a second time.
     assertCanRender(s.order, input.accountId)
