@@ -10,6 +10,7 @@ import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
 import { assertCanDeliver, updateOrder, type CreationKind } from '~/shared/whatsapp-creation'
 import { listCreationHeaders } from './catalog'
 import { hasEditorPermission, REGULAR_USER_AREAS, type AccessArea } from '~/shared/access-control'
+import { accountProjectArtifactPrefix, findOwnedAccountProject } from './account-projects'
 
 export function assertCreationAccess(user: AuthenticatedUser, kind: string): void {
   const areas: Record<string, AccessArea> = { encarte: 'encartes', video: 'videos', cartaz: 'cartazes', studio: 'artes' }
@@ -102,12 +103,25 @@ export async function loadLeasedMessage(eventId: string, token: string, client?:
   return { ...row, account, state: row.state as ConversationState }
 }
 
+/**
+ * Entrega de encarte já salvo na conta: só arquivos gerados para o projeto
+ * escolhido nesta conversa, dentro da pasta exclusiva do dono.
+ */
+export function assertAccountProjectSend(state: ConversationState, ownerId: string, item: Pick<ConversationSend, 'type' | 'key' | 'accountProjectId'>): void {
+  const projectId = item.accountProjectId
+  if (!projectId || state.accountProject?.projectId !== projectId || !['image', 'document'].includes(item.type) ||
+    !item.key || !item.key.startsWith(accountProjectArtifactPrefix(ownerId, projectId)) || !/\.png$/.test(item.key) || item.key.includes('..')) {
+    throw createError({ statusCode: 409, statusMessage: 'Encarte da conta sem escolha válida.' })
+  }
+}
+
 export async function queueCreationSend(client: PoolClient, conversationId: string, ownerId: string, orderId: string, state: ConversationState, send: ConversationSend[], correlation: string) {
   for (const [index, item] of send.entries()) {
     if (item.purpose === 'final') {
       if (!state.order || !item.artifactId || !item.formatId) throw createError({ statusCode: 409, statusMessage: 'Arquivo sem aprovação.' })
       assertCanDeliver(state.order, ownerId, item.artifactId, [item.formatId])
     }
+    if (item.purpose === 'account_project') assertAccountProjectSend(state, ownerId, item)
     await client.query(`INSERT INTO public.whatsapp_creation_outbox(conversation_id,owner_id,order_id,idempotency_key,type,payload)
       VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT(idempotency_key) DO NOTHING`, [conversationId, ownerId, orderId, `${correlation}:${index}`, item.type, JSON.stringify({ ...item, revision: state.order?.revision, sendIndex: index })])
   }
@@ -128,6 +142,9 @@ export async function beginCreationOrder(eventId: string, token: string, kind?: 
     const id = randomUUID()
     const state = newConversationState()
     state.startedByEventId = eventId
+    // O último encarte da conta escolhido continua disponível para os próximos pedidos.
+    const remembered = context.state.accountProject
+    if (remembered?.projectId) state.accountProject = { projectId: remembered.projectId, ...(remembered.projectName ? { projectName: remembered.projectName } : {}) }
     if (!options.cancelCurrent && kind && context.state.draft.additionalKinds?.includes(kind)) state.draft = { ...structuredClone(context.state.draft), kind, formats: kind === context.state.draft.kind ? [...context.state.draft.formats] : [], script: undefined, additionalKinds: context.state.draft.additionalKinds.filter((value: CreationKind) => value !== kind) }
     if (!terminal && options.cancelCurrent) {
       const cancelled = structuredClone(context.state)
@@ -201,7 +218,9 @@ export async function claimCreationOutbound() {
     if (!account.ok || account.user.id !== row.owner_id) {
       await client.query("UPDATE public.whatsapp_creation_outbox SET status='failed',error='account_link_changed' WHERE id=$1", [row.id]); return { claimed: false }
     }
-    try { if (row.order_id) assertCreationAccess(account.user, (row.state as ConversationState).draft.kind || '') } catch {
+    const payload = row.payload as ConversationSend
+    const sendKind = payload?.scope === 'account_project' || payload?.purpose === 'account_project' ? 'encarte' : (row.state as ConversationState).draft.kind || ''
+    try { if (row.order_id) assertCreationAccess(account.user, sendKind) } catch {
       await client.query("UPDATE public.whatsapp_creation_outbox SET status='failed',error='account_permission_changed' WHERE id=$1", [row.id]); return { claimed: false }
     }
     const item = row.payload as ConversationSend & { revision?: number }, state = row.state as ConversationState
@@ -210,6 +229,12 @@ export async function claimCreationOutbound() {
         await client.query("UPDATE public.whatsapp_creation_outbox SET status='failed',error='stale_approval' WHERE id=$1", [row.id]); return { claimed: false }
       }
       assertCanDeliver(state.order, row.owner_id, item.artifactId, [item.formatId])
+    }
+    if (item.purpose === 'account_project') {
+      // Revalida a escolha e o dono do projeto no momento do envio.
+      let valid = false
+      try { assertAccountProjectSend(state, row.owner_id, item); valid = Boolean(await findOwnedAccountProject(row.owner_id, item.accountProjectId!)) } catch { valid = false }
+      if (!valid) { await client.query("UPDATE public.whatsapp_creation_outbox SET status='failed',error='account_project_unavailable' WHERE id=$1", [row.id]); return { claimed: false } }
     }
     const token = randomUUID(); await client.query("UPDATE public.whatsapp_creation_outbox SET status='sending',lease_token=$2,lease_until=now()+interval '2 minutes',attempts=attempts+1,updated_at=now() WHERE id=$1", [row.id, token])
     return { claimed: true, ingress: false, id: row.id, token, row, item }
@@ -237,7 +262,7 @@ export async function claimCreationOutbound() {
   }
   return { ok: true, claimed: true, id: claim.id, token: claim.token, ingress: false,
     send: { endpoint: item.type === 'text' ? '/send/text' : '/send/media', body: {
-      number: row.sender_phone.replace(/^\+/, ''), text: item.text, ...(item.type !== 'text' ? { type: item.type, file, docName: item.type === 'document' ? `${state.draft.kind || 'JobVarejo'}-${item.formatId || 'arquivo'}.${String(item.key).endsWith('.pdf') ? 'pdf' : 'png'}` : undefined } : {}), track_source: 'jobvarejo', track_id: row.id
+      number: row.sender_phone.replace(/^\+/, ''), text: item.text, ...(item.type !== 'text' ? { type: item.type, file, docName: item.type === 'document' ? `${item.purpose === 'account_project' ? 'encarte' : state.draft.kind || 'JobVarejo'}-${item.formatId || 'arquivo'}.${String(item.key).endsWith('.pdf') ? 'pdf' : 'png'}` : undefined } : {}), track_source: 'jobvarejo', track_id: row.id
     } }
   }
 }

@@ -101,6 +101,8 @@ export default defineEventHandler(async event => {
     if (context.payload.type === 'image' && ['data', 'images'].includes(context.state.phase)) proposal.products = undefined
     const kind = proposal.kind || context.state.draft.kind
     if (kind) assertCreationAccess(context.account.user, kind)
+    // Encartes salvos na conta exigem a mesma permissão de encartes do painel.
+    if (proposal.action === 'account_project' || context.state.accountProject?.awaitingChoice) assertCreationAccess(context.account.user, 'encarte')
     const result = await advanceConversation({ state: context.state, proposal, text: messageText, accountId: context.owner_id,
       sender: context.sender_phone, orderId: context.current_order_id, name: context.account.user.user_metadata.name || context.account.businessProfile.companyName || 'cliente', uploaded: context.payload.uploaded,
       prepareHeader: (header, selectedKind) => prepareCreationHeader(header, selectedKind, context.account) })
@@ -115,6 +117,9 @@ export default defineEventHandler(async event => {
       const token = randomUUID()
       result.state.runtime = { token, until: new Date(Date.now() + 15 * 60_000).toISOString() }
       generation = { orderId: context.current_order_id, token, kind: result.state.draft.kind! }
+    } else if (result.accountProjectJob) {
+      // As páginas são geradas fora do apply (generate/encarte), que confere o dono de novo.
+      generation = { orderId: context.current_order_id, token: result.accountProjectJob.token, kind: 'encarte' }
     }
     await persistConversationResult(eventId, leaseToken, result.state, result.send, true, result.missingTheme)
     // Adianta a remoção de fundo das fotos enviadas; a geração reaproveita o arquivo já salvo.

@@ -173,4 +173,16 @@ describe('roteamento do pedido WhatsApp', () => {
     expect(mocks.advance.mock.calls[0]?.[0].proposal.action).toBe('update')
     expect(mocks.advance.mock.calls[0]?.[0].orderId).toBe(oldOrderId)
   })
+
+  it('pedido do encarte salvo na conta confere a permissão de encartes e devolve o job de geração', async () => {
+    const jobToken = '88888888-8888-4888-8888-888888888888'
+    context.state = { ...makeState('collecting'), draft: { formats: [], products: [] } }
+    context.payload.text = 'me manda o encarte de terça e quarta que fiz ontem'
+    mocks.advance.mockImplementation(async ({ state }: any) => ({ state, send: [{ type: 'text', text: 'Achei' }], generate: false, accountProjectJob: { token: jobToken, projectId: 'aaaaaaaa-0000-4000-8000-000000000001' } }))
+    const result = await handler(request({ action: 'update' }, context.payload.text) as any)
+    expect(mocks.advance.mock.calls[0]?.[0].proposal.action).toBe('account_project')
+    expect(mocks.access).toHaveBeenCalledWith(context.account.user, 'encarte')
+    expect(mocks.begin).not.toHaveBeenCalled()
+    expect(result).toEqual({ ok: true, generation: { orderId: oldOrderId, token: jobToken, kind: 'encarte' } })
+  })
 })

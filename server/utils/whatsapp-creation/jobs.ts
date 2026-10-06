@@ -7,6 +7,7 @@ import { generateCreationArtifact } from './render'
 import { ownedStorageBytes } from './media'
 import { listCreationHeaders, type CreationHeader } from './catalog'
 import { prepareCreationHeader } from './header-preview'
+import { deliverAccountProject } from './account-project-delivery'
 import { advanceConversation, finalSends, rememberConversationTurns, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
 import { approvePreview, assertCanDeliver, assertCanRender, registerPreview, updateOrder } from '~/shared/whatsapp-creation'
 
@@ -165,7 +166,14 @@ async function recoverChangedFlyerHeader(row: any, state: ConversationState, acc
 }
 
 export async function generateWhatsAppOrder(id: string, token: string, kind: string, event: H3Event) {
-  const row = await loadOrder(id), { account, state } = await accountFor(row)
+  const row = await loadOrder(id)
+  // Envio de encarte já salvo na conta: job próprio, sem pedido de criação aprovado.
+  const accountJob = (row.state as ConversationState | undefined)?.accountProject?.job
+  if (accountJob && accountJob.token === token) {
+    if (kind !== 'encarte') return failure(409, 'Solicitação de geração inválida ou já concluída.')
+    return deliverAccountProject(row, token)
+  }
+  const { account, state } = await accountFor(row)
   if (row.kind !== kind || state.phase !== 'rendering' || state.runtime?.token !== token) return failure(409, 'Solicitação de geração inválida ou já concluída.')
   if (state.runtime.native) return { ok: true, pending: true }
   if (state.runtime.started) return { ok: true, pending: true }

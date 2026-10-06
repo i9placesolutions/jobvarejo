@@ -231,7 +231,29 @@ def _zone_slots(zones, capacity):
     } for index in range(capacity)]
 
 
+FONT_CHECK_JS = """async descriptors => {
+          const essential = ['Barlow', 'Inter'];
+          const loadedFaces = await Promise.all(descriptors.map(face => document.fonts.load(`${face.style || 'normal'} ${face.weight === '100 900' || face.weight === '200 900' ? '700' : face.weight} 32px \"${face.family}\"`, 'Font check 123')));
+          await document.fonts.ready;
+          const ctx = document.createElement('canvas').getContext('2d');
+          const measured = {};
+          for (const family of essential) {
+            if (!descriptors.some((face, index) => face.family === family && loadedFaces[index].length > 0)) {
+              throw new Error(`Fonte essencial não foi carregada no Chromium: ${family}.`);
+            }
+            const loaded = document.fonts.check(`700 32px \"${family}\"`, 'Font check 123');
+            ctx.font = `700 32px \"${family}\"`;
+            const width = ctx.measureText('Font check 123').width;
+            if (!loaded || !Number.isFinite(width) || width <= 0) throw new Error(`Fonte essencial indisponível no Chromium: ${family}.`);
+            measured[family] = width;
+          }
+          return measured;
+        }"""
+
+
 def render(payload, output_dir: Path, fabric_path: Path):
+    if payload.get("mode") == "saved_page":
+        return render_saved_page(payload, output_dir, fabric_path)
     canvas = payload.get("canvas")
     if not isinstance(canvas, dict) or not isinstance(canvas.get("objects"), list):
         fail("O modelo não contém um canvas Fabric salvo.")
@@ -280,24 +302,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
         page = browser.new_page(viewport={"width": page_size[0], "height": page_size[1]}, device_scale_factor=1)
         page.route("**/*", lambda route: route.abort() if route.request.url.startswith(("http://", "https://")) else route.continue_())
         page.set_content(html, wait_until="load")
-        page.evaluate("""async descriptors => {
-          const essential = ['Barlow', 'Inter'];
-          const loadedFaces = await Promise.all(descriptors.map(face => document.fonts.load(`${face.style || 'normal'} ${face.weight === '100 900' || face.weight === '200 900' ? '700' : face.weight} 32px \"${face.family}\"`, 'Font check 123')));
-          await document.fonts.ready;
-          const ctx = document.createElement('canvas').getContext('2d');
-          const measured = {};
-          for (const family of essential) {
-            if (!descriptors.some((face, index) => face.family === family && loadedFaces[index].length > 0)) {
-              throw new Error(`Fonte essencial não foi carregada no Chromium: ${family}.`);
-            }
-            const loaded = document.fonts.check(`700 32px \"${family}\"`, 'Font check 123');
-            ctx.font = `700 32px \"${family}\"`;
-            const width = ctx.measureText('Font check 123').width;
-            if (!loaded || !Number.isFinite(width) || width <= 0) throw new Error(`Fonte essencial indisponível no Chromium: ${family}.`);
-            measured[family] = width;
-          }
-          return measured;
-        }""", font_descriptors)
+        page.evaluate(FONT_CHECK_JS, font_descriptors)
         page.add_script_tag(path=str(fabric_path))
         native_layout_path = Path(__file__).with_name("native-layout.js")
         if not native_layout_path.is_file():
@@ -502,6 +507,131 @@ def render(payload, output_dir: Path, fabric_path: Path):
         (output_dir / name).write_bytes(png)
         (output_dir / canvas_name).write_text(json.dumps(page["canvas"], ensure_ascii=False), encoding="utf-8")
         output.append({"name": name, "canvas": canvas_name, "productIds": page["productIds"], "department": page["department"]})
+    return {"pages": output}
+
+
+SAVED_PAGE_JS = """async () => {
+  const input = window.__RENDER_INPUT__;
+  const fabric = window.fabric;
+  if (!fabric?.StaticCanvas) throw new Error('Bundle Fabric indisponível.');
+  const source = input.canvas;
+  const c = new fabric.StaticCanvas(document.createElement('canvas'), {
+    width: input.width, height: input.height, renderOnAddRemove: false,
+    backgroundColor: source.background || '#ffffff', enableRetinaScaling: false
+  });
+  await c.loadFromJSON(source);
+  // Objetos antigos podem perder flags customizadas ao carregar; o JSON salvo é a referência.
+  const flagKeys = ['name', 'layerName', 'isGridCell', 'gridGroupId', 'isProductZone', 'isGridZone', 'isFrame', '_customId', 'quickLogoSlot', 'businessProfileField',
+    'excludeFromExport', 'zoneName', '_zoneGlobalStyles', '_zoneTemplateSnapshotId', '_zonePadding', '_zoneWidth', '_zoneHeight',
+    'role', 'quickLogoSource', '__stickerOutlineEnabled', 'parentFrameId'];
+  const restore = (objects, saved) => objects.forEach((object, index) => {
+    const original = (saved || [])[index] || {};
+    for (const key of flagKeys) if (original[key] !== undefined && object[key] === undefined) object[key] = original[key];
+    if (typeof object.getObjects === 'function') restore(object.getObjects(), original.objects);
+  });
+  restore(c.getObjects(), source.objects);
+  const all = [];
+  const walk = list => list.forEach(object => { all.push(object); if (typeof object.getObjects === 'function') walk(object.getObjects()); });
+  walk(c.getObjects());
+  const kind = object => String(object?.type || '').toLowerCase();
+  const dashedRect = object => kind(object) === 'rect' && Array.isArray(object.strokeDashArray) && object.strokeDashArray.length > 0;
+  // Mesmo critério do editor (isLikelyProductZone + withProductZonesHiddenForOutput).
+  const isZone = object => {
+    if (kind(object) !== 'group') return false;
+    if (object.isGridZone || object.isProductZone) return true;
+    if (object.name === 'gridZone' || object.name === 'productZoneContainer') return true;
+    if (typeof object._zonePadding === 'number' && typeof object._zoneWidth === 'number' && typeof object._zoneHeight === 'number') return true;
+    const rect = (object.getObjects?.() || []).find(dashedRect);
+    return Boolean(rect && (object._zoneGlobalStyles || object.zoneName || object._zoneTemplateSnapshotId || object.role));
+  };
+  const hidden = new Set();
+  for (const parent of all) if (isZone(parent)) for (const child of parent.getObjects?.() || []) if (dashedRect(child)) hidden.add(child);
+  for (const object of all) {
+    const name = String(object.name || '');
+    const isImage = kind(object) === 'image';
+    if (!isImage && (object.quickLogoSlot === true || String(object.businessProfileField || '').trim().toLowerCase() === 'logo')) hidden.add(object);
+    else if (['zoneRect', 'zone-border', 'product-zone-outline'].includes(name)) hidden.add(object);
+    else if (object.excludeFromExport === true && !isZone(object)) hidden.add(object);
+    else if (kind(object) === 'rect' && (object.isProductZone || object.isGridZone)) hidden.add(object);
+    // Logos com contorno (sticker) são desenhadas depois pelo servidor, como no encarte gerado.
+    if (isImage && object.quickLogoSource && object.__stickerOutlineEnabled && object.visible !== false) hidden.add(object);
+  }
+  hidden.forEach(object => {
+    object.visible = false;
+    for (let parent = object.group; parent; parent = parent.group) parent.dirty = true;
+  });
+  // Mesmos sinais de frame do editor (isFrameLikeObject).
+  const isFrameLike = object => {
+    if (object.isFrame) return true;
+    const layerName = String(object.layerName || '').trim().toUpperCase();
+    const name = String(object.name || '').trim();
+    if (layerName === 'FRAMER' || layerName === 'FRAME' || /^FRAMER?\\s+\\d+\\s*$/i.test(layerName)) return true;
+    if (/^FRAMER(?:\\s+\\d+)?$/i.test(name) || /^FRAME(?:\\s+\\d+)?\\s*$/i.test(name)) return true;
+    return kind(object) === 'rect' && (object.isGridCell === true || String(object.gridGroupId || '').trim().length > 0);
+  };
+  const frames = c.getObjects().filter(object => isFrameLike(object) && object.visible !== false);
+  const bounds = frame => {
+    const width = Math.abs(Number(frame.width || 0) * Number(frame.scaleX || 1));
+    const height = Math.abs(Number(frame.height || 0) * Number(frame.scaleY || 1));
+    if (Math.abs(Number(frame.angle || 0)) % 360 > 0.001) {
+      const rect = frame.getBoundingRect();
+      return {left: rect.left, top: rect.top, width: rect.width, height: rect.height};
+    }
+    const center = frame.getCenterPoint();
+    return {left: center.x - width / 2, top: center.y - height / 2, width, height};
+  };
+  const targets = (frames.length ? frames.map(bounds) : [{left: 0, top: 0, width: input.width, height: input.height}])
+    .slice(0, Math.max(1, Math.min(20, Number(input.maxOutputs) || 10)));
+  c.renderAll();
+  const output = [];
+  for (const target of targets) {
+    const region = {left: Math.round(target.left), top: Math.round(target.top),
+      width: Math.max(1, Math.round(target.width)), height: Math.max(1, Math.round(target.height))};
+    if (region.width > 8192 || region.height > 8192) throw new Error('Página grande demais para gerar a imagem.');
+    const png = c.toDataURL({format: 'png', multiplier: 1, enableRetinaScaling: false, ...region});
+    output.push({png, region});
+  }
+  await c.dispose();
+  return JSON.stringify(output);
+}"""
+
+
+def render_saved_page(payload, output_dir: Path, fabric_path: Path):
+    """Exporta uma página salva do editor sem alterar o layout (um PNG por frame)."""
+    canvas = payload.get("canvas")
+    if not isinstance(canvas, dict) or not isinstance(canvas.get("objects"), list):
+        fail("A página não contém um canvas Fabric salvo.")
+    page_size = (int(payload.get("width") or canvas.get("width") or 0), int(payload.get("height") or canvas.get("height") or 0))
+    if min(page_size) < 32 or max(page_size) > 8192:
+        fail("Dimensões da página fora do limite permitido.")
+    browser_payload = {"canvas": canvas, "width": page_size[0], "height": page_size[1], "maxOutputs": payload.get("maxOutputs")}
+    font_css, font_descriptors = _font_stylesheet(canvas)
+    html = """<!doctype html><html><head><meta charset=\"utf-8\"><style>%s</style></head><body>
+      <canvas id=\"canvas\"></canvas><script>window.__RENDER_INPUT__ = %s;</script>
+      </body></html>""" % (font_css, json.dumps(browser_payload, ensure_ascii=False).replace("</", "<\\/"))
+    with sync_playwright() as playwright:
+        browser_path = os.environ.get("WHATSAPP_CREATION_CHROMIUM_EXECUTABLE")
+        browser = playwright.chromium.launch(headless=True, executable_path=browser_path,
+                                             args=["--no-sandbox", "--disable-dev-shm-usage"])
+        page = browser.new_page(viewport={"width": min(page_size[0], 4096), "height": min(page_size[1], 4096)}, device_scale_factor=1)
+        page.route("**/*", lambda route: route.abort() if route.request.url.startswith(("http://", "https://")) else route.continue_())
+        page.set_content(html, wait_until="load")
+        page.evaluate(FONT_CHECK_JS, font_descriptors)
+        page.add_script_tag(path=str(fabric_path))
+        result = page.evaluate(SAVED_PAGE_JS)
+        browser.close()
+    if isinstance(result, str):
+        result = json.loads(result)
+    if not isinstance(result, list) or not result:
+        fail("O renderizador não retornou páginas.")
+    output = []
+    for index, item in enumerate(result, 1):
+        match = re.fullmatch(r"data:image/png;base64,([A-Za-z0-9+/=]+)", item.get("png", ""))
+        if not match:
+            fail("O renderizador não retornou PNG válido.")
+        name = f"page-{index}.png"
+        (output_dir / name).write_bytes(base64.b64decode(match.group(1), validate=True))
+        output.append({"name": name, "region": item.get("region")})
     return {"pages": output}
 
 
