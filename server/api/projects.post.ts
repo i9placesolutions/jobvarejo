@@ -9,6 +9,7 @@ import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull, pgQuery } from '../utils/postgres'
 import { ensureProjectTemplateColumn } from '../utils/project-templates'
+import { scheduleProjectCatalogPreviewWarm } from '../utils/project-catalog-preview'
 import { normalizeFlyerTemplateConfigCategory } from '~/utils/flyerTemplateCategory'
 import { requireBusinessProfileForOfferCreation } from '../utils/business-profile-onboarding'
 
@@ -257,6 +258,9 @@ export default defineEventHandler(async (event) => {
       })
     } catch (notifyErr) {
       console.warn('[api/projects:post] Failed to publish realtime notification:', notifyErr)
+    }
+    if (result.is_template === true) {
+      scheduleProjectCatalogPreviewWarm(event, String(result.id), String(result.user_id || user.id), result.updated_at || updatedAt)
     }
     if (!projectId && !isTemplate) {
       try {

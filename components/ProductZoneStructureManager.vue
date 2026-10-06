@@ -1906,7 +1906,7 @@ onMounted(() => {
 /* Editor shell: the structure manager uses the same stage / inspector rhythm
    as the canvas editor instead of behaving like a long settings page. */
 .structure-manager {
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: #111827;
 }
@@ -1931,7 +1931,7 @@ onMounted(() => {
   box-sizing: border-box;
   width: 100%;
   max-width: none;
-  height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
   min-height: 0;
   padding: 16px 18px 18px;
   overflow: hidden;
@@ -3343,11 +3343,44 @@ onMounted(() => {
   max-height: none;
   border-left: 0;
 }
-@media (max-width: 900px) {
-  .structure-manager__workspace { grid-template-columns: 1fr; }
-  .editor-panel { grid-template-columns: 1fr; grid-template-rows: minmax(520px, 70vh) auto; }
-  .flyer-preview { grid-row: 1; min-height: 520px; }
+@media (max-width: 1023px) {
+  .structure-manager { height: auto; min-height: 100dvh; overflow: visible; }
+  .structure-manager__main { height: auto; min-height: calc(100dvh - 46px); overflow: visible; }
+  .structure-manager__workspace { grid-template-columns: minmax(0, 1fr); }
+  .editor-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(420px, 68dvh) auto; }
+  .flyer-preview { grid-row: 1; min-height: min(420px, 68dvh); }
   .editor-panel__inspector { grid-column: 1; grid-row: 2; max-height: none; overflow: visible; }
+  .structure-manager__topbar-inner { min-width: 0; flex-wrap: wrap; gap: 8px; }
+  .structure-manager__actions { flex-wrap: wrap; }
+  .count-panel { min-width: 0; }
+  .count-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); max-height: min(32dvh, 240px); overflow-y: auto; }
+  .count-item { justify-content: flex-start; }
+  .count-item__copy { display: grid; }
+  .count-item__check { display: inline-flex; }
+  .structure-manager__intro { display: flex; align-items: flex-start; }
+  .intro-copy { display: block; max-width: none; white-space: normal; }
+}
+
+@media (max-width: 560px) {
+  .structure-manager__topbar { height: auto; min-height: 46px; }
+  .structure-manager__topbar-inner { padding: 8px 12px; }
+  .structure-manager__back span { display: inline; }
+  .structure-manager__secondary-link { display: inline-flex; }
+  .structure-manager__topbar-spacer { display: none; }
+  .structure-manager__secondary-link { margin-left: auto; font-size: 10px; }
+  .structure-manager__main { padding: 0 8px 12px; }
+  .structure-manager__intro { margin: 8px; padding: 10px; }
+  .structure-manager__intro .eyebrow { display: block; }
+  .structure-manager h1 { font-size: 18px; }
+  .intro-copy { display: block; font-size: 12px; }
+  .structure-manager__actions { width: 100%; }
+  .structure-manager__actions .button { flex: 1 1 120px; }
+  .count-list { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); max-height: 220px; }
+  .count-item { min-height: 42px; padding: 6px; }
+  .editor-panel { grid-template-rows: minmax(320px, 55dvh) auto; }
+  .flyer-preview { min-height: min(320px, 55dvh); }
+  .editor-panel__inspector { min-width: 0; }
+  .field-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Cabeçalho do editor de zonas acompanha o painel e os demais configuradores. */

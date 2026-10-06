@@ -419,7 +419,7 @@ onMounted(() => {
       v-if="checkoutSuccessModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4"
     >
-      <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative border border-slate-100 animate-in fade-in zoom-in duration-150">
+      <div class="plans-checkout-dialog max-h-[calc(100dvh-2rem)] min-w-0 w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl border border-slate-100 bg-white p-5 shadow-2xl relative animate-in fade-in zoom-in duration-150 sm:p-8">
         <button
           type="button"
           @click="closeCheckoutModal"
@@ -453,7 +453,7 @@ onMounted(() => {
 
         <div class="space-y-3 mb-6">
           <label class="block text-xs font-bold uppercase tracking-wider text-slate-400">Escolha a forma de pagamento:</label>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="plans-checkout-options grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
             <button
               type="button"
               class="p-4 rounded-xl border-2 border-emerald-500 bg-emerald-50/50 flex flex-col items-center gap-2 text-emerald-800 font-bold text-xs"
@@ -475,7 +475,7 @@ onMounted(() => {
           ℹ️ Sua loja já possui os <strong>15 dias gratuitos</strong> ativados. Se preferir, você pode continuar usando normalmente e efetuar a ativação a qualquer momento antes do término do prazo.
         </div>
 
-        <div class="flex gap-3">
+        <div class="plans-checkout-actions flex flex-col gap-3 min-[420px]:flex-row">
           <button
             type="button"
             @click="closeCheckoutModal"

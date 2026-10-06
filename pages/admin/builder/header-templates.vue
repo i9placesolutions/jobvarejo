@@ -320,7 +320,7 @@ onMounted(fetchData)
     <!-- MODO LISTA -->
     <!-- ═══════════════════════════════════════════════��� -->
     <template v-if="mode === 'list'">
-      <div class="p-6 max-w-6xl mx-auto">
+      <div class="w-full min-w-0 p-3 sm:p-6 max-w-6xl mx-auto">
         <div class="flex items-center justify-between mb-6">
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Header Templates</h1>
@@ -336,7 +336,7 @@ onMounted(fetchData)
         <div v-if="isLoading" class="text-center py-12 text-gray-400">Carregando...</div>
 
         <!-- Grid de cards com preview visual -->
-        <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div v-else class="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           <div
             v-for="item in items" :key="item.id"
             class="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all group cursor-pointer"

@@ -1,3 +1,4 @@
+import {musicStartFrame} from './music-tempo'
 import {REELS_OFFER_LAYOUT as reels} from './reels-layout'
 import {videoValidityText} from './validity'
 import {productLayers} from './product-layout'
@@ -12,6 +13,7 @@ import {displayPrice, type VideoRenderProps, type VideoScene} from './model'
 import {VideoPriceLabel} from './label-renderer'
 import {retailEntrance, retailExit} from './retail-motion'
 import {elementMotion,cameraMotion,transitionMotion} from './catalog-motion'
+import {sceneStyle,offerIndexOf} from './scene-variation'
 import {motionSettings,soundAsset,SOUND_EFFECTS} from './effect-catalog'
 import {CatalogAtmosphere,CatalogTransition,AnimatedRetailText} from './catalog-effects'
 import {flyerRecipe} from './flyer-recipes'
@@ -143,7 +145,7 @@ export function RetailCamera({props,children}:{props:VideoRenderProps;children?:
  if(props.editor?.enabled)return h(AbsoluteFill,null,children)
  const current=props.scenes.find(s=>f>=s.from&&f<s.from+s.frames)!,local=f-current.from
  const closest=props.scenes.slice(1).find(s=>f>=s.from-5&&f<=s.from+9)
- const t=transitionMotion(closest?f-closest.from:99,d.transition)
+ const t=transitionMotion(closest?f-closest.from:99,closest?sceneStyle(d,offerIndexOf(d,closest.id)).transition:d.transition)
  const mode=d.effects.includes('shake')?motionSettings(d.motion).camera:'none'
  const split=Math.floor((props.scenes[1]?.from||70)*.48)
  const impactFrame=props.format==='horizontal'&&current.id==='intro'&&f>=split?f-split:local
@@ -168,5 +170,5 @@ export function ShowcaseComposition(props:VideoRenderProps){
  }),
  ...OPENING_SOUNDS.map(cue=>d.audio.sounds?h(Sequence,{key:'opening-'+cue.sound,from:cue.frame,durationInFrames:Math.min(durationInFrames-cue.frame,Math.ceil((SOUND_EFFECTS.find(s=>s.id===cue.sound)?.seconds||1)*30))},h(Audio,{src:(props.audioBase||'/video-studio/audio')+'/'+soundAsset(cue.sound),volume:d.audio.effectsVolume*cue.gain})):null),
  ...(props.format==='horizontal'&&d.audio.sounds?[{sound:'air-swipe' as const,frame:Math.floor((props.scenes[1]?.from||70)*.48)-3,gain:.65},{sound:'bass-hit' as const,frame:Math.floor((props.scenes[1]?.from||70)*.48)+4,gain:.7}].map(cue=>h(Sequence,{key:'tv-brand-'+cue.sound,from:cue.frame,durationInFrames:Math.ceil((SOUND_EFFECTS.find(s=>s.id===cue.sound)?.seconds||1)*30)},h(Audio,{src:(props.audioBase||'/video-studio/audio')+'/'+soundAsset(cue.sound),volume:d.audio.effectsVolume*cue.gain}))):[]),
- props.music&&d.audio.music!=='none'?h(Audio,{src:props.music,loop:true,loopVolumeCurveBehavior:'extend',volume:(f:number)=>musicGain(f,durationInFrames,d,props.scenes)}):null)
+ props.music&&d.audio.music!=='none'?h(Audio,{src:props.music,loop:true,loopVolumeCurveBehavior:'extend',startFrom:musicStartFrame(d.audio.music,d.beatSync),volume:(f:number)=>musicGain(f,durationInFrames,d,props.scenes)}):null)
 }

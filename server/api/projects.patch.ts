@@ -9,6 +9,7 @@ import { publishProjectChange } from '../utils/project-realtime'
 import { enforceRateLimit } from '../utils/rate-limit'
 import { pgOneOrNull } from '../utils/postgres'
 import { ensureProjectTemplateColumn } from '../utils/project-templates'
+import { scheduleProjectCatalogPreviewWarm } from '../utils/project-catalog-preview'
 import { doesProjectPatchChangeContent } from '../../utils/projectEditedAt'
 import {
   normalizeFlyerTemplateCategory,
@@ -240,6 +241,10 @@ export default defineEventHandler(async (event) => {
       })
     } catch (notifyErr) {
       console.warn('[api/projects:patch] Failed to publish realtime notification:', notifyErr)
+    }
+
+    if (changesProjectContent && row.is_template === true) {
+      scheduleProjectCatalogPreviewWarm(event, String(row.id || projectId), String(row.user_id || user.id), row.updated_at)
     }
 
     return { success: true, project: row }

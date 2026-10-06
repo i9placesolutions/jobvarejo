@@ -222,7 +222,7 @@ function toggleFormat(format:VideoFormat){const i=doc.value.formats.indexOf(form
 function addOffer(){if(doc.value.offers.length<6)doc.value.offers.push({id:crypto.randomUUID(),name:'',price:'',unit:'un',condition:'',image:''})}
 function moveOffer(index:number,delta:number){const next=index+delta;if(next<0||next>=doc.value.offers.length)return;const item=doc.value.offers.splice(index,1)[0]!;doc.value.offers.splice(next,0,item);const map=new Map(doc.value.scripts.map(s=>[s.id,s]));doc.value.scripts=['intro',...doc.value.offers.map(o=>o.id),'outro'].flatMap(id=>map.has(id)?[map.get(id)!]:[]);if(doc.value.narrationText!==undefined)doc.value.narrationText=doc.value.scripts.map(s=>s.text).join('\n')}
 function removeOffer(index:number){const removed=doc.value.offers.splice(index,1)[0];if(!removed)return;doc.value.scripts=doc.value.scripts.filter(s=>s.id!==removed.id);if(doc.value.narrationText!==undefined)doc.value.narrationText=doc.value.scripts.map(s=>s.text).join('\n')}
-async function upload(event:Event,target:string){const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file)return;await action('Enviando arquivo',async()=>{const body=new FormData();body.append('file',file);body.append('kind',target==='music'?'music':'image');const asset=await $fetch<any>('/api/videos/assets',{method:'POST',body});if(target==='logo')doc.value.brand.logo=asset.id;else if(target==='music')doc.value.audio.music=asset.id;else{const offer=doc.value.offers.find(o=>o.id===target);if(offer){offer.image=asset.id;offer.imageAspectRatio=asset.aspectRatio}}await refreshAssets();await save();if(target==='music')notice.value='Música aplicada e salva em Minha biblioteca para seus próximos vídeos.'});input.value=''}
+async function upload(event:Event,target:string){const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file)return;await action('Enviando arquivo',async()=>{const body=new FormData();body.append('file',file);body.append('kind',target==='music'?'music':'image');if(target!=='music'&&target!=='logo'&&doc.value.removeProductBackground!==false)body.append('removeBackground','1');const asset=await $fetch<any>('/api/videos/assets',{method:'POST',body});if(target==='logo')doc.value.brand.logo=asset.id;else if(target==='music')doc.value.audio.music=asset.id;else{const offer=doc.value.offers.find(o=>o.id===target);if(offer){offer.image=asset.id;offer.imageAspectRatio=asset.aspectRatio}}await refreshAssets();await save();if(target==='music')notice.value='Música aplicada e salva em Minha biblioteca para seus próximos vídeos.'});input.value=''}
 async function suggestWithAI(){await action('Sugerindo roteiro com IA',async()=>{const source=videoSpeechSource(doc.value);const r=await $fetch<any>('/api/videos/script',{method:'POST',body:doc.value});if(source!==videoSpeechSource(doc.value))throw Error('As ofertas mudaram durante a sugestão. Solicite novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');legacyNarrationText.value=null;scriptSource.value='';notice.value='Roteiro sugerido por IA, com preços completos por extenso, no formato dezenove e noventa. Confira antes de gerar o áudio.'})}
 async function suggest(){await action('Preparando roteiro',async()=>{const source=videoSpeechSource(doc.value),scripts=suggestVideoScripts(doc.value);const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts,pronunciations:doc.value.voice.pronunciations}});if(source!==videoSpeechSource(doc.value))throw Error('As ofertas mudaram durante a sugestão. Solicite novamente.');doc.value.scripts=r.scripts;doc.value.narrationText=r.scripts.map((s:{text:string})=>s.text).join('\n');legacyNarrationText.value=null;scriptSource.value='';normalized.value=[];notice.value='Texto preparado por extenso, com preços completos no formato dezenove e noventa. Revise nomes e condições antes de confirmar.'})}
 async function previewLegacyNarration(){if(doc.value.narrationText!==undefined||!doc.value.scripts.length)return;try{const r=await $fetch<any>('/api/videos/normalize',{method:'POST',body:{scripts:doc.value.scripts,pronunciations:doc.value.voice.pronunciations}});legacyNarrationText.value=r.scripts.map((s:{text:string})=>s.text).join('\n')}catch{legacyNarrationText.value=null}}
@@ -393,10 +393,10 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
    <div class="vs-editor-title"><div class="vs-title-container"><span class="vs-eyebrow">SEU VÍDEO · SALVAMENTO AUTOMÁTICO</span><div class="vs-title-field"><span class="vs-title-input vs-title-mirror" aria-hidden="true">{{ doc.title + ' ' }}</span><textarea :value="doc.title" aria-label="Nome do projeto" maxlength="100" rows="1" class="vs-title-input" @keydown.enter.prevent @input="doc.title = ($event.target as HTMLTextAreaElement).value.replace(/[\r\n]+/g, ' ')"/></div></div></div>
    <nav class="vs-steps" aria-label="Etapas da criação"><button v-for="(label,i) in steps" :key="label" :class="{active:step===i,complete:step>i}" :aria-current="step===i?'step':undefined" :disabled="!!busy" @click="goStep(i)"><span><Check v-if="step>i" :size="15"/><component :is="stepIcons[i]" v-else :size="20"/></span>{{ label }}</button></nav>
    <div class="vs-workspace"><section class="vs-form-panel">
-    <VideoStudioListImport v-if="showListImport" v-show="step===1" :remaining="6-doc.offers.length" @close="showListImport=false" @import="receiveList"/>
+    <VideoStudioListImport v-if="showListImport" v-show="step===1" :remaining="6-doc.offers.length" :remove-background="doc.removeProductBackground!==false" @close="showListImport=false" @import="receiveList"/>
     <div v-if="step===0" class="vs-step-content"><span class="vs-eyebrow">01 · ESCOLHA O ESTILO</span><h2>Qual é a sua campanha?</h2><p class="vs-lead">Confira a marca e os formatos; depois envie a lista de ofertas.</p><details class="vs-details"><summary>Trocar modelo <ChevronDown :size="16"/></summary><label class="vs-field">Buscar modelo<input v-model="modelSearch" placeholder="Ex.: quinta, relâmpago, hortifruti" /></label><div class="vs-theme-grid"><button v-for="t in visibleModels" :key="t.id" class="vs-theme" :class="{selected:doc.theme===t.id}" :style="{'--accent':t.accent,'--base':t.base}" @click="selectTheme(t.id)"><span class="vs-theme-sample"><ReferenceArtworkPreview v-if="flyerRecipe(t.id)?.referenceArtwork" :artwork="flyerRecipe(t.id)!.referenceArtwork!" :title="t.title"/><img v-else-if="flyerRecipe(t.id)?.seal" :src="'/video-studio/templates/'+flyerRecipe(t.id)!.seal" class="vs-theme-badge" :alt="t.title" /><img v-else-if="t.id==='impact'" :src="doc.layoutVersion===2?'/video-studio/templates/fecha-mes-emerald-v2.png':'/video-studio/templates/fecha-mes-badge-v1.png'" alt="Fecha Mês em 3D" class="vs-theme-badge"/><template v-else>{{ t.title }}</template></span><span class="vs-theme-caption"><strong>{{ t.name }}</strong><small>{{ t.description }}</small></span><Check v-if="doc.theme===t.id" class="vs-theme-check" :size="19"/></button></div>
      <button v-if="visibleModels.length<filteredModels.length" class="vs-button secondary" @click="modelLimit+=12">Ver mais modelos ({{ filteredModels.length }})</button></details><label class="vs-field">Título da campanha<input v-model="doc.campaign" maxlength="65" placeholder="Ex.: Ofertas da semana"/></label>
-     <div class="vs-divider"/><label v-if="!flyerRecipe(doc.theme)" class="vs-field">Montagem do vídeo<select :value="doc.layoutVersion===2?'showcase':'broadcast'" @change="doc.layoutVersion=($event.target as HTMLSelectElement).value==='showcase'?2:undefined"><option value="showcase">Vitrine • selo grande e produtos livres</option><option value="broadcast">Moldura • modelo anterior</option></select></label><label class="vs-toggle"><span><strong>Duplicar a imagem do produto</strong><small>Até duas embalagens no Reels e três na TV, quando houver espaço. O preço e a unidade não mudam.</small></span><input v-model="doc.duplicateProducts" type="checkbox"/></label><label class="vs-field">Etiqueta de preço<select v-model="doc.priceLabel" @focus="loadLabelOptions" @change="selectPriceLabel"><option value="">Automática · combina com o modelo</option><option v-for="label in labelOptions" :key="label.id" :value="label.id">{{ label.name }}</option></select><small>Escolha uma etiqueta da sua biblioteca.</small></label><h3>Onde você vai usar?</h3><div class="vs-choice-row"><button v-for="(format,key) in VIDEO_FORMATS" :key="key" class="vs-choice" :class="{selected:doc.formats.includes(key)}" :aria-pressed="doc.formats.includes(key)" @click="toggleFormat(key)"><Smartphone v-if="key==='vertical'"/><Monitor v-else/><strong>{{ format.label }}</strong><small>{{ key==='vertical'?'Em pé · 9:16':'Deitado · 16:9' }}</small></button></div>
+     <div class="vs-divider"/><label v-if="!flyerRecipe(doc.theme)" class="vs-field">Montagem do vídeo<select :value="doc.layoutVersion===2?'showcase':'broadcast'" @change="doc.layoutVersion=($event.target as HTMLSelectElement).value==='showcase'?2:undefined"><option value="showcase">Vitrine • selo grande e produtos livres</option><option value="broadcast">Moldura • modelo anterior</option></select></label><label class="vs-toggle"><span><strong>Duplicar a imagem do produto</strong><small>Até duas embalagens no Reels e três na TV, quando houver espaço. O preço e a unidade não mudam.</small></span><input v-model="doc.duplicateProducts" type="checkbox"/></label><label class="vs-toggle"><span><strong>Remover fundo das fotos dos produtos</strong><small>Fotos novas chegam recortadas, sem o quadro branco. Imagens já transparentes não mudam.</small></span><input :checked="doc.removeProductBackground!==false" type="checkbox" @change="doc.removeProductBackground=($event.target as HTMLInputElement).checked"/></label><label class="vs-field">Etiqueta de preço<select v-model="doc.priceLabel" @focus="loadLabelOptions" @change="selectPriceLabel"><option value="">Automática · combina com o modelo</option><option v-for="label in labelOptions" :key="label.id" :value="label.id">{{ label.name }}</option></select><small>Escolha uma etiqueta da sua biblioteca.</small></label><h3>Onde você vai usar?</h3><div class="vs-choice-row"><button v-for="(format,key) in VIDEO_FORMATS" :key="key" class="vs-choice" :class="{selected:doc.formats.includes(key)}" :aria-pressed="doc.formats.includes(key)" @click="toggleFormat(key)"><Smartphone v-if="key==='vertical'"/><Monitor v-else/><strong>{{ format.label }}</strong><small>{{ key==='vertical'?'Em pé · 9:16':'Deitado · 16:9' }}</small></button></div>
      <label class="vs-field">Duração máxima<select v-model.number="doc.duration"><option :value="15">Até 15 segundos</option><option :value="20">Até 20 segundos</option><option :value="30">Até 30 segundos</option></select></label>
      <div class="vs-divider"/>
      <h3>{{ auth.isSuperAdmin.value?'Identidade do estabelecimento':'A identidade da sua loja' }}</h3>
@@ -1797,6 +1797,52 @@ onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await sa
 .vs-editing .vs-job-list{position:absolute;bottom:10px;right:12px;max-width:250px;border:0;background:#f7f8fc;border-radius:8px;padding:6px 9px;z-index:3}
 .vs-editing .vs-job-list[open]{max-height:240px;box-shadow:0 8px 24px #26385b22;border:1px solid #dce3ee}
 @media(max-width:760px){.vs-editing .vs-job-list{position:static;max-width:none}.vs-editing .vs-preview-heading>span{font-size:9px}}
+
+/* Mantém a biblioteca e os diálogos utilizáveis em telas estreitas e baixas. */
+.vs-app,
+.vs-app :is(.vs-library, .vs-editor, .vs-workspace, .vs-form-panel, .vs-preview-panel, .vs-step-content),
+.vs-app :is(.vs-hero, .vs-project-card, .vs-model-modal, .vs-model-modal-body, .vs-section-heading) { min-width:0; }
+.vs-app { width:100%; max-width:100%; overflow-x:clip; }
+.vs-app :is(h1, h2, h3, p, small, strong, span, label) { overflow-wrap:anywhere; }
+.vs-app .vs-modal-backdrop { overflow-y:auto; overscroll-behavior:contain; padding:clamp(8px, 2vw, 20px); }
+.vs-app .vs-modal,
+.vs-app .vs-model-modal { max-height:calc(100dvh - 16px); overscroll-behavior:contain; }
+.vs-app .vs-modal { width:min(620px, 100%); }
+.vs-app .vs-model-modal > header { gap:12px; }
+.vs-app .vs-model-modal > header > div { min-width:0; }
+.vs-app :is(.vs-inline-actions, .vs-form-footer, .vs-editor-title, .vs-header, .vs-header-actions, .vs-preview-heading) { min-width:0; flex-wrap:wrap; }
+.vs-app :is(.vs-step-content, .vs-preview-panel) :is(input:not([type="checkbox"]):not([type="range"]), select, textarea) { min-width:0; max-width:100%; }
+.vs-app :is(.vs-button, .vs-format-switch button, .vs-steps button) { min-height:40px; }
+
+@media (max-width:520px) {
+  .vs-app .vs-library { padding:18px 12px 44px; }
+  .vs-app .vs-editor { padding:16px 10px 40px; }
+  .vs-app .vs-hero { padding:20px 15px; border-radius:18px; }
+  .vs-app .vs-hero h1 { font-size:clamp(32px, 10vw, 44px); letter-spacing:-1px; }
+  .vs-app .vs-hero p { font-size:14px; margin:14px 0; }
+  .vs-app .vs-project-grid { grid-template-columns:minmax(0,1fr); }
+  .vs-app .vs-project-cover { padding:16px; }
+  .vs-app .vs-project-cover > strong { font-size:clamp(22px, 7vw, 28px); }
+  .vs-app .vs-message { width:calc(100% - 24px); padding:11px 12px; flex-wrap:wrap; gap:8px; }
+  .vs-app .vs-model-modal { padding:14px; border-radius:16px; }
+  .vs-app .vs-model-modal-body { gap:14px; }
+  .vs-app .vs-model-description { gap:12px; }
+  .vs-app .vs-step-content { padding:16px 12px; }
+  .vs-app .vs-step-content h2 { font-size:23px; }
+  .vs-app .vs-form-footer { padding:12px; }
+  .vs-app .vs-form-footer > :is(button, span) { min-width:0; }
+  .vs-app .vs-form-footer .vs-button { flex:1 1 120px; }
+  .vs-app .vs-brand-fields { grid-template-columns:minmax(0,1fr); gap:10px; }
+  .vs-app .vs-offer-body { grid-template-columns:minmax(64px, 78px) minmax(0,1fr); gap:9px; }
+  .vs-app .vs-preview-panel { padding:12px; }
+  .vs-app .vs-preview-heading { flex-wrap:wrap; }
+}
+
+@media (max-height:520px) {
+  .vs-app .vs-modal-backdrop { place-items:start center; }
+  .vs-app .vs-modal,
+  .vs-app .vs-model-modal { max-height:calc(100dvh - 16px); }
+}
 </style>
 
 <style scoped>

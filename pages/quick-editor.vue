@@ -87,7 +87,7 @@ const usePreviewTemplate = async () => {
 const selectedTemplateCategory = ref<string | null>(null)
 const selectedTemplateSubcategory = ref<string | null>(null)
 const templateSearch = ref('')
-const templateSort = ref<'company' | 'recent' | 'name'>('company')
+const templateSort = ref<'company' | 'newest' | 'recent' | 'name'>('company')
 const existingProjects = ref<ProjectListRow[]>([])
 const projectSearch = ref('')
 const projectSort = ref<'recent' | 'oldest' | 'name'>('recent')
@@ -124,6 +124,19 @@ const getTemplateCategoryLabel = (template: FlyerTemplateSummary): string | null
 }
 const getCategoryKey = (value: string | null | undefined): string | null =>
   normalizeSearchValue(normalizeFlyerTemplateCategory(value)) || null
+const getValidTemplateTimestamp = (value: string | null | undefined): number | null => {
+  if (!value?.trim()) return null
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+const getTemplateTimestamp = (template: FlyerTemplateSummary, field: 'created_at' | 'updated_at'): number => {
+  const primary = getValidTemplateTimestamp(template[field])
+  const fallback = getValidTemplateTimestamp(template[field === 'created_at' ? 'updated_at' : 'created_at'])
+  return primary ?? fallback ?? 0
+}
+const compareTemplateName = (left: FlyerTemplateSummary, right: FlyerTemplateSummary): number =>
+  String(left.name || '').localeCompare(String(right.name || ''), 'pt-BR', { sensitivity: 'base' }) ||
+  (String(left.id) < String(right.id) ? -1 : String(left.id) > String(right.id) ? 1 : 0)
 const templateCategories = computed(() => {
   const unique = new Map<string, string>()
   templates.value.forEach((template) => {
@@ -184,9 +197,12 @@ const filteredTemplates = computed(() => {
   }
   return matchingTemplates.sort((a, b) => {
     if (templateSort.value === 'name') {
-      return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base' })
+      return compareTemplateName(a, b)
     }
-    return (Date.parse(b.updated_at || b.created_at || '') || 0) - (Date.parse(a.updated_at || a.created_at || '') || 0)
+    const timestampField = templateSort.value === 'newest' ? 'created_at' : 'updated_at'
+    const timestampDifference = getTemplateTimestamp(b, timestampField) - getTemplateTimestamp(a, timestampField)
+    if (timestampDifference !== 0) return timestampDifference
+    return templateSort.value === 'newest' ? compareTemplateName(a, b) : 0
   })
 })
 
@@ -636,7 +652,8 @@ onUnmounted(() => {
               <ArrowDownAZ class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" />
               <select v-model="templateSort" aria-label="Ordenar modelos" class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-9 text-sm font-semibold text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100">
                 <option value="company">Variados para sua loja</option>
-                <option value="recent">Mais recentes</option>
+                <option value="newest">Últimos adicionados</option>
+                <option value="recent">Últimos atualizados</option>
                 <option value="name">Nome: A–Z</option>
               </select>
               <span class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400">⌄</span>

@@ -104,7 +104,9 @@ describe('GET /api/label-templates catálogo leve', () => {
   it('omite preview na consulta e reduz um catálogo de 3 MB para IDs usados', async () => {
     const fixture = realisticCatalog()
     mocks.query.mockImplementation(async (sql: string) => ({
-      rows: sql.includes('preview_data_url') ? fixture : fixture.map(({ preview_data_url: _preview, ...row }) => row)
+      rows: sql.includes('null::text as preview_data_url')
+        ? fixture.map((row) => ({ ...row, preview_data_url: null }))
+        : fixture
     }))
 
     mocks.getQuery.mockReturnValue({})
@@ -115,10 +117,10 @@ describe('GET /api/label-templates catálogo leve', () => {
     const lightweightBytes = Buffer.byteLength(JSON.stringify(lightweight))
     const [lightSql] = mocks.query.mock.calls[1]!
 
-    expect(lightSql).not.toContain('preview_data_url')
+    expect(lightSql).toContain('null::text as preview_data_url')
     expect(lightSql).toContain('coalesce(template_key, id) = any($2::text[])')
     expect(lightweightBytes).toBeLessThan(fullBytes - 2_900_000)
-    expect((lightweight as any).templates.every((item: any) => !('preview_data_url' in item))).toBe(true)
+    expect((lightweight as any).templates.every((item: any) => item.preview_data_url === null)).toBe(true)
   })
 
   it('summary=1 retorna apenas metadados e sempre exige autenticação', async () => {

@@ -127,6 +127,8 @@ const toolbarStyle = computed(() => {
 .image-action-settings svg:last-child {display:none;}
 @media(max-width:767px) {
 .image-actions-fields select {font-size:16px;}
+/* No celular as ações da imagem ficam fixas acima da navegação, sem cobrir o produto tocado. */
+.image-actions {position:fixed;top:auto;right:8px;bottom:calc(76px + env(safe-area-inset-bottom,0px));left:8px;width:auto;max-width:none;max-height:55dvh;}
 }
 @media(prefers-reduced-motion:reduce) {.image-action {transition:none;}}
 </style>

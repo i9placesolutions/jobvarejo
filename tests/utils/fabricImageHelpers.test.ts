@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   getPreferredProductImageFromGroup,
   getImageTrimmedDimensions,
@@ -8,7 +8,8 @@ import {
   autoTrimFabricImage,
   fitImageIntoSlot,
   detectImageTrimBounds,
-  inspectImageTrimBounds
+  inspectImageTrimBounds,
+  trimImageSourceToDataUrl
 } from '~/utils/fabricImageHelpers'
 
 const group = (children: any[]) => ({
@@ -66,6 +67,149 @@ describe('getPreferredProductImageFromGroup', () => {
   it('case-insensitive no type, mas case-sensitive no name', () => {
     const upper = { type: 'IMAGE', name: 'smart_image' }
     expect(getPreferredProductImageFromGroup(group([upper]))).toBe(upper)
+  })
+})
+
+describe('trimImageSourceToDataUrl cache', () => {
+  const installImageMocks = (options: { failedLoads?: number; pendingLoads?: boolean; dimensions?: number } = {}) => {
+    const previousWindow = (globalThis as any).window
+    const previousDocument = (globalThis as any).document
+    const metrics = { imageLoads: 0, pixelScans: 0, cropDraws: 0 }
+    let failedLoads = options.failedLoads || 0
+
+    class MockImage {
+      crossOrigin = ''
+      naturalWidth = options.dimensions ?? 4
+      naturalHeight = options.dimensions ?? 4
+      width = options.dimensions ?? 4
+      height = options.dimensions ?? 4
+      onload: null | (() => void) = null
+      onerror: null | (() => void) = null
+      private source = ''
+
+      set src(value: string) {
+        this.source = value
+        metrics.imageLoads += 1
+        if (options.pendingLoads) return
+        queueMicrotask(() => {
+          if (failedLoads > 0) {
+            failedLoads -= 1
+            this.onerror?.()
+          } else {
+            this.onload?.()
+          }
+        })
+      }
+
+      get src() { return this.source }
+    }
+
+    ;(globalThis as any).window = { Image: MockImage }
+    ;(globalThis as any).document = {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: () => ({
+          clearRect: () => undefined,
+          drawImage: () => { metrics.cropDraws += 1 },
+          getImageData: (_x: number, _y: number, width: number, height: number) => {
+            metrics.pixelScans += 1
+            const data = new Uint8ClampedArray(width * height * 4)
+            for (let y = 0; y < height; y += 1) {
+              for (let x = 0; x < width; x += 1) {
+                data[((y * width) + x) * 4 + 3] = x > 0 && y > 0 ? 255 : 0
+              }
+            }
+            return { data }
+          },
+          // Canvas dimensions are read by the helper after assignment.
+          get canvas() { return this }
+        }),
+        toDataURL: () => 'data:image/png;base64,trimmed'
+      })
+    }
+
+    return {
+      metrics,
+      restore: () => {
+        if (previousWindow === undefined) delete (globalThis as any).window
+        else (globalThis as any).window = previousWindow
+        if (previousDocument === undefined) delete (globalThis as any).document
+        else (globalThis as any).document = previousDocument
+      }
+    }
+  }
+
+  it('coalesces concurrent identical work and separates options', async () => {
+    const mocks = installImageMocks()
+    try {
+      const source = 'data:image/png;base64,coalesced-preview-test'
+      const startedAt = performance.now()
+      const results = await Promise.all(Array.from({ length: 8 }, () =>
+        trimImageSourceToDataUrl(source, { alphaThreshold: 12, padding: 0 })
+      ))
+      const elapsedMs = performance.now() - startedAt
+
+      expect(results).toEqual(Array(8).fill('data:image/png;base64,trimmed'))
+      expect(mocks.metrics.imageLoads).toBe(1)
+      expect(mocks.metrics.pixelScans).toBe(1)
+      // Each real trim draws once into the sample canvas and once into output.
+      expect(mocks.metrics.cropDraws).toBe(2)
+
+      await trimImageSourceToDataUrl(source, { alphaThreshold: 13, padding: 0 })
+      expect(mocks.metrics.imageLoads).toBe(2)
+      expect(mocks.metrics.pixelScans).toBe(2)
+      // Test metadata gives a repeatable before/after comparison point without
+      // imposing a wall-clock assertion on CI hosts.
+      expect(elapsedMs).toBeGreaterThanOrEqual(0)
+    } finally {
+      mocks.restore()
+    }
+  })
+
+  it('does not cache load failures, allowing a safe retry', async () => {
+    const mocks = installImageMocks({ failedLoads: 1 })
+    try {
+      const source = 'data:image/png;base64,retry-preview-test'
+      expect(await trimImageSourceToDataUrl(source, { alphaThreshold: 12, padding: 0 })).toBe(source)
+      expect(await trimImageSourceToDataUrl(source, { alphaThreshold: 12, padding: 0 }))
+        .toBe('data:image/png;base64,trimmed')
+      expect(mocks.metrics.imageLoads).toBe(2)
+      expect(mocks.metrics.pixelScans).toBe(1)
+    } finally {
+      mocks.restore()
+    }
+  })
+
+  it('retries images with invalid dimensions instead of caching the source', async () => {
+    const mocks = installImageMocks({ dimensions: 1 })
+    try {
+      const source = 'data:image/png;base64,not-decoded-preview-test'
+      expect(await trimImageSourceToDataUrl(source)).toBe(source)
+      expect(await trimImageSourceToDataUrl(source)).toBe(source)
+      expect(mocks.metrics.imageLoads).toBe(2)
+      expect(mocks.metrics.pixelScans).toBe(0)
+    } finally {
+      mocks.restore()
+    }
+  })
+
+  it('settles timed-out loads and releases the in-flight entry for retry', async () => {
+    const mocks = installImageMocks({ pendingLoads: true })
+    vi.useFakeTimers()
+    try {
+      const source = 'data:image/png;base64,slow-preview-test'
+      const firstAttempt = trimImageSourceToDataUrl(source)
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(await firstAttempt).toBe(source)
+      const secondAttempt = trimImageSourceToDataUrl(source)
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(await secondAttempt).toBe(source)
+      expect(mocks.metrics.imageLoads).toBe(2)
+    } finally {
+      vi.useRealTimers()
+      mocks.restore()
+    }
   })
 })
 

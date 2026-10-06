@@ -426,5 +426,60 @@
   "93d3d733-ac8d-47b4-9d7d-9ab3c6d9e040": {
     "background": "",
     "seal": "/video-studio/templates/catalog/reference-20261004-83.png"
+  },
+  "27afa93d-135e-4c41-8565-7f53188ce212": {
+    "background": "/video-studio/templates/rodrigues-20261005-sextou-ofertas-background.png",
+    "seal": "/video-studio/templates/rodrigues-20261005-sextou-ofertas-seal.png",
+    "backgroundCropY": 0
+  },
+  "84c1387f-16ef-40ad-9acf-f2b0b5ff73f5": {
+    "background": "/video-studio/templates/catalog/magnific-mega-oferta-estrelas-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-mega-oferta-estrelas-seal.png",
+    "backgroundCropY": 0.5
+  },
+  "439da8ec-cab8-4092-9102-49a226a1013b": {
+    "background": "/video-studio/templates/catalog/magnific-aqui-tem-super-ofertas-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-aqui-tem-super-ofertas-seal.png",
+    "backgroundCropY": 0.5
+  },
+  "2d64ce85-88b9-4fd2-8f6b-20ecc71c7513": {
+    "background": "/video-studio/templates/catalog/magnific-fim-de-semana-imbativel-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-fim-de-semana-imbativel-seal.png",
+    "backgroundCropY": 0.5
+  },
+  "e6650a6a-842b-4f5d-a19c-afe3939020ad": {
+    "background": "/video-studio/templates/catalog/magnific-quinta-da-carne-brasa-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-quinta-da-carne-brasa-seal.png",
+    "backgroundCropY": 0.5
+  },
+  "1a5ce70f-d753-499e-9c87-0238e5ccfbb0": {
+    "background": "/video-studio/templates/catalog/magnific-clube-de-descontos-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-clube-de-descontos-seal.png",
+    "backgroundCropY": 0.5
+  },
+  "06022f35-98c0-4f2e-8c36-70e9750744a1": {
+    "background": "/video-studio/templates/catalog/magnific-super-economia-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-super-economia-seal.png",
+    "backgroundCropY": 0.5
+  },
+  "f59e4137-4552-4ed3-8996-bf30707dda72": {
+    "background": "/video-studio/templates/catalog/magnific-promocao-do-dia-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-promocao-do-dia-seal.png",
+    "backgroundCropY": 0.5
+  },
+  "6d740a3e-4d5b-4a1c-a8e2-9ffc9ca4ce4a": {
+    "background": "/video-studio/templates/catalog/magnific-super-promocao-preto-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-super-promocao-preto-seal.png",
+    "backgroundCropY": 0.5
+  },
+  "43184b49-5dc9-499a-aae6-31b6b0d2501d": {
+    "background": "/video-studio/templates/catalog/magnific-mega-promocao-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-mega-promocao-seal.png",
+    "backgroundCropY": 0.5
+  },
+  "b61ec791-d54f-46f0-a387-2b34a618bf2f": {
+    "background": "/video-studio/templates/catalog/magnific-promocao-da-semana-cartaz-header.jpg",
+    "seal": "/video-studio/templates/catalog/magnific-promocao-da-semana-seal.png",
+    "backgroundCropY": 0.5
   }
 }

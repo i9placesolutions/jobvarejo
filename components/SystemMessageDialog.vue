@@ -22,11 +22,11 @@ watch(systemMessage, async (value) => {
   </Teleport>
 </template>
 <style scoped>
-.system-message { margin:auto; width:min(480px,calc(100vw - 32px)); max-height:80dvh; padding:24px; border:1px solid #41414b; border-radius:18px; background:#22232a; color:#f4f4f5; box-shadow:0 24px 80px #0008; }
+.system-message { margin:auto; width:min(480px,calc(100vw - 32px)); max-height:80dvh; overflow-y:auto; overscroll-behavior:contain; padding:clamp(16px,3vw,24px); border:1px solid #41414b; border-radius:18px; background:#22232a; color:#f4f4f5; box-shadow:0 24px 80px #0008; }
 .system-message::backdrop { background:#0008; }
 h2 { font-size:18px; font-weight:650; margin:0 0 14px; }
 p { white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; line-height:1.6; color:#d4d4d8; }
-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:24px; }
+footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:10px; margin-top:20px; }
 button { min-height:44px; padding:0 18px; border-radius:9px; background:#383941; font-size:14px; font-weight:600; }
 .primary { background:#7c3aed; color:white; }
 button:focus-visible { outline:2px solid #c4b5fd; outline-offset:3px; }

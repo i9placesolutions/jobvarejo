@@ -199,7 +199,7 @@ const close = () => emit('update:modelValue', false)
       <div
         :style="{
           background: '#1a1a1a', borderRadius: '16px',
-          width: '720px', maxWidth: '95vw', maxHeight: '90vh',
+          width: '720px', maxWidth: 'calc(100vw - 2rem)', maxHeight: 'calc(100dvh - 2rem)',
           display: 'flex', flexDirection: 'column',
           boxShadow: '0 12px 48px rgba(0,0,0,0.5)',
           color: '#fff',
@@ -386,9 +386,10 @@ const close = () => emit('update:modelValue', false)
 </template>
 
 <style scoped>
-@media(max-width:767px) {
+@media(max-width:1023px) {
  .image-editor-responsive-body { flex-direction:column; overflow-y:auto !important; }
  .image-editor-responsive-body > div { width:100% !important; flex-shrink:0 !important; }
+ .image-editor-responsive-body > div:first-child > div:first-child { min-height:min(300px, 35dvh) !important; }
  .image-editor-responsive-body input { min-width:0; }
  .image-editor-responsive-body button { min-height:44px; }
 }

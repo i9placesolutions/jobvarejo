@@ -24,6 +24,7 @@ const emit = defineEmits<{
   (event: 'resize-page', formatId: FlyerTemplateFormatId): void
   (event: 'switch-theme'): void
   (event: 'confirm-entry-format'): void
+  (event: 'zoom-fit'): void
 }>()
 
 const addMenuOpen = ref(false)
@@ -126,6 +127,7 @@ watch(() => props.currentPageId, closeMenus)
       <small>{{ props.formatLabel || 'Formato livre' }} · {{ dimensionsLabel }}</small>
     </div>
 
+    <button type="button" class="quick-page-fit" aria-label="Ajustar o encarte na tela" title="Ajustar o encarte na tela" @click="emit('zoom-fit')"><Maximize2 :size="16" aria-hidden="true" /></button>
     <button type="button" class="quick-page-options" :aria-expanded="mobileOptionsOpen" @click="mobileOptionsOpen = !mobileOptionsOpen">Opções <ChevronDown :size="14" /></button>
     <div class="quick-mode-page-toolbar__actions">
       <button
@@ -433,11 +435,12 @@ watch(() => props.currentPageId, closeMenus)
 </style>
 
 <style scoped>
-.quick-page-options {display:none;}
+.quick-page-options, .quick-page-fit {display:none;}
 @media(max-width:767px) {
  .quick-mode-page-toolbar {background:#18181b;border-color:#ffffff14;border-radius:12px;box-shadow:none;}
  .quick-mode-page-toolbar__identity {flex:1;}
  .quick-mode-page-toolbar__eyebrow {font-size:9px;}
+ .quick-page-fit {display:grid;place-items:center;width:44px;min-height:44px;border:1px solid #ffffff1f;border-radius:10px;color:#e4e4e7;}
  .quick-page-options {display:flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;color:#c4b5fd;font-size:12px;}
  .quick-mode-page-toolbar[data-mobile-expanded=false] .quick-mode-page-toolbar__actions {display:none;}
 }

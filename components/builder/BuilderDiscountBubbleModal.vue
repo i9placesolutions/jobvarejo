@@ -78,7 +78,7 @@ const renderBubbleShape = (style: typeof bubbleStyles[number]) => {
 <template>
   <Teleport to="body">
     <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" @click.self="emit('close')">
-      <div class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div class="bg-white rounded-xl shadow-2xl w-[calc(100%-2rem)] max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain">
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h3 class="text-sm font-semibold text-gray-800">Bubble de Desconto</h3>

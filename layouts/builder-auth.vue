@@ -8,7 +8,7 @@ const backgroundStyle = {
 
 <template>
   <div
-    class="h-screen w-full relative overflow-hidden bg-white text-slate-800 flex flex-col"
+    class="min-h-dvh w-full relative bg-white text-slate-800 flex flex-col"
     :style="backgroundStyle"
   >
     <!-- Decorative Grid Pattern -->
@@ -17,7 +17,7 @@ const backgroundStyle = {
     </div>
 
     <!-- Main Content -->
-    <div class="relative z-10 flex-1 flex flex-col overflow-hidden">
+    <div class="relative z-10 flex-1 min-h-0 flex flex-col">
       <!-- Top Bar with Logo -->
       <header class="w-full p-4 shrink-0">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
@@ -34,7 +34,7 @@ const backgroundStyle = {
       </header>
 
       <!-- Page Content -->
-      <main class="flex-1 flex items-center justify-center px-4 overflow-auto">
+      <main class="flex-1 min-h-0 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 overflow-y-auto">
         <div class="w-full max-w-md">
           <slot />
         </div>

@@ -1,6 +1,7 @@
 const PUBLIC_STORAGE_PREFIXES = ['imagens/', 'uploads/', 'logo/'] as const
 const BUILDER_STORAGE_PREFIX = 'builder/'
 const FLYER_GALLERY_STORAGE_PREFIX = 'imagens/catalogo-encartes/'
+const PRIVATE_CATALOG_PREVIEW_PREFIX_RE = /^projects\/[^/]+\/catalog-previews\/(?:labels|flyers)(?:\/|$)/
 const MAX_STORAGE_PATH_LENGTH = 1024
 const UUID_SEGMENT = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 const LEGACY_PROJECT_PAGE_KEY_RE = new RegExp(
@@ -15,7 +16,7 @@ export const normalizeStoragePath = (value: unknown): string =>
 // Ownership permite leitura, mas nunca alteração pelas APIs genéricas de storage.
 export const isServerManagedStorageKey = (key: string): boolean => {
   const normalized = normalizeStoragePath(key)
-  return normalized.startsWith(FLYER_GALLERY_STORAGE_PREFIX) || /^projects\/[^/]+\/enhancement-ledger\.json(?:\/|$)/.test(normalized) ||
+  return normalized.startsWith(FLYER_GALLERY_STORAGE_PREFIX) || PRIVATE_CATALOG_PREVIEW_PREFIX_RE.test(normalized) || /^projects\/[^/]+\/enhancement-ledger\.json(?:\/|$)/.test(normalized) ||
     /^projects\/[^/]+\/[^/]+\/enhancements(?:\/|$)/.test(normalized)
 }
 

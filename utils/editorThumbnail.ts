@@ -3,6 +3,7 @@ import { restoreCanvasStickerOutlines } from './editorStickerOutline'
 type GenerateThumbnailFromCanvasJsonOptions = {
   sourceJson: any
   staticCanvasCtor: any
+  document?: Pick<Document, 'createElement'> | null
   pageWidth?: number
   pageHeight?: number
   defaultWidth?: number
@@ -179,7 +180,8 @@ const setStaticCanvasSize = (canvas: any, width: number, height: number): void =
 const renderThumbnailFromCanvasJson = async (
   opts: GenerateThumbnailFromCanvasJsonOptions
 ): Promise<string> => {
-  if (!opts.staticCanvasCtor || typeof document === 'undefined') return ''
+  const canvasDocument = opts.document || (typeof document !== 'undefined' ? document : null)
+  if (!opts.staticCanvasCtor || !canvasDocument) return ''
 
   const THUMB_MAX_DIMENSION = 480
   const fullWidth = Math.max(1, Math.round(Number(opts.pageWidth || opts.defaultWidth || 1080)))
@@ -188,7 +190,7 @@ const renderThumbnailFromCanvasJson = async (
   const initialWidth = Math.max(1, Math.round(fullWidth * scale))
   const initialHeight = Math.max(1, Math.round(fullHeight * scale))
 
-  const el = document.createElement('canvas')
+  const el = canvasDocument.createElement('canvas')
   el.width = initialWidth
   el.height = initialHeight
 

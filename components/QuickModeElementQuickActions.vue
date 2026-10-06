@@ -102,3 +102,11 @@ watch(() => props.anchor.visible, async visible => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Alvo de toque maior no celular. */
+@media (max-width: 767px) {
+  [role='toolbar'] { width:44px !important; height:44px !important; }
+  [role='toolbar'] > button { width:38px; height:38px; }
+}
+</style>

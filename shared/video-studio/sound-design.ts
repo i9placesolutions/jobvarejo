@@ -1,5 +1,6 @@
 import {motionSettings, type SoundEffect} from './effect-catalog'
 import {campaignFamily} from './campaign-direction'
+import {sceneStyle,offerIndexOf} from './scene-variation'
 import type {VideoDocument, VideoScene} from './model'
 
 // Os ataques acompanham logo (frame 4), selo (8) e brilho da abertura (20).
@@ -44,9 +45,12 @@ export function flyerSoundCues(doc: VideoDocument, scenes: VideoScene[], format:
  const accent:SoundEffect=(doc.templateRevision||0)<19?'retail-pop-v1':motion.accentSound
  const cues:{sound:SoundEffect;frame:number;gain:number;key:string}[]=[]
  for(const scene of scenes){
-  cues.push({sound:transition,frame:scene.from,gain:scene.id==='outro'?.2:.32,key:'swipe-'+scene.id})
+  // Modo variado: som de passagem e de preço acompanham o estilo de cada oferta.
+  // A primeira oferta mantém os sons do vídeo (inclusive a regra das receitas antigas); as demais variam.
+  const index=offerIndexOf(doc,scene.id),st=doc.motionVariation==='varied'&&index>0?sceneStyle(doc,index):undefined
+  cues.push({sound:st?.transitionSound||transition,frame:scene.from,gain:scene.id==='outro'?.2:.32,key:'swipe-'+scene.id})
   if(scene.id==='intro')cues.push({sound:accent,frame:scene.from+8,gain:.42,key:'seal-'+scene.id})
-  else if(scene.id!=='outro')cues.push({sound:accent,frame:scene.from+5,gain:.32,key:'price-'+scene.id})
+  else if(scene.id!=='outro')cues.push({sound:st?.accentSound||accent,frame:scene.from+5,gain:.32,key:'price-'+scene.id})
  }
  if(format==='horizontal'&&scenes[1])cues.push({sound:transition,frame:Math.floor(scenes[1].from*.48),gain:.22,key:'brand'})
  return cues

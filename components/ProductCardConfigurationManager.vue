@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ArrowLeft,
   Check,
@@ -55,7 +55,9 @@ const feedbackTone = ref<'success' | 'error'>('success')
 type RealPriceLabelPreview = {
   id: string
   name: string
-  previewDataUrl: string
+  previewUrl: string | null
+  previewRevision: string | null
+  previewState: 'idle' | 'loading' | 'ready' | 'error'
 }
 
 const { getApiAuthHeaders } = useApiAuth()
@@ -231,6 +233,18 @@ interface PreviewInteraction {
 
 const previewInteraction = ref<PreviewInteraction | null>(null)
 const previewInteractionMoved = ref(false)
+let isComponentMounted = false
+let labelPreviewLoadGeneration = 0
+let labelPreviewObserver: IntersectionObserver | null = null
+let activeLabelPreviewRequests = 0
+const labelPreviewQueue: string[] = []
+const queuedLabelPreviewIds = new Set<string>()
+const activeLabelPreviewIds = new Set<string>()
+const labelPreviewImageRetryUrls = new Map<string, string>()
+const labelPreviewControllers = new Set<AbortController>()
+const labelPreviewUrlCache = new Map<string, { url: string; revision: string; expiresAt: number }>()
+const LABEL_PREVIEW_URL_TTL_MS = 8 * 60 * 1000
+const MAX_CONCURRENT_LABEL_PREVIEWS = 2
 
 const updateElementLayout = (
   key: ProductCardElementKey,
@@ -429,49 +443,192 @@ const finishPreviewInteraction = () => {
 
 const commitLive = () => publishLive(draft.value)
 
+const getLabelPreviewEntry = (id: string) =>
+  labelTemplatePreviews.value.find((template) => template.id === id) ?? null
+
+const clearLabelPreviewQueue = () => {
+  labelPreviewQueue.length = 0
+  queuedLabelPreviewIds.clear()
+  labelPreviewImageRetryUrls.clear()
+  labelPreviewControllers.forEach((controller) => controller.abort())
+  labelPreviewControllers.clear()
+  labelPreviewObserver?.disconnect()
+  labelPreviewObserver = null
+}
+
+const pumpLabelPreviewQueue = () => {
+  while (
+    isComponentMounted &&
+    activeLabelPreviewRequests < MAX_CONCURRENT_LABEL_PREVIEWS &&
+    labelPreviewQueue.length
+  ) {
+    const id = labelPreviewQueue.shift()!
+    queuedLabelPreviewIds.delete(id)
+    if (activeLabelPreviewIds.has(id)) continue
+    const entry = getLabelPreviewEntry(id)
+    if (!entry || entry.previewUrl) continue
+
+    const generation = labelPreviewLoadGeneration
+    const controller = new AbortController()
+    activeLabelPreviewRequests += 1
+    activeLabelPreviewIds.add(id)
+    labelPreviewControllers.add(controller)
+    entry.previewState = 'loading'
+
+    void (async () => {
+      try {
+        const headers = await getApiAuthHeaders()
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const result: any = await $fetch(
+              `/api/label-templates/${encodeURIComponent(id)}/preview?crop=1`,
+              { method: 'GET', headers, signal: controller.signal }
+            )
+            if (!isComponentMounted || generation !== labelPreviewLoadGeneration) return
+            const url = String(result?.url || '').trim()
+            const revision = String(result?.revision || '').trim()
+            const current = getLabelPreviewEntry(id)
+            if (!url || !revision || !current) {
+              throw new Error('A prévia da etiqueta retornou dados incompletos.')
+            }
+            labelPreviewUrlCache.set(id, {
+              url,
+              revision,
+              expiresAt: Date.now() + LABEL_PREVIEW_URL_TTL_MS
+            })
+            labelPreviewImageRetryUrls.delete(id)
+            current.previewUrl = url
+            current.previewRevision = revision
+            current.previewState = 'ready'
+            return
+          } catch (error: any) {
+            if (!isComponentMounted || generation !== labelPreviewLoadGeneration || controller.signal.aborted) return
+            const statusCode = Number(error?.statusCode || error?.status || error?.response?.status || 0)
+            if (statusCode === 409 && attempt === 0) continue
+            throw error
+          }
+        }
+      } catch (error: any) {
+        if (!isComponentMounted || generation !== labelPreviewLoadGeneration || controller.signal.aborted) return
+        const current = getLabelPreviewEntry(id)
+        if (current) current.previewState = 'error'
+      }
+    })().finally(() => {
+      activeLabelPreviewRequests = Math.max(0, activeLabelPreviewRequests - 1)
+      activeLabelPreviewIds.delete(id)
+      labelPreviewControllers.delete(controller)
+      pumpLabelPreviewQueue()
+    })
+  }
+}
+
+const requestLabelPreview = (id: string, force = false) => {
+  if (!isComponentMounted) return
+  const entry = getLabelPreviewEntry(id)
+  if (!entry || activeLabelPreviewIds.has(id) || queuedLabelPreviewIds.has(id)) return
+  const cached = labelPreviewUrlCache.get(id)
+  if (!force && entry.previewUrl && cached && cached.expiresAt > Date.now()) return
+  if (!force && entry.previewUrl) {
+    entry.previewUrl = null
+    entry.previewState = 'idle'
+  }
+  if (!force && cached && cached.expiresAt > Date.now()) {
+    entry.previewUrl = cached.url
+    entry.previewState = 'ready'
+    return
+  }
+  labelPreviewUrlCache.delete(id)
+  if (force) {
+    entry.previewUrl = null
+    entry.previewState = 'idle'
+  }
+  queuedLabelPreviewIds.add(id)
+  labelPreviewQueue.push(id)
+  pumpLabelPreviewQueue()
+}
+
+const observeLabelPreviewElement = (id: string, element: Element | null) => {
+  if (!element || !isComponentMounted || !labelPreviewObserver) return
+  element.setAttribute('data-label-preview-id', id)
+  labelPreviewObserver.observe(element)
+}
+
+const handleLabelPreviewImageError = (id: string, event: Event) => {
+  const failedUrl = String((event.currentTarget as HTMLImageElement | null)?.src || '')
+  if (labelPreviewImageRetryUrls.get(id) === failedUrl) return
+  labelPreviewImageRetryUrls.set(id, failedUrl)
+  labelPreviewUrlCache.delete(id)
+  requestLabelPreview(id, true)
+}
+
+const handleLabelPreviewImageLoad = (id: string, event: Event) => {
+  labelPreviewImageRetryUrls.delete(id)
+  handlePreviewImageLoad('price', event)
+}
+
+const handleLabelPreviewThumbnailLoad = (id: string, event: Event) => {
+  const loadedUrl = String((event.currentTarget as HTMLImageElement | null)?.src || '')
+  if (labelPreviewImageRetryUrls.get(id) === loadedUrl) labelPreviewImageRetryUrls.delete(id)
+}
+
+const selectLabelTemplatePreview = (id: string) => {
+  selectedLabelTemplateId.value = id
+  if (getLabelPreviewEntry(id)?.previewState === 'error') requestLabelPreview(id, true)
+}
+
 const loadLabelTemplatePreviews = async () => {
+  const generation = ++labelPreviewLoadGeneration
+  clearLabelPreviewQueue()
   isLabelPreviewLoading.value = true
   labelPreviewError.value = ''
   try {
     const headers = await getApiAuthHeaders()
     const response: any = await $fetch('/api/label-templates', {
       method: 'GET',
-      headers
+      headers,
+      query: { preview: '0' }
     })
+    if (!isComponentMounted || generation !== labelPreviewLoadGeneration) return
     const rows = Array.isArray(response?.templates) ? response.templates : []
-    // Etiquetas antigas podem carregar uma margem transparente grande no PNG/WebP.
-    // Recortar somente essa margem deixa a selecao rente ao conteudo sem alterar o layout salvo.
-    const previews = (await Promise.all(
-      rows.map(async (row: any): Promise<RealPriceLabelPreview | null> => {
-        const id = String(row?.id || '').trim()
-        const previewDataUrl = String(row?.preview_data_url ?? row?.previewDataUrl ?? '').trim()
-        if (!id || !previewDataUrl) return null
-
-        const trimmedPreviewDataUrl = await trimImageSourceToDataUrl(previewDataUrl, {
-          alphaThreshold: 12,
-          padding: 0
-        })
-
-        return {
-          id,
-          name: String(row?.name || 'Etiqueta sem nome').trim() || 'Etiqueta sem nome',
-          previewDataUrl: trimmedPreviewDataUrl || previewDataUrl
-        }
-      })
-    )).filter(Boolean) as RealPriceLabelPreview[]
+    const previews = rows.map((row: any): RealPriceLabelPreview | null => {
+      const id = String(row?.id || '').trim()
+      if (!id) return null
+      return {
+        id,
+        name: String(row?.name || 'Etiqueta sem nome').trim() || 'Etiqueta sem nome',
+        previewUrl: null,
+        previewRevision: null,
+        previewState: 'idle'
+      }
+    }).filter(Boolean) as RealPriceLabelPreview[]
 
     labelTemplatePreviews.value = previews
     if (!previews.some((template) => template.id === selectedLabelTemplateId.value)) {
       selectedLabelTemplateId.value = previews[0]?.id ?? null
     }
+    if (typeof IntersectionObserver !== 'undefined') {
+      labelPreviewObserver = new IntersectionObserver((entries) => {
+        entries.forEach((intersection) => {
+          if (!intersection.isIntersecting) return
+          const id = intersection.target.getAttribute('data-label-preview-id') || ''
+          const item = getLabelPreviewEntry(id)
+          if (item?.previewState === 'idle') requestLabelPreview(id)
+        })
+      }, { rootMargin: '80px' })
+    } else {
+      previews.slice(0, 4).forEach((item) => requestLabelPreview(item.id))
+    }
+    // The selected card preview is independent from the scrolling library.
+    if (selectedLabelTemplateId.value) requestLabelPreview(selectedLabelTemplateId.value)
   } catch (error: any) {
+    if (!isComponentMounted || generation !== labelPreviewLoadGeneration) return
     labelPreviewError.value = String(
       error?.data?.statusMessage || error?.message || 'Não foi possível carregar as etiquetas reais.'
     )
     labelTemplatePreviews.value = []
     selectedLabelTemplateId.value = null
   } finally {
-    isLabelPreviewLoading.value = false
+    if (generation === labelPreviewLoadGeneration) isLabelPreviewLoading.value = false
   }
 }
 
@@ -482,6 +639,12 @@ const restoreDefaults = () => {
   feedback.value = ''
   publishLive(draft.value)
 }
+
+watch(selectedLabelTemplateId, (id) => {
+  if (!isComponentMounted || !id) return
+  const entry = getLabelPreviewEntry(id)
+  requestLabelPreview(id, entry?.previewState === 'error')
+})
 
 const persist = async () => {
   isSaving.value = true
@@ -501,13 +664,13 @@ const persist = async () => {
   }
 }
 
-onMounted(async () => {
-  const [loaded] = await Promise.all([
-    load(),
-    loadLabelTemplatePreviews()
-  ])
-  draft.value = cloneConfiguration(loaded || savedConfiguration.value)
-  const [trimmedProductPreview, trimmedAlcoholBadge] = await Promise.all([
+onMounted(() => {
+  isComponentMounted = true
+  void load().then((loaded) => {
+    if (isComponentMounted) draft.value = cloneConfiguration(loaded || savedConfiguration.value)
+  })
+  void loadLabelTemplatePreviews()
+  void Promise.all([
     trimImageSourceToDataUrl(productPreviewSrc.value, {
       alphaThreshold: 12,
       padding: 0
@@ -516,12 +679,19 @@ onMounted(async () => {
       alphaThreshold: 12,
       padding: 0
     })
-  ])
-  productPreviewSrc.value = trimmedProductPreview || productPreviewSrc.value
-  alcoholBadgePreviewSrc.value = trimmedAlcoholBadge || alcoholBadgePreviewSrc.value
+  ]).then(([trimmedProductPreview, trimmedAlcoholBadge]) => {
+    if (!isComponentMounted) return
+    productPreviewSrc.value = trimmedProductPreview || productPreviewSrc.value
+    alcoholBadgePreviewSrc.value = trimmedAlcoholBadge || alcoholBadgePreviewSrc.value
+  }).catch(() => {
+    // Mantem os assets originais em caso de falha de leitura ou CORS.
+  })
 })
 
 onBeforeUnmount(() => {
+  isComponentMounted = false
+  labelPreviewLoadGeneration += 1
+  clearLabelPreviewQueue()
   finishPreviewInteraction()
 })
 </script>
@@ -645,7 +815,7 @@ onBeforeUnmount(() => {
                   `preview-element--${key}`,
                   {
                     'preview-element--selected': selectedElement === key,
-                    'preview-element--price-real': key === 'price' && !!selectedPriceLabelPreview
+                    'preview-element--price-real': key === 'price' && !!selectedPriceLabelPreview?.previewUrl
                   }
                 ]"
                 :style="previewCardElementStyle(key)"
@@ -670,11 +840,12 @@ onBeforeUnmount(() => {
                   </template>
                   <template v-else-if="key === 'price'">
                     <img
-                      v-if="selectedPriceLabelPreview"
+                      v-if="selectedPriceLabelPreview?.previewUrl"
                       class="preview-price-label-image"
-                      :src="selectedPriceLabelPreview.previewDataUrl"
+                      :src="selectedPriceLabelPreview.previewUrl"
                       :alt="`Etiqueta real: ${selectedPriceLabelPreview.name}`"
-                      @load="handlePreviewImageLoad('price', $event)"
+                      @load="handleLabelPreviewImageLoad(selectedPriceLabelPreview.id, $event)"
+                      @error="handleLabelPreviewImageError(selectedPriceLabelPreview.id, $event)"
                     />
                     <template v-else>
                       <span class="preview-price__currency">R$</span>
@@ -734,7 +905,7 @@ onBeforeUnmount(() => {
               {{ labelPreviewError }} A prévia continua usando o formato de exemplo.
             </p>
             <p v-else-if="!labelTemplatePreviews.length" class="real-label-library__status">
-              Nenhuma etiqueta com imagem de prévia foi encontrada ainda. Crie ou salve um modelo em Etiquetas.
+              Nenhuma etiqueta foi encontrada ainda. Crie ou salve um modelo em Etiquetas.
             </p>
             <div v-else class="real-label-library__items" role="listbox" aria-label="Selecionar etiqueta para a prévia">
               <button
@@ -746,10 +917,22 @@ onBeforeUnmount(() => {
                 role="option"
                 :aria-selected="selectedLabelTemplateId === template.id"
                 :title="`Mostrar ${template.name} no card`"
-                @click="selectedLabelTemplateId = template.id"
+                @click="selectLabelTemplatePreview(template.id)"
               >
-                <span class="real-label-library__thumb">
-                  <img :src="template.previewDataUrl" :alt="template.name" loading="lazy" decoding="async" />
+                <span
+                  class="real-label-library__thumb"
+                  :ref="(element) => observeLabelPreviewElement(template.id, element as Element | null)"
+                >
+                  <img
+                    v-if="template.previewUrl"
+                    :src="template.previewUrl"
+                    :alt="template.name"
+                    loading="lazy"
+                    decoding="async"
+                    @load="handleLabelPreviewThumbnailLoad(template.id, $event)"
+                    @error="handleLabelPreviewImageError(template.id, $event)"
+                  />
+                  <span v-else aria-hidden="true">{{ template.previewState === 'error' ? 'Indisponível' : '…' }}</span>
                 </span>
                 <span class="real-label-library__name">{{ template.name }}</span>
               </button>
@@ -991,6 +1174,6 @@ h1 { margin: 0; color: #172033; font-size: clamp(26px, 3vw, 38px); line-height: 
 .badge-settings__asset img { flex: 0 0 42px; width: 42px; height: 42px; object-fit: contain; clip-path: circle(50% at 50% 50%); }
 .switch { position: relative; display: inline-flex; flex: 0 0 auto; width: 34px; height: 20px; cursor: pointer; }.switch input, .master-switch input { position: absolute; opacity: 0; pointer-events: none; }.switch span { width: 100%; height: 100%; border-radius: 999px; background: #cbd5e1; transition: .16s ease; }.switch span::after { display: block; width: 14px; height: 14px; margin: 3px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.25); content: ''; transition: .16s ease; }.switch input:checked + span { background: #2160b4; }.switch input:checked + span::after { transform: translateX(14px); }
 .master-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 18px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer; }.master-switch span { display: grid; gap: 4px; }.master-switch strong { color: #334155; font-size: 12px; }.master-switch small { color: #94a3b8; font-size: 10px; line-height: 1.35; }.master-switch::after { flex: 0 0 auto; width: 34px; height: 20px; border-radius: 999px; background: #cbd5e1; content: ''; }.master-switch:has(input:checked)::after { background: #2160b4; }
-@media (max-width: 980px) { .card-config-workspace { grid-template-columns: 1fr; }.preview-stage { min-height: 520px; }.card-config-page__intro { align-items: flex-start; flex-direction: column; }.card-config-page__actions { width: 100%; }.button { flex: 1; } }
-@media (max-width: 560px) { .card-config-page__topbar-inner, .card-config-page__main { width: min(100% - 24px, 1380px); }.card-config-page__topbar { height: 56px; }.card-config-page__back span, .card-config-page__secondary-link { display: none; }.card-config-page__brand { font-size: 12px; }.card-config-page__main { padding-top: 26px; }.preview-panel, .settings-panel { padding: 15px; }.preview-stage { min-height: 390px; padding: 16px; }.profile-switcher { grid-template-columns: repeat(2, minmax(0, 1fr)); }.profile-tools { align-items: stretch; flex-direction: column; }.profile-bulk-button { width: 100%; }.range-grid { grid-template-columns: 1fr; }.scope-banner { align-items: flex-start; }.scope-banner__status { display: none; }.real-label-library__items { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1023px) { .card-config-workspace { grid-template-columns: minmax(0, 1fr); }.preview-stage { min-height: clamp(320px, 54dvh, 520px); }.card-config-page__intro { align-items: flex-start; flex-direction: column; }.card-config-page__actions { width: 100%; }.button { flex: 1; } }
+@media (max-width: 560px) { .card-config-page__topbar-inner, .card-config-page__main { width: min(100% - 24px, 1380px); }.card-config-page__topbar { min-height: 56px; height: auto; }.card-config-page__topbar-inner { flex-wrap: wrap; gap: 8px 12px; padding: 8px 0; }.card-config-page__back span { display: inline; }.card-config-page__secondary-link { display: inline-flex; }.card-config-page__brand { min-width: 0; font-size: 12px; }.card-config-page__topbar-spacer { display: none; }.card-config-page__secondary-link { margin-left: auto; font-size: 10px; }.card-config-page__main { padding-top: 22px; }.card-config-page__actions { align-items: stretch; flex-direction: column; }.preview-panel, .settings-panel { padding: 15px; }.preview-stage { min-height: clamp(280px, 48dvh, 390px); padding: 16px; }.profile-switcher { grid-template-columns: repeat(2, minmax(0, 1fr)); }.profile-tools { align-items: stretch; flex-direction: column; }.profile-bulk-button { width: 100%; }.range-grid { grid-template-columns: 1fr; }.scope-banner { align-items: flex-start; }.scope-banner__status { display: inline-flex; margin-left: auto; }.real-label-library__items { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

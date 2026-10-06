@@ -194,7 +194,7 @@ watch(
     @keydown.esc="templateMenuOpen = false"
   >
     <div
-      class="pointer-events-auto absolute inline-flex items-center gap-0.5 rounded-lg border border-white/15 bg-[#18181b]/95 p-0.5 shadow-[0_8px_24px_rgba(0,0,0,0.42)] backdrop-blur-md"
+      class="label-actions-toolbar pointer-events-auto absolute inline-flex items-center gap-0.5 rounded-lg border border-white/15 bg-[#18181b]/95 p-0.5 shadow-[0_8px_24px_rgba(0,0,0,0.42)] backdrop-blur-md"
       :style="toolbarStyle"
       @mousedown.stop
       @click.stop
@@ -209,6 +209,7 @@ watch(
         @click="emit('mode', 'move')"
       >
         <Move class="h-3 w-3" />
+        <span class="label-actions-text">Mover</span>
       </button>
 
       <button
@@ -221,6 +222,7 @@ watch(
         @click="emit('mode', 'edit')"
       >
         <MousePointer2 class="h-3 w-3" />
+        <span class="label-actions-text">Editar</span>
       </button>
 
       <button
@@ -231,6 +233,7 @@ watch(
         @click="emit('select-all')"
       >
         <ListChecks class="h-3 w-3" />
+        <span class="label-actions-text">Tudo</span>
       </button>
 
       <button
@@ -241,6 +244,7 @@ watch(
         @click="emit('edit-price')"
       >
         <DollarSign class="h-3 w-3" />
+        <span class="label-actions-text">Preço</span>
       </button>
 
       <span class="mx-0.5 h-4 w-px bg-white/10" aria-hidden="true" />
@@ -254,6 +258,7 @@ watch(
         @click="templateMenuOpen = false; emit('edit-color')"
       >
         <Palette class="h-3 w-3" />
+        <span class="label-actions-text">Cor</span>
       </button>
 
       <button
@@ -265,6 +270,7 @@ watch(
         @click="templateMenuOpen = !templateMenuOpen"
       >
         <Tag class="h-3 w-3" />
+        <span class="label-actions-text">Etiqueta</span>
         <ChevronDown class="-ml-1 h-2 w-2" />
       </button>
     </div>
@@ -272,7 +278,7 @@ watch(
     <div
       v-if="templateMenuOpen"
       ref="templateMenuEl"
-      class="pointer-events-auto absolute w-60 max-w-[calc(100vw-20px)] overflow-y-auto overflow-x-hidden rounded-lg border border-white/15 bg-[#18181b]/98 p-1.5 shadow-2xl backdrop-blur-md"
+      class="label-actions-menu pointer-events-auto absolute w-60 max-w-[calc(100vw-20px)] overflow-y-auto overflow-x-hidden rounded-lg border border-white/15 bg-[#18181b]/98 p-1.5 shadow-2xl backdrop-blur-md"
       :style="templateMenuStyle"
       role="menu"
       @mousedown.stop
@@ -320,3 +326,47 @@ watch(
     </div>
   </div>
 </template>
+
+<style scoped>
+.label-actions-text { display:none; }
+/* No celular a barra da etiqueta fica fixa acima da navegação, com botões de toque. */
+@media (max-width: 767px) {
+  .label-actions-toolbar {
+    position: fixed;
+    top: auto !important;
+    right: 8px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    left: 8px !important;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 6px;
+    border-radius: 16px;
+  }
+  .label-actions-toolbar > span[aria-hidden='true'] { display:none; }
+  .label-actions-toolbar > button {
+    flex-direction: column;
+    gap: 3px;
+    width: auto;
+    height: auto;
+    min-height: 48px;
+    border-radius: 11px;
+  }
+  .label-actions-toolbar > button :deep(svg) { width:18px; height:18px; margin:0; }
+  .label-actions-toolbar > button :deep(svg.-ml-1) { display:none; }
+  .label-actions-text { display:block; font-size:10px; line-height:1; }
+  .label-actions-menu {
+    position: fixed;
+    top: auto !important;
+    right: 8px;
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    left: 8px !important;
+    width: auto;
+    max-width: none;
+    max-height: 50dvh !important;
+    border-radius: 16px;
+  }
+  .label-actions-menu button { min-height:44px; }
+}
+</style>

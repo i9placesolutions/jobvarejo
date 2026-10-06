@@ -307,15 +307,31 @@ defineProps<{
 
 @media (max-width: 720px) {
   .cartazista-header {
-    padding: 0 16px;
+    padding: 8px 12px;
     min-height: 64px;
-    height: 64px;
+    height: auto;
   }
-  .cartazista-brand-copy,
+  .cartazista-header-inner {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+  .cartazista-brand {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .cartazista-brand-logo { height: 30px; }
+  .cartazista-brand-copy { min-width: 0; }
+  .cartazista-brand-copy strong { font-size: 11px; }
+  .cartazista-brand-copy small { font-size: 8px; }
   .cartazista-back {
-    display: none;
+    display: inline-flex;
+    margin-left: auto;
+    font-size: 11px;
   }
   .cartazista-header nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
     gap: 4px;
   }
   .cartazista-header nav a {

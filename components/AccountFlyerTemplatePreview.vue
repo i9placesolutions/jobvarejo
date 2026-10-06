@@ -1,28 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { removeFlyerAccountContacts } from '~/utils/flyerGalleryPreview'
 import {
-  buildFlyerTemplateConfigFromPages,
-  inferFormatIdFromPage,
-  orderFlyerTemplatePages
-} from '~/utils/flyerTemplateApi'
-import {
-  bindAccountLogoToFlyerCanvas,
   buildAccountFlyerPreviewCacheKey,
-  cacheAccountFlyerPreview,
-  getCachedAccountFlyerPreview,
-  getAccountFlyerTemplateCanvasData,
-  getAccountFlyerTemplateCanvasDataPath,
-  getAccountFlyerTemplatePages,
   getAccountFlyerLogoPreference,
   getAccountFlyerLogoSource,
-  normalizeAccountFlyerCanvasImageSources,
   runWithAccountFlyerPreviewConcurrency,
   shouldRenderAccountFlyerPreview,
   shouldStartAccountFlyerPreview
 } from '~/utils/accountFlyerTemplatePreview'
-import { autoTrimFabricImageAsync } from '~/utils/fabricImageHelpers'
-import { toWasabiProxyUrl } from '~/utils/storageProxy'
 
 const props = defineProps<{
   templateId: string
@@ -40,7 +25,7 @@ const emit = defineEmits<{
   (event: 'failed'): void
 }>()
 
-const imageUrl = ref('')
+const serverPreview = ref<{ url: string; revision: string; requestId: number } | null>(null)
 const galleryImageFailed = ref(false)
 const host = ref<HTMLElement | null>(null)
 const isVisible = ref(false)
@@ -52,124 +37,39 @@ let disposed = false
 let retryAttempt = 0
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 const { getApiAuthHeaders } = useApiAuth()
-const { loadCanvasDataFromPath } = useStorage()
 
-const loadPreview = async (requestGeneration: number): Promise<string> => {
-  if (requestGeneration !== generation || disposed) return ''
-  let stage = 'autenticando e consultando o modelo'
+const loadPreview = async (requestGeneration: number): Promise<{ url: string; revision: string } | null> => {
+  if (requestGeneration !== generation || disposed) return null
   try {
-  const rawLogoSource = getAccountFlyerLogoSource(props.profile)
-  const logoPreference = getAccountFlyerLogoPreference(props.profile)
-  const cacheIdentity = {
-    templateId: props.templateId,
-    accountId: String(props.profile?.id || ''),
-    logoSource: rawLogoSource,
-    logoPreference
-  }
-  if (props.revision) {
-    const cached = await getCachedAccountFlyerPreview(buildAccountFlyerPreviewCacheKey({
-      ...cacheIdentity,
-      revision: String(props.revision)
-    }))
-    if (cached) return cached
-  }
-  if (requestGeneration !== generation || disposed) return ''
-  const headers = await getApiAuthHeaders()
-  const project = await $fetch<any>('/api/projects', {
-    headers,
-    timeout: 15_000,
-    query: { id: props.templateId, library: '1' }
-  })
-  if (requestGeneration !== generation || disposed) return ''
-
-  stage = 'lendo metadados das páginas'
-  const pages = getAccountFlyerTemplatePages(project)
-  if (!pages.length) throw new Error('Modelo sem páginas.')
-  const config = buildFlyerTemplateConfigFromPages(project?.template_config, pages, props.templateId)
-  const orderedPages = orderFlyerTemplatePages(pages, config)
-  const page = orderedPages.find((candidate: any) => (
-    String(candidate?.templateModelId || '').trim() === String(config.defaultModelId || '').trim() &&
-    inferFormatIdFromPage(candidate) === config.defaultFormatId
-  )) || orderedPages[0]
-  if (!page) throw new Error('Modelo sem página padrão.')
-
-  const revision = String(props.revision || project?.updated_at || project?.updatedAt || '').trim()
-  const cacheKey = revision
-    ? buildAccountFlyerPreviewCacheKey({ ...cacheIdentity, revision })
-    : ''
-  if (cacheKey) {
-    const cached = await getCachedAccountFlyerPreview(cacheKey)
-    if (cached) return cached
-  }
-
-  stage = 'carregando o canvas da página padrão'
-  let canvasJson = getAccountFlyerTemplateCanvasData(page)
-  const canvasDataPath = getAccountFlyerTemplateCanvasDataPath(page)
-  if (!canvasJson && canvasDataPath) {
-    canvasJson = await loadCanvasDataFromPath(canvasDataPath)
-  }
-  if (!canvasJson || typeof canvasJson !== 'object') throw new Error('Canvas do modelo indisponível.')
-
-  stage = 'carregando a logo da conta e preparando o canvas'
-  let logoSource = rawLogoSource ? (toWasabiProxyUrl(rawLogoSource) || rawLogoSource) : ''
-  const { StaticCanvas, FabricImage } = await import('fabric')
-  let logoSize: { width: number; height: number; cropX: number; cropY: number } | null = null
-  if (logoSource) {
-    const logoAbort = new AbortController()
-    const logoTimeout = setTimeout(() => logoAbort.abort(), 8_000)
-    try {
-      const logo = await FabricImage.fromURL(logoSource, { crossOrigin: 'anonymous', signal: logoAbort.signal })
-      await autoTrimFabricImageAsync(logo, { preserveVisualPosition: false })
-      logoSize = {
-        width: Number(logo.width || 0),
-        height: Number(logo.height || 0),
-        cropX: Number(logo.cropX || 0),
-        cropY: Number(logo.cropY || 0)
-      }
-      if (!(logoSize.width > 0 && logoSize.height > 0)) throw new Error('A logo não possui dimensões válidas.')
-    } catch {
-      // A galeria continua sem logo da conta; nunca volta à miniatura persistida do modelo.
-      logoSource = ''
-      logoSize = null
-    } finally {
-      clearTimeout(logoTimeout)
-    }
-  }
-  if (requestGeneration !== generation || disposed) return ''
-
-  const contactSafeCanvasJson = removeFlyerAccountContacts(canvasJson)
-  const safeCanvasJson = bindAccountLogoToFlyerCanvas(normalizeAccountFlyerCanvasImageSources(contactSafeCanvasJson), {
-    logoSrc: logoSource,
-    logoSize,
-    logoPreference
-  })
-  stage = 'renderizando a prévia do canvas'
-  const { generateThumbnailFromCanvasJson } = await import('~/utils/editorThumbnail')
-  const thumbnail = await generateThumbnailFromCanvasJson({
-    sourceJson: safeCanvasJson,
-    staticCanvasCtor: StaticCanvas,
-    pageWidth: Number(page.width || 1080),
-    pageHeight: Number(page.height || 1350)
-  })
-  if (!thumbnail) throw new Error('O renderizador não gerou uma imagem para o canvas.')
-  if (cacheKey) void cacheAccountFlyerPreview(cacheKey, thumbnail)
-  return thumbnail
+    const headers = await getApiAuthHeaders()
+    if (requestGeneration !== generation || disposed) return null
+    const query = props.personalize ? { personalize: '1' } : undefined
+    const response = await $fetch<any>(`/api/projects/${encodeURIComponent(props.templateId)}/preview`, {
+      method: 'GET',
+      headers,
+      query,
+      timeout: 120_000
+    })
+    if (requestGeneration !== generation || disposed) return null
+    const url = String(response?.url || '').trim()
+    const revision = String(response?.revision || '').trim()
+    if (!url || !revision) throw new Error('O servidor não retornou uma prévia pronta para este modelo.')
+    return { url, revision }
   } catch (error: any) {
-    const message = String(error?.message || error || 'erro desconhecido')
-    console.warn(`[AccountFlyerTemplatePreview] Falha ao ${stage} (modelo ${props.templateId}): ${message}`)
-    throw new Error(`Falha ao ${stage}: ${message}`)
+    const message = String(error?.data?.statusMessage || error?.message || error || 'erro desconhecido')
+    console.warn(`[AccountFlyerTemplatePreview] Falha ao consultar a prévia do modelo ${props.templateId}: ${message}`)
+    throw new Error(`Falha ao consultar a prévia: ${message}`)
   }
 }
-
 const startPreview = () => {
+  const hasGalleryPreview = !!props.galleryPreviewUrl && !galleryImageFailed.value
   if (!shouldStartAccountFlyerPreview({
-    profileReady: props.profileReady,
+    profileReady: props.profileReady || hasGalleryPreview || !props.personalize,
     hasTemplateId: !!props.templateId,
     isVisible: isVisible.value,
     rendererInProgress: isLoading.value,
-    hasRenderedPreview: !!imageUrl.value
+    hasRenderedPreview: !!serverPreview.value
   })) return
-  const hasGalleryPreview = !!props.galleryPreviewUrl && !galleryImageFailed.value
   const shouldRender = shouldRenderAccountFlyerPreview({
     hasGalleryPreview,
     personalize: !!props.personalize,
@@ -179,18 +79,26 @@ const startPreview = () => {
     emit('loading-change', !galleryImageLoaded.value)
     return
   }
+  // The neutral gallery image can display while profile data is pending, but
+  // account-specific rendering must use the settled profile result.
+  if (props.personalize && !props.profileReady) return
   const requestGeneration = ++generation
-  const previewTaskKey = buildAccountFlyerPreviewCacheKey({
+  const previewTaskKey = [buildAccountFlyerPreviewCacheKey({
     templateId: props.templateId,
     accountId: String(props.profile?.id || ''),
     logoSource: getAccountFlyerLogoSource(props.profile),
     logoPreference: getAccountFlyerLogoPreference(props.profile),
     revision: String(props.revision || 'latest')
-  })
+  }), props.personalize ? 'personalized' : 'neutral'].join('|')
   const finish = () => {
     if (requestGeneration !== generation || disposed) return
+    if (serverPreview.value) return
+    if (retryTimer) {
+      isLoading.value = false
+      return
+    }
+    if (galleryImageLoaded.value || hasFailed.value) emit('loading-change', false)
     isLoading.value = false
-    emit('loading-change', false)
   }
   const render = () => {
     if (requestGeneration !== generation || disposed || !isVisible.value) return
@@ -199,21 +107,21 @@ const startPreview = () => {
       previewTaskKey,
       props.eager ? 1 : 0
     )
-      .then((url) => {
+      .then((preview) => {
         if (requestGeneration !== generation || disposed) return
-        if (!url) throw new Error('Não foi possível gerar a prévia do modelo.')
-        imageUrl.value = url
-        retryAttempt = 0
+        if (!preview?.url) throw new Error('O servidor não retornou uma prévia pronta para este modelo.')
+        serverPreview.value = { ...preview, requestId: requestGeneration }
       })
       .catch((error: any) => {
         if (requestGeneration !== generation || disposed) return
-        imageUrl.value = ''
+        serverPreview.value = null
         if (hasGalleryPreview) {
           console.warn(`[AccountFlyerTemplatePreview] Personalização indisponível para o modelo ${props.templateId}; mantendo a miniatura neutra: ${String(error?.message || error)}`)
           return
         }
         if (retryAttempt < 1 && isVisible.value) {
           retryAttempt += 1
+          isLoading.value = false
           console.info(`[AccountFlyerTemplatePreview] Nova tentativa ${retryAttempt}/1 para o modelo ${props.templateId}: ${String(error?.message || error)}`)
           if (retryTimer) clearTimeout(retryTimer)
           retryTimer = setTimeout(() => {
@@ -230,22 +138,14 @@ const startPreview = () => {
   isLoading.value = true
   hasFailed.value = false
   if (!hasGalleryPreview || !galleryImageLoaded.value) emit('loading-change', true)
-  if (props.revision) {
-    void getCachedAccountFlyerPreview(previewTaskKey).then((cached) => {
-      if (requestGeneration !== generation || disposed) return
-      if (cached) {
-        imageUrl.value = cached
-        retryAttempt = 0
-        finish()
-      } else render()
-    }).catch(render)
-  } else render()
+  render()
 }
 
 const galleryImageLoaded = ref(false)
 
 const handleGalleryImageLoad = () => {
   galleryImageLoaded.value = true
+  isLoading.value = false
   emit('loading-change', false)
 }
 
@@ -253,7 +153,37 @@ const handleGalleryImageError = () => {
   galleryImageFailed.value = true
   galleryImageLoaded.value = false
   if (isLoading.value) return
-  if (isVisible.value && props.profileReady) startPreview()
+  if (isVisible.value && (!props.personalize || props.profileReady)) startPreview()
+}
+
+const handleRenderedImageError = (renderedRequestId: number) => {
+  if (serverPreview.value?.requestId !== renderedRequestId) return
+  serverPreview.value = null
+  if (!isVisible.value || disposed) return
+  if (retryAttempt < 1) {
+    retryAttempt += 1
+    isLoading.value = false
+    if (retryTimer) clearTimeout(retryTimer)
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      if (!disposed) startPreview()
+    }, 200)
+    return
+  }
+  if (props.galleryPreviewUrl && !galleryImageFailed.value) {
+    isLoading.value = false
+    if (galleryImageLoaded.value) emit('loading-change', false)
+    return
+  }
+  hasFailed.value = true
+  emit('failed')
+}
+
+const handleRenderedImageLoad = (renderedRequestId: number) => {
+  if (serverPreview.value?.requestId !== renderedRequestId) return
+  retryAttempt = 0
+  isLoading.value = false
+  emit('loading-change', false)
 }
 
 const observeVisibility = () => {
@@ -271,7 +201,7 @@ const observeVisibility = () => {
       startPreview()
       return
     }
-    if (!imageUrl.value && isLoading.value) {
+    if (!serverPreview.value && isLoading.value) {
       generation += 1
       isLoading.value = false
       emit('loading-change', false)
@@ -308,7 +238,7 @@ watch(() => `${getGalleryPreviewIdentity()}::${getPersonalizationIdentity()}`, (
   retryAttempt = 0
   if (retryTimer) clearTimeout(retryTimer)
   retryTimer = null
-  imageUrl.value = ''
+  serverPreview.value = null
   if (galleryChanged) {
     galleryImageFailed.value = false
     galleryImageLoaded.value = false
@@ -335,12 +265,15 @@ onUnmounted(() => {
 
 <template>
   <img
-    v-if="imageUrl"
-    :src="imageUrl"
+    v-if="serverPreview"
+    :key="`${props.templateId}:${serverPreview.revision}:${serverPreview.requestId}`"
+    :src="serverPreview.url"
     :alt="''"
     aria-hidden="true"
     class="account-flyer-template-preview"
     :class="`account-flyer-template-preview--${props.fit || 'cover'}`"
+    @load="handleRenderedImageLoad(serverPreview.requestId)"
+    @error="handleRenderedImageError(serverPreview.requestId)"
   />
   <img
     v-else-if="props.galleryPreviewUrl && !galleryImageFailed"

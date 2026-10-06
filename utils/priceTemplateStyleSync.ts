@@ -150,6 +150,11 @@ export const syncPriceTemplateStyle = (group: any, template: any, revivePaint: (
         if (background) {
           const currency = parts.find((node: any) => String(node.text || '').trim() === 'R$')
           const anchor = currency && { left: currency.left, top: currency.top, scaleX: currency.scaleX ?? 1, scaleY: currency.scaleY ?? 1 }
+          // O encaixe também move as decorações sem texto; guarda a posição anterior para não aplicar o
+          // deslocamento do R$ duas vezes (o círculo se descolava do símbolo em preços longos).
+          const decorations = parts.filter((part: any) => !('text' in part)).map((node: any) => ({
+            node, left: Number(node.left), top: Number(node.top), scaleX: Number(node.scaleX ?? 1), scaleY: Number(node.scaleY ?? 1)
+          }))
           fitAuthoredPriceTier(background, parts)
           // O círculo/faixa do R$ acompanha o símbolo durante o encaixe de
           // valores longos; não pode ficar solto na borda da etiqueta vizinha.
@@ -157,12 +162,12 @@ export const syncPriceTemplateStyle = (group: any, template: any, revivePaint: (
             const sx = Number(currency.scaleX ?? 1) / Number(anchor.scaleX)
             const sy = Number(currency.scaleY ?? 1) / Number(anchor.scaleY)
             if (Number.isFinite(sx) && Number.isFinite(sy)) {
-              for (const node of parts.filter((part: any) => !('text' in part))) {
+              for (const { node, left, top, scaleX, scaleY } of decorations) {
                 node.set?.({
-                  left: Number(currency.left) + (Number(node.left) - Number(anchor.left)) * sx,
-                  top: Number(currency.top) + (Number(node.top) - Number(anchor.top)) * sy,
-                  scaleX: Number(node.scaleX ?? 1) * sx,
-                  scaleY: Number(node.scaleY ?? 1) * sy
+                  left: Number(currency.left) + (left - Number(anchor.left)) * sx,
+                  top: Number(currency.top) + (top - Number(anchor.top)) * sy,
+                  scaleX: scaleX * sx,
+                  scaleY: scaleY * sy
                 })
                 node.dirty = true
                 node.setCoords?.()

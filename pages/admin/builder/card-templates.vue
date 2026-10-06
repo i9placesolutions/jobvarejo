@@ -183,7 +183,7 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
 
     <!-- ═══ LISTA ═══ -->
     <template v-if="mode === 'list'">
-      <div class="p-6 max-w-6xl mx-auto">
+      <div class="w-full min-w-0 p-3 sm:p-6 max-w-6xl mx-auto">
         <div class="flex items-center justify-between mb-6">
           <div>
             <h1 class="text-xl font-bold text-gray-800">Card Templates</h1>
@@ -196,7 +196,7 @@ const previewProducts = computed(() => mockProducts.slice(0, 9).map(buildMockPro
         </div>
         <div v-if="error" class="mb-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm border border-red-200">{{ error }}</div>
         <div v-if="isLoading" class="text-center py-16 text-gray-400">Carregando...</div>
-        <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div v-else class="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
           <div v-for="item in items" :key="item.id" @click="goEdit(item)" class="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
             <div class="bg-gray-100 p-4 flex items-center justify-center" style="aspect-ratio: 3/4">
               <div class="w-full h-full rounded flex flex-col items-center justify-center p-2" :style="{ background: item.card_style?.bg || '#fff', borderRadius: item.card_style?.borderRadius || '8px', border: item.card_style?.border || '1px solid #eee' }">

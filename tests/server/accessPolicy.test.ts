@@ -40,7 +40,10 @@ describe('níveis de acesso do JobVarejo', () => {
     await expect(assertRoleApiAccess(event('PUT', '/api/videos/projects'), 'editor', onlyVideoRead)).rejects.toMatchObject({ statusCode: 403 })
     await expect(assertRoleApiAccess(event('GET', '/api/radio-indoor/index'), 'editor', onlyVideoRead)).rejects.toMatchObject({ statusCode: 403 })
     await expect(assertRoleApiAccess(event('GET', '/api/admin/users'), 'editor', onlyVideoRead)).rejects.toMatchObject({ statusCode: 403 })
-    await expect(assertRoleApiAccess(event('GET', '/api/radio-indoor/index'), 'user', {})).rejects.toMatchObject({ statusCode: 403 })
+    // Rádio Indoor é módulo do cliente (REGULAR_USER_AREAS); áreas privilegiadas continuam bloqueadas.
+    await expect(assertRoleApiAccess(event('GET', '/api/radio-indoor/index'), 'user', {})).resolves.toBeUndefined()
+    await expect(assertRoleApiAccess(event('GET', '/api/admin/users'), 'user', {})).rejects.toMatchObject({ statusCode: 403 })
+    await expect(assertRoleApiAccess(event('GET', '/api/debug/runtime-config'), 'user', {})).rejects.toMatchObject({ statusCode: 403 })
     await expect(assertRoleApiAccess(event('GET', '/api/cartazista/designs'), 'user', {})).resolves.toBeUndefined()
     await expect(assertRoleApiAccess(event('GET', '/api/debug/runtime-config'), 'admin', {})).resolves.toBeUndefined()
   })

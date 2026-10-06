@@ -437,10 +437,17 @@ const D = 'w-px h-4 bg-gray-200 mx-0.5'
 </template>
 
 <style scoped>
-@media(max-width:767px) {
- .builder-responsive-toolbar > div { height: auto; min-height:44px; flex-wrap:nowrap; overflow-x:auto; padding:4px 8px; }
+@media(max-width:1023px) {
+ .builder-responsive-toolbar > div { height: auto; min-height:44px; flex-wrap:wrap; align-content:flex-start; overflow-x:hidden; overflow-y:auto; padding:4px 8px; }
+ .builder-responsive-toolbar > div:first-child { max-height:clamp(72px, 18dvh, 132px); }
+ .builder-responsive-toolbar > div:nth-child(2) { max-height:clamp(44px, 10dvh, 80px); }
  .builder-responsive-toolbar > div > * { flex-shrink:0; }
  .builder-responsive-toolbar button, .builder-responsive-toolbar select { min-height:44px; }
  .builder-responsive-toolbar select { font-size:16px; }
+}
+@media(max-width:767px) and (max-height:520px) {
+ .builder-responsive-toolbar > div { flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; }
+ .builder-responsive-toolbar > div:first-child { max-height:48px; }
+ .builder-responsive-toolbar > div:nth-child(2) { max-height:44px; }
 }
 </style>

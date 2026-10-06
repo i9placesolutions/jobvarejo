@@ -199,7 +199,7 @@ const onZoomInput = (event: Event) => {
     <div class="quick-mode-canvas-controls__divider" aria-hidden="true"></div>
 
     <div class="quick-mode-canvas-controls__group quick-mode-canvas-controls__tool-group">
-      <div class="quick-mode-canvas-controls__popover-wrap">
+      <div class="quick-mode-canvas-controls__popover-wrap quick-mode-canvas-controls__pan-wrap">
         <button
           type="button"
           class="quick-mode-canvas-controls__tool-button"
@@ -919,7 +919,16 @@ const onZoomInput = (event: Event) => {
 <style scoped>
 @media(max-width:767px) {
  .quick-mode-canvas-controls[data-mobile-open=false] {display:none !important;}
- .quick-mode-canvas-controls[data-mobile-open=true] {position:fixed !important;left:8px !important;right:8px;bottom:calc(76px + env(safe-area-inset-bottom,0px)) !important;width:auto;max-width:none;margin:0 !important;z-index:600;box-shadow:0 -8px 32px #0005;padding:12px;border-radius:18px;}
+ /* Aberto = encaixado na aba Visual da gaveta (Teleport no EditorCanvas). */
+ .quick-mode-canvas-controls[data-mobile-open=true] {position:static !important;width:100%;max-width:none;margin:0 !important;box-shadow:none;padding:10px;border:1px solid rgba(255,255,255,.1);border-radius:16px;background:rgba(8,12,21,.34);}
+ /* No toque, zoom e rolagem são feitos com os dedos; o botão "Ajustar" fica no encarte. */
+ .quick-mode-canvas-controls[data-mobile-open=true] :is(.quick-mode-canvas-controls__zoom,.quick-mode-canvas-controls__pan-wrap) {display:none;}
+ .quick-mode-canvas-controls[data-mobile-open=true] .quick-mode-canvas-controls__tool-group {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+ .quick-mode-canvas-controls[data-mobile-open=true] .quick-mode-canvas-controls__popover-wrap {width:100%;min-width:0;}
+ .quick-mode-canvas-controls[data-mobile-open=true] .quick-mode-canvas-controls__tool-button {width:100%;min-height:52px;justify-content:center;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(255,255,255,.05);}
+ .quick-mode-canvas-controls[data-mobile-open=true] .quick-mode-canvas-controls__primary-actions {margin-top:8px;}
+ .quick-mode-canvas-controls[data-mobile-open=true] .quick-enhance-button {width:100%;min-height:48px;}
+ .quick-mode-canvas-controls[data-mobile-open=true] .quick-enhance-button span::after {content:' · Melhorar encarte';}
  .quick-export-button {display:none;}
  .quick-mode-canvas-controls__tool-group {width:100%;justify-content:space-around;}
  .quick-mode-canvas-controls__tool-button {min-height:48px;}

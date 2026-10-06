@@ -352,10 +352,12 @@ describe('clearInvalidClipPath', () => {
   })
 
   it('clipPath valido permanece intacto', () => {
+    // Objeto Fabric real: render + toObject (exigido desde a correção de serialização de clipPath).
     const validClip = {
       type: 'rect',
       _objects: [],
-      render: () => {}
+      render: () => {},
+      toObject: () => ({ type: 'rect' })
     }
     const o = makeObj({ clipPath: validClip })
     clearInvalidClipPath(o)

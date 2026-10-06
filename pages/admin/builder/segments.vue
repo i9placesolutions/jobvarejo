@@ -145,7 +145,7 @@ onMounted(() => {
 <template>
   <AdminWorkspaceShell>
   <div class="admin-page admin-page--builder">
-    <div class="mx-auto max-w-6xl px-6 py-10">
+    <div class="mx-auto w-full min-w-0 max-w-6xl px-3 py-5 sm:px-6 sm:py-10">
       <!-- Back link -->
       <div class="mb-8">
         <NuxtLink

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { LabelTemplate } from '~/types/label-template'
+import { createLazyCatalogPreviewQueue } from '~/utils/lazyCatalogPreviewQueue'
 import LabelTemplateMiniEditor from './LabelTemplateMiniEditor.vue'
 
 const props = defineProps<{
@@ -36,6 +37,143 @@ const imageTargetId = ref<string | null>(null)
 const editingTemplateId = ref<string | null>(null)
 const miniEditorRef = ref<{ requestClose?: () => boolean } | null>(null)
 const showCreateSection = ref(false)
+const previewGrid = ref<HTMLElement | null>(null)
+const previewCardElements = new Map<string, Element>()
+type ServerPreview = { url: string; revision: string; templateRevision: string; userId: string; expiresAt: number; generation: number }
+const serverPreviews = shallowRef<Record<string, ServerPreview>>({})
+const failedPreviewRevisions = new Set<string>()
+const { getApiAuthHeaders } = useApiAuth()
+const auth = useAuth()
+const currentUserId = computed(() => String(auth.user.value?.id || ''))
+let previewGeneration = 0
+
+const canRequestServerPreview = (template: LabelTemplate) => {
+  const record = template as LabelTemplate & { __fromDb?: boolean; __localOverride?: boolean }
+  return record.__localOverride !== true && (record.isBuiltIn !== true || record.__fromDb === true)
+}
+
+const previewQueue = createLazyCatalogPreviewQueue<LabelTemplate, { url: string; revision: string; userId: string; generation: number } | null>({
+  concurrency: 2,
+  render: async (template) => {
+    if (!canRequestServerPreview(template)) return null
+    const userId = currentUserId.value
+    const generation = previewGeneration
+    const response = await $fetch<{ url?: unknown; revision?: unknown }>(
+      `/api/label-templates/${encodeURIComponent(String(template.id))}/preview`,
+      { headers: await getApiAuthHeaders() }
+    )
+    const url = String(response?.url || '').trim()
+    const revision = String(response?.revision || '').trim()
+    return url.startsWith('https://') && revision
+      ? { url, revision, userId, generation }
+      : null
+  },
+  publish: (template, preview) => {
+    if (!preview) return
+    if (preview.userId !== currentUserId.value || preview.generation !== previewGeneration) return
+    const id = String(template.id)
+    const templateRevision = String(template.updatedAt || '')
+    const saved: ServerPreview = { ...preview, templateRevision, expiresAt: Date.now() + 540_000 }
+    serverPreviews.value = { ...serverPreviews.value, [id]: saved }
+  },
+  isCurrent: (template) => {
+    const current = props.templates.find(item => String(item.id) === String(template.id))
+    return !!current && String(current.updatedAt || '') === String(template.updatedAt || '') && canRequestServerPreview(current) && !!currentUserId.value
+  },
+  getId: template => String(template.id),
+  getRevision: template => String(template.updatedAt || ''),
+  onError: () => {}
+})
+
+const setPreviewCardElement = (id: string, element: unknown) => {
+  if (typeof Element === 'undefined') return
+  if (element instanceof Element) previewCardElements.set(id, element)
+  else previewCardElements.delete(id)
+}
+
+const getPreviewObserverRoot = (): Element | null => {
+  if (typeof window === 'undefined') return null
+  const grid = previewGrid.value
+  if (!grid) return null
+  const isScrollable = (element: Element) => {
+    const style = window.getComputedStyle(element)
+    return /(auto|scroll|overlay)/.test(style.overflowY) && element.clientHeight > 0 && element.scrollHeight > element.clientHeight + 1
+  }
+  if (isScrollable(grid)) return grid
+  let ancestor = grid.parentElement
+  while (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
+    if (isScrollable(ancestor)) return ancestor
+    ancestor = ancestor.parentElement
+  }
+  return null
+}
+
+const storedPreviewSource = (template: LabelTemplate) => {
+  const value = String(template.previewDataUrl || '').trim()
+  return value.startsWith('data:image/') ? value : undefined
+}
+
+const previewSource = (template: LabelTemplate) => {
+  const id = String(template.id)
+  const preview = serverPreviews.value[id]
+  if (preview?.userId === currentUserId.value && preview.generation === previewGeneration && preview.expiresAt > Date.now() && preview.templateRevision === String(template.updatedAt || '')) return preview.url
+  return storedPreviewSource(template)
+}
+
+const previewKey = (template: LabelTemplate) => {
+  const preview = serverPreviews.value[String(template.id)]
+  return preview?.userId === currentUserId.value && preview.generation === previewGeneration && preview.expiresAt > Date.now() && preview?.templateRevision === String(template.updatedAt || '')
+    ? preview.revision
+    : `${template.id}:${template.updatedAt}`
+}
+
+const handlePreviewError = (template: LabelTemplate) => {
+  const id = String(template.id)
+  const templateRevision = String(template.updatedAt || '')
+  if (!serverPreviews.value[id] || failedPreviewRevisions.has(`${id}:${templateRevision}`)) return
+  const next = { ...serverPreviews.value }
+  delete next[id]
+  serverPreviews.value = next
+  failedPreviewRevisions.add(`${id}:${templateRevision}`)
+  previewQueue.enqueue(template)
+}
+
+const refreshVisiblePreviewQueue = async () => {
+  await nextTick()
+  const targets = props.templates.flatMap(template => {
+    const id = String(template?.id || '')
+    const element = previewCardElements.get(id)
+    const preview = serverPreviews.value[id]
+    if (!id || !element || !canRequestServerPreview(template)) return []
+    if (preview?.userId === currentUserId.value && preview.generation === previewGeneration && preview.expiresAt > Date.now() && preview.templateRevision === String(template.updatedAt || '')) return []
+    return [{
+      id,
+      element,
+      resolve: () => props.templates.find(item => String(item.id) === id && String(item.updatedAt || '') === String(template.updatedAt || ''))
+    }]
+  })
+  previewQueue.observe(getPreviewObserverRoot(), targets)
+}
+
+watch(
+  () => props.templates.map(template => `${template.id}:${template.updatedAt}:${canRequestServerPreview(template)}`).join('|'),
+  () => {
+    previewGeneration += 1
+    serverPreviews.value = {}
+    failedPreviewRevisions.clear()
+    void refreshVisiblePreviewQueue()
+  },
+  { flush: 'post', immediate: true }
+)
+
+watch(currentUserId, () => {
+  previewGeneration += 1
+  serverPreviews.value = {}
+  failedPreviewRevisions.clear()
+  void refreshVisiblePreviewQueue()
+}, { flush: 'sync' })
+
+onBeforeUnmount(() => previewQueue.dispose())
 
 const requestMiniEditorClose = () => {
   if (miniEditorRef.value?.requestClose) {
@@ -229,7 +367,7 @@ const formatDate = (dateStr: string) => {
         </button>
       </div>
 
-      <div v-else class="ltm-templates-grid">
+      <div v-else ref="previewGrid" class="ltm-templates-grid">
         <div
           v-for="tpl in templates"
           :key="tpl.id"
@@ -242,9 +380,9 @@ const formatDate = (dateStr: string) => {
           @mouseleave="hoveredTemplateId = null"
         >
           <!-- Preview -->
-          <div class="ltm-template-preview">
-            <div v-if="tpl.previewDataUrl" class="ltm-template-preview-image">
-              <img :src="tpl.previewDataUrl" :alt="tpl.name" loading="lazy" decoding="async" />
+          <div class="ltm-template-preview" :ref="element => setPreviewCardElement(String(tpl.id), element)">
+            <div v-if="previewSource(tpl)" class="ltm-template-preview-image">
+              <img :key="previewKey(tpl)" :src="previewSource(tpl)" :alt="tpl.name" loading="lazy" decoding="async" @error="handlePreviewError(tpl)" />
             </div>
             <div v-else class="ltm-template-preview-placeholder">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -622,6 +760,10 @@ const formatDate = (dateStr: string) => {
   @apply absolute inset-x-0 bottom-0 p-2 bg-linear-to-t from-zinc-900 via-zinc-900/95 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-1;
 }
 
+.ltm-template-card:focus-within .ltm-template-actions {
+  opacity: 1;
+}
+
 .ltm-template-action {
   @apply w-8 h-8 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-all duration-150 backdrop-blur-sm;
 }
@@ -657,10 +799,13 @@ const formatDate = (dateStr: string) => {
 /* Delete Overlay */
 .ltm-delete-overlay {
   @apply absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4;
+  overflow-y: auto;
 }
 
 .ltm-delete-dialog {
   @apply w-full max-w-sm bg-zinc-900 rounded-2xl border border-zinc-800 p-6 shadow-2xl;
+  max-height: 90dvh;
+  overflow-y: auto;
 }
 
 .ltm-delete-icon-wrapper {
@@ -754,5 +899,29 @@ const formatDate = (dateStr: string) => {
 
 .ltm-templates-grid::-webkit-scrollbar-thumb:hover {
   @apply bg-zinc-700;
+}
+
+@media (max-width: 1023px) {
+  .ltm-header { gap: 12px; }
+  .ltm-actions-bar { flex-wrap: wrap; }
+  .ltm-templates-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); }
+  .ltm-template-actions { position: static; opacity: 1; padding: 8px; background: rgb(24 24 27 / 90%); flex-wrap: wrap; }
+}
+
+@media (max-width: 560px) {
+  .ltm-header { align-items: flex-start; padding-bottom: 16px; }
+  .ltm-header-left { min-width: 0; gap: 10px; }
+  .ltm-icon-wrapper { width: 40px; height: 40px; flex: 0 0 auto; }
+  .ltm-title { font-size: 16px; }
+  .ltm-subtitle { line-height: 1.4; }
+  .ltm-actions-bar { align-items: stretch; padding: 14px 0; }
+  .ltm-action-btn { flex: 1 1 140px; justify-content: center; }
+  .ltm-create-actions { flex-wrap: wrap; }
+  .ltm-create-btn { flex: 1 1 140px; justify-content: center; }
+  .ltm-templates-grid { grid-template-columns: minmax(0, 1fr); }
+  .ltm-template-actions { position: static; opacity: 1; padding: 8px; background: rgb(24 24 27 / 90%); flex-wrap: wrap; }
+  .ltm-template-action { width: 36px; height: 36px; }
+  .ltm-delete-dialog { padding: 18px; }
+  .ltm-delete-actions { flex-wrap: wrap; }
 }
 </style>

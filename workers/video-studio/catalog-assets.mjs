@@ -101,6 +101,9 @@ export function selectCatalogTemplateAssets(document,format,{recipe,backgroundAs
   'sprite-stars':'star','sprite-rings':'ring','sprite-lightning':'lightning',
   'sprite-fire':'fire','sprite-dust':'dust','sprite-vortex':'vortex',
  }
+ // Fogo pode vir dos efeitos escolhidos, da atmosfera do documento ou da atmosfera da receita da campanha.
+ const fx=new Set([...(document?.effects||[]),...(document?.motion?.atmosphere||[]),...(recipe?.motion?.atmosphere||[])])
+ const has=name=>fx.has(name)
  for(const effect of document?.motion?.atmosphere||[]){
   const sprite=spriteAssets[effect]
   if(sprite)assets.add(`templates/effects/kenney-${sprite}.png`)
@@ -109,11 +112,12 @@ export function selectCatalogTemplateAssets(document,format,{recipe,backgroundAs
   const chosen=document?.background
   const energy=chosen&&backgroundAsset?backgroundAsset(chosen,format):format==='vertical'?(recipe.energyBackgroundVertical||recipe.energyBackground):recipe.energyBackground
   const background=chosen?undefined:format==='horizontal'?(recipe.backgroundHorizontal||recipe.background):recipe.background
-  for(const asset of [background,chosen?undefined:recipe.backgroundVideo,energy,recipe.seal,recipe.mascot])if(asset)assets.add(`templates/${asset}`)
+  const video=format==='horizontal'&&recipe.backgroundVideoHorizontal?recipe.backgroundVideoHorizontal:recipe.backgroundVideo
+  for(const asset of [background,chosen?undefined:video,energy,recipe.seal,recipe.mascot])if(asset)assets.add(`templates/${asset}`)
   const referenceSource=recipe.referenceArtwork?.src
   if(typeof referenceSource==='string'&&referenceSource.startsWith('/video-studio/templates/'))assets.add(referenceSource.slice('/video-studio/'.length))
-  if(document?.effects?.includes('fire')||document?.effects?.includes('smoke'))assets.add('templates/impact-fire-v2.png')
-  if(document?.effects?.includes('fire')||document?.effects?.includes('fire-jets'))assets.add('templates/retail-fire-curtain-v1.png')
+  if(has('fire')||has('smoke'))assets.add('templates/impact-fire-v2.png')
+  if(has('fire')||has('fire-jets'))assets.add('templates/retail-fire-curtain-v1.png')
  }else{
   if(document?.background&&backgroundAsset)assets.add(`templates/${backgroundAsset(document.background,format)}`)
   if(document?.theme==='impact')assets.add('templates/fecha-mes-stage-v1.png')
@@ -121,8 +125,8 @@ export function selectCatalogTemplateAssets(document,format,{recipe,backgroundAs
    assets.add('templates/fecha-mes-badge-v1.png')
    if(document?.layoutVersion===2)assets.add('templates/fecha-mes-emerald-v2.png')
   }
-  if(document?.effects?.includes('fire')||document?.effects?.includes('smoke'))assets.add('templates/impact-fire-v2.png')
-  if(document?.effects?.includes('fire')||document?.effects?.includes('fire-jets'))assets.add('templates/retail-fire-curtain-v1.png')
+  if(has('fire')||has('smoke'))assets.add('templates/impact-fire-v2.png')
+  if(has('fire')||has('fire-jets'))assets.add('templates/retail-fire-curtain-v1.png')
  }
  return [...assets]
 }

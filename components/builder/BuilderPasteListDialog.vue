@@ -106,7 +106,7 @@ onUnmounted(() => {
         />
 
         <!-- Dialog -->
-        <div class="relative bg-[#18181b] rounded-2xl border border-white/5 shadow-2xl w-full max-w-lg overflow-hidden">
+        <div class="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden bg-[#18181b] rounded-2xl border border-white/5 shadow-2xl">
           <!-- Header -->
           <div class="flex items-center justify-between px-5 py-4 border-b border-white/5">
             <h2 class="text-sm font-semibold text-white">Colar Lista de Produtos</h2>
@@ -119,7 +119,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Body -->
-          <div class="px-5 py-4 space-y-3">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 sm:px-5 py-4 space-y-3">
             <p class="text-[11px] text-zinc-400 leading-relaxed">
               Cole sua lista com um produto por linha. Formato: <span class="text-zinc-300">nome do produto - preco</span>
             </p>
@@ -136,7 +136,7 @@ onUnmounted(() => {
               v-model="text"
               placeholder="Cole sua lista aqui..."
               rows="8"
-              class="w-full bg-[#09090b]/50 text-[12px] text-white placeholder-zinc-600 outline-none
+              class="min-h-24 sm:min-h-40 w-full bg-[#09090b]/50 text-[12px] text-white placeholder-zinc-600 outline-none
                 border border-white/5 focus:border-emerald-500/50 rounded-lg px-3 py-2.5 transition-colors
                 resize-none min-h-[200px] font-mono"
             />
@@ -155,7 +155,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Footer -->
-          <div class="flex items-center justify-end gap-2 px-5 py-3 border-t border-white/5">
+          <div class="flex shrink-0 flex-wrap items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t border-white/5">
             <button
               @click="handleClose"
               class="px-4 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-white

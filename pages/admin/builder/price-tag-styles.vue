@@ -710,7 +710,7 @@ onMounted(() => {
     <!-- Subtle grain texture overlay -->
     <div class="fixed inset-0 pointer-events-none opacity-[0.015] z-50" style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 256 256%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noise%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noise)%22/%3E%3C/svg%3E');" />
 
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 relative">
+    <div class="mx-auto w-full min-w-0 max-w-7xl px-3 py-5 sm:px-6 sm:py-8 lg:px-8 relative">
       <!-- ═══════ Header ═══════ -->
       <div class="mb-8">
         <NuxtLink
@@ -721,14 +721,14 @@ onMounted(() => {
           <span>Voltar ao Builder</span>
         </NuxtLink>
 
-        <div class="flex items-end justify-between mt-4">
-          <div>
+        <div class="flex flex-wrap items-end justify-between gap-3 mt-4">
+          <div class="min-w-0 flex-1">
             <h1 class="text-3xl font-bold tracking-tight bg-linear-to-r from-zinc-100 to-zinc-400 bg-clip-text text-transparent">
               Estilos de Etiqueta
             </h1>
             <p class="text-sm text-[color:var(--jv-muted)] mt-1.5">Configure cores, formatos e efeitos das etiquetas de preco</p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <button
               class="inline-flex items-center gap-2 rounded-lg bg-[#f3f8fd] px-4 py-2.5 text-sm font-medium text-[color:var(--jv-muted)] hover:text-[color:var(--jv-blue)] hover:bg-[color:var(--jv-sky)] transition-all duration-200 border border-[color:var(--jv-line)] hover:border-[color:var(--jv-line)]"
               :disabled="isSeeding"

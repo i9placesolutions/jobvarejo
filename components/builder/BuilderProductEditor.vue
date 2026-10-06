@@ -97,7 +97,7 @@ const handleAddProduct = () => {
     <!-- Toggle header bar -->
     <button
       @click="isExpanded = !isExpanded"
-      class="w-full flex items-center justify-between gap-3 px-3 py-2 hover:bg-gray-100 transition-colors"
+      class="w-full flex flex-wrap items-center justify-between gap-2 px-3 py-2 hover:bg-gray-100 transition-colors"
     >
       <div class="flex items-center gap-2">
         <component :is="isExpanded ? ChevronDown : ChevronUp" class="w-3.5 h-3.5 text-gray-400" />
@@ -106,7 +106,7 @@ const handleAddProduct = () => {
         </span>
       </div>
 
-      <div class="flex items-center gap-2" @click.stop>
+      <div class="flex flex-wrap items-center justify-end gap-1.5" @click.stop>
         <button
           @click="catalogPickerOpen = true"
           class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all
@@ -201,10 +201,10 @@ const handleAddProduct = () => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
         @click.self="showConfirmRemoveAll = false"
       >
-        <div class="bg-white border border-gray-200 rounded-xl p-5 mx-4 max-w-sm w-full shadow-2xl">
+        <div class="max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mx-4 max-w-sm w-full shadow-2xl">
           <h3 class="text-sm font-semibold text-gray-900 mb-2">Remover todos os produtos?</h3>
           <p class="text-[11px] text-gray-500 mb-4">Esta acao vai remover todos os {{ products.length }} produtos do encarte. Nao pode ser desfeita.</p>
-          <div class="flex gap-2 justify-end">
+          <div class="flex flex-wrap gap-2 justify-end">
             <button
               @click="showConfirmRemoveAll = false"
               class="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"

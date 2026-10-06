@@ -3,6 +3,7 @@ import {mapNarrationScripts} from './narration'
 import type {VideoBackground} from './backgrounds'
 import {FLYER_RECIPES} from './flyer-recipes'
 import {videoTemplateCopy} from './template-copy'
+import {musicTempo,snapScenesToBeats} from './music-tempo'
 import type {VideoMotionSettings, SceneTransition} from './effect-catalog'
 export const VIDEO_FPS = 30
 export const VIDEO_VERSION = 1
@@ -37,7 +38,7 @@ export interface VideoDocument {
   validityRange?: {start:string;end:string};
   layoutEdits?: VideoLayoutEdits;
   templateRevision?: number; background?: VideoBackground;
-  layoutVersion?: 2; duplicateProducts?: boolean; version: 1; title: string; theme: typeof VIDEO_THEMES[number]['id']; campaign: string
+  layoutVersion?: 2; duplicateProducts?: boolean; removeProductBackground?: boolean; motionVariation?: 'varied'|'fixed'; variationSeed?: number; priceAccent?: 'none'|'shine'|'stamp'|'glow-pulse'|'sparkle'|'confetti'; beatSync?: boolean; version: 1; title: string; theme: typeof VIDEO_THEMES[number]['id']; campaign: string
   autoFitVoice?: boolean; formats: VideoFormat[]; duration: 15 | 20 | 30
   brand: { logoStyle?: 'sticker' | 'clean'; name: string; logo: string; address: string; whatsapp: string; instagram: string; phone?:string; facebook?:string; website?:string; slogan?:string; hours?:string; paymentNotes?:string; addresses?:string[]; whatsappNumbers?:string[] }
   priceLabel?: string; validity: string; offers: VideoOffer[]; scripts: VideoScript[]; narrationText?: string
@@ -49,7 +50,7 @@ export interface VideoScene { id: string; from: number; frames: number; audio?: 
 import type { VideoLabel } from './labels'
 export interface VideoRenderProps extends Record<string, unknown> { editor?: VideoEditorState; fastPreview?: boolean; document: VideoDocument; scenes: VideoScene[]; media: Record<string, string>; format: VideoFormat; voiceAudio?: string; music?: string; impact?: string; whoosh?: string; audioBase?: string; fontBase?: string; templateBase?: string; label?: VideoLabel }
 export function newVideoDocument(): VideoDocument {
-  return { layoutVersion:2,duplicateProducts:true,priceLabel:'',version: 1, title: 'Meu vídeo de ofertas', theme: 'impact', campaign: 'FECHA MÊS', formats: ['vertical','horizontal'], duration: 30,
+  return { layoutVersion:2,duplicateProducts:true,motionVariation:'varied',variationSeed:Math.floor(Math.random()*2**31),priceAccent:'shine',beatSync:true,priceLabel:'',version: 1, title: 'Meu vídeo de ofertas', theme: 'impact', campaign: 'FECHA MÊS', formats: ['vertical','horizontal'], duration: 30,
     brand: { logoStyle:'sticker',name: '', logo: '', address: '', whatsapp: '', instagram: '' }, validityMode:'none', validity: '', offers: [], scripts: [],
     voice: { enabled: true, id: 'default', pronunciations: [] }, effects: ['zoom','shake','smoke','embers','glow','rays','pulse'], intensity: 0.85, transition: 'light',
     audio: { music: 'upbeat', musicVolume: 0.23, voiceVolume: 1, effectsVolume: 0.3, sounds: true } }
@@ -142,6 +143,9 @@ export function buildVideoTimeline(doc: VideoDocument, durations?: Record<string
   if(total(frames)>budget)throw new Error(`O conteúdo ultrapassa ${doc.duration} segundos. Ative o ajuste automático da locução ou use menos produtos.`)
   // Distribui tempo livre entre ofertas para leitura, sem alongar aberturas.
   if (!doc.voice.enabled) { let spare=budget-frames.reduce((a,b)=>a+b,0); for(let i=1;i<frames.length-1;i++){const add=Math.min(60,Math.floor(spare/(frames.length-1-i))); frames[i]!+=add; spare-=add} }
+  // Cortes no ritmo: as trocas de cena caem sobre as batidas da música escolhida.
+  const tempo=doc.beatSync&&doc.audio.music!=='none'?musicTempo(doc.audio.music):undefined
+  if(tempo)frames.splice(0,frames.length,...snapScenesToBeats(frames,tempo.bpm,budget,VIDEO_FPS,doc.voice.enabled,frames.map((_,i)=>!doc.voice.enabled&&i>0&&i<frames.length-1?150:Infinity)))
   let from=0
   return ids.map((id,i)=>{const result={id,from,frames:frames[i]!,playbackRate:doc.voice.enabled?playbackRate:undefined,speechFrames:durations?.[id] ? Math.ceil(durations[id]!/playbackRate*VIDEO_FPS) : undefined};from+=frames[i]!;return result})
 }

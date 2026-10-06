@@ -4,7 +4,7 @@ import type { SmartProduct } from '~/composables/useProductProcessor'
 import { videoListBatchIssue, videoOfferFromList } from '~/shared/video-studio/list-import'
 import type { VideoOffer } from '~/shared/video-studio/model'
 
-const props = defineProps<{ remaining: number }>()
+const props = defineProps<{ remaining: number; removeBackground?: boolean }>()
 const emit = defineEmits<{ close: []; import: [offers: VideoOffer[]] }>()
 // Keep the exact quick-editor review, image search and upload flow.
 // Only the final adapter changes: video assets instead of canvas cards.
@@ -23,7 +23,7 @@ async function importProducts(products: SmartProduct[]) {
       let asset = importedImages.get(key)
       if (!asset) {
         asset = await $fetch<{ id: string; aspectRatio?: number }>('/api/videos/catalog-image', {
-          method: 'POST', body: { source: product.imageUrl, name: product.name }
+          method: 'POST', body: { source: product.imageUrl, name: product.name, removeBackground: props.removeBackground !== false }
         })
         importedImages.set(key, asset)
       }

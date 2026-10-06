@@ -12,6 +12,8 @@ export default defineNuxtConfig({
     '/artifacts',
     '/tmp',
     '/node-compile-cache',
+    // Worktrees de agentes são cópias inteiras do projeto; vigiá-las força reloads e limpa o cache.
+    '/.claude',
   ],
   devServer: {
     port: 80,
@@ -184,6 +186,12 @@ export default defineNuxtConfig({
     plugins: [
       tailwindcss(),
     ],
+    server: {
+      watch: {
+        // Mesma regra do `ignore`: cópias de worktree não devem disparar reload.
+        ignored: ['**/.claude/**'],
+      },
+    },
     build: {
       rollupOptions: {
         output: {

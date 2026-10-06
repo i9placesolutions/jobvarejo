@@ -503,4 +503,118 @@ onMounted(loadProfile)
   .repeatable-row .contact-label { grid-column: 1; grid-row: 2; }
   .repeatable-row .remove-entry { grid-column: 2; grid-row: 1; }
 }
+
+.business-profile-page,
+.page-header__inner,
+.page-main,
+.profile-layout,
+.surface {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.page-header__inner {
+  padding-inline: clamp(12px, 2.5vw, 24px);
+  gap: clamp(8px, 1.2vw, 14px);
+}
+
+.brand,
+.brand > div,
+.surface-title > div,
+.logo-row > div:last-child {
+  min-width: 0;
+}
+
+.page-main {
+  padding: clamp(22px, 4vw, 38px) clamp(12px, 2.5vw, 24px) 48px;
+}
+
+.page-intro h1 {
+  font-size: clamp(1.55rem, 4vw, 2rem);
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.page-intro span,
+.surface-help,
+.logo-row p,
+.field-heading small {
+  overflow-wrap: anywhere;
+}
+
+.surface-title {
+  flex-wrap: wrap;
+}
+
+.surface-title > .status-dot {
+  flex: 0 0 auto;
+}
+
+.form-grid input,
+.single-field input,
+.onboarding-fields input,
+.onboarding-fields textarea,
+.repeatable-row input,
+.repeatable-row textarea,
+.textarea-field textarea {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.icon-button,
+.secondary-button,
+.remove-entry,
+.add-entry,
+.select-all-btn,
+.payment-actions button,
+.card-library__toolbar > button,
+.payment-option,
+.card-option {
+  min-height: 44px;
+}
+
+.repeatable-row .remove-entry {
+  min-width: 40px;
+}
+
+.payment-actions,
+.card-library__toolbar {
+  flex-wrap: wrap;
+}
+
+.card-library__header {
+  min-width: 0;
+}
+
+.card-library__header > div {
+  min-width: 0;
+}
+
+.card-library__header strong {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 359px) {
+  .page-header__inner,
+  .page-main {
+    padding-inline: 10px;
+  }
+
+  .surface {
+    padding: 14px;
+  }
+
+  .logo-row {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .logo-preview {
+    width: 56px;
+    height: 56px;
+    flex: 0 0 56px;
+  }
+}
 </style>

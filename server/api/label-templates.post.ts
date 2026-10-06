@@ -3,6 +3,7 @@ import { enforceRateLimit } from '../utils/rate-limit'
 import { parseAndStringifyJsonbParam } from '../utils/jsonb'
 import { pgOneOrNull, pgQuery } from '../utils/postgres'
 import { isBuiltInLabelTemplateId } from '../../utils/labelTemplateHelpers'
+import { ensureLabelCatalogPreview } from '../utils/label-catalog-preview'
 
 type Body = {
   id?: string
@@ -29,7 +30,9 @@ export default defineEventHandler(async (event) => {
   const templateId = String(body?.id || '').trim()
   const templateName = String(body?.name || '').trim()
   const templateKind = String(body?.kind || '').trim()
-  const previewDataUrl = body?.previewDataUrl == null ? null : String(body?.previewDataUrl)
+  const previewDataUrl = body?.previewDataUrl == null || body.previewDataUrl === ''
+    ? null
+    : String(body.previewDataUrl)
   const templateKey = isBuiltInLabelTemplateId(templateId) ? templateId : null
 
   if (!templateId) throw createError({ statusCode: 400, statusMessage: 'Template id required' })
@@ -103,7 +106,7 @@ export default defineEventHandler(async (event) => {
              name = $3,
              kind = $4,
              "group" = $5::jsonb,
-             preview_data_url = $6,
+             preview_data_url = coalesce($6, preview_data_url),
              updated_at = $7
          where id = $8
            and user_id = $1
@@ -141,6 +144,10 @@ export default defineEventHandler(async (event) => {
     if (!data) {
       throw createError({ statusCode: 500, statusMessage: 'Failed to persist template' })
     }
+    const warmPreview = ensureLabelCatalogPreview(user.id, String(data.id || templateId)).catch((error: any) => {
+      console.warn('[label-templates] não foi possível aquecer a prévia server-side:', error?.message || error)
+    })
+    event.waitUntil(warmPreview)
     return { success: true, template: data }
   } catch (error: any) {
     if (error?.statusCode) throw error

@@ -1846,4 +1846,102 @@ onBeforeUnmount(() => {
   .main-nav .nav-item { font-size:12px; }
   .player-dock { left:0; }
 }
+
+/* Compacta o painel sem cortar controles em larguras e alturas curtas. */
+.radio-app,
+.radio-main,
+.radio-main > *,
+.radio-main :is(section, article, form, fieldset, label) { min-width:0; }
+.radio-app { overflow-x:clip; }
+.radio-main { padding-bottom:clamp(150px, 18vh, 190px); }
+.topbar { min-width:0; }
+.crumb { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-actions { min-width:0; flex-wrap:wrap; justify-content:flex-end; }
+.topbar-live-badge { max-width:min(260px, 100%); min-width:0; }
+.topbar-live-badge strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hero-copy { min-width:0; }
+.stats-row,
+.genre-grid,
+.catalog-grid,
+.track-row,
+.workspace-grid,
+.form-grid,
+.interleave-grid { min-width:0; }
+.station-create-panel,
+.station-create-copy,
+.station-create-fields,
+.page-heading,
+.page-heading-actions,
+.filter-bar,
+.batch-actions-bar,
+.card-title,
+.program-header,
+.program-header-actions,
+.request-preview,
+.request-preview-copy,
+.voice-row,
+.member-row,
+.schedule-row,
+.program-row,
+.player-dock { min-width:0; }
+.station-create-copy,
+.page-heading > div:first-child,
+.request-main,
+.voice-main,
+.member-main,
+.schedule-program,
+.program-main { overflow-wrap:anywhere; }
+.radio-app :is(.request-main, .voice-main, .member-main, .schedule-program, .program-main) { min-width:0; }
+.radio-app :is(button, .button, .icon-button, .station-add, .block-chip-btn, .request-action, .track-select-box, .track-add) { min-height:40px; }
+.radio-app input:not([type="range"]),
+.radio-app select,
+.radio-app textarea { min-width:0; max-width:100%; }
+.player-dock { left:256px; }
+
+@media (max-width:1023px) {
+  .radio-main { padding-inline:clamp(12px, 3vw, 24px); }
+  .player-dock { left:0; }
+}
+
+@media (max-width:760px) {
+  .radio-main { padding:0 14px calc(155px + env(safe-area-inset-bottom)); }
+  .topbar { height:auto; min-height:58px; padding:9px 0; align-items:flex-start; }
+  .topbar-actions { flex:0 1 auto; gap:6px; }
+  .topbar-live-badge { display:none; }
+  .station-switcher { max-width:min(158px, 48vw); }
+  .station-switcher select { min-width:0; max-width:82px; }
+  .page-heading { display:flex; align-items:flex-start; flex-wrap:wrap; gap:12px; padding:22px 0 16px; }
+  .page-heading-actions { width:100%; flex-wrap:wrap; }
+  .page-heading-actions .button { flex:1 1 150px; margin:0; }
+  .filter-bar { display:grid; grid-template-columns:minmax(0,1fr); }
+  .filter-bar select { width:100%; margin-top:0; }
+  .station-create-fields { grid-template-columns:minmax(0,1fr); }
+  .radio-app :is(.program-row, .schedule-row, .request-row, .member-row, .voice-row) { flex-wrap:wrap; }
+  .radio-app .voice-row audio { width:min(100%, 260px); }
+  .radio-app .player-dock { grid-template-columns:minmax(0,1fr) auto; }
+}
+
+@media (max-width:420px) {
+  .radio-main { padding-inline:12px; }
+  .hero-panel { min-height:0; }
+  .hero-copy { padding:24px 18px 150px; }
+  .hero-copy h1 { font-size:clamp(28px, 9vw, 36px); }
+  .hero-actions { flex-wrap:wrap; gap:8px; margin-top:17px; }
+  .hero-actions .button { flex:1 1 130px; }
+  .radio-app .stats-row,
+  .radio-app .genre-grid,
+  .radio-app .catalog-grid { grid-template-columns:repeat(2, minmax(0,1fr)); }
+  .radio-app .stats-row { gap:7px; }
+  .radio-app .stat-card { min-width:0; padding:11px; }
+  .radio-app .genre-card { min-width:0; padding:10px; }
+  .page-heading-actions .button { flex-basis:100%; }
+  .batch-actions-bar { align-items:stretch; }
+  .batch-actions-bar .batch-btn { flex:1 1 130px; justify-content:center; }
+  .editor-card, .list-card { padding:14px; }
+}
+
+@media (max-height:500px) and (min-width:761px) {
+  .radio-main { padding-bottom:110px; }
+  .player-dock { min-height:72px; padding-block:7px; }
+}
 </style>

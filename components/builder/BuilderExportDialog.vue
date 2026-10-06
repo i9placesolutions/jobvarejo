@@ -124,7 +124,7 @@ const handleClose = () => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         @click.self="handleClose"
       >
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-200">
+        <div class="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain bg-white rounded-2xl shadow-2xl border border-gray-200">
           <!-- Header -->
           <div class="flex items-center justify-between px-6 pt-5 pb-3">
             <h2 class="text-lg font-semibold text-gray-900">

@@ -1372,6 +1372,16 @@ const getCurrentProductZonePreviewFormat = (): ProductZonePreviewFormat =>
 // Label templates (price splash models)
 const showLabelTemplatesModal = ref(false)
 const labelTemplates = ref<LabelTemplate[]>([])
+type LabelTemplateServerPreview = {
+    url: string
+    revision: string
+    templateRevision: string
+    userId: string
+    expiresAt: number
+    libraryGeneration: number
+}
+const labelTemplateServerPreviews = shallowRef<Record<string, LabelTemplateServerPreview>>({})
+const pendingLabelTemplateServerPreviews = new Map<string, Promise<LabelTemplateServerPreview | null>>()
 const hasLoadedLabelTemplatesFromDb = ref(false)
 // Depois que a API responde, a biblioteca externa passa a ser a fonte de
 // verdade. O snapshot `__labelTemplates` do projeto continua sendo aceito
@@ -1381,6 +1391,7 @@ const isLabelTemplateLibraryAuthoritative = ref(false)
 let labelTemplatesLoadPromise: Promise<void> | null = null
 const verifiedLabelTemplateIds = new Set<string>()
 let labelLibraryGeneration = 0
+let labelTemplatePreviewGeneration = 0
 const isLabelTemplateVerified = (id: string) => isLabelTemplateLibraryAuthoritative.value || verifiedLabelTemplateIds.has(id)
 
 const openGlobalLabelTemplates = () => {
@@ -1517,6 +1528,61 @@ const normalizeDbLabelTemplate = (row: any): LabelTemplate | null => {
     }) as LabelTemplate;
 }
 
+const requestLabelTemplateServerPreview = async (rawId: unknown): Promise<LabelTemplateServerPreview | null> => {
+    const id = String(rawId || '').trim()
+    const template = (labelTemplates.value || []).find(item => String(item?.id || '').trim() === id) as any
+    const userId = String(currentUser.value?.id || '')
+    if (!id || !template || !userId) return null
+    if (template.isBuiltIn === true && template.__fromDb !== true) return null
+    if (template.__localOverride === true && template.__fromDb !== true) return null
+
+    const templateRevision = String(template.updatedAt || '')
+    const cached = labelTemplateServerPreviews.value[id]
+    if (
+        cached?.userId === userId &&
+        cached.templateRevision === templateRevision &&
+        cached.libraryGeneration === labelTemplatePreviewGeneration &&
+        cached.expiresAt > Date.now()
+    ) return cached
+
+    const requestKey = `${userId}\u0000${id}\u0000${templateRevision}`
+    const pending = pendingLabelTemplateServerPreviews.get(requestKey)
+    if (pending) return pending
+
+    const requestGeneration = labelTemplatePreviewGeneration
+    const request = (async (): Promise<LabelTemplateServerPreview | null> => {
+        try {
+            const response = await $fetch<{ url?: unknown; revision?: unknown }>(
+                `/api/label-templates/${encodeURIComponent(id)}/preview`,
+                { headers: await getApiAuthHeaders() }
+            )
+            const url = String(response?.url || '').trim()
+            const revision = String(response?.revision || '').trim()
+            if (!url || !revision || !/^https:\/\//i.test(url)) return null
+            const current = (labelTemplates.value || []).find(item => String(item?.id || '').trim() === id) as any
+            if (
+                isCanvasDestroyed.value ||
+                requestGeneration !== labelTemplatePreviewGeneration ||
+                userId !== String(currentUser.value?.id || '') ||
+                String(current?.updatedAt || '') !== templateRevision
+            ) return null
+            const preview = { url, revision, templateRevision, userId, expiresAt: Date.now() + 540_000, libraryGeneration: requestGeneration }
+            labelTemplateServerPreviews.value = { ...labelTemplateServerPreviews.value, [id]: preview }
+            return preview
+        } catch {
+            return null
+        }
+    })()
+    pendingLabelTemplateServerPreviews.set(requestKey, request)
+    try {
+        return await request
+    } finally {
+        if (pendingLabelTemplateServerPreviews.get(requestKey) === request) {
+            pendingLabelTemplateServerPreviews.delete(requestKey)
+        }
+    }
+}
+
 const loadLabelTemplatesFromDb = async (force = false, ids?: string[]) => {
     if (!force && hasLoadedLabelTemplatesFromDb.value && isLabelTemplateLibraryAuthoritative.value) return;
     if (labelTemplatesLoadPromise) {
@@ -1541,6 +1607,11 @@ const loadLabelTemplatesFromDb = async (force = false, ids?: string[]) => {
             if (resp?.success === false) {
                 throw new Error(String(resp?.message || 'A biblioteca de etiquetas não pôde ser carregada.'));
             }
+            // Server previews belong to one authoritative catalog generation.
+            // Invalidate ephemeral URLs before replacing or merging library rows.
+            labelTemplatePreviewGeneration += 1;
+            labelTemplateServerPreviews.value = {};
+            pendingLabelTemplateServerPreviews.clear();
             const rows = Array.isArray(resp?.templates) ? resp.templates : [];
             const incoming = rows.map(normalizeDbLabelTemplate).filter(Boolean) as LabelTemplate[];
 
@@ -1607,37 +1678,13 @@ const ensureUsedLabelTemplatesReady = async () => {
 
 const ensureLabelTemplatesReady = async () => {
     await loadLabelTemplatesFromDb();
-    await ensureBuiltInDefaultLabelTemplate();
-    await ensureBuiltInAtacarejoLabelTemplate();
-    await ensureBuiltInFardoSpecialLabelTemplate();
-    await ensureWholesaleReferenceLabelTemplate();
-    await ensureBuiltInBlackYellowLabelTemplate();
-    await ensureBuiltInOfertaAmarelaLabelTemplate();
-    await ensureBuiltInBarlowBlackLabelTemplate();
-
-    // Generate/refresh previews in-memory.
-    // This self-heals stale/broken thumbnails after reload or renderer updates.
-    const list = [...(labelTemplates.value || [])];
-    let changed = false;
-    for (let i = 0; i < list.length; i++) {
-        const t = list[i];
-        if (!t) continue;
-        const currentPreviewVersion = Number((t as any).__previewRenderVersion || 0);
-        const needsPreviewRefresh =
-            !(t as any).previewDataUrl ||
-            currentPreviewVersion < LABEL_TEMPLATE_PREVIEW_RENDER_VERSION;
-        if (!needsPreviewRefresh) continue;
-        const url = await renderLabelTemplatePreview(t);
-        if (url) {
-            (list[i] as any) = {
-                ...(t as any),
-                previewDataUrl: url,
-                __previewRenderVersion: LABEL_TEMPLATE_PREVIEW_RENDER_VERSION
-            };
-            changed = true;
-        }
-    }
-    if (changed) labelTemplates.value = list as any;
+    await ensureBuiltInDefaultLabelTemplate(false);
+    await ensureBuiltInAtacarejoLabelTemplate(false);
+    await ensureBuiltInFardoSpecialLabelTemplate(false);
+    await ensureWholesaleReferenceLabelTemplate(false);
+    await ensureBuiltInBlackYellowLabelTemplate(false);
+    await ensureBuiltInOfertaAmarelaLabelTemplate(false);
+    await ensureBuiltInBarlowBlackLabelTemplate(false);
 
     // Hard guard: never keep duplicated IDs in memory.
     const dedup = new Map<string, any>();
@@ -1729,6 +1776,8 @@ const persistBuiltInLabelTemplateToCatalog = async (tpl: LabelTemplate | null | 
     const saved = await upsertLabelTemplateToDb(tpl)
     if (!saved) {
         console.warn(`[labelTemplates] Modelo built-in ${tpl.id} ficou local; catálogo central indisponível`)
+    } else {
+        (tpl as any).__fromDb = true
     }
 }
 
@@ -4392,8 +4441,11 @@ const { recentColors, addRecentColor } = useRecentColors()
 const currentUser = computed(() => auth.user.value)
 watch(() => currentUser.value?.id || '', () => {
     labelLibraryGeneration += 1;
+    labelTemplatePreviewGeneration += 1;
     verifiedLabelTemplateIds.clear();
     labelTemplates.value = [];
+    labelTemplateServerPreviews.value = {};
+    pendingLabelTemplateServerPreviews.clear();
     hasLoadedLabelTemplatesFromDb.value = false;
     isLabelTemplateLibraryAuthoritative.value = false;
     if (isInitialDesignLoadDone.value && currentUser.value?.id) {
@@ -7721,6 +7773,7 @@ const applyQuickCardColors = async (settings: { mode: 'auto' | 'manual'; color?:
 }
 
 const quickMobileSection = ref('preview')
+const isQuickMobileVisualDocked = computed(() => isMobile.value && quickMobileSection.value === 'visual')
 const quickModeColorTargets = computed(() => {
     void selectedObjectRef.value
     if (!isQuickMode.value) return []
@@ -8730,6 +8783,26 @@ const importZoneLabelTemplateId = computed(() => {
     return '';
 })
 
+const productReviewLabelTemplates = computed(() => {
+    const selectedId = String(importZoneLabelTemplateId.value || '').trim()
+    const preview = selectedId ? labelTemplateServerPreviews.value[selectedId] : null
+    const selectedTemplate = (labelTemplates.value || []).find((template: any) => String(template?.id || '').trim() === selectedId) as any
+    if (
+        !preview ||
+        preview.userId !== String(currentUser.value?.id || '') ||
+        preview.templateRevision !== String(selectedTemplate?.updatedAt || '') ||
+        preview.libraryGeneration !== labelTemplatePreviewGeneration ||
+        preview.expiresAt <= Date.now()
+    ) return labelTemplates.value
+    // This copy exists only at the modal boundary. The global label templates
+    // stay free of signed URLs, so serialization and DB upserts keep stored data URLs only.
+    return (labelTemplates.value || []).map((template: any) => (
+        String(template?.id || '').trim() === selectedId
+            ? { ...template, previewDataUrl: preview.url }
+            : template
+    ))
+})
+
 const importTargetZoneId = computed(() => {
     const zone = resolveImportTargetZone()
     return zone && isLikelyProductZone(zone)
@@ -8740,6 +8813,9 @@ const importTargetZoneId = computed(() => {
 watch(showProductReviewModal, async (open) => {
     if (!open) return;
     await ensureLabelTemplatesReady();
+    if (importZoneLabelTemplateId.value) {
+        void requestLabelTemplateServerPreview(importZoneLabelTemplateId.value)
+    }
 })
 
 const showAIModal = ref(false)
@@ -14562,7 +14638,13 @@ const scheduleCanvasFontLoad = () => {
     // Reunir os cards/textos de uma mesma operação; evitar percorrer a árvore em cada frame.
     fontScanTimer = setTimeout(() => { fontScanTimer = null; loadFonts(); }, 200);
 };
-onBeforeUnmount(() => { if (fontScanTimer) clearTimeout(fontScanTimer); });
+onBeforeUnmount(() => {
+    if (fontScanTimer) clearTimeout(fontScanTimer)
+    labelLibraryGeneration += 1
+    labelTemplatePreviewGeneration += 1
+    labelTemplateServerPreviews.value = {}
+    pendingLabelTemplateServerPreviews.clear()
+})
 
 // --- User Guides (persistent, draggable via rulers) ---
 // USER_GUIDE_COLOR, USER_GUIDE_EXTENT extraidos para utils/snapConstants.ts.
@@ -21501,7 +21583,12 @@ const getCompatibleProductLabelTemplateOptions = (card: any) => {
         .map((template: any) => ({
             id: String(template.id).trim(),
             name: String(template.name || 'Etiqueta sem nome').trim() || 'Etiqueta sem nome',
-            previewDataUrl: String(template.previewDataUrl || '').trim() || undefined
+            previewDataUrl: labelTemplateServerPreviews.value[String(template.id).trim()]?.userId === String(currentUser.value?.id || '') &&
+                labelTemplateServerPreviews.value[String(template.id).trim()]?.templateRevision === String(template.updatedAt || '') &&
+                labelTemplateServerPreviews.value[String(template.id).trim()]?.libraryGeneration === labelTemplatePreviewGeneration &&
+                (labelTemplateServerPreviews.value[String(template.id).trim()]?.expiresAt || 0) > Date.now()
+                ? labelTemplateServerPreviews.value[String(template.id).trim()]?.url
+                : String(template.previewDataUrl || '').trim() || undefined
         }))
 }
 
@@ -21718,25 +21805,14 @@ const selectedProductLabelQuickActionsPos = computed(() => {
         : { top: 0, left: 0, width: 0, height: 0, visible: false }
 })
 
-const pendingQuickLabelPreviews = new Set<string>()
 const prepareQuickLabelPreviews = async () => {
-    const options = selectedProductLabelQuickActions.value?.templates || []
-    for (const option of options) {
-        if (isCanvasDestroyed.value) return
-        const template = labelTemplates.value.find(item => item.id === option.id)
-        if (!template || template.previewDataUrl || pendingQuickLabelPreviews.has(option.id)) continue
-        pendingQuickLabelPreviews.add(option.id)
-        try {
-            const previewDataUrl = await renderLabelTemplatePreview(template)
-            if (!previewDataUrl || isCanvasDestroyed.value) continue
-            // Prévia só em memória: não altera a etiqueta nem a arte aberta.
-            labelTemplates.value = labelTemplates.value.map(item => item === template
-                ? { ...item, previewDataUrl, __previewRenderVersion: LABEL_TEMPLATE_PREVIEW_RENDER_VERSION }
-                : item)
-        } finally {
-            pendingQuickLabelPreviews.delete(option.id)
-        }
-    }
+    const quickActions = selectedProductLabelQuickActions.value
+    if (!quickActions) return
+    const candidateIds = [...new Set([
+        quickActions.selectedTemplateId,
+        quickActions.templates[0]?.id
+    ].map(id => String(id || '').trim()).filter(Boolean))].slice(0, 2)
+    await Promise.all(candidateIds.map(id => requestLabelTemplateServerPreview(id)))
 }
 
 const showProductLabelQuickActions = computed(() => {
@@ -26409,7 +26485,7 @@ async function createDefaultLabelTemplate(name: string) {
     }
 }
 
-async function ensureBuiltInDefaultLabelTemplate() {
+async function ensureBuiltInDefaultLabelTemplate(renderPreview = true) {
     // Seed a "Padrão" template so it appears in the list and can be edited/duplicated.
     if (!fabric) return;
     if (hasAuthoritativeGlobalLabelTemplate(BUILTIN_DEFAULT_LABEL_TEMPLATE_ID)) return;
@@ -26432,13 +26508,13 @@ async function ensureBuiltInDefaultLabelTemplate() {
         createdAt: now,
         updatedAt: now
     };
-    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    if (renderPreview) tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
     saveCurrentState();
     await persistBuiltInLabelTemplateToCatalog(tpl);
 }
 
-async function ensureBuiltInAtacarejoLabelTemplate() {
+async function ensureBuiltInAtacarejoLabelTemplate(renderPreview = true) {
     // Seed an "Atacarejo" 2-tier template (regular + wholesale) for CSV/Excel-like price tables.
     if (!fabric) return;
     if (hasAuthoritativeGlobalLabelTemplate(BUILTIN_ATACAREJO_LABEL_TEMPLATE_ID)) return;
@@ -26495,7 +26571,7 @@ async function ensureBuiltInAtacarejoLabelTemplate() {
         updatedAt: now
     };
     (tpl as any).__seedVersionAtacarejo = BUILTIN_ATACAREJO_SEED_VERSION;
-    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    if (renderPreview) tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     if (existingIdx >= 0) {
         const list = [...(labelTemplates.value || [])];
         list[existingIdx] = tpl;
@@ -26507,17 +26583,17 @@ async function ensureBuiltInAtacarejoLabelTemplate() {
     await persistBuiltInLabelTemplateToCatalog(tpl);
 }
 
-async function ensureWholesaleReferenceLabelTemplate() {
+async function ensureWholesaleReferenceLabelTemplate(renderPreview = true) {
     if (!fabric) return;
     const existing = labelTemplates.value.find(t => t.id === WHOLESALE_REFERENCE_TEMPLATE_ID);
     if ((existing?.group as any)?.__referenceStyleVersion === 2) return;
     const now = new Date().toISOString();
     const tpl: LabelTemplate = { id: WHOLESALE_REFERENCE_TEMPLATE_ID, name: 'Atacado — referência lateral (4 preços)', kind: 'priceGroup-v1', group: createWholesaleReferenceTemplateJson(), isBuiltIn: true, createdAt: now, updatedAt: now };
-    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    if (renderPreview) tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     labelTemplates.value = [tpl, ...labelTemplates.value.filter(t => t.id !== WHOLESALE_REFERENCE_TEMPLATE_ID)];
 }
 
-async function ensureBuiltInFardoSpecialLabelTemplate() {
+async function ensureBuiltInFardoSpecialLabelTemplate(renderPreview = true) {
     // Modelo específico para tabelas com preço unitário + preço especial por fardo.
     // A faixa azul é o regular, a vermelha é o especial e a amarela é a condição.
     if (!fabric) return;
@@ -26559,13 +26635,13 @@ async function ensureBuiltInFardoSpecialLabelTemplate() {
         createdAt: now,
         updatedAt: now
     };
-    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    if (renderPreview) tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
     saveCurrentState();
     await persistBuiltInLabelTemplateToCatalog(tpl);
 }
 
-async function ensureBuiltInBlackYellowLabelTemplate() {
+async function ensureBuiltInBlackYellowLabelTemplate(renderPreview = true) {
     // Seed a "Preto/Amarelo" template similar to the reference (black pill + yellow text).
     if (!fabric) return;
     if (hasAuthoritativeGlobalLabelTemplate(BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID)) return;
@@ -26588,13 +26664,13 @@ async function ensureBuiltInBlackYellowLabelTemplate() {
         createdAt: now,
         updatedAt: now
     };
-    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    if (renderPreview) tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
     saveCurrentState();
     await persistBuiltInLabelTemplateToCatalog(tpl);
 }
 
-async function ensureBuiltInOfertaAmarelaLabelTemplate() {
+async function ensureBuiltInOfertaAmarelaLabelTemplate(renderPreview = true) {
     // Seed a "Oferta (amarela)" template inspired by common market tags (yellow bg + red border + top strip).
     // Dynamic fitting for values like 1,99 / 12,99 / 124,99 is handled by setPriceOnPriceGroup().
     if (!fabric) return;
@@ -26618,7 +26694,7 @@ async function ensureBuiltInOfertaAmarelaLabelTemplate() {
         createdAt: now,
         updatedAt: now
     };
-    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    if (renderPreview) tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
     saveCurrentState();
     await persistBuiltInLabelTemplateToCatalog(tpl);
@@ -26669,7 +26745,7 @@ async function ensureBuiltInRedBurstLabelTemplate() {
     await persistBuiltInLabelTemplateToCatalog(tpl);
 }
 
-async function ensureBuiltInBarlowBlackLabelTemplate() {
+async function ensureBuiltInBarlowBlackLabelTemplate(renderPreview = true) {
     // Etiqueta preta com R$ amarelo e preço branco — fonte Barlow Black.
     if (!fabric) return;
     if (hasAuthoritativeGlobalLabelTemplate(BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID)) return;
@@ -26692,7 +26768,7 @@ async function ensureBuiltInBarlowBlackLabelTemplate() {
         createdAt: now,
         updatedAt: now
     };
-    tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    if (renderPreview) tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
     labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
     saveCurrentState();
     await persistBuiltInLabelTemplateToCatalog(tpl);
@@ -30344,12 +30420,21 @@ const handleAutoOfferLayout = async () => {
                 @duplicate-page="duplicateQuickModePage"
                 @add-page="addQuickModePage"
                 @resize-page="resizeQuickModePage"
+                @zoom-fit="quickModeZoomFit"
                 @switch-theme="showQuickThemeSwitchModal = true"
               />
 
-              <QuickModeCanvasControls
-                :mobile-open="quickMobileSection === 'tools'"
+              <!-- No celular, fontes/cores/IA vivem dentro da aba Visual da gaveta.
+                   A chave remonta o Teleport para resolver o destino só quando ele existe. -->
+              <Teleport
                 v-if="isQuickMode && project.pages?.length"
+                :key="isQuickMobileVisualDocked ? 'quick-visual-docked' : 'quick-visual-stage'"
+                defer
+                to="#quick-mobile-visual-slot"
+                :disabled="!isQuickMobileVisualDocked"
+              >
+              <QuickModeCanvasControls
+                :mobile-open="isQuickMobileVisualDocked"
                 :current-zoom="currentZoom"
                 :native-text-count="quickModeNativeTextObjects.length"
                 :native-color-count="quickModeGlobalColorTargets.length"
@@ -30377,8 +30462,7 @@ const handleAutoOfferLayout = async () => {
                 @clear-color="clearQuickModeColor"
                 @apply-opacity="applyQuickModeOpacityChange"
               />
-
-
+              </Teleport>
 
               <!-- Infinite Canvas Effect (Wrapper) -->
               <div class="canvas-workspace" :class="{ 'has-logo-panel': selectedQuickLogo }">
@@ -30990,7 +31074,7 @@ const handleAutoOfferLayout = async () => {
         :show-save-modal="showSaveModal"
         :save-project-name="saveProjectName"
         :show-label-templates-modal="showLabelTemplatesModal"
-        :label-templates="labelTemplates"
+        :label-templates="productReviewLabelTemplates"
         :selected-template-id="activeZoneTemplateId()"
         :can-save-label-template-from-selection="canSaveLabelTemplateFromSelectionComputed"
         :show-a-i-modal="showAIModal"
@@ -31267,6 +31351,8 @@ main {
 <style scoped>
 @media(max-width:767px) {
  .quick-mode-stage {padding-bottom:calc(140px + env(safe-area-inset-bottom,0px)) !important;}
+ /* Sem o aviso "Cole a lista", o encarte usa o espaço até a barra inferior. */
+ .quick-mobile-action-dock.is-hidden ~ .quick-mode-stage {padding-bottom:calc(70px + env(safe-area-inset-bottom,0px)) !important;}
 }
 
 @media (min-width: 768px) and (max-width: 1199px) {

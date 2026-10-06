@@ -67,8 +67,11 @@ const fitCanvasToView = () => {
   if (!area) return
   const w = model.value?.width ?? 1080
   const h = model.value?.height ?? 1080
-  const areaW = area.clientWidth - 48 // padding
-  const areaH = area.clientHeight - 48
+  const styles = window.getComputedStyle(area)
+  const horizontalPadding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight)
+  const verticalPadding = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom)
+  const areaW = area.clientWidth - horizontalPadding
+  const areaH = area.clientHeight - verticalPadding
   if (areaW <= 0 || areaH <= 0) return
   const scaleX = areaW / w
   const scaleY = areaH / h
@@ -132,16 +135,16 @@ onUnmounted(() => {
     <BuilderToolbar @export="showExportDialog = true" @preview="showPreview = true" />
 
     <!-- Body: Sidebar + Canvas + Product Editor -->
-    <div class="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+    <div class="builder-responsive-editor-body flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
       <!-- Left Sidebar (72px icons + 360px panel) -->
       <BuilderSidebar />
 
       <!-- Main area -->
-      <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main class="builder-responsive-editor-main flex-1 flex flex-col min-w-0 overflow-hidden">
         <!-- Canvas area — centered both axes -->
         <div
           ref="canvasAreaRef"
-          class="flex-1 overflow-auto flex bg-gray-100 p-6"
+          class="min-h-0 flex-1 overflow-auto flex bg-gray-100 p-2 sm:p-4 lg:p-6"
         >
           <template v-if="isLoading">
             <div class="flex flex-col items-center gap-3">
@@ -157,7 +160,7 @@ onUnmounted(() => {
         <!-- Bottom: Pagination + Product editor -->
         <div class="shrink-0 border-t border-gray-200 bg-gray-50">
           <!-- Pagination (QROfertas spec: Anterior / Pagina X de Y / Proximo) -->
-          <div v-if="totalPages > 1" class="flex items-center justify-center gap-3 py-2 border-b border-gray-200">
+          <div v-if="totalPages > 1" class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 py-2 px-2 border-b border-gray-200">
             <button
               @click="setCurrentPage(currentPage - 1)"
               :disabled="currentPage <= 1"
@@ -193,7 +196,9 @@ onUnmounted(() => {
           </div>
 
           <!-- Product editor cards below canvas -->
-          <BuilderProductEditor />
+          <div class="builder-responsive-product-editor min-h-0 shrink-0 overflow-y-auto">
+            <BuilderProductEditor />
+          </div>
         </div>
       </main>
     </div>
@@ -236,7 +241,7 @@ onUnmounted(() => {
 
         <!-- Encarte puro — sem toolbar/sidebar, tamanho real escalado para caber na tela -->
         <div
-          class="overflow-auto max-h-[95vh] max-w-[95vw]"
+          class="overflow-auto max-h-[95dvh] max-w-[95vw]"
           :style="{
             width: `${(model?.width ?? 1080) * previewScale}px`,
             height: `${(model?.height ?? 1080) * previewScale}px`,
@@ -258,3 +263,23 @@ onUnmounted(() => {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 1023px) {
+  .builder-responsive-product-editor {
+    max-height: 24dvh;
+  }
+}
+
+@media (max-height: 520px) {
+  .builder-responsive-editor-body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .builder-responsive-editor-main {
+    min-height: 220px;
+    flex-shrink: 0;
+  }
+}
+</style>

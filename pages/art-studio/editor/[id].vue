@@ -1791,13 +1791,13 @@ onBeforeUnmount(() => {
 .studio-workspace {
   display: grid;
   grid-template-columns: 245px minmax(200px, 1fr) 280px;
-  height: calc(100vh - 166px);
-  min-height: 650px;
+  height: calc(100dvh - 166px);
+  min-height: min(650px, calc(100dvh - 166px));
 }
 .art-shell--embedded .studio-workspace,
 .studio-workspace--embedded {
-  height: calc(100vh - 220px);
-  min-height: 520px;
+  height: calc(100dvh - 220px);
+  min-height: min(520px, calc(100dvh - 220px));
 }
 .studio-layers,
 .studio-properties {
@@ -2090,7 +2090,8 @@ onBeforeUnmount(() => {
   color: #172b45;
   width: 480px;
   max-width: 92vw;
-  max-height: 90vh;
+  max-height: 90dvh;
+  overflow-y: auto;
   padding: 28px;
 }
 .publish-dialog::backdrop {
@@ -2139,10 +2140,11 @@ onBeforeUnmount(() => {
   }
   .studio-toolbar button span,
   .back-catalog span {
-    display: none;
+    display: inline;
   }
   .studio-toolbar .art-button {
     padding: 9px;
+    white-space: nowrap;
   }
   .studio-workspace {
     display: flex;
@@ -2152,8 +2154,8 @@ onBeforeUnmount(() => {
   }
   .canvas-section {
     order: 1;
-    height: 58vh;
-    min-height: 400px;
+    height: 58dvh;
+    min-height: min(400px, 58dvh);
   }
   .studio-layers,
   .studio-properties {
@@ -2161,7 +2163,7 @@ onBeforeUnmount(() => {
     order: 3;
     overflow: visible;
     border: 0;
-    padding: 24px;
+    padding: 16px;
     min-height: 270px;
   }
   .studio-layers.mobile-open,
@@ -2215,5 +2217,18 @@ onBeforeUnmount(() => {
   .layer-select span {
     max-width: none;
   }
+}
+
+@media (max-width: 480px) {
+  .studio-toolbar { align-items: stretch; }
+  .studio-toolbar .art-name { flex: 1 1 100%; min-width: 0; }
+  .studio-toolbar .art-name input { max-width: none; }
+  .studio-toolbar .toolbar-history { margin-left: 0; }
+  .studio-toolbar .art-button { flex: 1 1 auto; }
+  .canvas-section { height: 54dvh; }
+  .canvas-topline, .canvas-bottomline { flex-wrap: wrap; align-items: center; }
+  .mobile-panel-tabs button { padding: 12px 8px; font-size: 12px; }
+  .add-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .publish-dialog { padding: 18px; }
 }
 </style>

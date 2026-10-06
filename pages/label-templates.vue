@@ -26,7 +26,7 @@ import {
 } from '~/utils/labelTemplateHelpers'
 import { createEditableLabelTemplateGroup } from '~/utils/labelTemplateFactory'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
-import { renderLabelTemplateCatalogPreview } from '~/utils/labelTemplateCatalogPreview'
+import { createLazyCatalogPreviewQueue } from '~/utils/lazyCatalogPreviewQueue'
 
 definePageMeta({
   layout: false,
@@ -76,10 +76,62 @@ const isSaving = ref(false)
 const isDuplicating = ref(false)
 const deletingTemplateId = ref<string | null>(null)
 const failedPreviewIds = ref<Set<string>>(new Set())
-const generatedPreviews = ref<Record<string, string>>({})
-const pendingPreviewIds = new Set<string>()
+type ServerPreview = { url: string; revision: string }
+const generatedPreviews = ref<Record<string, ServerPreview>>({})
+const previewImageRetries = new Map<string, number>()
+const previewConflictRetries = new Map<string, number>()
+const previewConflictRetryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const previewGrid = ref<HTMLElement | null>(null)
+const previewElements = new Map<string, Element>()
+type PreviewJob = { id: string; revision: number }
+let previewRevisionSequence = 0
+const previewRevisions = new Map<string, number>()
+let isPageMounted = false
 const toast = ref<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+const previewScheduler = createLazyCatalogPreviewQueue<PreviewJob, ServerPreview>({
+  concurrency: 2,
+  rootMargin: '240px 0px',
+  getId: (job) => job.id,
+  getRevision: (job) => job.revision,
+  isCurrent: (job) => isPageMounted
+    && previewRevisions.get(job.id) === job.revision
+    && !generatedPreviews.value[job.id]
+    && templates.value.some((template) => template.id === job.id),
+  render: async (job) => {
+    const headers = await getApiAuthHeaders()
+    const response = await $fetch<any>(`/api/label-templates/${encodeURIComponent(job.id)}/preview`, { method: 'GET', headers })
+    const url = String(response?.url || '').trim()
+    const revision = String(response?.revision || '').trim()
+    if (!url || !revision) throw new Error('O servidor não retornou uma prévia pronta para este modelo.')
+    return { url, revision }
+  },
+  publish: (job, image) => {
+    generatedPreviews.value = { ...generatedPreviews.value, [job.id]: image }
+    failedPreviewIds.value.delete(job.id)
+    previewConflictRetries.delete(job.id)
+    const timer = previewConflictRetryTimers.get(job.id)
+    if (timer) clearTimeout(timer)
+    previewConflictRetryTimers.delete(job.id)
+  },
+  onError: (job, error) => {
+    const statusCode = Number((error as any)?.statusCode || (error as any)?.status || (error as any)?.response?.status || 0)
+    if (statusCode === 409 && (previewConflictRetries.get(job.id) || 0) < 1) {
+      previewConflictRetries.set(job.id, (previewConflictRetries.get(job.id) || 0) + 1)
+      const timer = setTimeout(() => {
+        previewConflictRetryTimers.delete(job.id)
+        if (!isPageMounted || previewRevisions.get(job.id) !== job.revision) return
+        const current = templates.value.find((template) => template.id === job.id)
+        if (current) queuePreview(current)
+      }, 0)
+      previewConflictRetryTimers.set(job.id, timer)
+      return
+    }
+    failedPreviewIds.value = new Set([...failedPreviewIds.value, job.id])
+    console.warn('[label-templates] Não foi possível gerar a prévia da etiqueta', job.id, error)
+  }
+})
 
 const filteredTemplates = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -133,7 +185,48 @@ const sortTemplates = (items: LabelTemplate[]) => [...items].sort((a, b) => {
   return bTime - aTime
 })
 
+const invalidatePreview = (templateId: string): number => {
+  previewRevisionSequence += 1
+  previewRevisions.set(templateId, previewRevisionSequence)
+  return previewRevisionSequence
+}
+
+const queuePreview = (template: LabelTemplate) => {
+  if (!isPageMounted || failedPreviewIds.value.has(template.id)) return
+  if (generatedPreviews.value[template.id]) return
+  const revision = previewRevisions.get(template.id) ?? invalidatePreview(template.id)
+  previewScheduler.enqueue({ id: template.id, revision })
+}
+
+const setPreviewElement = (templateId: string, element: unknown) => {
+  if (element instanceof Element) previewElements.set(templateId, element)
+  else previewElements.delete(templateId)
+}
+
+const refreshPreviewObserver = async () => {
+  await nextTick()
+  if (!isPageMounted) return
+  const targets = filteredTemplates.value.flatMap((template) => {
+    const element = previewElements.get(template.id)
+    if (!element || failedPreviewIds.value.has(template.id) || generatedPreviews.value[template.id]) return []
+    return [{ id: template.id, element, resolve: () => {
+      const current = templates.value.find((item) => item.id === template.id)
+      if (!current || failedPreviewIds.value.has(current.id) || generatedPreviews.value[current.id]) return undefined
+      const revision = previewRevisions.get(current.id) ?? invalidatePreview(current.id)
+      return { id: current.id, revision }
+    } }]
+  })
+  const scrollRoot = previewGrid.value?.closest<HTMLElement>('.admin-shell__main') ?? null
+  previewScheduler.observe(scrollRoot, targets)
+}
+
 const upsertLocalTemplate = (template: LabelTemplate) => {
+  invalidatePreview(template.id)
+  previewImageRetries.delete(template.id)
+  previewConflictRetries.delete(template.id)
+  const retryTimer = previewConflictRetryTimers.get(template.id)
+  if (retryTimer) clearTimeout(retryTimer)
+  previewConflictRetryTimers.delete(template.id)
   const failed = new Set(failedPreviewIds.value)
   failed.delete(template.id)
   failedPreviewIds.value = failed
@@ -145,65 +238,62 @@ const upsertLocalTemplate = (template: LabelTemplate) => {
   const index = templates.value.findIndex((item) => item.id === template.id)
   if (index === -1) {
     templates.value = sortTemplates([...templates.value, template])
-    if (!template.previewDataUrl) void generatePreview(template)
+    void refreshPreviewObserver()
     return
   }
   const next = [...templates.value]
   next[index] = template
   templates.value = sortTemplates(next)
-  if (!template.previewDataUrl) void generatePreview(template)
+  void refreshPreviewObserver()
 }
 
 const markPreviewFailed = (templateId: string) => {
-  if (failedPreviewIds.value.has(templateId)) return
-  failedPreviewIds.value = new Set([...failedPreviewIds.value, templateId])
+  const attempt = (previewImageRetries.get(templateId) ?? 0) + 1
+  previewImageRetries.set(templateId, attempt)
+  const next = { ...generatedPreviews.value }
+  delete next[templateId]
+  generatedPreviews.value = next
+  if (attempt > 1) {
+    failedPreviewIds.value = new Set([...failedPreviewIds.value, templateId])
+    return
+  }
   const template = templates.value.find((item) => item.id === templateId)
-  if (template) void generatePreview(template)
+  if (template) queuePreview(template)
 }
 
 const previewSrc = (template: LabelTemplate): string | undefined =>
-  !failedPreviewIds.value.has(template.id) && template.previewDataUrl
-    ? template.previewDataUrl
-    : generatedPreviews.value[template.id]
+  !failedPreviewIds.value.has(template.id) ? generatedPreviews.value[template.id]?.url : undefined
 
-const generatePreview = async (template: LabelTemplate): Promise<void> => {
-  if (pendingPreviewIds.has(template.id) || generatedPreviews.value[template.id]) return
-  pendingPreviewIds.add(template.id)
-  try {
-    const image = await renderLabelTemplateCatalogPreview(template.group)
-    if (image) generatedPreviews.value = { ...generatedPreviews.value, [template.id]: image }
-  } catch (error) {
-    console.warn('[label-templates] Não foi possível gerar a prévia da etiqueta', template.id, error)
-  } finally {
-    pendingPreviewIds.delete(template.id)
-  }
+const retryPreview = (template: LabelTemplate) => {
+  failedPreviewIds.value.delete(template.id)
+  previewImageRetries.delete(template.id)
+  previewConflictRetries.delete(template.id)
+  queuePreview(template)
 }
 
-const generateMissingPreviews = async (items: LabelTemplate[]): Promise<void> => {
-  const queue = items.filter((template) => !template.previewDataUrl)
-  let cursor = 0
-  const worker = async () => {
-    while (cursor < queue.length) {
-      const template = queue[cursor++]
-      if (template) await generatePreview(template)
-    }
-  }
-  await Promise.all([worker(), worker()])
-}
+const markPreviewLoaded = (templateId: string) => previewImageRetries.delete(templateId)
 
 const loadTemplates = async () => {
   isLoading.value = true
   loadError.value = null
   try {
     const headers = await getApiAuthHeaders()
-    const response: any = await $fetch('/api/label-templates', { method: 'GET', headers })
+    const response: any = await $fetch('/api/label-templates', { method: 'GET', headers, query: { preview: '0' } })
     if (response?.success === false) {
       throw new Error(String(response?.message || 'Não foi possível carregar os modelos.'))
     }
     const rows = Array.isArray(response?.templates) ? response.templates : []
+    for (const previous of templates.value) invalidatePreview(previous.id)
     templates.value = sortTemplates(rows.map(mapTemplateRow).filter(Boolean) as LabelTemplate[])
+    for (const template of templates.value) invalidatePreview(template.id)
+    generatedPreviews.value = {}
+    failedPreviewIds.value = new Set()
+    previewImageRetries.clear()
+    previewConflictRetries.clear()
+    for (const timer of previewConflictRetryTimers.values()) clearTimeout(timer)
+    previewConflictRetryTimers.clear()
     await ensureStarterTemplate()
-    void generateMissingPreviews(templates.value)
+    void refreshPreviewObserver()
   } catch (error: any) {
     loadError.value = String(error?.data?.statusMessage || error?.message || 'Não foi possível carregar os modelos.')
     templates.value = []
@@ -581,11 +671,21 @@ const formatDate = (value: string) => {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+watch(filteredTemplates, () => { void refreshPreviewObserver() }, { flush: 'post' })
+
 onMounted(() => {
+  isPageMounted = true
   void loadTemplates()
 })
 
 onBeforeUnmount(() => {
+  isPageMounted = false
+  previewScheduler.dispose()
+  previewElements.clear()
+  previewImageRetries.clear()
+  for (const timer of previewConflictRetryTimers.values()) clearTimeout(timer)
+  previewConflictRetryTimers.clear()
+  previewConflictRetries.clear()
   if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
@@ -667,12 +767,13 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <div v-else class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <article v-for="template in filteredTemplates" :key="template.id" class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/5">
+        <div v-else ref="previewGrid" class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <article v-for="template in filteredTemplates" :key="template.id" :ref="(element) => setPreviewElement(template.id, element)" class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/5">
             <div class="relative flex h-44 items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#eef2ff,transparent_42%),#f8fafc] p-5">
-              <img v-if="previewSrc(template)" :src="previewSrc(template)" :alt="template.name" class="max-h-full max-w-full object-contain drop-shadow-xl" loading="lazy" decoding="async" @error="markPreviewFailed(template.id)" />
+              <img v-if="previewSrc(template)" :src="previewSrc(template)" :alt="template.name" class="max-h-full max-w-full object-contain drop-shadow-xl" loading="lazy" decoding="async" @load="markPreviewLoaded(template.id)" @error="markPreviewFailed(template.id)" />
               <div v-else class="flex h-24 w-44 items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-white/70 text-blue-300">
-                <ImagePlus class="h-8 w-8" />
+                <button v-if="failedPreviewIds.has(template.id)" type="button" class="rounded-lg px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50" @click="retryPreview(template)">Tentar prévia novamente</button>
+                <ImagePlus v-else class="h-8 w-8" />
               </div>
               <span v-if="template.isBuiltIn" class="absolute left-3 top-3 rounded-full bg-white/85 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shadow-sm">Sistema</span>
               <span v-else class="absolute left-3 top-3 rounded-full bg-blue-600/90 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm">Meu modelo</span>
@@ -703,8 +804,8 @@ onBeforeUnmount(() => {
       </section>
     </main>
 
-    <div v-if="showCreateDialog" class="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" @click.self="!isPreparingTemplate && (showCreateDialog = false)">
-      <div class="w-full max-w-lg rounded-3xl bg-white p-5 shadow-2xl sm:p-7">
+    <div v-if="showCreateDialog" class="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center sm:p-5" @click.self="!isPreparingTemplate && (showCreateDialog = false)">
+      <div class="my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:max-h-[calc(100dvh-2.5rem)] sm:p-7">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-[11px] font-bold uppercase tracking-[.16em] text-blue-500">Novo modelo</p>

@@ -55,34 +55,36 @@ const handleCancel = () => {
         >
           <div
             v-if="show"
-            class="w-full max-w-sm bg-white border border-slate-200 rounded-xl p-5 relative shadow-xl"
+            class="w-full min-w-0 max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain bg-white border border-slate-200 rounded-xl p-4 sm:p-5 relative shadow-xl"
           >
             <!-- Close button -->
             <button
               @click="handleCancel"
+              type="button"
+              aria-label="Fechar confirmação"
               class="absolute top-4 right-4 p-1 hover:bg-slate-100 rounded transition-colors"
             >
               <X class="w-3.5 h-3.5 text-slate-400" />
             </button>
 
             <!-- Title -->
-            <h3 class="text-sm font-semibold text-slate-800 mb-2 pr-8">{{ title }}</h3>
+            <h3 class="wrap-anywhere text-sm font-semibold text-slate-800 mb-2 pr-8">{{ title }}</h3>
 
             <!-- Message -->
-            <p class="text-[11px] text-slate-500 mb-5">{{ message }}</p>
+            <p class="wrap-anywhere text-xs text-slate-500 mb-5">{{ message }}</p>
 
             <!-- Actions -->
-            <div class="flex gap-2">
+            <div class="flex flex-wrap gap-2">
               <button
                 @click="handleCancel"
-                class="flex-1 h-8 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] transition-colors font-medium"
+                class="min-w-0 flex-1 min-h-10 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs transition-colors font-medium"
               >
                 {{ cancelText }}
               </button>
               <button
                 @click="handleConfirm"
                 :class="[
-                  'flex-1 h-8 rounded text-[11px] transition-colors font-medium',
+                  'min-w-0 flex-1 min-h-10 px-3 py-2 rounded text-xs transition-colors font-medium',
                   variant === 'danger' ? 'bg-red-600 hover:bg-red-500 text-white' :
                   variant === 'warning' ? 'bg-yellow-600 hover:bg-yellow-500 text-white' :
                   'bg-violet-600 hover:bg-violet-500 text-white'

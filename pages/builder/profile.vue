@@ -321,7 +321,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto px-4 py-8">
+  <div class="w-full min-w-0 max-w-3xl mx-auto px-3 sm:px-4 py-5 sm:py-8">
     <!-- Header -->
     <div class="mb-6">
       <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Minha Empresa</h1>
@@ -365,7 +365,7 @@ onMounted(() => {
         leave-to-class="opacity-0 -translate-y-2"
       >
         <div v-if="showSuccess" class="p-4 bg-blue-50 border border-blue-200 rounded-xl backdrop-blur-sm">
-          <div class="flex items-center gap-3">
+          <div class="flex min-w-0 items-center gap-3">
             <div class="shrink-0 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
               <Check class="w-3.5 h-3.5 text-white" />
             </div>

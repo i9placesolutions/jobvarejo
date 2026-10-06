@@ -4,6 +4,7 @@ import { handleFileUpload } from '../../utils/editorProductImageActionsControlle
 const fixture = (mode: string | null) => ({
  pendingLocalImageActionMode: {value:mode}, pendingImageReplaceTargetId:{value:'image'}, pendingImageAddCardId:{value:'card'},
  productImagePickerTargetImageId:{value:null}, productImagePickerTargetCardId:{value:null},
+ showProductImageUploadPicker:{value:false}, productImagePickerMode:{value:null as string|null},
  productImagePickerError:{value:''},
  toWasabiProxyUrl:(url:string)=>`proxy:${url}`,
  uploadFile:vi.fn().mockResolvedValue({success:true,url:'processed.webp'}), replaceImageByCustomId:vi.fn().mockResolvedValue(true),

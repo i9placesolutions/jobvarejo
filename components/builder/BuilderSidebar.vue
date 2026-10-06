@@ -1941,11 +1941,11 @@ const storageProxyUrl = (keyOrUrl: string | null | undefined): string => {
 
 <style scoped>
 .builder-panel-close { display: none; }
-@media(max-width:767px) {
+@media(max-width:1023px) {
  .builder-responsive-sidebar { position: relative; height: auto; width: 100%; }
  .builder-responsive-sidebar > div:first-child { flex-direction: row; width: 100%; overflow-x: auto; padding: 4px; border-bottom: 1px solid #e5e7eb; }
- .builder-responsive-sidebar > div:first-child button { flex-shrink: 0; }
- .builder-responsive-panel { position: fixed; z-index: 80; inset: 20dvh 0 0; width: 100%; border-radius: 16px 16px 0 0; box-shadow: 0 -10px 40px #0003; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+ .builder-responsive-sidebar > div:first-child button { flex: 0 0 56px; min-height: 48px; }
+ .builder-responsive-panel { position: fixed; z-index: 80; inset: clamp(144px, 22dvh, 220px) 0 0; width: 100%; max-height: calc(100dvh - clamp(144px, 22dvh, 220px)); min-height: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -10px 40px #0003; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
  .builder-panel-close { display: block; position: sticky; top: 0; width: 100%; min-height: 48px; z-index: 2; background: #ecfdf5; color: #047857; font-weight: 600; }
  .builder-responsive-panel button, .builder-responsive-panel select { min-height:44px; }
  .builder-responsive-panel input:not([type="checkbox"]):not([type="color"]), .builder-responsive-panel textarea, .builder-responsive-panel select { font-size:16px; min-width:0; }

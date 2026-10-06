@@ -218,7 +218,7 @@ onBeforeUnmount(() => {
     <header class="kiosk-top">
       <div class="brand"><Radio :size="20" /><div><strong>JobVarejo</strong><span>Player kiosk</span></div></div>
       <div v-if="playerToken" class="live-pill"><i></i>{{ station?.name || 'Loja' }} · {{ schedule?.programName || 'Catálogo' }}</div>
-      <button v-if="playerToken" class="ghost" @click="disconnect">Trocar token</button>
+      <button v-if="playerToken" class="ghost" aria-label="Trocar token do player" @click="disconnect">Trocar token</button>
     </header>
 
     <section v-if="!playerToken" class="gate">
@@ -246,13 +246,13 @@ onBeforeUnmount(() => {
           <h1>{{ currentTrack?.title || 'Aguardando fila' }}</h1>
           <p>{{ currentTrack?.artist || 'A programação entra automaticamente pela agenda' }}</p>
           <div class="controls">
-            <button @click="playPrevious"><ChevronLeft :size="22" /></button>
-            <button class="play" :class="{ 'pulse-play': autoplayBlocked && !isPlaying }" :disabled="isLoadingTrack" @click="togglePlay">
+            <button aria-label="Tocar faixa anterior" @click="playPrevious"><ChevronLeft :size="22" /></button>
+            <button class="play" :aria-label="isPlaying ? 'Pausar reprodução' : 'Iniciar reprodução'" :class="{ 'pulse-play': autoplayBlocked && !isPlaying }" :disabled="isLoadingTrack" @click="togglePlay">
               <LoaderCircle v-if="isLoadingTrack" class="spin" :size="22" />
               <Pause v-else-if="isPlaying" :size="22" fill="currentColor" />
               <Play v-else :size="22" fill="currentColor" />
             </button>
-            <button @click="playNext"><ChevronRight :size="22" /></button>
+            <button aria-label="Tocar próxima faixa" @click="playNext"><ChevronRight :size="22" /></button>
             <button class="ghost shuffle-btn" :class="{ active: isShuffle }" :title="isShuffle ? 'Modo Aleatório Ativado' : 'Ativar Modo Aleatório'" @click="isShuffle = !isShuffle">
               <Shuffle :size="18" />
             </button>
@@ -303,7 +303,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.kiosk { min-height:100vh; padding:24px 28px 48px; color:#efeaf8; background:radial-gradient(circle at top left,#2a1a45,#0d0c12 48%); font-family:Inter,system-ui,sans-serif; }
+.kiosk { min-height:100dvh; padding:24px 28px 48px; color:#efeaf8; background:radial-gradient(circle at top left,#2a1a45,#0d0c12 48%); font-family:Inter,system-ui,sans-serif; overflow-x:clip; }
 .kiosk-top { display:flex; align-items:center; gap:16px; margin-bottom:28px; }
 .brand { display:flex; align-items:center; gap:10px; }
 .brand strong,.brand span { display:block; }
@@ -354,10 +354,37 @@ button.primary { border:0; background:linear-gradient(135deg,#8b5cf6,#6d3fd6); c
 .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); padding:10px 14px; border-radius:999px; background:rgba(20,18,30,.95); border:1px solid rgba(255,255,255,.1); font-size:12px; }
 .spin { animation:spin 1s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
+.kiosk, .kiosk > *, .meta { min-width:0; }
+.kiosk-top { flex-wrap:wrap; }
+.live-pill { max-width:100%; min-width:0; overflow-wrap:anywhere; }
+.live-pill i { flex:none; }
+.meta h1, .meta p, .queue-row strong, .queue-row small { overflow-wrap:anywhere; }
+.controls button, .ghost, button.primary { min-width:44px; min-height:44px; }
+.progress input, .volume input { min-width:0; min-height:24px; }
+.toast { width:min(540px, calc(100% - 24px)); max-width:calc(100% - 24px); text-align:center; overflow-wrap:anywhere; }
 @media (max-width:800px) {
-  .now { grid-template-columns:1fr; }
+  .now { grid-template-columns:minmax(0,1fr); gap:18px; }
   .cover { width:min(280px,100%); margin:0 auto; }
   .kiosk { padding:18px 16px 40px; }
-  .meta h1 { font-size:28px; }
+  .meta h1 { font-size:clamp(24px, 7vw, 32px); }
+  .kiosk-top { gap:10px; margin-bottom:20px; }
+  .live-pill { margin-left:0; flex:1 1 100%; order:3; }
+}
+@media (max-width:420px) {
+  .kiosk { padding:14px 12px 30px; }
+  .gate-card { padding:20px 16px; }
+  .controls { flex-wrap:wrap; gap:7px; }
+  .controls .play { width:54px; height:54px; }
+  .meta p { font-size:13px; line-height:1.5; }
+  .progress, .volume { gap:6px; }
+}
+@media (max-height:500px) and (min-width:801px) {
+  .kiosk { padding-block:12px 22px; }
+  .kiosk-top { margin-bottom:14px; }
+  .now { grid-template-columns:minmax(140px, 20vw) minmax(0,1fr); gap:18px; margin-bottom:18px; }
+  .cover { width:min(100%, 180px); }
+  .meta h1 { font-size:clamp(22px, 4vh, 30px); }
+  .meta p { margin-bottom:8px; }
+  .progress, .volume { margin-top:7px; }
 }
 </style>

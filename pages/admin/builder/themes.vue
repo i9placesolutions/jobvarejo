@@ -524,7 +524,7 @@ onMounted(() => {
 <template>
   <AdminWorkspaceShell>
   <div class="admin-page admin-page--builder">
-    <div class="mx-auto max-w-6xl px-6 py-10">
+    <div class="mx-auto w-full min-w-0 max-w-6xl px-3 py-5 sm:px-6 sm:py-10">
       <!-- Header -->
       <div class="mb-8">
         <NuxtLink
@@ -870,7 +870,7 @@ onMounted(() => {
           <!-- CSS Config -->
           <div>
             <h3 class="text-sm font-medium text-slate-600 mb-4 uppercase tracking-wider">Configuracao Visual (CSS)</h3>
-            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            <div class="grid grid-cols-1 min-[380px]:grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 sm:gap-4">
               <div>
                 <label class="block text-xs font-medium text-[color:var(--jv-muted)] mb-1">Cor Primaria</label>
                 <div class="flex items-center gap-2">

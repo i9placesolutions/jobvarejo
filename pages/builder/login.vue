@@ -49,7 +49,7 @@ const handleLogin = async () => {
 <template>
   <div class="w-full">
     <div class="w-full">
-      <div class="bg-white border border-slate-200 rounded-4xl p-8 sm:p-10 shadow-xl shadow-black/5 relative overflow-hidden">
+      <div class="w-full min-w-0 bg-white border border-slate-200 rounded-3xl sm:rounded-4xl p-5 sm:p-10 shadow-xl shadow-black/5 relative overflow-hidden">
         <!-- Decoration light -->
         <div class="absolute -top-32 -right-32 w-64 h-64 bg-blue-100/60 rounded-full blur-[80px] pointer-events-none"></div>
         <div class="absolute -bottom-32 -left-32 w-64 h-64 bg-sky-100/40 rounded-full blur-[80px] pointer-events-none"></div>

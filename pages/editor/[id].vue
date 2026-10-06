@@ -555,7 +555,7 @@ const openPageHistory = () => {
   <ClientOnly>
   <div class="h-screen h-dvh flex flex-col bg-[#0f0f0f] overflow-hidden">
     <!-- Project Name Header -->
-    <div :class="['border-b border-blue-300/20 flex items-center justify-between px-3 bg-[#173d70] shrink-0', isMobile ? 'min-h-[calc(40px+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]' : 'h-8']">
+    <div class="editor-page-header" :class="['border-b border-blue-300/20 flex items-center justify-between px-3 bg-[#173d70] shrink-0', isMobile ? 'min-h-[calc(40px+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)]' : 'h-8']">
       <div class="flex flex-1 items-center gap-2 min-w-0 mr-2">
         <WorkspaceMenuButton />
         <button
@@ -676,6 +676,48 @@ const openPageHistory = () => {
 /* Save pill — subtle fade between states */
 .save-pill {
   transition: color 0.3s ease, background-color 0.3s ease;
+}
+
+.editor-page-header,
+.editor-page-header > div {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .editor-page-header {
+    gap: 6px;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .editor-page-header > div:first-child {
+    gap: 6px;
+    margin-right: 0;
+  }
+
+  .editor-page-header .save-pill {
+    max-width: 38vw;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    padding-inline: 6px;
+  }
+
+  .editor-page-header .save-pill > span:nth-child(2) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .editor-page-header .save-retry-btn,
+  .editor-page-header > div:last-child > button {
+    min-height: 36px;
+  }
+}
+
+@media (max-width: 359px) {
+  .editor-page-header .save-pill {
+    max-width: 34vw;
+  }
 }
 
 /* Retry button — pop in */

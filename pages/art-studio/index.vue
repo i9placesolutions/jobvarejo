@@ -487,6 +487,7 @@ const start = () => {
 .art-catalog {
   max-width: 1600px;
   margin: auto;
+  min-width: 0;
   padding: 42px 4vw 0;
 }
 .catalog-hero {
@@ -762,7 +763,8 @@ h1 {
   width: 92vw;
   background: #fff;
   color: #172b45;
-  max-height: 90vh;
+  max-height: 90dvh;
+  overflow-y: auto;
 }
 .art-template-dialog::backdrop {
   background: rgba(23, 61, 112, 0.55);
@@ -837,7 +839,7 @@ h1 {
 }
 @media (max-width: 700px) {
   .art-catalog {
-    padding: 26px 20px 0;
+    padding: 26px 16px 0;
   }
   .catalog-hero {
     align-items: flex-start;
@@ -884,5 +886,17 @@ h1 {
   .format-filter > svg {
     display: none;
   }
+}
+
+@media (max-width: 420px) {
+  .art-catalog { padding: 20px 12px 0; }
+  .collection-grid { grid-template-columns: minmax(0, 1fr); }
+  .design-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .catalog-search { gap: 8px; padding: 12px; }
+  .catalog-search input { min-width: 0; }
+  .catalog-footer { align-items: flex-start; flex-direction: column; }
+  .template-detail section { padding: 42px 18px 20px; }
+  .template-detail h2 { font-size: 23px; }
+  .detail-preview { padding: 16px; }
 }
 </style>

@@ -1,0 +1,163 @@
+[
+ {
+  "id": "lib-magnific-2650",
+  "name": "Festa na Roça · Kike Gutz",
+  "bpm": 100,
+  "firstBeat": 0.569,
+  "category": "forro",
+  "mood": [
+   "Energetic",
+   "Upbeat"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-2759",
+  "name": "Alegria Sem Fim · MudiG",
+  "bpm": 121,
+  "firstBeat": 0.244,
+  "category": "forro",
+  "mood": [
+   "Happy",
+   "Energetic"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-2781",
+  "name": "Dança do Coração · MudiG",
+  "bpm": 94,
+  "firstBeat": 0.023,
+  "category": "forro",
+  "mood": [
+   "Happy",
+   "Peaceful",
+   "Soulful"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-2702",
+  "name": "Batida do Amor · MudiG",
+  "bpm": 111,
+  "firstBeat": 0.511,
+  "category": "sertanejo",
+  "mood": [
+   "Groovy",
+   "Upbeat"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-2700",
+  "name": "Ecos da Bahia · MudiG",
+  "bpm": 130,
+  "firstBeat": 2.763,
+  "category": "axe",
+  "mood": [
+   "Happy",
+   "Energetic",
+   "Melancholic"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-2365",
+  "name": "Electric Funkadelic · Kike Gutz",
+  "bpm": 110,
+  "firstBeat": 0.522,
+  "category": "funk",
+  "mood": [
+   "Groovy",
+   "Energetic"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-5980",
+  "name": "La Noche Pa Mi · Off Beat",
+  "bpm": 107,
+  "firstBeat": 0.07,
+  "category": "eletronica",
+  "mood": [
+   "Energetic",
+   "Upbeat"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-5141",
+  "name": "Take It Further · Off Beat",
+  "bpm": 115,
+  "firstBeat": 0.023,
+  "category": "eletronica",
+  "mood": [
+   "Energetic",
+   "Exciting",
+   "Upbeat"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-3209",
+  "name": "Bailoteo Vibes · MudiG",
+  "bpm": 133,
+  "firstBeat": 0.081,
+  "category": "eletronica",
+  "mood": [
+   "Groovy",
+   "Energetic",
+   "Exciting"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-3082",
+  "name": "Shake It · müxa",
+  "bpm": 125,
+  "firstBeat": 0.221,
+  "category": "eletronica",
+  "mood": [
+   "Groovy",
+   "Upbeat"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-4003",
+  "name": "Cherry Beat · MudiG",
+  "bpm": 100,
+  "firstBeat": 0.279,
+  "category": "pop",
+  "mood": [
+   "Happy",
+   "Upbeat"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-4218",
+  "name": "Shiny Candy Pop · Kike Gutz",
+  "bpm": 120,
+  "firstBeat": 3.471,
+  "category": "pop",
+  "mood": [
+   "Happy",
+   "Upbeat"
+  ],
+  "source": "magnific"
+ },
+ {
+  "id": "lib-magnific-5557",
+  "name": "HYPE · müxa",
+  "bpm": 126,
+  "firstBeat": 5.445,
+  "category": "pop",
+  "mood": [
+   "Epic",
+   "Energetic",
+   "Exciting"
+  ],
+  "source": "magnific"
+ }
+]

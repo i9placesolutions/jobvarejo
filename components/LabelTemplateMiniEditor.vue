@@ -6118,6 +6118,36 @@ watch(
   @apply lg:col-span-2 overflow-y-auto pr-1 min-h-[80vh];
 }
 
+@media (max-width: 1023px) {
+  .me-container { min-width: 0; min-height: 0; height: 100%; }
+  .me-grid { min-width: 0; }
+  .me-main-panel { min-width: 0; min-height: min(42dvh, 360px); }
+  .me-props-panel { min-height: 0; max-height: min(48dvh, 520px); }
+  .me-toolbar-floating { right: 8px; max-width: calc(100% - 16px); flex-wrap: wrap; }
+  .me-top-bar { min-width: 0; }
+}
+
+@media (max-width: 560px) {
+  .me-container { padding: 6px; }
+  .me-top-bar { flex-wrap: wrap; gap: 6px; padding: 7px; }
+  .me-top-left { min-width: 0; flex-basis: 100%; }
+  .me-top-actions { margin-left: auto; }
+  .me-grid { gap: 8px; }
+  .me-main-panel { min-height: min(38dvh, 300px); padding-top: 76px; }
+  .me-toolbar-floating { left: 4px; right: 4px; top: 4px; justify-content: center; gap: 0; padding: 4px; }
+  .me-tool-btn-compact { width: 30px; height: 30px; }
+  .me-toolbar-divider { margin-inline: 1px; }
+  .me-bottom-controls-floating { max-width: calc(100% - 16px); padding: 6px; gap: 5px; }
+  .me-zoom-slider-compact { width: clamp(48px, 20vw, 80px); }
+  .me-props-panel { max-height: 48dvh; }
+}
+
+@media (max-width: 1023px) and (max-height: 600px) {
+  .me-grid { overflow-y: auto; overscroll-behavior: contain; }
+  .me-main-panel { min-height: 240px; }
+  .me-props-panel { max-height: none; overflow-y: visible; }
+}
+
 .me-insert-actions {
   @apply mb-3 grid grid-cols-2 gap-2;
 }

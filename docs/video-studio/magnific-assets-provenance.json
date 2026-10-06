@@ -1,0 +1,261 @@
+{
+ "fonte": "Magnific (antigo Freepik) — download do acervo de stock, plano Premium, uso interno para clientes (sem geração por IA)",
+ "licenca": "https://www.magnific.com/legal/terms-of-use",
+ "atualizadoEm": "2026-10-06T13:05:26.535Z",
+ "videos": [
+  {
+   "magnificId": 8768316,
+   "titulo": "Animated Red and Yellow Sunburst Background with Sparkling Stars",
+   "arquivo": "templates/backgrounds-video/magnific-8768316-sunburst-vertical.mp4",
+   "segundos": 10
+  },
+  {
+   "magnificId": 4065018,
+   "titulo": "Abstract Red and yellow light rays circle background (pop art)",
+   "arquivo": "templates/backgrounds-video/magnific-4065018-popart-rays-wide.mp4",
+   "segundos": 15
+  }
+ ],
+ "musicas": [
+  {
+   "magnificId": 2650,
+   "titulo": "Festa na Roça",
+   "artista": "Kike Gutz",
+   "generos": [
+    "World",
+    "Latin"
+   ],
+   "climas": [
+    "Energetic",
+    "Upbeat"
+   ],
+   "pagina": "https://www.magnific.com/music/2650",
+   "arquivo": "audio/lib-magnific-2650.mp3",
+   "bpm": 100,
+   "primeiraBatidaSeg": 0.569,
+   "baixadoEm": "2026-10-06T13:02:08.578Z"
+  },
+  {
+   "magnificId": 2759,
+   "titulo": "Alegria Sem Fim",
+   "artista": "MudiG",
+   "generos": [
+    "World",
+    "Latin"
+   ],
+   "climas": [
+    "Happy",
+    "Energetic"
+   ],
+   "pagina": "https://www.magnific.com/music/2759",
+   "arquivo": "audio/lib-magnific-2759.mp3",
+   "bpm": 121,
+   "primeiraBatidaSeg": 0.244,
+   "baixadoEm": "2026-10-06T13:02:10.908Z"
+  },
+  {
+   "magnificId": 2781,
+   "titulo": "Dança do Coração",
+   "artista": "MudiG",
+   "generos": [
+    "World",
+    "Latin"
+   ],
+   "climas": [
+    "Happy",
+    "Peaceful",
+    "Soulful"
+   ],
+   "pagina": "https://www.magnific.com/music/2781",
+   "arquivo": "audio/lib-magnific-2781.mp3",
+   "bpm": 94,
+   "primeiraBatidaSeg": 0.023,
+   "baixadoEm": "2026-10-06T13:02:12.680Z"
+  },
+  {
+   "magnificId": 2702,
+   "titulo": "Batida do Amor",
+   "artista": "MudiG",
+   "generos": [
+    "World",
+    "Latin"
+   ],
+   "climas": [
+    "Groovy",
+    "Upbeat"
+   ],
+   "pagina": "https://www.magnific.com/music/2702",
+   "arquivo": "audio/lib-magnific-2702.mp3",
+   "bpm": 111,
+   "primeiraBatidaSeg": 0.511,
+   "baixadoEm": "2026-10-06T13:02:14.663Z"
+  },
+  {
+   "magnificId": 2700,
+   "titulo": "Ecos da Bahia",
+   "artista": "MudiG",
+   "generos": [
+    "World",
+    "Latin"
+   ],
+   "climas": [
+    "Happy",
+    "Energetic",
+    "Melancholic"
+   ],
+   "pagina": "https://www.magnific.com/music/2700",
+   "arquivo": "audio/lib-magnific-2700.mp3",
+   "bpm": 130,
+   "primeiraBatidaSeg": 2.763,
+   "baixadoEm": "2026-10-06T13:02:17.555Z"
+  },
+  {
+   "magnificId": 2365,
+   "titulo": "Electric Funkadelic",
+   "artista": "Kike Gutz",
+   "generos": [
+    "Funk"
+   ],
+   "climas": [
+    "Groovy",
+    "Energetic"
+   ],
+   "pagina": "https://www.magnific.com/music/2365",
+   "arquivo": "audio/lib-magnific-2365.mp3",
+   "bpm": 110,
+   "primeiraBatidaSeg": 0.522,
+   "baixadoEm": "2026-10-06T13:02:19.222Z"
+  },
+  {
+   "magnificId": 5980,
+   "titulo": "La Noche Pa Mi",
+   "artista": "Off Beat",
+   "generos": [
+    "Electronic",
+    "Latin"
+   ],
+   "climas": [
+    "Energetic",
+    "Upbeat"
+   ],
+   "pagina": "https://www.magnific.com/music/5980",
+   "arquivo": "audio/lib-magnific-5980.mp3",
+   "bpm": 107,
+   "primeiraBatidaSeg": 0.07,
+   "baixadoEm": "2026-10-06T13:02:21.084Z"
+  },
+  {
+   "magnificId": 5141,
+   "titulo": "Take It Further",
+   "artista": "Off Beat",
+   "generos": [
+    "Electronic",
+    "Hip Hop"
+   ],
+   "climas": [
+    "Energetic",
+    "Exciting",
+    "Upbeat"
+   ],
+   "pagina": "https://www.magnific.com/music/5141",
+   "arquivo": "audio/lib-magnific-5141.mp3",
+   "bpm": 115,
+   "primeiraBatidaSeg": 0.023,
+   "baixadoEm": "2026-10-06T13:02:22.940Z"
+  },
+  {
+   "magnificId": 3209,
+   "titulo": "Bailoteo Vibes",
+   "artista": "MudiG",
+   "generos": [
+    "Electronic",
+    "Latin"
+   ],
+   "climas": [
+    "Groovy",
+    "Energetic",
+    "Exciting"
+   ],
+   "pagina": "https://www.magnific.com/music/3209",
+   "arquivo": "audio/lib-magnific-3209.mp3",
+   "bpm": 133,
+   "primeiraBatidaSeg": 0.081,
+   "baixadoEm": "2026-10-06T13:02:25.331Z"
+  },
+  {
+   "magnificId": 3082,
+   "titulo": "Shake It",
+   "artista": "müxa",
+   "generos": [
+    "Electronic",
+    "Funk",
+    "Disco",
+    "Corporate"
+   ],
+   "climas": [
+    "Groovy",
+    "Upbeat"
+   ],
+   "pagina": "https://www.magnific.com/music/3082",
+   "arquivo": "audio/lib-magnific-3082.mp3",
+   "bpm": 125,
+   "primeiraBatidaSeg": 0.221,
+   "baixadoEm": "2026-10-06T13:02:28.561Z"
+  },
+  {
+   "magnificId": 4003,
+   "titulo": "Cherry Beat",
+   "artista": "MudiG",
+   "generos": [
+    "Pop",
+    "Electronic"
+   ],
+   "climas": [
+    "Happy",
+    "Upbeat"
+   ],
+   "pagina": "https://www.magnific.com/music/4003",
+   "arquivo": "audio/lib-magnific-4003.mp3",
+   "bpm": 100,
+   "primeiraBatidaSeg": 0.279,
+   "baixadoEm": "2026-10-06T13:02:31.186Z"
+  },
+  {
+   "magnificId": 4218,
+   "titulo": "Shiny Candy Pop",
+   "artista": "Kike Gutz",
+   "generos": [
+    "Pop",
+    "Corporate"
+   ],
+   "climas": [
+    "Happy",
+    "Upbeat"
+   ],
+   "pagina": "https://www.magnific.com/music/4218",
+   "arquivo": "audio/lib-magnific-4218.mp3",
+   "bpm": 120,
+   "primeiraBatidaSeg": 3.471,
+   "baixadoEm": "2026-10-06T13:02:32.679Z"
+  },
+  {
+   "magnificId": 5557,
+   "titulo": "HYPE",
+   "artista": "müxa",
+   "generos": [
+    "Pop",
+    "Electronic"
+   ],
+   "climas": [
+    "Epic",
+    "Energetic",
+    "Exciting"
+   ],
+   "pagina": "https://www.magnific.com/music/5557",
+   "arquivo": "audio/lib-magnific-5557.mp3",
+   "bpm": 126,
+   "primeiraBatidaSeg": 5.445,
+   "baixadoEm": "2026-10-06T13:02:34.898Z"
+  }
+ ]
+}

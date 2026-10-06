@@ -1,6 +1,11 @@
 import {CAMPAIGN_SOUNDS} from './campaign-direction'
 import {REFERENCE_SOUNDS} from './reference-sounds'
 import supplementalAudio from './supplemental-audio.json'
+import musicLibrary from './music-library.json'
+import sfxLibrary from './sfx-library.json'
+// Biblioteca licenciada (uso comercial, sem atribuição): procedência em docs/video-studio/music-library-provenance.json.
+const librarySounds = sfxLibrary as unknown as readonly {id:`lib-${string}`;name:string;seconds:number;category?:string}[]
+const libraryMusic = (musicLibrary as unknown as {id:string;name:string;bpm:number;category?:string}[]).map(t=>({id:t.id,name:`${t.name} · ${t.bpm} BPM`}))
 import generatedFlyers from './generated-flyer-recipes.json'
 // Origem dos áudios registrada em catalog-provenance.json.
 // Supplemental IDs são validados em runtime pelo schema, sem alargar o tipo estático do catálogo.
@@ -48,6 +53,19 @@ export const SCENE_TRANSITIONS = [
   {id:'diamond-wipe',name:'Diamante luminoso'}, {id:'radial-burst',name:'Explosão radial'},
   {id:'bar-wipe',name:'Faixas laterais'}, {id:'pixel-dissolve',name:'Dissolução em pixels'},
   {id:'chevron-wipe',name:'Corte em V'}, {id:'ring-wipe',name:'Anel luminoso'},
+  {id:'glitch-slice',name:'Fatias digitais'}, {id:'zoom-through',name:'Mergulho de câmera'},
+  {id:'curtain',name:'Cortina de faixas'}, {id:'star-burst',name:'Estrela de impacto'},
+  {id:'stripe-wipe',name:'Listras de oferta'}, {id:'confetti-pop',name:'Explosão de confete'},
+] as const
+/** Destaque animado sobre a etiqueta de preço de cada oferta. */
+export const PRICE_ACCENTS = [
+  {id:'none',name:'Sem destaque'}, {id:'shine',name:'Brilho passando'},
+  {id:'stamp',name:'Carimbo de impacto'}, {id:'glow-pulse',name:'Pulso luminoso'},
+  {id:'sparkle',name:'Estrelas piscando'}, {id:'confetti',name:'Confete no preço'},
+] as const
+/** Variada: cada oferta recebe transição, entradas, acabamento e destaque próprios (determinístico pela semente). */
+export const MOTION_VARIATIONS = [
+  {id:'varied',name:'Variada · cada oferta diferente'}, {id:'fixed',name:'Igual em todas as ofertas'},
 ] as const
 export const ATMOSPHERE_EFFECTS = [
   {id:'fire',name:'Fogo em camadas'}, {id:'fire-jets',name:'Labaredas de impacto'},
@@ -66,6 +84,7 @@ export const ATMOSPHERE_EFFECTS = [
 ] as const
 export const SOUND_EFFECTS = [
   ...supplementalSounds,
+  ...librarySounds,
   ...REFERENCE_SOUNDS,
   ...CAMPAIGN_SOUNDS,
   {id:'retail-whoosh-v1',name:'Passagem curta · suave',seconds:.54},
@@ -79,6 +98,7 @@ export const SOUND_EFFECTS = [
   {id:'glitch',name:'Pulso digital',seconds:.3}, {id:'boom',name:'Explosão curta',seconds:.85},
 ] as const
 export const BUILTIN_MUSIC = [
+  ...libraryMusic,
   ...supplementalAudio.music,
   ...generatedFlyers.map(r=>({id:r.music,name:`${r.name} · ${r.musicStyle} · ${r.bpm} BPM`})),
   {id:'upbeat',name:'Animada'}, {id:'energy',name:'Energia'}, {id:'calm',name:'Leve'},
@@ -95,6 +115,8 @@ export type CameraMovement = typeof CAMERA_MOVEMENTS[number]['id']
 export type SceneTransition = typeof SCENE_TRANSITIONS[number]['id']
 export type AtmosphereEffect = typeof ATMOSPHERE_EFFECTS[number]['id']
 export type SoundEffect = typeof SOUND_EFFECTS[number]['id']
+export type PriceAccent = typeof PRICE_ACCENTS[number]['id']
+export type MotionVariation = typeof MOTION_VARIATIONS[number]['id']
 export interface VideoMotionSettings {
   product: ProductEntrance; text: TextEntrance; price: ProductEntrance; camera: CameraMovement
   atmosphere: AtmosphereEffect[]; speed: 'fast'|'balanced'; transitionSound: SoundEffect; accentSound: SoundEffect

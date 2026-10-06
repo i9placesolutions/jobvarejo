@@ -10,6 +10,7 @@ import {lightLeak} from '@remotion/effects/light-leak'
 import {starburst} from '@remotion/effects/starburst'
 import {motionSettings,type TextEntrance} from './effect-catalog'
 import {elementMotion,transitionMotion} from './catalog-motion'
+import {sceneStyle,offerIndexOf} from './scene-variation'
 import type {VideoRenderProps} from './model'
 
 const div=(style:React.CSSProperties,...children:React.ReactNode[])=>h('div',{style},...children)
@@ -92,7 +93,8 @@ export function CatalogTransition({props}:{props:VideoRenderProps}) {
   const f=useCurrentFrame(),{width:w,height:ht}=useVideoConfig(),scene=props.scenes.slice(1).find(s=>f>=s.from-5&&f<=s.from+10)
   if(!scene)return null
   const accent=flyerRecipe(props.document.theme)?.accent||'#d8ef85',base=flyerRecipe(props.document.theme)?.base||'#163825'
-  const local=f-scene.from,mode=props.document.transition,t=transitionMotion(local,mode),items:React.ReactNode[]=[]
+  // No modo variado cada oferta entra com a sua transição; abertura e encerramento usam a do vídeo.
+  const local=f-scene.from,mode=sceneStyle(props.document,offerIndexOf(props.document,scene.id)).transition,t=transitionMotion(local,mode),items:React.ReactNode[]=[]
   if(mode==='fade')return null
   if(mode==='light')items.push(h(Solid,{key:'light',width:w,height:ht,color:'transparent',effects:[lightLeak({seed:8,hueShift:65,progress:(local+5)/15})],style:{position:'absolute',inset:0,opacity:t.energy*.75,mixBlendMode:'screen'}}))
   if(mode==='diagonal')items.push(div({...abs(w*(local/8)-w*.5,-ht*.5,w*.65,ht*2),background:`linear-gradient(90deg,${base},${accent},#fff,${base})`,rotate:'-25deg',opacity:t.cover}))
@@ -126,6 +128,12 @@ export function CatalogTransition({props}:{props:VideoRenderProps}) {
     const diameter=Math.max(w,ht)*1.18*(.68+t.energy*.42),border=Math.max(12,w*.045)
     items.push(div({...abs((w-diameter)/2,(ht-diameter)/2,diameter,diameter),border:`${border}px solid ${accent}`,borderRadius:'50%',boxShadow:`0 0 ${border*2}px ${accent},inset 0 0 ${border*2}px ${accent}`,opacity:t.cover*.9,mixBlendMode:'screen'}))
   }
+  if(mode==='glitch-slice')for(let i=0;i<12;i++){const off=(rnd(i+local*7+501)-.5)*w*.22*t.cover;items.push(div({...abs(off,ht*i/12,w,ht/12+1),background:i%3===0?accent:i%3===1?base:'#ffffff',opacity:t.cover*(.55+rnd(i+71)*.4),mixBlendMode:'screen'}))}
+  if(mode==='zoom-through')items.push(div({position:'absolute',inset:'-20%',background:`radial-gradient(circle at 50% 50%,#ffffff ${4+t.energy*10}%,${accent}aa ${18+t.energy*14}%,transparent ${45+t.energy*20}%)`,opacity:t.energy*.85,mixBlendMode:'screen'}))
+  if(mode==='curtain')for(let i=0;i<6;i++){const fromLeft=i<3,width=w/6+1;items.push(div({...abs(fromLeft?(i*w/6)*t.cover-width*(1-t.cover):w-((i-2)*w/6)*t.cover,0,width,ht),background:`linear-gradient(90deg,${base},${accent})`,opacity:.95*t.cover}))}
+  if(mode==='star-burst'){const r=t.cover*95,pts=Array.from({length:20},(_,i)=>{const a=i*Math.PI/10-Math.PI/2,rad=i%2?r*.45:r;return `${50+Math.cos(a)*rad}% ${50+Math.sin(a)*rad*(w/ht)}%`}).join(',');items.push(div({position:'absolute',inset:0,background:`radial-gradient(circle,#fff,${accent} 45%,${base})`,clipPath:`polygon(${pts})`,opacity:.95}))}
+  if(mode==='stripe-wipe')items.push(div({position:'absolute',inset:'-30%',background:`repeating-linear-gradient(-30deg,${accent} 0 ${w*.04}px,${base} ${w*.04}px ${w*.08}px)`,opacity:t.cover*.92,transform:`translateX(${(1-t.cover)*w*.6}px)`}))
+  if(mode==='confetti-pop'){const n=props.fastPreview?40:110;for(let i=0;i<n;i++){const a=rnd(i+901)*Math.PI*2,d=(local+5)/15*Math.max(w,ht)*(.25+rnd(i+77)*.7);items.push(div({...abs(w/2+Math.cos(a)*d,ht/2+Math.sin(a)*d,w*.018,w*.03),background:i%3===0?accent:i%3===1?'#ffffff':base,rotate:`${rnd(i)*360+local*20}deg`,opacity:t.energy}))}}
   if(mode==='smoke')for(let i=0;i<(props.fastPreview?2:3);i++)items.push(div({...abs(w*(i*.4-.3)+local*w*.02,ht*(i%2?.5:-.1),w,ht*.8),borderRadius:'50%',background:['boom','grill','clearance'].includes(campaignFamily(props.document.theme)||'')?'radial-gradient(ellipse,#dac3a1,#564338cc 40%,transparent 70%)':campaignFamily(props.document.theme)==='spooky'?'radial-gradient(ellipse,#aa89c7,#40245fcc 40%,transparent 70%)':'radial-gradient(ellipse,#c2ddb7,#668a51aa 40%,transparent 70%)',filter:props.fastPreview?'blur(8px)':'blur(25px)',opacity:t.cover}))
   if(['snap-zoom','slide','whip-up','spin'].includes(mode))for(let i=0;i<14;i++)items.push(div({...abs(w*.5,ht*.5,4,w*.32),transformOrigin:'top',transform:`rotate(${i*360/14}deg) translateY(${w*(.3+(local+5)*.045)}px)`,background:'linear-gradient(transparent,#efffd3,transparent)',opacity:t.energy*.6}))
   if(t.flash)items.push(div({position:'absolute',inset:0,background:accent,opacity:t.flash,mixBlendMode:'screen'}))

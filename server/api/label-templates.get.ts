@@ -23,7 +23,7 @@ const selectedColumns = (summary: boolean, includePreview: boolean): string => {
   if (summary) return 'id, name, kind, created_at, updated_at'
   return [
     'id', 'user_id', 'name', 'kind', '"group"',
-    ...(includePreview ? ['preview_data_url'] : []),
+    includePreview ? 'preview_data_url' : 'null::text as preview_data_url',
     'created_at', 'updated_at'
   ].join(', ')
 }
@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
   const columns = selectedColumns(summary, includePreview)
   const catalogOptionalColumns = [
     ...(!summary ? ['"group"'] : []),
-    ...(includePreview ? ['preview_data_url'] : [])
+    ...(!summary ? [includePreview ? 'preview_data_url' : 'null::text as preview_data_url'] : [])
   ].map((column) => `,\n           ${column}`).join('')
   const params: unknown[] = [user.id]
   const idFilter = hasIdsFilter

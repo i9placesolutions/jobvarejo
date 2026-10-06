@@ -10,7 +10,7 @@ import {productLayers} from '../../shared/video-studio/product-layout'
 
 describe('personalização privada de vídeos',()=>{
  it('aplica a hierarquia de Reels ao catálogo inteiro, com nome fora da foto e preço destacado',()=>{
-  for(const recipe of Object.values(FLYER_RECIPES).filter(r=>!r.referenceArtwork)){
+  for(const recipe of Object.values(FLYER_RECIPES).filter(r=>!r.referenceArtwork&&!r.preserveVerticalLayout)){
    const l=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id)).vertical
    expect(l.name[1]-(l.seal[1]+l.seal[3])).toBe(24)
    expect(l.product[1]-(l.name[1]+l.name[3])).toBe(20)
@@ -25,10 +25,26 @@ describe('personalização privada de vídeos',()=>{
    expect(productLayers(l.product,true,false,.4)).toHaveLength(1)
   }
  })
+ it('mantém o cabeçalho próprio de selo, logo e faixa de validade quando a receita pede',()=>{
+  const recipes=Object.values(FLYER_RECIPES).filter(r=>r.preserveVerticalLayout)
+  expect(recipes.length).toBeGreaterThan(0)
+  for(const recipe of recipes){
+   const l=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id)).vertical
+   expect(l).toEqual(recipe.vertical)
+   // Selo e logo lado a lado (qualquer lado) ou selo acima da logo, sem sobreposição; faixa de validade abaixo da logo e acima da oferta.
+   const apart=l.seal[0]+l.seal[2]<=l.logo[0]||l.logo[0]+l.logo[2]<=l.seal[0]||l.seal[1]+l.seal[3]<=l.logo[1]
+   expect(apart,recipe.name).toBe(true)
+   expect(l.logo[1]+l.logo[3]).toBeLessThanOrEqual(l.validity[1])
+   expect(l.validity[1]+l.validity[3]).toBeLessThanOrEqual(l.product[1])
+   expect(l.product[1]+l.product[3]).toBeLessThanOrEqual(l.name[1])
+   expect(l.price[1]+l.price[3]).toBeLessThanOrEqual(l.condition[1])
+  }
+ })
  it('preserva a identidade ampliada com validade dentro da margem do zoom',()=>{
   for(const recipe of Object.values(FLYER_RECIPES).filter(r=>r.preserveBrandLayout)){
    const result=personalizedRecipe(recipe,newVideoFromTemplate(recipe.id))
-   expect(result.vertical.logo[1]).toBeGreaterThan(result.vertical.price[1]+result.vertical.price[3])
+   // Cabeçalho próprio (selo + logo no topo, como no encarte) não segue a ordem do Reels comum.
+   if(!recipe.preserveVerticalLayout)expect(result.vertical.logo[1]).toBeGreaterThan(result.vertical.price[1]+result.vertical.price[3])
    for(const [layout,height] of [[result.vertical,1920],[result.horizontal,1080]] as const){
     const [,y,,h]=layout.validity
     expect((y+h-height/2)*1.045+height/2).toBeLessThan(height)

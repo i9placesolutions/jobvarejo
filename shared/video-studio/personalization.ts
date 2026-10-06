@@ -18,7 +18,8 @@ export function personalizedRecipe(recipe:FlyerRecipe,doc:VideoDocument):FlyerRe
   const titleChanged=doc.campaign.trim()!==videoTemplateCopy(recipe).title.trim()
   const preserveReference=!!recipe.referenceArtwork&&!titleChanged
   // Mascotes já têm uma coluna própria ao lado do selo; preserve essa separação.
-  const vertical:FlyerLayout=preserveReference?recipe.vertical:recipe.mascot?{...REELS_OFFER_LAYOUT,seal:[recipe.vertical.seal[0],65,recipe.vertical.seal[2],560]}:reelsOfferLayout(titleChanged?undefined:recipe.sealAspect)
+  // Receitas com cabeçalho próprio (selo + logo + faixa de validade, como no encarte) mantêm a geometria vertical.
+  const vertical:FlyerLayout=preserveReference||recipe.preserveVerticalLayout?recipe.vertical:recipe.mascot?{...REELS_OFFER_LAYOUT,seal:[recipe.vertical.seal[0],65,recipe.vertical.seal[2],560]}:reelsOfferLayout(titleChanged?undefined:recipe.sealAspect)
   return {...recipe,referenceArtwork:preserveReference?recipe.referenceArtwork:undefined,vertical,horizontal:preserveReference?recipe.horizontal:videoTvOfferLayout(recipe.preserveBrandLayout?recipe.horizontal:videoFooterLayout(recipe.horizontal,false)),
     ...(doc.appearance?.accent?{accent:doc.appearance.accent,nativeTitleColor:doc.appearance.accent}:{}),
     ...(titleChanged?{seal:'',nativeTitle:doc.campaign,sealAspect:1}:{}),

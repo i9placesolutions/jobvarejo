@@ -10,10 +10,10 @@ import {
   Layers,
   Palette,
   Trash2,
-  Image as CanvasIcon,
+  Share2,
   ShoppingBasket,
-  SlidersHorizontal,
-  Download,
+  Store,
+  X,
 } from 'lucide-vue-next'
 import QuickCardColors from './QuickCardColors.vue'
 import OfferValidityPrompt from './OfferValidityPrompt.vue'
@@ -183,7 +183,28 @@ const productAreaPickerValue = (currentColor: string | null) => (
 
 const { height: mobileViewportHeight, bottomInset: mobileKeyboardInset } = useEditorVisualViewport()
 const mobileStructureExpanded = ref(false)
-const mobileSection = ref<'products' | 'pages' | 'preview' | 'tools'>('preview')
+// No celular cada aba da barra inferior abre uma gaveta; 'preview' deixa só o encarte.
+type QuickMobileSection = 'preview' | 'products' | 'visual' | 'store' | 'pages'
+const mobileSection = ref<QuickMobileSection>('preview')
+const MOBILE_SECTION_TITLES: Record<QuickMobileSection, string> = {
+  preview: 'Encarte',
+  products: 'Produtos',
+  visual: 'Visual',
+  store: 'Dados da loja',
+  pages: 'Páginas',
+}
+const toggleMobileSection = (section: Exclude<QuickMobileSection, 'preview'>) => {
+  if (mobileSection.value === section) {
+    mobileSection.value = 'preview'
+    return
+  }
+  if (section === 'products') {
+    openMobileProductList()
+    return
+  }
+  if (section === 'store') dataPanelOpen.value = true
+  mobileSection.value = section
+}
 watch(mobileSection, value => emit('mobile-section', value))
 const activeTab = ref<'search' | 'mine'>('search')
 const productsReviewed = ref(false)
@@ -552,7 +573,8 @@ watch(() => props.validityPromptReady, ready => {
 
 const continueAfterProductReview = () => {
   productsReviewed.value = true
-  mobileSection.value = 'tools'
+  // Depois de conferir os produtos, o usuário quer ver o resultado no encarte.
+  mobileSection.value = 'preview'
 }
 watch(() => props.completedProductReviews, (value, previous) => {
   if (!value || value === previous) return
@@ -610,11 +632,6 @@ const handleMobilePrimaryAction = () => {
     return
   }
   startMobileProductList()
-}
-
-const openMobileTools = () => {
-  mobileSection.value = 'tools'
-  dataPanelOpen.value = true
 }
 
 const handlePrimaryProductAction = () => {
@@ -848,7 +865,7 @@ const useTemplateModel = (modelId: string) => {
   />
 
   <section
-    :class="['quick-mobile-action-dock', { 'is-hidden': mobileSection !== 'preview' }]"
+    :class="['quick-mobile-action-dock', { 'is-hidden': mobileSection !== 'preview' || productCount > 0 }]"
     aria-label="Próximo passo da edição rápida"
   >
     <div class="quick-mobile-action-dock__copy">
@@ -865,27 +882,43 @@ const useTemplateModel = (modelId: string) => {
 
   <div class="quick-mode-controls-layout" :data-mobile-section="mobileSection" :style="{ '--mobile-keyboard-inset': `${mobileKeyboardInset}px`, '--mobile-visible-height': mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh' }">
     <nav class="quick-mobile-sections" aria-label="Edição rápida">
-      <button type="button" :aria-pressed="mobileSection === 'preview'" @click="mobileSection = 'preview'"><CanvasIcon :size="20" /><span>Encarte</span></button>
-      <button type="button" :aria-pressed="mobileSection === 'products'" @click="mobileSection === 'products' ? mobileSection = 'preview' : openMobileProductList()"><ShoppingBasket :size="20" /><span>Lista</span></button>
-      <button type="button" :aria-pressed="mobileSection === 'pages'" @click="mobileSection = mobileSection === 'pages' ? 'preview' : 'pages'"><Layers :size="20" /><span>Páginas</span></button>
-      <button type="button" :aria-pressed="mobileSection === 'tools'" @click="mobileSection === 'tools' ? mobileSection = 'preview' : openMobileTools()"><SlidersHorizontal :size="20" /><span>Ajustes</span></button>
-      <button type="button" :disabled="props.busy" @click="emit('export')"><Download :size="20" /><span>Exportar</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'products'" @click="toggleMobileSection('products')"><ShoppingBasket :size="20" /><span>Produtos</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'visual'" @click="toggleMobileSection('visual')"><Palette :size="20" /><span>Visual</span></button>
+      <button v-if="quickPages.length || templateModels.length" type="button" :aria-pressed="mobileSection === 'pages'" @click="toggleMobileSection('pages')"><Layers :size="20" /><span>Páginas</span></button>
+      <button type="button" :aria-pressed="mobileSection === 'store'" @click="toggleMobileSection('store')"><Store :size="20" /><span>Loja</span></button>
+      <button type="button" class="quick-mobile-sections__share" :disabled="props.busy" @click="mobileSection = 'preview'; emit('export')"><Share2 :size="20" /><span>Compartilhar</span></button>
     </nav>
-    <aside class="quick-mode-sidebar" :aria-label="mobileSection === 'tools' ? 'Ajustes da edição rápida' : 'Produtos da edição rápida'">
+    <button
+      v-if="mobileSection !== 'preview'"
+      type="button"
+      class="quick-mobile-sheet-close"
+      aria-label="Fechar e ver o encarte"
+      @click="mobileSection = 'preview'"
+    >
+      <X :size="18" aria-hidden="true" />
+      <span>Ver encarte</span>
+    </button>
+    <aside class="quick-mode-sidebar" :aria-label="`${MOBILE_SECTION_TITLES[mobileSection]} da edição rápida`">
     <div class="quick-mode-sidebar__content">
-      <p v-if="mobileSection === 'tools' && !productsReviewed" class="quick-mobile-import-copy">Confira os produtos para liberar a grade, as cores e as outras opções.</p>
       <div class="quick-mode-sidebar__topbar">
         <div class="quick-mode-sidebar__title-wrap">
           <span class="quick-mode-sidebar__backmark" aria-hidden="true">+</span>
           <div>
             <p class="quick-mode-sidebar__eyebrow">Edição rápida</p>
-            <h2>{{ mobileSection === 'tools' ? 'Ajustes' : 'Produtos' }}</h2>
+            <h2>
+              <span class="quick-mode-sidebar__title-desktop">Produtos</span>
+              <span class="quick-mode-sidebar__title-mobile">{{ MOBILE_SECTION_TITLES[mobileSection] }}</span>
+            </h2>
           </div>
         </div>
-        <span v-if="mobileSection !== 'tools'" class="quick-mode-sidebar__count">
+        <span v-if="mobileSection === 'products' || mobileSection === 'preview'" class="quick-mode-sidebar__count">
           {{ productCount }} {{ productCount === 1 ? 'produto' : 'produtos' }}
         </span>
       </div>
+
+      <!-- Destino das ferramentas da página (fontes, cores, IA) na aba Visual do celular. -->
+      <div id="quick-mobile-visual-slot" class="quick-mobile-visual-slot"></div>
+      <p v-if="mobileSection === 'visual' && productCount === 0" class="quick-mobile-import-copy">Adicione produtos para organizar a página e mudar as cores dos cards.</p>
 
       <div v-if="props.zones.length > 1 && activeTab !== 'search'" class="quick-mode-sidebar__zone-picker">
         <label for="quick-mode-zone">Destino do encarte</label>
@@ -897,16 +930,16 @@ const useTemplateModel = (modelId: string) => {
       </div>
 
       <details
-        v-if="selectedZone && (activeTab === 'mine' || mobileSection === 'tools')"
+        v-if="selectedZone && productCount > 0 && (activeTab === 'mine' || mobileSection === 'visual')"
         class="quick-mode-layout-options"
       >
-        <summary>Organizar grid da página</summary>
-        <div class="flex flex-wrap gap-2 p-2">
-          <button type="button" :disabled="props.busy" class="rounded bg-violet-600 px-3 py-2 text-white disabled:opacity-50" @click="emit('restore-grid', { zoneId: props.selectedZoneId || '', preset: 'model' })">Restaurar grid padrão</button>
-          <button type="button" :disabled="props.busy" class="rounded border border-white/20 px-3 py-2" @click="emit('restore-grid', { zoneId: props.selectedZoneId || '', preset: '2' })">2 colunas</button>
-          <button type="button" :disabled="props.busy" class="rounded border border-white/20 px-3 py-2" @click="emit('restore-grid', { zoneId: props.selectedZoneId || '', preset: '3' })">3 colunas</button>
+        <summary>Organizar produtos na página</summary>
+        <div class="quick-mode-layout-options__presets">
+          <button type="button" :disabled="props.busy" class="quick-mode-layout-options__preset quick-mode-layout-options__preset--primary" @click="emit('restore-grid', { zoneId: props.selectedZoneId || '', preset: 'model' })">Como no modelo</button>
+          <button type="button" :disabled="props.busy" class="quick-mode-layout-options__preset" @click="emit('restore-grid', { zoneId: props.selectedZoneId || '', preset: '2' })">2 por linha</button>
+          <button type="button" :disabled="props.busy" class="quick-mode-layout-options__preset" @click="emit('restore-grid', { zoneId: props.selectedZoneId || '', preset: '3' })">3 por linha</button>
         </div>
-        <p class="px-2 text-xs text-zinc-400">Altera somente a organização desta área de produtos. Você pode desfazer.</p>
+        <p class="px-2 text-xs text-zinc-400">Muda só a organização desta área de produtos. Você pode desfazer.</p>
         <label v-if="hasAlternativeZoneStructures" class="quick-mode-structure-card__select">
           <span>Disposições para {{ productCount }} produtos</span>
           <select
@@ -1075,7 +1108,7 @@ const useTemplateModel = (modelId: string) => {
                 <small v-if="product.price">Oferta: {{ product.price }}</small>
                 <small>{{ product.labelName ? `Etiqueta: ${product.labelName}` : 'Etiqueta padrão do produto' }}</small>
                 <small class="quick-mode-product-card__image-status">
-                  {{ product.imageUrl && !productImageErrors[product.id] ? 'Imagem atual · clique para trocar' : 'Sem imagem · clique para escolher' }}
+                  {{ product.imageUrl && !productImageErrors[product.id] ? 'Com imagem' : 'Sem imagem · escolha uma foto' }}
                 </small>
               </button>
             </div>
@@ -1103,13 +1136,13 @@ const useTemplateModel = (modelId: string) => {
         </div>
 
         <p v-else class="quick-mode-library-empty">
-          Nenhum produto nesta zona. Pesquise uma lista para começar.
+          Nenhum produto nesta área. Cole sua lista para começar.
         </p>
         <p v-if="products.length">
-          Clique na imagem para ver as opções do Wasabi ou enviar outra. O layout do modelo continua protegido.
+          Toque na foto do produto para trocar a imagem. O layout do modelo continua protegido.
         </p>
         <button type="button" class="quick-mode-library-action" @click="activeTab = 'search'">
-          Pesquisar produtos
+          Adicionar mais produtos
         </button>
       </section>
 
@@ -1138,7 +1171,7 @@ const useTemplateModel = (modelId: string) => {
         <p class="quick-mode-product-area-panel__sync-hint">As mesmas cores estão em <strong>Cores globais</strong>. Os dois controles ficam sincronizados.</p>
       </section>
 
-      <section v-if="productsReviewed && (activeTab === 'mine' || mobileSection === 'tools')" class="quick-mode-data-panel">
+      <section v-if="(productsReviewed && activeTab === 'mine') || (mobileSection === 'visual' && productCount > 0) || mobileSection === 'store'" class="quick-mode-data-panel">
         <details class="quick-mobile-advanced-options">
           <summary>Aparência dos produtos</summary>
           <div class="quick-mobile-advanced-options__body">
@@ -4215,13 +4248,13 @@ const useTemplateModel = (modelId: string) => {
 
 <style scoped>
 @media(max-width:767px) {
- .quick-mobile-sections {position:fixed;left:0;right:0;bottom:var(--mobile-keyboard-inset,0px);z-index:700;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:6px 8px calc(8px + env(safe-area-inset-bottom,0px));border-top:1px solid #ffffff14;border-bottom:0;background:#18181b;}
+ .quick-mobile-sections {position:fixed;left:0;right:0;bottom:var(--mobile-keyboard-inset,0px);z-index:700;grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;padding:6px 8px calc(8px + env(safe-area-inset-bottom,0px));border-top:1px solid #ffffff14;border-bottom:0;background:#18181b;}
  .quick-mobile-sections button {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:50px;font-size:10px;font-weight:500;border-radius:12px;touch-action:manipulation;}
- .quick-mobile-sections button:last-child {color:#c4b5fd;}
+ .quick-mobile-sections .quick-mobile-sections__share {color:#c4b5fd;}
  .quick-mode-controls-layout[data-mobile-section=preview] {position:fixed;top:auto;bottom:0;height:0;border:0;background:transparent;box-shadow:none;}
- .quick-mode-controls-layout[data-mobile-section=products],.quick-mode-controls-layout[data-mobile-section=pages],.quick-mode-controls-layout[data-mobile-section=tools] {bottom:calc(76px + var(--mobile-keyboard-inset,0px) + env(safe-area-inset-bottom,0px));height:calc(var(--mobile-visible-height,100dvh) - 132px - env(safe-area-inset-bottom,0px));}
- .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-pages-rail {display:none;}
- .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__zone-picker,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-tabs,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-search-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-library-card,.quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__footer {display:none;}
+ .quick-mode-controls-layout[data-mobile-section=products],.quick-mode-controls-layout[data-mobile-section=pages],.quick-mode-controls-layout[data-mobile-section=visual],.quick-mode-controls-layout[data-mobile-section=store] {bottom:calc(76px + var(--mobile-keyboard-inset,0px) + env(safe-area-inset-bottom,0px));height:calc(var(--mobile-visible-height,100dvh) - 132px - env(safe-area-inset-bottom,0px));}
+ .quick-mode-controls-layout:is([data-mobile-section=visual],[data-mobile-section=store]) .quick-mode-pages-rail {display:none;}
+ .quick-mode-controls-layout:is([data-mobile-section=visual],[data-mobile-section=store]) :is(.quick-mode-sidebar__zone-picker,.quick-mode-tabs,.quick-mode-search-card,.quick-mode-library-card,.quick-mode-sidebar__footer) {display:none;}
  .quick-mode-sidebar__backmark {display:none;}
 }
 
@@ -4245,7 +4278,7 @@ const useTemplateModel = (modelId: string) => {
  .quick-mobile-flow__step.is-active b {border-color:#60a5fa;background:#2563eb;color:#fff;box-shadow:0 0 0 3px rgba(59,130,246,.14);}
  .quick-mobile-flow__line {height:1px;min-width:10px;flex:1;background:rgba(255,255,255,.14);}
 
- .quick-mode-controls-layout[data-mobile-section=products],.quick-mode-controls-layout[data-mobile-section=tools] {border-radius:22px 22px 16px 16px;background:linear-gradient(165deg,#232b3d 0%,#1d1d23 56%,#18181b 100%);box-shadow:0 -12px 38px rgba(0,0,0,.36);}
+ .quick-mode-controls-layout:is([data-mobile-section=products],[data-mobile-section=visual],[data-mobile-section=store],[data-mobile-section=pages]) {border-radius:22px 22px 16px 16px;background:linear-gradient(165deg,#232b3d 0%,#1d1d23 56%,#18181b 100%);box-shadow:0 -12px 38px rgba(0,0,0,.36);}
  .quick-mode-sidebar {border-radius:inherit;}
  .quick-mode-sidebar__content {padding:18px 14px;}
  .quick-mode-sidebar__topbar {align-items:center;min-height:34px;margin-bottom:15px;padding:0 2px;}
@@ -4273,10 +4306,9 @@ const useTemplateModel = (modelId: string) => {
  .quick-mode-sidebar__footer-action {min-height:52px!important;border-radius:14px;background:linear-gradient(135deg,#2563eb,#6d28d9);font-size:14px!important;}
  .quick-mode-sidebar__footer-action:hover:not(:disabled) {background:linear-gradient(135deg,#3b82f6,#7c3aed);}
 
- .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-sidebar__topbar {margin-bottom:18px;}
- .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-data-panel {margin-top:0;}
- .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-data-panel__toggle {min-height:58px;border-radius:15px;background:rgba(59,130,246,.12);}
- .quick-mode-controls-layout[data-mobile-section=tools] .quick-mode-data-panel__body {margin-top:10px;border-radius:15px;}
+ .quick-mode-controls-layout:is([data-mobile-section=visual],[data-mobile-section=store]) .quick-mode-sidebar__topbar {margin-bottom:18px;}
+ .quick-mode-controls-layout:is([data-mobile-section=visual],[data-mobile-section=store]) .quick-mode-data-panel {margin-top:0;}
+ .quick-mode-controls-layout[data-mobile-section=store] .quick-mode-data-panel__body {margin-top:0;border-radius:15px;}
 }
 @media (max-width:390px) {
  .quick-mobile-action-dock {right:8px;left:8px;gap:8px;padding:10px;}
@@ -4354,4 +4386,36 @@ const useTemplateModel = (modelId: string) => {
 .quick-mode-product-area-panel__custom input:disabled{cursor:not-allowed;opacity:.4}
 .quick-mode-product-area-panel__sync-hint{margin:11px 0 0;color:#a1a1aa;font-size:10px;line-height:1.45}
 .quick-mode-product-area-panel__sync-hint strong{color:#c7dcff;font-weight:600}
+</style>
+
+<style scoped>
+/* Gaveta mobile: título por seção, botão de fechar e ajuste de zoom. */
+.quick-mode-sidebar__title-mobile,
+.quick-mobile-sheet-close,
+.quick-mobile-visual-slot { display:none; }
+.quick-mode-layout-options__presets { display:flex; flex-wrap:wrap; gap:8px; padding:8px; }
+.quick-mode-layout-options__preset { min-height:36px; padding:0 12px; border:1px solid rgba(255,255,255,.2); border-radius:8px; color:#e4e4e7; font-size:12px; font-weight:600; }
+.quick-mode-layout-options__preset--primary { border-color:#7c3aed; background:#7c3aed; color:#fff; }
+.quick-mode-layout-options__preset:disabled { opacity:.5; }
+@media (max-width:767px) {
+ .quick-mode-sidebar__title-desktop { display:none; }
+ .quick-mode-sidebar__title-mobile { display:inline; }
+ .quick-mode-sidebar__topbar { padding-right:118px; }
+ .quick-mobile-sheet-close { position:absolute; top:14px; right:14px; z-index:5; display:inline-flex; align-items:center; gap:6px; min-height:40px !important; padding:0 12px; border:1px solid rgba(255,255,255,.16); border-radius:999px; background:rgba(255,255,255,.08); color:#e4e4e7; font-size:12px; font-weight:700; touch-action:manipulation; }
+ .quick-mode-controls-layout[data-mobile-section=visual] .quick-mobile-visual-slot { display:block; margin-bottom:14px; }
+ .quick-mode-controls-layout[data-mobile-section=visual] .quick-mobile-visual-slot:empty { display:none; }
+ /* Cada seção mostra só o que é dela. */
+ .quick-mode-controls-layout:not([data-mobile-section=visual]) :is(.quick-mode-product-area-panel,.quick-mode-layout-options) { display:none; }
+ .quick-mode-controls-layout[data-mobile-section=visual] :is(.quick-mode-data-panel__toggle,.quick-mode-data-panel__body) { display:none; }
+ .quick-mode-controls-layout[data-mobile-section=visual] .quick-mobile-advanced-options { margin-bottom:12px; }
+ .quick-mode-controls-layout[data-mobile-section=visual] .quick-mode-layout-options { padding:0 12px; }
+ .quick-mode-controls-layout[data-mobile-section=visual] .quick-mode-layout-options__preset { min-height:44px; flex:1 1 30%; }
+ .quick-mode-controls-layout[data-mobile-section=store] :is(.quick-mobile-advanced-options,.quick-mode-data-panel__toggle) { display:none; }
+ /* Ações do produto em botões de toque (44px). */
+ .quick-mode-product-card__actions { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:6px; padding:8px; }
+ .quick-mode-product-card__actions button { min-height:44px; border-radius:10px; font-size:12px; }
+ .quick-mode-product-card__actions > button:nth-child(1), .quick-mode-product-card__actions > button:nth-child(2) { grid-column:span 3; }
+ .quick-mode-product-card__actions > button:nth-child(3), .quick-mode-product-card__actions > button:nth-child(4) { grid-column:span 1; font-size:16px; }
+ .quick-mode-product-card__actions > .quick-mode-product-card__delete { grid-column:span 4; }
+}
 </style>

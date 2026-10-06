@@ -8,6 +8,7 @@ import { resolve, join, extname } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { assertRenderTheme } from './render-theme.mjs'
+import { normalizeLoudness } from './loudness.mjs'
 import {copyCatalogAsset,selectCatalogSoundAssets,selectCatalogTemplateAssets} from './catalog-assets.mjs'
 const exec=promisify(execFile)
 export const root=resolve(import.meta.dirname,'../..')
@@ -36,5 +37,5 @@ export async function renderVideo(input,directory,output,onProgress=()=>{},optio
  for(const key of Object.keys(props.media))props.media[key]=base+'/'+props.media[key]
  for(const scene of props.scenes)if(scene.audio)scene.audio=base+'/'+scene.audio
  for(const key of ['music','impact','whoosh','voiceAudio'])if(props[key])props[key]=base+'/'+props[key]
- try{const serveUrl=await videoBundle();const composition=await selectComposition({serveUrl,id:'Offers',inputProps:props,chromiumOptions:{gl:'angle'}});if(Number.isInteger(options.frame)){await renderStill({composition,serveUrl,inputProps:props,chromiumOptions:{gl:'angle'},frame:options.frame,output,imageFormat:'png',scale:options.scale||1});return {frame:options.frame}}await renderMedia({composition,serveUrl,inputProps:props,chromiumOptions:{gl:'angle'},frameRange:options.frameRange,scale:options.scale||1,codec:'h264',audioCodec:'aac',pixelFormat:'yuv420p',outputLocation:output,...renderSettings(),crf:20,onProgress:({progress})=>onProgress(progress),timeoutInMilliseconds:90000});const details=await probe(output);if(Number(details.format?.duration)>input.document.duration+.001||Number(details.format?.duration)>30)throw Error('O vídeo excedeu o limite de duração. Reduza o roteiro.');return details}finally{await new Promise(r=>server.close(r))}
+ try{const serveUrl=await videoBundle();const composition=await selectComposition({serveUrl,id:'Offers',inputProps:props,chromiumOptions:{gl:'angle'}});if(Number.isInteger(options.frame)){await renderStill({composition,serveUrl,inputProps:props,chromiumOptions:{gl:'angle'},frame:options.frame,output,imageFormat:'png',scale:options.scale||1});return {frame:options.frame}}await renderMedia({composition,serveUrl,inputProps:props,chromiumOptions:{gl:'angle'},frameRange:options.frameRange,scale:options.scale||1,codec:'h264',audioCodec:'aac',pixelFormat:'yuv420p',outputLocation:output,...renderSettings(),crf:20,onProgress:({progress})=>onProgress(progress),timeoutInMilliseconds:90000});await normalizeLoudness(output);const details=await probe(output);if(Number(details.format?.duration)>input.document.duration+.001||Number(details.format?.duration)>30)throw Error('O vídeo excedeu o limite de duração. Reduza o roteiro.');return details}finally{await new Promise(r=>server.close(r))}
 }

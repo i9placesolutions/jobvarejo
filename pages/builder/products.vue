@@ -342,7 +342,7 @@ onMounted(() => fetchProducts())
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto px-4 py-6">
+  <div class="w-full min-w-0 max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
 
     <!-- Explicacao -->
     <div class="mb-5 p-4 bg-blue-50 border border-blue-200 rounded-xl">
@@ -357,7 +357,7 @@ onMounted(() => fetchProducts())
         <h1 class="text-xl font-bold text-gray-900">Meus Produtos</h1>
         <p class="text-xs text-gray-500 mt-0.5">{{ products.length }} produtos cadastrados</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <button @click="openBulkModal" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 rounded-lg text-xs font-medium transition-all border border-gray-200">
           <List class="w-3.5 h-3.5" />
           Cadastrar Lista
@@ -393,7 +393,7 @@ onMounted(() => fetchProducts())
       <Package class="w-12 h-12 text-gray-400 mb-3" />
       <p class="text-sm text-gray-600 mb-1">{{ searchQuery.trim() ? 'Nenhum produto encontrado' : 'Nenhum produto cadastrado' }}</p>
       <p class="text-xs text-gray-400 mb-4">{{ searchQuery.trim() ? 'Tente outro termo.' : 'Cadastre seus produtos para usar nos encartes.' }}</p>
-      <div v-if="!searchQuery.trim()" class="flex gap-2">
+      <div v-if="!searchQuery.trim()" class="flex flex-wrap justify-center gap-2">
         <button @click="openBulkModal" class="inline-flex items-center gap-1.5 h-9 px-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium border border-gray-200 transition-all">
           <List class="w-3.5 h-3.5" />
           Cadastrar Lista
@@ -446,7 +446,7 @@ onMounted(() => fetchProducts())
       <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100" leave-to-class="opacity-0">
         <div v-if="showModal" class="fixed inset-0 z-100 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="closeModal"></div>
-          <div class="relative bg-white border border-gray-200 rounded-2xl p-5 max-w-md w-full shadow-2xl">
+          <div class="relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-2xl">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-base font-semibold text-gray-900">{{ isEditing ? 'Editar Produto' : 'Novo Produto' }}</h2>
               <button @click="closeModal" class="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
@@ -490,7 +490,7 @@ onMounted(() => fetchProducts())
 
               <!-- No image: actions -->
               <div v-else class="space-y-3">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     @click="searchImages"
@@ -564,7 +564,7 @@ onMounted(() => fetchProducts())
       <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100" leave-to-class="opacity-0">
         <div v-if="showBulkModal" class="fixed inset-0 z-100 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="closeBulkModal"></div>
-          <div class="relative bg-white border border-gray-200 rounded-2xl p-5 max-w-xl w-full shadow-2xl max-h-[90vh] flex flex-col">
+          <div class="relative max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-hidden bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-col">
             <div class="flex items-center justify-between mb-3">
               <div>
                 <h2 class="text-base font-semibold text-gray-900">Cadastrar Lista</h2>
@@ -579,22 +579,22 @@ onMounted(() => fetchProducts())
               <p class="text-xs text-red-400">{{ bulkError }}</p>
             </div>
 
-            <div class="mb-2 p-2 bg-gray-50 rounded-lg text-[10px] text-gray-500 font-mono leading-relaxed">
+            <div class="mb-2 shrink-0 p-2 bg-gray-50 rounded-lg text-[10px] text-gray-500 font-mono leading-relaxed">
               Arroz Integral 1kg<br/>Feijao Carioca 1kg<br/>Leite Integral 1L
             </div>
 
             <textarea
               v-model="bulkText"
               placeholder="Cole a lista de produtos aqui..."
-              class="flex-1 min-h-40 max-h-[40vh] w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 p-3 focus:outline-none focus:border-blue-500/50 transition-all resize-none font-mono leading-relaxed"
+              class="min-h-24 sm:min-h-40 max-h-[40dvh] min-w-0 w-full flex-1 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 p-3 focus:outline-none focus:border-blue-500/50 transition-all resize-none font-mono leading-relaxed"
             ></textarea>
 
-            <div class="flex items-center justify-between mt-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
               <span v-if="bulkParsedProducts.length > 0" class="text-xs font-medium px-2 py-0.5 rounded-md" :class="bulkParsedProducts.length > 200 ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400'">
                 {{ bulkParsedProducts.length }} produtos
               </span>
               <div v-else></div>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center justify-end gap-2">
                 <button @click="closeBulkModal" class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-900 rounded-lg transition-colors">Cancelar</button>
                 <button @click="saveBulkProducts" :disabled="bulkSaving || bulkParsedProducts.length === 0 || bulkParsedProducts.length > 200" class="inline-flex items-center gap-1.5 h-8 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-40">
                   <Loader2 v-if="bulkSaving" class="w-3.5 h-3.5 animate-spin" />
@@ -613,10 +613,10 @@ onMounted(() => fetchProducts())
       <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100" leave-to-class="opacity-0">
         <div v-if="confirmDeleteId" class="fixed inset-0 z-100 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="cancelDelete"></div>
-          <div class="relative bg-white border border-gray-200 rounded-2xl p-5 max-w-sm w-full shadow-2xl">
+          <div class="relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-2xl">
             <h3 class="text-base font-semibold text-gray-900 mb-2">Excluir produto?</h3>
             <p class="text-sm text-gray-500 mb-5">O produto sera removido permanentemente.</p>
-            <div class="flex items-center justify-end gap-2">
+            <div class="flex flex-wrap items-center justify-end gap-2">
               <button @click="cancelDelete" class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-900 rounded-lg transition-colors">Cancelar</button>
               <button @click="confirmDelete" class="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors">Excluir</button>
             </div>

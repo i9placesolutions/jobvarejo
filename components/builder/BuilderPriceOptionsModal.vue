@@ -84,7 +84,7 @@ const handleOverlayClick = (e: MouseEvent) => {
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
     @click="handleOverlayClick"
   >
-    <div class="w-full max-w-lg max-h-[85vh] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden mx-4">
+    <div class="w-[calc(100%-2rem)] max-w-lg max-h-[calc(100dvh-2rem)] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden mx-4">
       <!-- Header -->
       <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
         <h2 class="text-sm font-semibold text-gray-900">Opcoes de Preco</h2>

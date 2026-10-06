@@ -151,6 +151,8 @@ const auth = useAuth()
   backdrop-filter: blur(18px);
 }
 
+.art-header > * { min-width: 0; }
+
 .art-brand {
   display: inline-flex;
   align-items: center;
@@ -327,12 +329,25 @@ const auth = useAuth()
     gap: 8px;
     overflow: auto;
     font-size: 12px;
+    scrollbar-width: thin;
   }
+  .art-header nav a,
+  .art-tabs a { flex: 0 0 auto; white-space: nowrap; }
   .art-tabs {
     padding: 12px 16px 0;
   }
   .art-back {
     margin-left: auto;
   }
+}
+
+@media (max-width: 420px) {
+  .art-header { padding-inline: 12px; }
+  .art-brand { min-width: 0; gap: 8px; }
+  .art-brand img { height: 30px; max-width: 110px; }
+  .art-brand-copy { padding-left: 8px; }
+  .art-brand-copy strong { font-size: 10px; }
+  .art-brand-copy small { font-size: 8px; }
+  .art-back { font-size: 11px; }
 }
 </style>

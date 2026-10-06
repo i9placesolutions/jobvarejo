@@ -63,5 +63,11 @@ export function transitionMotion(frame:number,mode:SceneTransition) {
     case 'pixel-dissolve':return {...out,cover:energy,flash:peak*.12}
     case 'chevron-wipe':return {...out,cover:peak,zoom:energy*.05}
     case 'ring-wipe':return {...out,cover:energy,flash:peak*.16,zoom:energy*.06}
+    case 'glitch-slice':return {...out,x:Math.sin(frame*3.1)*energy*30,cover:peak,chromatic:energy}
+    case 'zoom-through':return {...out,zoom:energy*.34,blur:energy*12,flash:peak*.3}
+    case 'curtain':return {...out,cover:peak,zoom:energy*.04}
+    case 'star-burst':return {...out,cover:peak,flash:peak*.28,zoom:energy*.07}
+    case 'stripe-wipe':return {...out,cover:peak,x:energy*40,zoom:energy*.05}
+    case 'confetti-pop':return {...out,cover:energy,flash:peak*.2,zoom:energy*.06}
   }
 }

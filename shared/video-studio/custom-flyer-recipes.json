@@ -4008,15 +4008,15 @@
       ],
       "logo": [
         50,
-        685,
+        665,
         600,
-        340
+        300
       ],
       "product": [
         670,
-        210,
-        1160,
-        740
+        180,
+        1180,
+        440
       ],
       "name": [
         925,
@@ -4087,7 +4087,7 @@
       "accentSound": "metal-hit"
     },
     "semanticMotifs": false,
-    "backgroundKind": "spotlight",
+    "backgroundKind": "clock",
     "revision": 1,
     "layoutName": "Fecha Mês com Tudo",
     "vertical": {
@@ -4223,7 +4223,7 @@
       "accentSound": "metal-hit"
     },
     "semanticMotifs": false,
-    "backgroundKind": "spotlight",
+    "backgroundKind": "clock",
     "revision": 1,
     "layoutName": "Operação Fecha Mês — Vermelho e Prata",
     "vertical": {
@@ -4360,7 +4360,7 @@
       "accentSound": "metal-hit"
     },
     "semanticMotifs": false,
-    "backgroundKind": "spotlight",
+    "backgroundKind": "clock",
     "revision": 2,
     "layoutName": "Operação Fecha Mês — Amarelo e Grafite",
     "vertical": {
@@ -4496,7 +4496,7 @@
       "accentSound": "metal-hit"
     },
     "semanticMotifs": false,
-    "backgroundKind": "spotlight",
+    "backgroundKind": "clock",
     "revision": 1,
     "layoutName": "Fecha Mês! — Calendário de Ofertas",
     "vertical": {
@@ -12509,7 +12509,7 @@
       "accentSound": "metal-hit"
     },
     "semanticMotifs": false,
-    "backgroundKind": "spotlight",
+    "backgroundKind": "clock",
     "revision": 1,
     "layoutName": "Comece o Mês Economizando — Calendário",
     "vertical": {
@@ -15182,7 +15182,7 @@
         48
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 664550355,
     "layoutName": "Story · produto central / TV · palco central",
     "musicStyle": "clearance",
@@ -15528,7 +15528,7 @@
         45
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 1915066506,
     "layoutName": "Story · produto à direita / TV · produto à esquerda",
     "musicStyle": "butcher",
@@ -16191,7 +16191,7 @@
         48
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 4098166147,
     "layoutName": "Story · produto compacto e oferta larga / TV · palco central",
     "musicStyle": "clearance",
@@ -16354,7 +16354,7 @@
         45
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 1390969448,
     "layoutName": "Story · vitrine invertida / TV · oferta na lateral",
     "musicStyle": "butcher",
@@ -17007,7 +17007,7 @@
         50
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 2190098776,
     "layoutName": "Story · selo de preço em destaque / TV · cabeçalho direito",
     "musicStyle": "clearance",
@@ -18332,7 +18332,7 @@
         45
       ]
     },
-    "backgroundKind": "impact",
+    "backgroundKind": "clock",
     "seed": 1702078346,
     "layoutName": "Story · selo de preço em destaque / TV · oferta na lateral",
     "musicStyle": "impact",
@@ -18821,7 +18821,7 @@
         50
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 835294225,
     "layoutName": "Story · produto compacto e oferta larga / TV · cabeçalho esquerdo",
     "musicStyle": "butcher",
@@ -19147,7 +19147,7 @@
         48
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 130243761,
     "layoutName": "Story · produto central / TV · palco central",
     "musicStyle": "butcher",
@@ -20289,7 +20289,7 @@
         45
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 2353738033,
     "layoutName": "Story · vitrine invertida / TV · oferta na lateral",
     "musicStyle": "clearance",
@@ -20453,7 +20453,7 @@
         45
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 2083713350,
     "layoutName": "Story · produto central / TV · produto à esquerda",
     "musicStyle": "clearance",
@@ -20616,7 +20616,7 @@
         45
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 1278516450,
     "layoutName": "Story · produto à esquerda / TV · faixa editorial",
     "musicStyle": "butcher",
@@ -21268,7 +21268,7 @@
         45
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 2876426227,
     "layoutName": "Story · preço na lateral / TV · oferta na lateral",
     "musicStyle": "butcher",
@@ -21930,7 +21930,7 @@
         50
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 782816437,
     "layoutName": "Story · produto à esquerda / TV · cabeçalho direito",
     "musicStyle": "butcher",
@@ -22094,7 +22094,7 @@
         48
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 269984263,
     "layoutName": "Story · produto à direita / TV · palco central",
     "musicStyle": "clearance",
@@ -23562,7 +23562,7 @@
         50
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 3632837118,
     "layoutName": "Story · produto alto / TV · cabeçalho esquerdo",
     "musicStyle": "clearance",
@@ -23889,7 +23889,7 @@
         48
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 2884534420,
     "layoutName": "Story · produto compacto e oferta larga / TV · palco central",
     "musicStyle": "clearance",
@@ -24053,7 +24053,7 @@
         45
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 1670287374,
     "layoutName": "Story · vitrine invertida / TV · oferta na lateral",
     "musicStyle": "clearance",
@@ -24217,7 +24217,7 @@
         45
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 1031939520,
     "layoutName": "Story · produto central / TV · produto à esquerda",
     "musicStyle": "clearance",
@@ -24380,7 +24380,7 @@
         45
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 373424564,
     "layoutName": "Story · produto à esquerda / TV · faixa editorial",
     "musicStyle": "butcher",
@@ -24544,7 +24544,7 @@
         50
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 1095962954,
     "layoutName": "Story · produto à direita / TV · cabeçalho esquerdo",
     "musicStyle": "clearance",
@@ -24870,7 +24870,7 @@
         48
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 1910178109,
     "layoutName": "Story · produto alto / TV · palco central",
     "musicStyle": "butcher",
@@ -25849,7 +25849,7 @@
         48
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 1026511966,
     "layoutName": "Story · produto à direita / TV · palco central",
     "musicStyle": "butcher",
@@ -26013,7 +26013,7 @@
         45
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 4272875943,
     "layoutName": "Story · selo de preço em destaque / TV · oferta na lateral",
     "musicStyle": "clearance",
@@ -26177,7 +26177,7 @@
         45
       ]
     },
-    "backgroundKind": "clearance",
+    "backgroundKind": "embers",
     "seed": 702650823,
     "layoutName": "Story · produto alto / TV · produto à esquerda",
     "musicStyle": "clearance",
@@ -26503,7 +26503,7 @@
         50
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 1821576476,
     "layoutName": "Story · produto compacto e oferta larga / TV · cabeçalho esquerdo",
     "musicStyle": "butcher",
@@ -26666,7 +26666,7 @@
         50
       ]
     },
-    "backgroundKind": "butcher",
+    "backgroundKind": "embers",
     "seed": 57509122,
     "layoutName": "Story · vitrine invertida / TV · cabeçalho direito",
     "musicStyle": "butcher",
@@ -27197,5 +27197,1846 @@
       },
       "sourceIndex": 83
     }
+  },
+  {
+    "id": "flyer-27afa93d-135e-4c41-8565-7f53188ce212",
+    "sourceProject": "27afa93d-135e-4c41-8565-7f53188ce212",
+    "name": "Sextou de Ofertas — Vermelho e Amarelo",
+    "campaign": "SEXTOU DE OFERTAS — VERMELHO E AMARELO",
+    "accent": "#ffd200",
+    "base": "#c80404",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Varejo — Vermelha com Borda Amarela",
+      "VERMELHA",
+      "PRETA VERMELHA AMARELA",
+      "Padrão"
+    ],
+    "background": "rodrigues-20261005-sextou-ofertas-background.png",
+    "seal": "rodrigues-20261005-sextou-ofertas-seal.png",
+    "sealAspect": 0.9133333333333333,
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-3209",
+    "musicStyle": "latin-electronic",
+    "bpm": 133,
+    "seed": 665823549,
+    "transition": "chevron-wipe",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "speed-lines"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Sextou de Ofertas — Vermelho e Amarelo",
+    "vertical": {
+      "seal": [
+        24,
+        56,
+        520,
+        560
+      ],
+      "logo": [
+        560,
+        64,
+        496,
+        300
+      ],
+      "validity": [
+        560,
+        384,
+        496,
+        210
+      ],
+      "product": [
+        60,
+        652,
+        960,
+        678
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        40,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        40,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-8768316-sunburst-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-4065018-popart-rays-wide.mp4",
+    "backgroundVideoHorizontalDuration": 15,
+    "validityStyle": "ribbon",
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "backgroundHorizontal": "rodrigues-20261005-sextou-ofertas-background-wide.png",
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#d90201",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd200"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "name": "Fim de Semana Maluco",
+    "campaign": "Fim de Semana Maluco",
+    "sourceProject": "fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "accent": "#b38308",
+    "base": "#fde123",
+    "ink": "#032e78",
+    "label": "bolt",
+    "labelNames": [
+      "PRETA VERMELHA AMARELA",
+      "Padrão"
+    ],
+    "background": "catalog/fc95b924-a8a0-4deb-9b44-fdbc568a925f-background.png",
+    "seal": "catalog/fc95b924-a8a0-4deb-9b44-fdbc568a925f-seal-trimmed-v1.png",
+    "music": "model-fc95b924-a8a0-4deb-9b44-fdbc568a925f",
+    "transition": "snap-zoom",
+    "motion": {
+      "speed": "fast",
+      "finish": "clean",
+      "product": "slam",
+      "text": "stomp",
+      "price": "slam",
+      "camera": "earthquake",
+      "atmosphere": [
+        "shockwave",
+        "speed-lines"
+      ],
+      "transitionSound": "retail-whoosh-v1",
+      "accentSound": "retail-pop-v1"
+    },
+    "vertical": {
+      "seal": [
+        80,
+        65,
+        920,
+        630
+      ],
+      "logo": [
+        65,
+        1515,
+        950,
+        340
+      ],
+      "product": [
+        40,
+        825,
+        620,
+        700
+      ],
+      "name": [
+        575,
+        968,
+        470,
+        100
+      ],
+      "price": [
+        575,
+        1080,
+        470,
+        330
+      ],
+      "validity": [
+        575,
+        1435,
+        470,
+        40
+      ],
+      "condition": [
+        575,
+        926,
+        470,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        40,
+        50,
+        610,
+        575
+      ],
+      "logo": [
+        50,
+        665,
+        600,
+        300
+      ],
+      "product": [
+        670,
+        180,
+        1180,
+        440
+      ],
+      "name": [
+        925,
+        532,
+        660,
+        96
+      ],
+      "price": [
+        925,
+        640,
+        660,
+        315
+      ],
+      "validity": [
+        925,
+        978,
+        660,
+        30
+      ],
+      "condition": [
+        925,
+        490,
+        660,
+        34
+      ]
+    },
+    "revision": 19,
+    "backgroundVariant": 4,
+    "nativeTitle": "",
+    "sealAspect": 1.3607843137254902,
+    "backgroundKind": "electric",
+    "seed": 4237670692,
+    "layoutName": "Destaque lateral",
+    "musicStyle": "house",
+    "bpm": 132
+  },
+  {
+    "id": "flyer-84c1387f-16ef-40ad-9acf-f2b0b5ff73f5",
+    "sourceProject": "84c1387f-16ef-40ad-9acf-f2b0b5ff73f5",
+    "name": "Mega Oferta — Preto e Dourado",
+    "campaign": "MEGA OFERTA — PRETO E DOURADO",
+    "accent": "#e8b923",
+    "base": "#161616",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Padrão"
+    ],
+    "background": "catalog/magnific-mega-oferta-estrelas-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-mega-oferta-estrelas-background-wide.jpg",
+    "seal": "catalog/magnific-mega-oferta-estrelas-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-5141",
+    "musicStyle": "eletronica",
+    "bpm": 115,
+    "seed": 2227255423,
+    "transition": "star-burst",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "zoom-out",
+      "text": "stretch",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "energy-starburst",
+        "speed-lines"
+      ],
+      "transitionSound": "riser",
+      "accentSound": "bass-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Mega Oferta — Preto e Dourado",
+    "vertical": {
+      "seal": [
+        24,
+        56,
+        520,
+        560
+      ],
+      "logo": [
+        560,
+        64,
+        496,
+        300
+      ],
+      "validity": [
+        560,
+        384,
+        496,
+        210
+      ],
+      "product": [
+        60,
+        652,
+        960,
+        678
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        40,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        40,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-mega-oferta-estrelas-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-mega-oferta-estrelas-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#2c2c2c",
+        "#161616",
+        "#000000"
+      ],
+      "edge": "#5a5a5a",
+      "pill": [
+        "#fff1a8",
+        "#f2c94c",
+        "#c99a1a"
+      ],
+      "stockInk": "#2a1d00"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#161616",
+      "labelInk": "#ffffff",
+      "labelEdge": "#e8b923"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-439da8ec-cab8-4092-9102-49a226a1013b",
+    "sourceProject": "439da8ec-cab8-4092-9102-49a226a1013b",
+    "name": "Aqui Tem Super Ofertas — Laranja",
+    "campaign": "AQUI TEM SUPER OFERTAS — LARANJA",
+    "accent": "#ffd200",
+    "base": "#e35d00",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Padrão"
+    ],
+    "background": "catalog/magnific-aqui-tem-super-ofertas-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-aqui-tem-super-ofertas-background-wide.jpg",
+    "seal": "catalog/magnific-aqui-tem-super-ofertas-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-2759",
+    "musicStyle": "forro",
+    "bpm": 121,
+    "seed": 1134405868,
+    "transition": "chevron-wipe",
+    "motion": {
+      "speed": "fast",
+      "finish": "shine",
+      "product": "elastic",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "spark-burst",
+        "shockwave"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Aqui Tem Super Ofertas — Laranja",
+    "vertical": {
+      "seal": [
+        536,
+        56,
+        520,
+        560
+      ],
+      "logo": [
+        24,
+        64,
+        496,
+        300
+      ],
+      "validity": [
+        24,
+        384,
+        496,
+        210
+      ],
+      "product": [
+        60,
+        652,
+        960,
+        678
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        1300,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        1280,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        1280,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        5,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        85,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        85,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        85,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-aqui-tem-super-ofertas-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-aqui-tem-super-ofertas-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#ff7a00",
+        "#e35d00",
+        "#a33a00"
+      ],
+      "edge": "#ffb067",
+      "pill": [
+        "#fff27a",
+        "#ffd91a",
+        "#f5b800"
+      ],
+      "stockInk": "#7a2e00"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#e35d00",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd200"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-2d64ce85-88b9-4fd2-8f6b-20ecc71c7513",
+    "sourceProject": "2d64ce85-88b9-4fd2-8f6b-20ecc71c7513",
+    "name": "Fim de Semana Imbatível — Azul e Vermelho",
+    "campaign": "FIM DE SEMANA IMBATÍVEL — AZUL E VERMELHO",
+    "accent": "#ffd200",
+    "base": "#0b44b8",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Padrão"
+    ],
+    "background": "catalog/magnific-fim-de-semana-imbativel-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-fim-de-semana-imbativel-background-wide.jpg",
+    "seal": "catalog/magnific-fim-de-semana-imbativel-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-3082",
+    "musicStyle": "eletronica",
+    "bpm": 125,
+    "seed": 761581189,
+    "transition": "radial-burst",
+    "motion": {
+      "speed": "fast",
+      "finish": "shine",
+      "product": "slam",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "speed-lines"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Fim de Semana Imbatível — Azul e Vermelho",
+    "vertical": {
+      "seal": [
+        24,
+        56,
+        520,
+        560
+      ],
+      "logo": [
+        560,
+        64,
+        496,
+        300
+      ],
+      "validity": [
+        560,
+        384,
+        496,
+        210
+      ],
+      "product": [
+        60,
+        652,
+        960,
+        678
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        40,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        40,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-fim-de-semana-imbativel-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-fim-de-semana-imbativel-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#1f5fe0",
+        "#0b44b8",
+        "#062c80"
+      ],
+      "edge": "#4f8bff",
+      "pill": [
+        "#fff27a",
+        "#ffd91a",
+        "#f5b800"
+      ],
+      "stockInk": "#0a2d78"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#0b44b8",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd200"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-e6650a6a-842b-4f5d-a19c-afe3939020ad",
+    "sourceProject": "e6650a6a-842b-4f5d-a19c-afe3939020ad",
+    "name": "Quinta da Carne — Madeira e Brasa",
+    "campaign": "QUINTA DA CARNE — MADEIRA E BRASA",
+    "accent": "#ffc21a",
+    "base": "#8f1208",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Padrão"
+    ],
+    "background": "catalog/magnific-quinta-da-carne-brasa-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-quinta-da-carne-brasa-background-wide.jpg",
+    "seal": "catalog/magnific-quinta-da-carne-brasa-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-2702",
+    "musicStyle": "sertanejo",
+    "bpm": 111,
+    "seed": 3865381482,
+    "transition": "flash-wipe",
+    "motion": {
+      "speed": "fast",
+      "finish": "shine",
+      "product": "slam",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "earthquake",
+      "atmosphere": [
+        "fire-jets",
+        "embers"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "embers",
+    "revision": 3,
+    "layoutName": "Quinta da Carne — Madeira e Brasa",
+    "vertical": {
+      "seal": [
+        536,
+        56,
+        520,
+        560
+      ],
+      "logo": [
+        24,
+        64,
+        496,
+        300
+      ],
+      "validity": [
+        24,
+        384,
+        496,
+        210
+      ],
+      "product": [
+        60,
+        652,
+        960,
+        678
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        1300,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        1280,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        1280,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        5,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        85,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        85,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        85,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-quinta-da-carne-brasa-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-quinta-da-carne-brasa-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#b81d0e",
+        "#8f1208",
+        "#5e0a04"
+      ],
+      "edge": "#e0452f",
+      "pill": [
+        "#fff27a",
+        "#ffd91a",
+        "#f5b800"
+      ],
+      "stockInk": "#5e0a04"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#8f1208",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffc21a"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-1a5ce70f-d753-499e-9c87-0238e5ccfbb0",
+    "sourceProject": "1a5ce70f-d753-499e-9c87-0238e5ccfbb0",
+    "name": "Clube de Descontos — Verde",
+    "campaign": "CLUBE DE DESCONTOS — VERDE",
+    "accent": "#ffd200",
+    "base": "#13801f",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Padrão"
+    ],
+    "background": "catalog/magnific-clube-de-descontos-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-clube-de-descontos-background-wide.jpg",
+    "seal": "catalog/magnific-clube-de-descontos-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-2650",
+    "musicStyle": "forro",
+    "bpm": 100,
+    "seed": 442296079,
+    "transition": "confetti-pop",
+    "motion": {
+      "speed": "fast",
+      "finish": "shine",
+      "product": "elastic",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "spark-burst",
+        "shockwave"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Clube de Descontos — Verde",
+    "vertical": {
+      "seal": [
+        24,
+        56,
+        520,
+        560
+      ],
+      "logo": [
+        560,
+        64,
+        496,
+        300
+      ],
+      "validity": [
+        560,
+        384,
+        496,
+        210
+      ],
+      "product": [
+        60,
+        652,
+        960,
+        678
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        40,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        40,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-clube-de-descontos-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-clube-de-descontos-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#22a52a",
+        "#13801f",
+        "#0a5a14"
+      ],
+      "edge": "#5fd35a",
+      "pill": [
+        "#fff27a",
+        "#ffd91a",
+        "#f5b800"
+      ],
+      "stockInk": "#0a4d12"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#13801f",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd200"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-06022f35-98c0-4f2e-8c36-70e9750744a1",
+    "sourceProject": "06022f35-98c0-4f2e-8c36-70e9750744a1",
+    "name": "Super Economia — Amarelo e Vermelho",
+    "campaign": "SUPER ECONOMIA — AMARELO E VERMELHO",
+    "accent": "#e30613",
+    "base": "#d40808",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Varejo — Vermelha com Borda Amarela",
+      "VERMELHA",
+      "PRETA VERMELHA AMARELA",
+      "Padrão"
+    ],
+    "background": "catalog/magnific-super-economia-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-super-economia-background-wide.jpg",
+    "seal": "catalog/magnific-super-economia-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-2700",
+    "musicStyle": "axe",
+    "bpm": 130,
+    "seed": 100806453,
+    "transition": "diamond-wipe",
+    "motion": {
+      "speed": "fast",
+      "finish": "shine",
+      "product": "slam",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "speed-lines"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Super Economia — Amarelo e Vermelho",
+    "vertical": {
+      "seal": [
+        24,
+        56,
+        520,
+        560
+      ],
+      "logo": [
+        560,
+        64,
+        496,
+        300
+      ],
+      "validity": [
+        560,
+        384,
+        496,
+        210
+      ],
+      "product": [
+        60,
+        652,
+        960,
+        678
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        40,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        40,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-super-economia-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-super-economia-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#f01d10",
+        "#d40808",
+        "#a00000"
+      ],
+      "edge": "#ff5a44",
+      "pill": [
+        "#fff27a",
+        "#ffd91a",
+        "#f5b800"
+      ],
+      "stockInk": "#8a0000"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#d40808",
+      "labelInk": "#ffffff",
+      "labelEdge": "#e30613"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-f59e4137-4552-4ed3-8996-bf30707dda72",
+    "sourceProject": "f59e4137-4552-4ed3-8996-bf30707dda72",
+    "name": "Promoção do Dia — Roxo",
+    "campaign": "PROMOÇÃO DO DIA — ROXO",
+    "accent": "#ffd200",
+    "base": "#5b21b6",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Padrão"
+    ],
+    "background": "catalog/magnific-promocao-do-dia-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-promocao-do-dia-background-wide.jpg",
+    "seal": "catalog/magnific-promocao-do-dia-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-4218",
+    "musicStyle": "pop",
+    "bpm": 120,
+    "seed": 4120789303,
+    "transition": "zoom-through",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "zoom-out",
+      "text": "stretch",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "energy-starburst",
+        "speed-lines"
+      ],
+      "transitionSound": "riser",
+      "accentSound": "bass-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Promoção do Dia — Roxo",
+    "vertical": {
+      "seal": [
+        120,
+        56,
+        840,
+        400
+      ],
+      "logo": [
+        140,
+        464,
+        800,
+        220
+      ],
+      "validity": [
+        220,
+        692,
+        640,
+        140
+      ],
+      "product": [
+        60,
+        840,
+        960,
+        490
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        40,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        40,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-promocao-do-dia-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-promocao-do-dia-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#7c3aed",
+        "#5b21b6",
+        "#3b0f80"
+      ],
+      "edge": "#b07bff",
+      "pill": [
+        "#fff27a",
+        "#ffd91a",
+        "#f5b800"
+      ],
+      "stockInk": "#3b0f80"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#5b21b6",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd200"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-6d740a3e-4d5b-4a1c-a8e2-9ffc9ca4ce4a",
+    "sourceProject": "6d740a3e-4d5b-4a1c-a8e2-9ffc9ca4ce4a",
+    "name": "Super Promoção — Preto e Vermelho",
+    "campaign": "SUPER PROMOÇÃO — PRETO E VERMELHO",
+    "accent": "#e01408",
+    "base": "#b00000",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Padrão"
+    ],
+    "background": "catalog/magnific-super-promocao-preto-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-super-promocao-preto-background-wide.jpg",
+    "seal": "catalog/magnific-super-promocao-preto-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-5557",
+    "musicStyle": "pop",
+    "bpm": 126,
+    "seed": 1836321342,
+    "transition": "glitch-slice",
+    "motion": {
+      "speed": "fast",
+      "finish": "shine",
+      "product": "slam",
+      "text": "stomp",
+      "price": "elastic",
+      "camera": "impact",
+      "atmosphere": [
+        "shockwave",
+        "speed-lines"
+      ],
+      "transitionSound": "whip",
+      "accentSound": "boom"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Super Promoção — Preto e Vermelho",
+    "vertical": {
+      "seal": [
+        536,
+        56,
+        520,
+        560
+      ],
+      "logo": [
+        24,
+        64,
+        496,
+        300
+      ],
+      "validity": [
+        24,
+        384,
+        496,
+        210
+      ],
+      "product": [
+        60,
+        652,
+        960,
+        678
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        1300,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        1280,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        1280,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        5,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        85,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        85,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        85,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-super-promocao-preto-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-super-promocao-preto-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#e01408",
+        "#b00000",
+        "#6e0000"
+      ],
+      "edge": "#ff4a3d",
+      "pill": [
+        "#fff27a",
+        "#ffd91a",
+        "#f5b800"
+      ],
+      "stockInk": "#6e0000"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#b00000",
+      "labelInk": "#ffffff",
+      "labelEdge": "#e01408"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-43184b49-5dc9-499a-aae6-31b6b0d2501d",
+    "sourceProject": "43184b49-5dc9-499a-aae6-31b6b0d2501d",
+    "name": "Mega Promoção — Vermelho e Dourado",
+    "campaign": "MEGA PROMOÇÃO — VERMELHO E DOURADO",
+    "accent": "#ffd200",
+    "base": "#d40808",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Varejo — Vermelha com Borda Amarela",
+      "VERMELHA",
+      "PRETA VERMELHA AMARELA",
+      "Padrão"
+    ],
+    "background": "catalog/magnific-mega-promocao-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-mega-promocao-background-wide.jpg",
+    "seal": "catalog/magnific-mega-promocao-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-3209",
+    "musicStyle": "eletronica",
+    "bpm": 133,
+    "seed": 1125665609,
+    "transition": "curtain",
+    "motion": {
+      "speed": "fast",
+      "finish": "shine",
+      "product": "elastic",
+      "text": "word-pop",
+      "price": "slam",
+      "camera": "zoom-pulse",
+      "atmosphere": [
+        "spark-burst",
+        "shockwave"
+      ],
+      "transitionSound": "air-swipe",
+      "accentSound": "coin"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Mega Promoção — Vermelho e Dourado",
+    "vertical": {
+      "seal": [
+        536,
+        56,
+        520,
+        560
+      ],
+      "logo": [
+        24,
+        64,
+        496,
+        300
+      ],
+      "validity": [
+        24,
+        384,
+        496,
+        210
+      ],
+      "product": [
+        60,
+        652,
+        960,
+        678
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        1300,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        1280,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        1280,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        5,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        85,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        85,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        85,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-mega-promocao-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-mega-promocao-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#f01d10",
+        "#d40808",
+        "#a00000"
+      ],
+      "edge": "#ff5a44",
+      "pill": [
+        "#fff27a",
+        "#ffd91a",
+        "#f5b800"
+      ],
+      "stockInk": "#8a0000"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#d40808",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd200"
+    },
+    "preserveBrandLayout": true
+  },
+  {
+    "id": "flyer-b61ec791-d54f-46f0-a387-2b34a618bf2f",
+    "sourceProject": "b61ec791-d54f-46f0-a387-2b34a618bf2f",
+    "name": "Promoção da Semana — Laranja e Vermelho",
+    "campaign": "PROMOÇÃO DA SEMANA — LARANJA E VERMELHO",
+    "accent": "#ffd200",
+    "base": "#e35d00",
+    "ink": "#ffffff",
+    "label": "banner",
+    "labelNames": [
+      "Padrão"
+    ],
+    "background": "catalog/magnific-promocao-da-semana-background.jpg",
+    "backgroundHorizontal": "catalog/magnific-promocao-da-semana-background-wide.jpg",
+    "seal": "catalog/magnific-promocao-da-semana-seal.png",
+    "posterLayout": "thematic-seal",
+    "music": "lib-magnific-2365",
+    "musicStyle": "funk",
+    "bpm": 110,
+    "seed": 3055470481,
+    "transition": "stripe-wipe",
+    "motion": {
+      "speed": "fast",
+      "finish": "glow",
+      "product": "zoom-out",
+      "text": "stretch",
+      "price": "drop",
+      "camera": "impact",
+      "atmosphere": [
+        "energy-starburst",
+        "speed-lines"
+      ],
+      "transitionSound": "riser",
+      "accentSound": "bass-hit"
+    },
+    "semanticMotifs": false,
+    "backgroundKind": "impact",
+    "revision": 3,
+    "layoutName": "Promoção da Semana — Laranja e Vermelho",
+    "vertical": {
+      "seal": [
+        120,
+        56,
+        840,
+        400
+      ],
+      "logo": [
+        140,
+        464,
+        800,
+        220
+      ],
+      "validity": [
+        220,
+        692,
+        640,
+        140
+      ],
+      "product": [
+        60,
+        840,
+        960,
+        490
+      ],
+      "name": [
+        85,
+        1348,
+        910,
+        85
+      ],
+      "price": [
+        85,
+        1445,
+        910,
+        340
+      ],
+      "condition": [
+        85,
+        1795,
+        910,
+        34
+      ]
+    },
+    "horizontal": {
+      "seal": [
+        60,
+        24,
+        560,
+        560
+      ],
+      "logo": [
+        40,
+        596,
+        600,
+        250
+      ],
+      "validity": [
+        40,
+        856,
+        600,
+        182
+      ],
+      "product": [
+        675,
+        160,
+        1240,
+        630
+      ],
+      "name": [
+        785,
+        638,
+        1050,
+        90
+      ],
+      "condition": [
+        785,
+        1040,
+        1050,
+        30
+      ],
+      "price": [
+        785,
+        740,
+        1050,
+        295
+      ]
+    },
+    "backgroundVideo": "backgrounds-video/magnific-promocao-da-semana-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-promocao-da-semana-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12,
+    "validityStyle": "ribbon",
+    "ribbonColors": {
+      "ribbon": [
+        "#ff7a00",
+        "#e35d00",
+        "#a33a00"
+      ],
+      "edge": "#ffb067",
+      "pill": [
+        "#fff27a",
+        "#ffd91a",
+        "#f5b800"
+      ],
+      "stockInk": "#7a2e00"
+    },
+    "preserveVerticalLayout": true,
+    "preferSingleProduct": true,
+    "posterPriceCornerRadius": 0.01,
+    "posterRetailFinish": {
+      "labelFill": "#e35d00",
+      "labelInk": "#ffffff",
+      "labelEdge": "#ffd200"
+    },
+    "preserveBrandLayout": true
   }
 ]

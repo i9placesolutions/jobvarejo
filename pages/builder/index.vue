@@ -148,7 +148,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-7xl mx-auto px-4 py-8">
+  <div class="w-full min-w-0 max-w-7xl mx-auto px-3 sm:px-4 py-5 sm:py-8">
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
       <div>
@@ -167,12 +167,12 @@ onMounted(() => {
     </div>
 
     <!-- Filter Tabs -->
-    <div class="flex items-center gap-1 mb-6 p-1 bg-gray-100 rounded-xl border border-gray-200 w-fit">
+    <div class="flex max-w-full items-center gap-1 mb-6 p-1 bg-gray-100 rounded-xl border border-gray-200 w-fit overflow-x-auto">
       <button
         v-for="tab in tabs"
         :key="tab.key"
         @click="activeFilter = tab.key"
-        class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+        class="shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200"
         :class="activeFilter === tab.key
           ? 'bg-blue-500/15 text-blue-600 shadow-sm'
           : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'"
@@ -227,7 +227,7 @@ onMounted(() => {
     </div>
 
     <!-- Flyer Grid -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div v-else class="grid min-w-0 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       <div
         v-for="flyer in filteredFlyers"
         :key="flyer.id"
@@ -298,12 +298,12 @@ onMounted(() => {
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="cancelDelete"></div>
 
           <!-- Modal -->
-          <div class="relative bg-white border border-gray-200 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+          <div class="relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-2xl">
             <h3 class="text-lg font-semibold text-gray-900 mb-2">Excluir encarte?</h3>
             <p class="text-sm text-gray-500 mb-6">
               Esta ação não pode ser desfeita. O encarte e todos os seus produtos serão removidos permanentemente.
             </p>
-            <div class="flex items-center justify-end gap-3">
+            <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
               <button
                 @click="cancelDelete"
                 class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"

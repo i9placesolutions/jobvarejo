@@ -34,7 +34,7 @@ if (import.meta.client) {
 
 <template>
   <div
-    class="h-screen w-full relative overflow-hidden bg-[#f8f9fb] text-slate-800 flex flex-col"
+    class="h-screen h-dvh w-full relative overflow-hidden bg-[#f8f9fb] text-slate-800 flex flex-col"
     :class="{ 'auth-layout--login': isLoginPage }"
   >
     <!-- Decorative Grid Pattern -->
@@ -43,7 +43,7 @@ if (import.meta.client) {
     </div>
 
     <!-- Main Content -->
-    <div class="relative z-10 flex-1 flex flex-col overflow-hidden">
+    <div class="relative z-10 min-h-0 flex-1 flex flex-col overflow-hidden">
       <!-- Top Bar with Logo -->
       <header class="auth-header w-full p-4 shrink-0">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
@@ -68,8 +68,8 @@ if (import.meta.client) {
       </header>
 
       <!-- Page Content - Centered in viewport -->
-      <main class="auth-main flex-1 flex items-center justify-center px-4 overflow-auto">
-        <div class="w-full max-w-md">
+      <main class="auth-main min-h-0 flex-1 flex items-start justify-center px-4 overflow-auto overscroll-contain">
+        <div class="w-full min-w-0 my-auto" :class="isLoginPage ? 'max-w-md' : 'max-w-4xl'">
           <slot />
         </div>
       </main>
@@ -204,7 +204,7 @@ if (import.meta.client) {
 @media (max-width: 520px) {
   .auth-layout--login .auth-header { min-height: 64px; padding-inline: 16px; }
   .auth-layout--login .auth-main { align-items: flex-start; padding: 22px 16px; }
-  .auth-layout--login .auth-main > div { max-width: 420px; }
+  .auth-layout--login .auth-main > div { max-width: 420px; margin-block: 0; }
   .auth-layout--login .auth-footer { padding: 14px 12px; }
 }
 
@@ -233,6 +233,8 @@ if (import.meta.client) {
     align-items: flex-start;
     padding: 12px 16px;
   }
+
+  .auth-layout--login .auth-main > div { margin-block: 0; }
 
   .auth-layout--login .auth-footer { padding: 8px 12px; }
 

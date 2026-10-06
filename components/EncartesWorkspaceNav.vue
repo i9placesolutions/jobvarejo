@@ -218,6 +218,13 @@ const isActive = (tool: WorkspaceTool) => route.path === (tool.activePath || too
   .encarte-workspace-nav { margin-bottom: 18px; padding: 16px; border-radius: 20px; }
   .encarte-workspace-nav__items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .encarte-workspace-nav__item { min-height: 70px; padding: 10px; }
-  .encarte-workspace-nav__copy small { display: none; }
+  .encarte-workspace-nav__copy small { display: block; }
+}
+
+@media (max-width: 420px) {
+  .encarte-workspace-nav { padding: 14px; border-radius: 16px; }
+  .encarte-workspace-nav__items,
+  .encarte-workspace-nav__items--single { grid-template-columns: minmax(0, 1fr); }
+  .encarte-workspace-nav__item { min-height: 0; }
 }
 </style>

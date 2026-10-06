@@ -13,7 +13,7 @@ import {S3Client,GetObjectCommand,PutObjectCommand,HeadObjectCommand} from '@aws
 const {prepareNeutralFlyerCanvas}=await import('../utils/flyerGalleryPreview.ts')
 const {generateThumbnailFromCanvasJson}=await import('../utils/editorThumbnail.ts')
 const {buildFlyerTemplateConfigFromPages,inferFormatIdFromPage,orderFlyerTemplatePages}=await import('../utils/flyerTemplateApi.ts')
-const apply=process.argv.includes('--upload'),limit=Number(process.argv.find(x=>x.startsWith('--limit='))?.split('=')[1]||0)
+const apply=process.argv.includes('--upload'),continueOnError=process.argv.includes('--continue-on-error'),limit=Number(process.argv.find(x=>x.startsWith('--limit='))?.split('=')[1]||0)
 const manifestPath='server/data/flyer-gallery-previews.json',output='output/flyer-gallery-previews'
 await mkdir('server/data',{recursive:true});await mkdir(output,{recursive:true})
 globalThis.document=getEnv().document
@@ -53,9 +53,17 @@ async function prepareImages(node,ownerId){
 
 const c=new pg.Client({connectionString:process.env.POSTGRES_DATABASE_URL});await c.connect();const{rows}=await c.query(`select p.id,p.user_id,p.name,p.updated_at,p.canvas_data,p.template_config from public.projects p join public.profiles owner on owner.id=p.user_id where p.is_template=true and owner.role in ('admin','super_admin') order by p.id`);await c.end()
 let previous={version:1,assets:{}};try{previous=JSON.parse(await readFile(manifestPath,'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}
-const manifest={version:1,assets:{...previous.assets}},metrics=[]
+const manifest={version:1,assets:{...previous.assets}},metrics=[],failures=[]
 let completed=0
 let checkpoint=Promise.resolve()
+const failureMessage=error=>{
+ const message=String(error?.message||error||'Falha sem detalhe')
+ if(message.startsWith('Referência privada fora da conta do modelo:'))return 'Referência privada fora da conta do modelo'
+ if(message==='Referência de storage inválida')return message
+ return message
+  .replace(/https?:\/\/[^\s)'"<>]+/gi,'[URL]')
+  .replace(/(?:authorization|credential|access.?key|secret.?key|signature|token|x-amz-[\w-]+)\s*[:=]\s*[^\s,;]+/gi,'[credencial redigida]')
+}
 async function processProject(project){
  const revision=project.updated_at.toISOString(),old=previous.assets[project.id]
  const start=performance.now();const pages=Array.isArray(project.canvas_data)?project.canvas_data:project.canvas_data?.pages||[]
@@ -80,8 +88,23 @@ async function processProject(project){
  console.log(JSON.stringify({completed,total:limit||rows.length,...metric}))
 }
 const selected=limit?rows.slice(0,limit):rows
-for(let i=0;i<selected.length;i+=4){await Promise.all(selected.slice(i,i+4).map(processProject));globalThis.gc?.()}
+for(let i=0;i<selected.length;i+=4){
+ const batch=selected.slice(i,i+4)
+ if(continueOnError){
+  const results=await Promise.allSettled(batch.map(project=>processProject(project)))
+  for(let index=0;index<results.length;index++)if(results[index].status==='rejected'){
+   const error=results[index].reason, message=failureMessage(error)
+   const failure={id:batch[index].id,error:message}
+   failures.push(failure)
+   console.log(JSON.stringify({failed:true,...failure,sourcePolicyRejected:String(error?.message||'').startsWith('Referência privada fora da conta do modelo:')}))
+  }
+ }else await Promise.all(batch.map(processProject))
+ globalThis.gc?.()
+}
 if(!limit){const ids=new Set(rows.map(p=>p.id));for(const id of Object.keys(manifest.assets))if(!ids.has(id))delete manifest.assets[id]}
 if(apply&&!limit)await writeFile(manifestPath,JSON.stringify(manifest,null,2)+'\n')
 await writeFile(output+'/metrics.json',JSON.stringify(metrics,null,2))
-console.log(JSON.stringify({mode:apply?'uploaded':'local-review',count:Object.keys(manifest.assets).length,totalBytes:Object.values(manifest.assets).reduce((n,a)=>n+a.bytes,0)}))
+if(continueOnError)await writeFile(output+'/failures.json',JSON.stringify(failures,null,2))
+const sourcePolicyRejections=failures.filter(f=>f.error==='Referência privada fora da conta do modelo').length
+console.log(JSON.stringify({mode:apply?'uploaded':'local-review',count:Object.keys(manifest.assets).length,totalBytes:Object.values(manifest.assets).reduce((n,a)=>n+a.bytes,0),failedProjects:failures.length,sourcePolicyRejections}))
+if(failures.length)process.exitCode=1

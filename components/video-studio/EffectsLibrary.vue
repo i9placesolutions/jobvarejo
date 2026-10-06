@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {MOTION_PRESETS,PRODUCT_ENTRANCES,TEXT_ENTRANCES,CAMERA_MOVEMENTS,SCENE_TRANSITIONS,ATMOSPHERE_EFFECTS,SOUND_EFFECTS,PRODUCT_FINISHES,motionSettings,identifyMotionPreset,soundAsset,type VideoMotionSettings} from '~/shared/video-studio/effect-catalog'
+import {MOTION_VARIATIONS,PRICE_ACCENTS,MOTION_PRESETS,PRODUCT_ENTRANCES,TEXT_ENTRANCES,CAMERA_MOVEMENTS,SCENE_TRANSITIONS,ATMOSPHERE_EFFECTS,SOUND_EFFECTS,PRODUCT_FINISHES,motionSettings,identifyMotionPreset,soundAsset,type VideoMotionSettings} from '~/shared/video-studio/effect-catalog'
 import type {VideoDocument} from '~/shared/video-studio/model'
 const doc=defineModel<VideoDocument>({required:true})
 const m=computed(()=>motionSettings(doc.value.motion))
@@ -9,6 +9,8 @@ function apply(id:string){const p=MOTION_PRESETS.find(p=>p.id===id)!;doc.value={
 function set(key:keyof VideoMotionSettings,value:string){doc.value={...doc.value,motion:{...m.value,[key]:value}};if(key==='camera'&&value!=='none'&&!doc.value.effects.includes('shake'))doc.value.effects.push('shake')}
 function atmosphere(id:VideoMotionSettings['atmosphere'][number]){const current=m.value.atmosphere;if(!current.includes(id)&&current.length>=8)return;doc.value={...doc.value,motion:{...m.value,atmosphere:current.includes(id)?current.filter(v=>v!==id):[...current,id]}}}
 const value=(e:Event)=>(e.target as HTMLSelectElement).value
+// Nova combinação de transições/entradas/destaques por oferta, sem mudar o estilo base escolhido.
+function shuffleVariation(){doc.value={...doc.value,motionVariation:'varied',variationSeed:Math.floor(Math.random()*2**31)}}
 </script>
 
 <template>
@@ -29,6 +31,12 @@ const value=(e:Event)=>(e.target as HTMLSelectElement).value
    </button>
   </div>
   <p class="motion-note" role="status"><span aria-hidden="true">{{ selected?'✓':'▶' }}</span>{{ selected?'Estilo aplicado. Dê o play na prévia para ver o resultado.':'Escolha um estilo para visualizar o movimento na prévia.' }}</p>
+  <div class="motion-fields motion-variation">
+   <label>Variação entre ofertas<select :value="doc.motionVariation||'fixed'" @change="doc={...doc,motionVariation:value($event) as VideoDocument['motionVariation']}"><option v-for="v in MOTION_VARIATIONS" :key="v.id" :value="v.id">{{ v.name }}</option></select></label>
+   <label>Destaque do preço<select :value="doc.priceAccent||'none'" @change="doc={...doc,priceAccent:value($event) as VideoDocument['priceAccent']}"><option v-for="a in PRICE_ACCENTS" :key="a.id" :value="a.id">{{ a.name }}</option></select></label>
+   <label class="motion-toggle"><input type="checkbox" :checked="doc.beatSync===true" @change="doc={...doc,beatSync:($event.target as HTMLInputElement).checked}"/> Cortes no ritmo da música</label>
+   <button v-if="doc.motionVariation==='varied'" type="button" class="motion-shuffle" @click="shuffleVariation">Sortear outra combinação</button>
+  </div>
   <details><summary>Ajustar cada movimento</summary><div class="motion-fields">
    <label v-for="field in fields" :key="field.key">{{ field.label }}<select :value="m[field.key]||'clean'" @change="set(field.key,value($event))"><option v-for="item in field.items" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
    <label>Transição entre ofertas<select v-model="doc.transition"><option v-for="t in SCENE_TRANSITIONS" :key="t.id" :value="t.id">{{ t.name }}</option></select></label>
@@ -48,4 +56,5 @@ const value=(e:Event)=>(e.target as HTMLSelectElement).value
 .motion-library details{border:1px solid #e3e9f0;border-radius:12px;padding:0 12px;margin-top:10px;background:#fff}.motion-library summary{display:flex;align-items:center;min-height:43px;cursor:pointer;color:#344969;font-weight:700;font-size:12px}.motion-library details[open]{padding-bottom:13px}.motion-library details[open] summary{border-bottom:1px solid #edf1f5}.motion-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:13px}.motion-fields label{display:flex;flex-direction:column;gap:7px;color:#40536f;font-size:11px;font-weight:650}.motion-fields select{width:100%;border:1px solid #d5dfea;border-radius:9px;background:#fff;padding:9px 8px;font:inherit;color:#263959}.motion-fields audio{width:100%;height:34px}.motion-checks{display:grid;grid-template-columns:1fr 1fr;gap:9px;font-size:11px}.motion-checks label{display:flex;gap:7px;align-items:center;color:#53677f}.motion-subtitle{color:#344969;font-size:11px;font-weight:750;margin:17px 0 10px}.motion-library input{accent-color:#6556aa}
 @container (max-width:440px){.motion-library{padding:16px}.motion-kicker{align-items:flex-start;flex-direction:column}.motion-heading>strong{font-size:21px}.motion-presets{grid-template-columns:1fr}.motion-fields{grid-template-columns:1fr}.motion-preset-main{grid-template-columns:50px minmax(0,1fr) 22px}.motion-presets i{width:50px;height:50px}.motion-checks{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.motion-presets button{transition:none}}
+.motion-variation{margin:12px 0 4px}.motion-toggle{display:flex;align-items:center;gap:8px;font-weight:700}.motion-shuffle{align-self:end;border:1px solid #c9d6ec;border-radius:10px;background:#f3f6ff;color:#3a4fa0;font-weight:800;padding:9px 12px;cursor:pointer}.motion-shuffle:hover{background:#e7edff}
 </style>

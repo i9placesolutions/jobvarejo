@@ -96,7 +96,7 @@ watch(() => props.open, (val) => {
       <div v-if="open" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="emit('close')" />
 
-        <div class="relative bg-[#18181b] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+        <div class="relative bg-[#18181b] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[calc(100dvh-2rem)] flex flex-col shadow-2xl">
           <!-- Header -->
           <div class="flex items-center justify-between px-5 py-4 border-b border-white/5">
             <div>

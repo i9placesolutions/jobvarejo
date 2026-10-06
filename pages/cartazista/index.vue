@@ -684,6 +684,10 @@ const modelById = (id: string) => templates.value.find((template) => template.id
   opacity: 1;
 }
 
+.cartazista-card-preview:focus-visible .cartazista-card-hover-action {
+  opacity: 1;
+}
+
 .cartazista-card-hover-action span {
   padding: 8px 16px;
   background: #ffffff;
@@ -790,10 +794,11 @@ const modelById = (id: string) => templates.value.find((template) => template.id
 /* Modal Dialog */
 .cartazista-modal {
   width: min(940px, calc(100% - 32px));
+  max-height: 90dvh;
   padding: 0;
   border: 0;
   border-radius: 24px;
-  overflow: hidden;
+  overflow-y: auto;
   box-shadow: 0 25px 60px rgba(15, 23, 42, 0.25);
 }
 
@@ -953,6 +958,15 @@ const modelById = (id: string) => templates.value.find((template) => template.id
 }
 
 @media (max-width: 480px) {
+  .cartazista-catalog { width: calc(100% - 24px); padding-top: 18px; }
+  .cartazista-hero-card { padding: 20px 16px; border-radius: 18px; }
+  .cartazista-hero-card p { font-size: 13px; }
+  .cartazista-step-item { padding: 12px; }
+  .cartazista-search { min-width: 0; width: 100%; }
+  .cartazista-model-grid { gap: 12px; }
+  .cartazista-modal-right { padding: 18px; }
+  .cartazista-modal-actions { align-items: stretch; flex-direction: column-reverse; }
+  .cartazista-modal-actions .cartazista-btn { width: 100%; }
   .cartazista-model-grid {
     grid-template-columns: 1fr;
   }

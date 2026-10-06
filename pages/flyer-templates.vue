@@ -73,6 +73,7 @@ const savingCategory = ref(false)
 const selectedCategory = ref<string | null>(null)
 const selectedSubcategory = ref<string | null>(null)
 let templateLoadGeneration = 0
+let pageDisposed = false
 let categoryListMutationGeneration = 0
 const showCategoryDialog = ref(false)
 const categoryDialogName = ref('')
@@ -349,6 +350,7 @@ const formatTemplateStructure = (template: FlyerTemplateSummary): string => {
 
 const loadTemplates = async () => {
   const requestGeneration = ++templateLoadGeneration
+  const isCurrentRequest = () => requestGeneration === templateLoadGeneration && !pageDisposed
   isLoading.value = true
   loadError.value = ''
   accountPreviewProfile.value = null
@@ -368,20 +370,22 @@ const loadTemplates = async () => {
       categories.value = [...mergedCategories.values()]
     })
     const profileRequest = $fetch<any>('/api/profile', { headers }).catch(() => null)
-    const [models, profile] = await Promise.all([
-      listFlyerTemplates(headers, { library: true }),
-      profileRequest
-    ])
-    if (requestGeneration !== templateLoadGeneration) return
+    void profileRequest.then((profile) => {
+      if (!isCurrentRequest()) return
+      accountPreviewProfile.value = profile
+    }).finally(() => {
+      if (isCurrentRequest()) accountPreviewProfileReady.value = true
+    })
+
+    const models = await listFlyerTemplates(headers, { library: true })
+    if (!isCurrentRequest()) return
     templates.value = models
-    accountPreviewProfile.value = profile
   } catch (error: any) {
-    if (requestGeneration !== templateLoadGeneration) return
+    if (!isCurrentRequest()) return
     loadError.value = String(error?.data?.statusMessage || error?.message || 'Não foi possível carregar os modelos.')
     templates.value = []
   } finally {
-    if (requestGeneration === templateLoadGeneration) {
-      accountPreviewProfileReady.value = true
+    if (isCurrentRequest()) {
       isLoading.value = false
     }
   }
@@ -507,6 +511,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  pageDisposed = true
+  templateLoadGeneration++
   if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
@@ -644,8 +650,7 @@ onUnmounted(() => {
                 <LayoutTemplate class="h-8 w-8" />
               </div>
               <AccountFlyerTemplatePreview
-                v-if="accountPreviewProfileReady"
-                :key="`${template.id}:${accountPreviewProfile?.id || 'account'}`"
+                :key="template.id"
                 :template-id="template.id"
                 :gallery-preview-url="template.gallery_preview_url"
                 :revision="template.updated_at"
@@ -864,8 +869,8 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="showCategoryDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" @click.self="!isCreatingCategory && (showCategoryDialog = false)">
-      <form class="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl sm:p-6" @submit.prevent="createCatalogCategory">
+    <div v-if="showCategoryDialog" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center sm:p-5" @click.self="!isCreatingCategory && (showCategoryDialog = false)">
+      <form class="my-auto w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl sm:p-6" @submit.prevent="createCatalogCategory">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-[11px] font-bold uppercase tracking-[.16em] text-blue-500">Biblioteca</p>

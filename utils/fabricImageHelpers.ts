@@ -670,23 +670,74 @@ export const waitForFabricImagesDecoded = async (root: any, timeoutMs = 4000): P
  * imagens cross-origin sem CORS ou em fontes opacas, retorna a origem sem
  * alterar o asset.
  */
-export const trimImageSourceToDataUrl = async (
+type TrimImageSourceResult = { value: string; cacheable: boolean }
+
+const TRIM_IMAGE_CACHE_MAX_ENTRIES = 48
+const TRIM_IMAGE_CACHE_MAX_BYTES = 16 * 1024 * 1024
+const TRIM_IMAGE_IN_FLIGHT_MAX_ENTRIES = 32
+const TRIM_IMAGE_LOAD_TIMEOUT_MS = 3000
+const trimImageResultCache = new Map<string, { value: string; bytes: number }>()
+const trimImageInFlight = new Map<string, Promise<string>>()
+let trimImageResultCacheBytes = 0
+
+const trimImageSourceCacheKey = (source: string, opts: ImageTrimDetectOptions): string => {
+    const normalizedOptions = Object.keys(opts)
+        .sort()
+        .map((key) => [key, (opts as any)[key]])
+    return JSON.stringify([source, normalizedOptions])
+}
+
+const trimImageCacheStringBytes = (value: string): number => value.length * 2
+
+const getTrimmedSourceFromCache = (key: string): string | null => {
+    const entry = trimImageResultCache.get(key)
+    if (!entry) return null
+    // A Map preserves insertion order; moving the entry to the end makes this LRU.
+    trimImageResultCache.delete(key)
+    trimImageResultCache.set(key, entry)
+    return entry.value
+}
+
+const cacheTrimmedSource = (key: string, value: string): void => {
+    const bytes = trimImageCacheStringBytes(key) + trimImageCacheStringBytes(value)
+    if (bytes > TRIM_IMAGE_CACHE_MAX_BYTES) return
+
+    const existing = trimImageResultCache.get(key)
+    if (existing) {
+        trimImageResultCacheBytes -= existing.bytes
+        trimImageResultCache.delete(key)
+    }
+    while (
+        trimImageResultCache.size >= TRIM_IMAGE_CACHE_MAX_ENTRIES ||
+        trimImageResultCacheBytes + bytes > TRIM_IMAGE_CACHE_MAX_BYTES
+    ) {
+        const oldestKey = trimImageResultCache.keys().next().value
+        if (oldestKey === undefined) break
+        const oldest = trimImageResultCache.get(oldestKey)
+        if (oldest) trimImageResultCacheBytes -= oldest.bytes
+        trimImageResultCache.delete(oldestKey)
+    }
+    trimImageResultCache.set(key, { value, bytes })
+    trimImageResultCacheBytes += bytes
+}
+
+const trimImageSourceUncached = async (
     source: string,
     opts: ImageTrimDetectOptions = {}
-): Promise<string> => {
-    const normalizedSource = String(source || '').trim()
-    if (!normalizedSource || typeof window === 'undefined' || typeof document === 'undefined') {
-        return normalizedSource
-    }
-
-    return await new Promise<string>((resolve) => {
+): Promise<TrimImageSourceResult> => {
+    return await new Promise<TrimImageSourceResult>((resolve) => {
+        let settled = false
+        let timeout: ReturnType<typeof setTimeout> | undefined
         const image = new window.Image()
         image.crossOrigin = 'anonymous'
 
-        const finish = (value: string) => {
+        const finish = (value: string, cacheable: boolean) => {
+            if (settled) return
+            settled = true
+            if (timeout !== undefined) clearTimeout(timeout)
             image.onload = null
             image.onerror = null
-            resolve(value)
+            resolve({ value, cacheable })
         }
 
         image.onload = () => {
@@ -694,17 +745,22 @@ export const trimImageSourceToDataUrl = async (
                 const width = Number(image.naturalWidth || image.width || 0)
                 const height = Number(image.naturalHeight || image.height || 0)
                 if (width < 2 || height < 2) {
-                    finish(normalizedSource)
+                    finish(source, false)
                     return
                 }
 
-                const bounds = detectImageTrimBounds({
+                const inspected = inspectImageTrimBounds({
                     getElement: () => image,
                     width,
                     height
                 }, opts)
+                if (!inspected.hasContent) {
+                    finish(source, false)
+                    return
+                }
+                const bounds = inspected.bounds
                 if (!bounds) {
-                    finish(normalizedSource)
+                    finish(source, true)
                     return
                 }
 
@@ -713,7 +769,7 @@ export const trimImageSourceToDataUrl = async (
                 output.height = Math.max(1, Math.round(bounds.height))
                 const context = output.getContext('2d')
                 if (!context) {
-                    finish(normalizedSource)
+                    finish(source, false)
                     return
                 }
 
@@ -729,12 +785,48 @@ export const trimImageSourceToDataUrl = async (
                     output.width,
                     output.height
                 )
-                finish(output.toDataURL('image/png'))
+                finish(output.toDataURL('image/png'), true)
             } catch {
-                finish(normalizedSource)
+                finish(source, false)
             }
         }
-        image.onerror = () => finish(normalizedSource)
-        image.src = normalizedSource
+        image.onerror = () => finish(source, false)
+        timeout = setTimeout(() => finish(source, false), TRIM_IMAGE_LOAD_TIMEOUT_MS)
+        image.src = source
     })
+}
+
+/**
+ * Cria uma versao PNG aparada pelo alpha visivel de uma imagem raster.
+ * Resultados bem-sucedidos usam cache LRU limitado por entradas e bytes;
+ * chamadas concorrentes para a mesma origem/opcoes compartilham a promessa.
+ * Falhas nao entram no cache para que uma chamada posterior possa tentar de novo.
+ */
+export const trimImageSourceToDataUrl = async (
+    source: string,
+    opts: ImageTrimDetectOptions = {}
+): Promise<string> => {
+    const normalizedSource = String(source || '').trim()
+    if (!normalizedSource || typeof window === 'undefined' || typeof document === 'undefined') {
+        return normalizedSource
+    }
+
+    const key = trimImageSourceCacheKey(normalizedSource, opts)
+    const cached = getTrimmedSourceFromCache(key)
+    if (cached !== null) return cached
+
+    const existing = trimImageInFlight.get(key)
+    if (existing) return existing
+
+    const canTrackInFlight = trimImageInFlight.size < TRIM_IMAGE_IN_FLIGHT_MAX_ENTRIES
+    const promise = trimImageSourceUncached(normalizedSource, opts).then(({ value, cacheable }) => {
+        if (cacheable) cacheTrimmedSource(key, value)
+        return value
+    }).finally(() => {
+        if (canTrackInFlight && trimImageInFlight.get(key) === promise) {
+            trimImageInFlight.delete(key)
+        }
+    })
+    if (canTrackInFlight) trimImageInFlight.set(key, promise)
+    return promise
 }

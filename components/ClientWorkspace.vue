@@ -185,12 +185,12 @@ onMounted(() => {
 
         <div class="client-workspace__account">
           <AccountSwitcher v-if="auth.isStaff.value" />
-          <NuxtLink to="/plans" class="client-workspace__plans-badge">
+          <NuxtLink to="/plans" class="client-workspace__plans-badge" aria-label="Planos e pagamento">
             <Sparkles :size="14" />
             <span>Planos & Teste</span>
           </NuxtLink>
 
-          <NuxtLink v-if="auth.can('loja')" to="/business-profile" class="client-workspace__store-link">
+          <NuxtLink v-if="auth.can('loja')" to="/business-profile" class="client-workspace__store-link" aria-label="Minha loja">
             <Store :size="16" />
             <span>Minha loja</span>
           </NuxtLink>
@@ -409,7 +409,8 @@ onMounted(() => {
   --workspace-blue: #2160b4;
   --workspace-line: #dbe5f0;
   min-height: 100dvh;
-  overflow: hidden;
+  min-width: 0;
+  overflow-x: clip;
   color: var(--workspace-ink);
   background:
     radial-gradient(circle at 13% -7%, rgba(75, 139, 221, .17), transparent 28rem),
@@ -452,10 +453,10 @@ onMounted(() => {
 
 .client-workspace__header-inner {
   display: flex;
-  min-height: 82px;
+  min-height: 64px;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 12px;
 }
 
 .client-workspace__brand {
@@ -573,6 +574,10 @@ onMounted(() => {
   right: 0;
   display: grid;
   min-width: 196px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 80px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 7px;
   border: 1px solid var(--workspace-line);
   border-radius: 14px;
@@ -608,7 +613,7 @@ onMounted(() => {
 }
 
 .client-workspace__main {
-  padding: 68px 0 56px;
+  padding: clamp(20px, 3.5vw, 44px) 0 32px;
 }
 
 .client-workspace__hero {
@@ -1315,7 +1320,7 @@ onMounted(() => {
 
 .client-workspace__projects-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
   gap: 18px;
 }
 
@@ -1401,6 +1406,42 @@ onMounted(() => {
 .client-workspace__project-edit-btn:hover {
   background: #dbeafe;
   color: #1e40af;
+}
+
+.client-workspace__header-inner,
+.client-workspace__main,
+.client-workspace__hero > *,
+.client-workspace__account { min-width: 0; }
+.client-workspace__hero h1 { font-size: clamp(28px, 4vw, 48px); line-height: 1.08; margin-block: 12px; }
+.client-workspace__hero-copy > p:last-child { font-size: 13px; line-height: 1.6; }
+.client-workspace__tool-link { min-height: 240px; padding: clamp(16px, 2vw, 24px); }
+.client-workspace__tool h3 { font-size: clamp(21px, 2vw, 25px); }
+.client-workspace__tool-eyebrow { margin-top: 18px; }
+.client-workspace__trial-banner { padding: clamp(16px, 2vw, 24px); gap: 12px; }
+.client-workspace__trial-btn { max-width: 100%; white-space: normal; text-align: center; justify-content: center; }
+.client-workspace :is(h1, h2, h3, p) { overflow-wrap: anywhere; }
+
+@media (max-width: 1023px) {
+  .client-workspace__header-inner { min-height: 60px; gap: 8px; }
+  .client-workspace__hero { grid-template-columns: minmax(0, 1fr); gap: 18px; padding-bottom: 24px; }
+  .client-workspace__main { padding-top: 24px; }
+  .client-workspace__flow-card { padding: 18px; }
+  .client-workspace__account-copy, .client-workspace__account-menu summary > svg { display: none; }
+  .client-workspace__account-menu summary { width: 44px; justify-content: center; padding: 4px; }
+}
+@media (max-width: 600px) {
+  .client-workspace__plans-badge { width: 44px; flex-shrink: 0; justify-content: center; padding: 0; }
+  .client-workspace__plans-badge span { display: none; }
+  .client-workspace__account { gap: 6px; }
+  .client-workspace__header-inner { gap: 8px; }
+  .client-workspace__header-inner, .client-workspace__main { width: calc(100% - 24px); }
+  .client-workspace__brand img { width: 120px; }
+  .client-workspace__main { padding-top: 20px; }
+  .client-workspace__tool-link { min-height: 220px; }
+  .client-workspace__tool-steps { margin-top: 14px; }
+}
+@media (max-width: 359px) {
+  .client-workspace__brand img { width: 92px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

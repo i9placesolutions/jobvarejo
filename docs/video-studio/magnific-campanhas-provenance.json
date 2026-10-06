@@ -1,0 +1,774 @@
+{
+ "fonte": "Magnific (antigo Freepik) — download do acervo de stock via API, plano Premium, uso interno para clientes (sem geração por IA)",
+ "licenca": "https://www.magnific.com/legal/terms-of-use",
+ "atualizadoEm": "2026-10-06T16:01:33.366Z",
+ "campanhas": [
+  {
+   "slug": "mega-oferta-estrelas",
+   "nome": "Mega Oferta — Preto e Dourado",
+   "projeto": "84c1387f-16ef-40ad-9acf-f2b0b5ff73f5",
+   "selo": {
+    "magnificId": 373928820,
+    "titulo": "Selo 3D Mega Oferta Redes Sociais"
+   },
+   "fotoFundo": {
+    "magnificId": 61037064,
+    "titulo": "Partículas de fundo de poeira dourada clara"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782975,
+     "titulo": "Cubo de desconto preto e vermelho com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 28211246,
+     "titulo": "ilustração de moedas 3d isolada"
+    },
+    {
+     "magnificId": 378782975,
+     "titulo": "Cubo de desconto preto e vermelho com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 19427445,
+     "titulo": "Ícone 3d da estrela de Natal"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "4150821",
+    "titulo": "Partículas de glitter dourado, bokeh e poeira de premiação em fundo abstrato em loop",
+    "pagina": "https://www.magnific.com/br/video-premium/particulas-glitter-dourado-bokeh-poeira-premiacao-fundo-abstrato-loop_4150821",
+    "autor": "Getty Images",
+    "duracao": "00:00:12",
+    "resolucao": "1280x720",
+    "baixadoEm": "2026-10-06T13:38:04.304Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-5141",
+   "arquivos": {
+    "seal": "catalog/magnific-mega-oferta-estrelas-seal.png",
+    "background": "catalog/magnific-mega-oferta-estrelas-background.jpg",
+    "backgroundWide": "catalog/magnific-mega-oferta-estrelas-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-mega-oferta-estrelas-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-mega-oferta-estrelas-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-mega-oferta-estrelas-wide.mp4"
+   }
+  },
+  {
+   "slug": "aqui-tem-super-ofertas",
+   "nome": "Aqui Tem Super Ofertas — Laranja",
+   "projeto": "439da8ec-cab8-4092-9102-49a226a1013b",
+   "selo": {
+    "magnificId": 47967040,
+    "titulo": "selar ofertas de mídia social de supermercado renderizadas em 3d"
+   },
+   "fotoFundo": {
+    "magnificId": 47928372,
+    "titulo": "Arte digital de fundo sunburst movimento radial retrô padrão de faixa dinâmica"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 412450421,
+     "titulo": "Moeda 3D Cifrao Dinheiro para Redes Sociais"
+    },
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 36161768,
+     "titulo": "megafone laranja e branco para composição"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "9866945",
+    "titulo": "Fundo de explosão solar animado com partículas rotativas",
+    "pagina": "https://www.magnific.com/br/video-premium/fundo-explosao-solar-animado-particulas-rotativas_9866945",
+    "autor": "NovaMotion",
+    "duracao": "00:00:10",
+    "resolucao": "1920x1080",
+    "baixadoEm": "2026-10-06T13:38:22.150Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-2759",
+   "arquivos": {
+    "seal": "catalog/magnific-aqui-tem-super-ofertas-seal.png",
+    "background": "catalog/magnific-aqui-tem-super-ofertas-background.jpg",
+    "backgroundWide": "catalog/magnific-aqui-tem-super-ofertas-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-aqui-tem-super-ofertas-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-aqui-tem-super-ofertas-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-aqui-tem-super-ofertas-wide.mp4"
+   }
+  },
+  {
+   "slug": "fim-de-semana-imbativel",
+   "nome": "Fim de Semana Imbatível — Azul e Vermelho",
+   "projeto": "2d64ce85-88b9-4fd2-8f6b-20ecc71c7513",
+   "selo": {
+    "magnificId": 409787719,
+    "titulo": "fim de semana imbativel comercio varejo supermercado"
+   },
+   "fotoFundo": {
+    "magnificId": 75936425,
+    "titulo": "textura"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 28211246,
+     "titulo": "ilustração de moedas 3d isolada"
+    },
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 28827235,
+     "titulo": "ícone 3D elétrico dourado"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "9660453",
+    "titulo": "Fundo abstrato em movimento com explosão solar azul",
+    "pagina": "https://www.magnific.com/br/video-premium/fundo-abstrato-movimento-explosao-solar-azul_9660453",
+    "autor": "syimoonsell",
+    "duracao": "00:00:10",
+    "resolucao": "1920x1080",
+    "baixadoEm": "2026-10-06T13:37:59.874Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-3082",
+   "arquivos": {
+    "seal": "catalog/magnific-fim-de-semana-imbativel-seal.png",
+    "background": "catalog/magnific-fim-de-semana-imbativel-background.jpg",
+    "backgroundWide": "catalog/magnific-fim-de-semana-imbativel-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-fim-de-semana-imbativel-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-fim-de-semana-imbativel-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-fim-de-semana-imbativel-wide.mp4"
+   }
+  },
+  {
+   "slug": "quinta-da-carne-brasa",
+   "nome": "Quinta da Carne — Madeira e Brasa",
+   "projeto": "e6650a6a-842b-4f5d-a19c-afe3939020ad",
+   "selo": {
+    "magnificId": 49462352,
+    "titulo": "Selo 3d isolado para supermercado quinta da carne"
+   },
+   "fotoFundo": {
+    "magnificId": 39085615,
+    "titulo": "Antigo fundo de textura de madeira preta"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 28211246,
+     "titulo": "ilustração de moedas 3d isolada"
+    },
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 19427445,
+     "titulo": "Ícone 3d da estrela de Natal"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "2841861",
+    "titulo": "Animação 3D de chamas em movimento, faíscas de brasas quentes e ardentes, brilho de fogos de artifício, partículas em chamas voando em fundo preto, efeito visual 4K laranja e vermelho",
+    "pagina": "https://www.magnific.com/br/video-premium/animacao-3d-chamas-movimento-faiscas-brasas-quentes-ardentes-brilho-fogos-artificio-particulas-chamas-voando-fundo-preto-efeito-visual-4k-laranja-vermelho_2841861",
+    "autor": "BlackBoxGuild",
+    "duracao": "00:00:15",
+    "resolucao": "3840x2160",
+    "baixadoEm": "2026-10-06T13:41:20.338Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-2702",
+   "arquivos": {
+    "seal": "catalog/magnific-quinta-da-carne-brasa-seal.png",
+    "background": "catalog/magnific-quinta-da-carne-brasa-background.jpg",
+    "backgroundWide": "catalog/magnific-quinta-da-carne-brasa-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-quinta-da-carne-brasa-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-quinta-da-carne-brasa-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-quinta-da-carne-brasa-wide.mp4"
+   }
+  },
+  {
+   "slug": "clube-de-descontos",
+   "nome": "Clube de Descontos — Verde",
+   "projeto": "1a5ce70f-d753-499e-9c87-0238e5ccfbb0",
+   "selo": {
+    "magnificId": 171916144,
+    "titulo": "3d logo discount club campanha mídia social ofertas especiais supermercado clube de descontos brasil"
+   },
+   "fotoFundo": {
+    "magnificId": 378134013,
+    "titulo": "Luzes verdes brilhantes brilhantes incríveis e luzes de luxo tela larga resolução 4K"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 57396571,
+     "titulo": "Renderização 3D do carrinho de compras isolado"
+    },
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 28211246,
+     "titulo": "ilustração de moedas 3d isolada"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "91280",
+    "titulo": "Animação em loop de fundo retrô 26",
+    "pagina": "https://www.magnific.com/br/video-premium/animacao-loop-fundo-retro-26_91280",
+    "autor": "Motionflow",
+    "duracao": "00:00:06",
+    "resolucao": "1920x1080",
+    "baixadoEm": "2026-10-06T13:38:38.252Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-2650",
+   "arquivos": {
+    "seal": "catalog/magnific-clube-de-descontos-seal.png",
+    "background": "catalog/magnific-clube-de-descontos-background.jpg",
+    "backgroundWide": "catalog/magnific-clube-de-descontos-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-clube-de-descontos-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-clube-de-descontos-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-clube-de-descontos-wide.mp4"
+   }
+  },
+  {
+   "slug": "super-economia",
+   "nome": "Super Economia — Amarelo e Vermelho",
+   "projeto": "06022f35-98c0-4f2e-8c36-70e9750744a1",
+   "selo": {
+    "magnificId": 40562978,
+    "titulo": "3d render selo supermercado brasil dia da super economia"
+   },
+   "fotoFundo": {
+    "magnificId": 382257210,
+    "titulo": "um fundo amarelo com um sol e estrelas"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 65756585,
+     "titulo": "PSD ELEMENT 3D PARA COMPOSITÃO (composição em 3D)"
+    },
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 28211246,
+     "titulo": "ilustração de moedas 3d isolada"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "5063757",
+    "titulo": "Animação de fundo com efeito de vazamentos de luz 4K, com vazamentos de luz de lente piscando, criando um efeito elegante.",
+    "pagina": "https://www.magnific.com/br/video-premium/animacao-fundo-efeito-vazamentos-luz-4k-vazamentos-luz-lente-piscando-criando-efeito-elegante_5063757",
+    "autor": "Infi Studio",
+    "duracao": "00:00:30",
+    "resolucao": "4096x2304",
+    "baixadoEm": "2026-10-06T13:37:54.908Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-2700",
+   "arquivos": {
+    "seal": "catalog/magnific-super-economia-seal.png",
+    "background": "catalog/magnific-super-economia-background.jpg",
+    "backgroundWide": "catalog/magnific-super-economia-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-super-economia-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-super-economia-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-super-economia-wide.mp4"
+   }
+  },
+  {
+   "slug": "promocao-do-dia",
+   "nome": "Promoção do Dia — Roxo",
+   "projeto": "f59e4137-4552-4ed3-8996-bf30707dda72",
+   "selo": {
+    "magnificId": 420576792,
+    "titulo": "Selo Promocional 3D de Alta Definição - Promoção Diária"
+   },
+   "fotoFundo": {
+    "magnificId": 378133397,
+    "titulo": "Luzes violetas brilhantes brilhantes incríveis e luzes de luxo tela larga resolução 4K"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 28827235,
+     "titulo": "ícone 3D elétrico dourado"
+    },
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 19427445,
+     "titulo": "Ícone 3d da estrela de Natal"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "91331",
+    "titulo": "Movimento abstrato de linhas roxas estilo anos 80 3",
+    "pagina": "https://www.magnific.com/br/video-premium/movimento-abstrato-linhas-roxas-estilo-anos-80-3_91331",
+    "autor": "Motionflow",
+    "duracao": "00:00:06",
+    "resolucao": "3840x2160",
+    "baixadoEm": "2026-10-06T13:39:10.066Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-4218",
+   "arquivos": {
+    "seal": "catalog/magnific-promocao-do-dia-seal.png",
+    "background": "catalog/magnific-promocao-do-dia-background.jpg",
+    "backgroundWide": "catalog/magnific-promocao-do-dia-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-promocao-do-dia-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-promocao-do-dia-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-promocao-do-dia-wide.mp4"
+   }
+  },
+  {
+   "slug": "super-promocao-preto",
+   "nome": "Super Promoção — Preto e Vermelho",
+   "projeto": "6d740a3e-4d5b-4a1c-a8e2-9ffc9ca4ce4a",
+   "selo": {
+    "magnificId": 418002001,
+    "titulo": "Insignia de venda de Super Promoocao"
+   },
+   "fotoFundo": {
+    "magnificId": 156205307,
+    "titulo": "Desenho de fundo abstrato HD Hard Dark Cocktail Cor vermelha"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782975,
+     "titulo": "Cubo de desconto preto e vermelho com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 58378153,
+     "titulo": "caixa de presente vermelha 3D com fita em fundo transparente"
+    },
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 378782975,
+     "titulo": "Cubo de desconto preto e vermelho com símbolo de porcentagem em renderização 3D com fundo transparente"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "5063757",
+    "titulo": "Animação de fundo com efeito de vazamentos de luz 4K, com vazamentos de luz de lente piscando, criando um efeito elegante.",
+    "pagina": "https://www.magnific.com/br/video-premium/animacao-fundo-efeito-vazamentos-luz-4k-vazamentos-luz-lente-piscando-criando-efeito-elegante_5063757",
+    "autor": "Infi Studio",
+    "duracao": "00:00:30",
+    "resolucao": "4096x2304",
+    "baixadoEm": "2026-10-06T13:37:54.908Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-5557",
+   "arquivos": {
+    "seal": "catalog/magnific-super-promocao-preto-seal.png",
+    "background": "catalog/magnific-super-promocao-preto-background.jpg",
+    "backgroundWide": "catalog/magnific-super-promocao-preto-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-super-promocao-preto-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-super-promocao-preto-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-super-promocao-preto-wide.mp4"
+   }
+  },
+  {
+   "slug": "mega-promocao",
+   "nome": "Mega Promoção — Vermelho e Dourado",
+   "projeto": "43184b49-5dc9-499a-aae6-31b6b0d2501d",
+   "selo": {
+    "magnificId": 116170687,
+    "titulo": "Mega promoção de marca 3D: supermercado oferece logotipo de varejo"
+   },
+   "fotoFundo": {
+    "magnificId": 201664294,
+    "titulo": "Efeito de movimento de brilho colorido fundo brilhante abstrato brilho de cor"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 28211246,
+     "titulo": "ilustração de moedas 3d isolada"
+    },
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 58378153,
+     "titulo": "caixa de presente vermelha 3D com fita em fundo transparente"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "7789349",
+    "titulo": "Loop de Padrão de Raios de Sol Rotativo em Vermelho e Bordô",
+    "pagina": "https://www.magnific.com/br/video-premium/loop-padrao-raios-sol-rotativo-vermelho-bordo_7789349",
+    "autor": "MrsTortoise",
+    "duracao": "00:00:10",
+    "resolucao": "3840x2160",
+    "baixadoEm": "2026-10-06T13:37:27.692Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-3209",
+   "arquivos": {
+    "seal": "catalog/magnific-mega-promocao-seal.png",
+    "background": "catalog/magnific-mega-promocao-background.jpg",
+    "backgroundWide": "catalog/magnific-mega-promocao-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-mega-promocao-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-mega-promocao-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-mega-promocao-wide.mp4"
+   }
+  },
+  {
+   "slug": "promocao-da-semana",
+   "nome": "Promoção da Semana — Laranja e Vermelho",
+   "projeto": "b61ec791-d54f-46f0-a387-2b34a618bf2f",
+   "selo": {
+    "magnificId": 40855901,
+    "titulo": "logo 3d render promoção da semana para composições de campanhas publicitárias promocao da semana"
+   },
+   "fotoFundo": {
+    "magnificId": 15739920,
+    "titulo": "Fundo de textura abstrata marrom, fundo padrão de papel de parede gradiente"
+   },
+   "elementos": [
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 133912841,
+     "titulo": "Red Shopping Bag Shopping Online conceito 3d"
+    },
+    {
+     "magnificId": 378782681,
+     "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente"
+    },
+    {
+     "magnificId": 36161768,
+     "titulo": "megafone laranja e branco para composição"
+    }
+   ],
+   "videoRaios": {
+    "magnificId": "9866945",
+    "titulo": "Fundo de explosão solar animado com partículas rotativas",
+    "pagina": "https://www.magnific.com/br/video-premium/fundo-explosao-solar-animado-particulas-rotativas_9866945",
+    "autor": "NovaMotion",
+    "duracao": "00:00:10",
+    "resolucao": "1920x1080",
+    "baixadoEm": "2026-10-06T13:38:22.150Z"
+   },
+   "overlays": [
+    {
+     "magnificId": "9031541",
+     "titulo": "Fundo com borda de partículas de glitter dourado, espaço para texto, brilhos de estrelas cintilantes, brilho luxuoso e quente",
+     "pagina": "https://www.magnific.com/br/video-premium/fundo-borda-particulas-glitter-dourado-espaco-texto-brilhos-estrelas-cintilantes-brilho-luxuoso-quente_9031541",
+     "autor": "Infi Studio",
+     "duracao": "00:00:20",
+     "resolucao": "4096x2304",
+     "baixadoEm": "2026-10-06T14:26:58.482Z"
+    },
+    {
+     "magnificId": "3964557",
+     "titulo": "Animação de confetes caindo sobre luzes brilhantes em fundo preto",
+     "pagina": "https://www.magnific.com/br/video-premium/animacao-confetes-caindo-sobre-luzes-brilhantes-fundo-preto_3964557",
+     "autor": "Getty Images",
+     "duracao": "00:00:11",
+     "resolucao": "1280x720",
+     "baixadoEm": "2026-10-06T14:24:37.912Z"
+    }
+   ],
+   "musica": "lib-magnific-2365",
+   "arquivos": {
+    "seal": "catalog/magnific-promocao-da-semana-seal.png",
+    "background": "catalog/magnific-promocao-da-semana-background.jpg",
+    "backgroundWide": "catalog/magnific-promocao-da-semana-background-wide.jpg",
+    "cartazHeader": "catalog/magnific-promocao-da-semana-cartaz-header.jpg",
+    "videoVertical": "backgrounds-video/magnific-promocao-da-semana-vertical.mp4",
+    "videoWide": "backgrounds-video/magnific-promocao-da-semana-wide.mp4"
+   }
+  }
+ ],
+ "elementos": [
+  {
+   "magnificId": 378782975,
+   "titulo": "Cubo de desconto preto e vermelho com símbolo de porcentagem em renderização 3D com fundo transparente",
+   "arquivo": "templates/catalog/magnific-element-378782975-1.png"
+  },
+  {
+   "magnificId": 28211246,
+   "titulo": "ilustração de moedas 3d isolada",
+   "arquivo": "templates/catalog/magnific-element-28211246.png"
+  },
+  {
+   "magnificId": 378782975,
+   "titulo": "Cubo de desconto preto e vermelho com símbolo de porcentagem em renderização 3D com fundo transparente",
+   "arquivo": "templates/catalog/magnific-element-378782975-2.png"
+  },
+  {
+   "magnificId": 19427445,
+   "titulo": "Ícone 3d da estrela de Natal",
+   "arquivo": "templates/catalog/magnific-element-19427445.png"
+  },
+  {
+   "magnificId": 378782681,
+   "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente",
+   "arquivo": "templates/catalog/magnific-element-378782681-1.png"
+  },
+  {
+   "magnificId": 412450421,
+   "titulo": "Moeda 3D Cifrao Dinheiro para Redes Sociais",
+   "arquivo": "templates/catalog/magnific-element-412450421.png"
+  },
+  {
+   "magnificId": 378782681,
+   "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente",
+   "arquivo": "templates/catalog/magnific-element-378782681-2.png"
+  },
+  {
+   "magnificId": 36161768,
+   "titulo": "megafone laranja e branco para composição",
+   "arquivo": "templates/catalog/magnific-element-36161768.png"
+  },
+  {
+   "magnificId": 378782681,
+   "titulo": "Cubo de desconto vermelho e branco com símbolo de porcentagem em renderização 3D com fundo transparente",
+   "arquivo": "templates/catalog/magnific-element-378782681-3.png"
+  },
+  {
+   "magnificId": 28827235,
+   "titulo": "ícone 3D elétrico dourado",
+   "arquivo": "templates/catalog/magnific-element-28827235.png"
+  },
+  {
+   "magnificId": 57396571,
+   "titulo": "Renderização 3D do carrinho de compras isolado",
+   "arquivo": "templates/catalog/magnific-element-57396571.png"
+  },
+  {
+   "magnificId": 65756585,
+   "titulo": "PSD ELEMENT 3D PARA COMPOSITÃO (composição em 3D)",
+   "arquivo": "templates/catalog/magnific-element-65756585.png"
+  },
+  {
+   "magnificId": 58378153,
+   "titulo": "caixa de presente vermelha 3D com fita em fundo transparente",
+   "arquivo": "templates/catalog/magnific-element-58378153.png"
+  },
+  {
+   "magnificId": 378782975,
+   "titulo": "Cubo de desconto preto e vermelho com símbolo de porcentagem em renderização 3D com fundo transparente",
+   "arquivo": "templates/catalog/magnific-element-378782975-3.png"
+  },
+  {
+   "magnificId": 133912841,
+   "titulo": "Red Shopping Bag Shopping Online conceito 3d",
+   "arquivo": "templates/catalog/magnific-element-133912841.png"
+  }
+ ]
+}

@@ -211,7 +211,7 @@ watch(
             </button>
           </div>
 
-          <div v-else class="mt-6 grid gap-4 md:grid-cols-3">
+          <div v-else class="profile-content-grid mt-6 grid gap-4 md:grid-cols-3">
             <section class="md:col-span-1 rounded-2xl border border-slate-200 bg-white backdrop-blur-sm p-5 shadow-xs">
               <div class="w-20 h-20 rounded-full bg-linear-to-br from-blue-500 to-sky-500 flex items-center justify-center text-2xl font-semibold text-white overflow-hidden mb-4">
                 <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" class="w-full h-full object-cover" />
@@ -302,6 +302,163 @@ watch(
 <style scoped>
 .dashboard-root {
   background: #f8f9fb;
+  width: 100%;
+  min-width: 0;
+  height: 100dvh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: clamp(0px, 1.25vw, 20px);
+}
+
+.dashboard-root > div {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-radius: clamp(0px, 1.6vw, 32px);
+}
+
+.dashboard-header {
+  min-width: 0;
+  gap: 10px;
+  padding-inline: clamp(12px, 2vw, 32px);
+}
+
+.dashboard-header > div:first-child,
+.dashboard-header > div:first-child > span {
+  min-width: 0;
+}
+
+.dashboard-header > div:first-child > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(12px, 1.1vw, 16px);
+}
+
+.dashboard-layout > aside {
+  width: clamp(208px, 21vw, 288px);
+  flex-basis: clamp(208px, 21vw, 288px);
+}
+
+.dashboard-main {
+  min-width: 0;
+  padding: clamp(16px, 2.5vw, 32px);
+}
+
+.dashboard-main h1 {
+  font-size: clamp(1.75rem, 3.2vw, 2.25rem);
+}
+
+.profile-content-grid {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.profile-content-grid > section {
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.profile-content-grid p,
+.profile-content-grid h3 {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1100px) {
+  .profile-content-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .profile-content-grid > section:first-child {
+    grid-column: span 1;
+  }
+
+  .profile-content-grid > section:nth-child(2) {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-root > div {
+    border-radius: 0;
+  }
+
+  .dashboard-header {
+    height: 56px;
+    padding-inline: 12px;
+  }
+
+  .dashboard-layout {
+    flex-direction: column;
+  }
+
+  .dashboard-layout > aside {
+    width: 100%;
+    height: auto;
+    flex-basis: auto;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 8px 12px;
+  }
+
+  .dashboard-layout > aside > div:first-child,
+  .dashboard-layout > aside > div:nth-child(3) {
+    display: none;
+  }
+
+  .dashboard-layout > aside > div:nth-child(2) {
+    display: flex;
+    flex: 1 0 auto;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+  }
+
+  .dashboard-layout > aside > div:nth-child(2) button {
+    width: auto;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .dashboard-layout > aside > div:last-child {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .dashboard-layout > aside > div:last-child button {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+
+  .dashboard-layout > aside > div:last-child button span {
+    display: none;
+  }
+
+  .dashboard-main {
+    padding: 20px 16px;
+  }
+}
+
+@media (max-height: 480px) {
+  .dashboard-root,
+  .dashboard-root > div {
+    padding: 0;
+    border-radius: 0;
+  }
+
+  .dashboard-header {
+    height: 52px;
+  }
+
+  .dashboard-main {
+    padding-block: 12px;
+  }
 }
 
 button:focus-visible {
