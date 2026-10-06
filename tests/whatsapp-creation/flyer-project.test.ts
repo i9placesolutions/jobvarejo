@@ -84,6 +84,8 @@ describe('projeto do encarte em andamento no painel', () => {
     expect(classifyFlyerProjectSlot(row, input)).toBe('ours')
     expect(classifyFlyerProjectSlot(row, { ...input, stage: 'final' })).toBe('ours')
     expect(classifyFlyerProjectSlot({ ...row, canvas_data: { pages: [{ id: 'p1', canvasDataPath: 'projects/x/page.json', canvasSavedAt: 1 }] } }, input)).toBe('edited')
+    // Abrir no editor só gera miniatura e muda a página ativa: não é edição.
+    expect(classifyFlyerProjectSlot({ ...row, canvas_data: { pages: [{ id: 'p1', canvasDataPath: 'projects/x/page.json', thumbnailUrl: 'projects/x/thumb.png' }], activePageIndex: 0 } }, input)).toBe('ours')
     expect(classifyFlyerProjectSlot(row, { ...input, revision: 2 })).toBe('newer')
     expect(classifyFlyerProjectSlot({ ...row, template_config: { whatsappCreation: { ...meta, stage: 'final' } } }, input)).toBe('newer')
     expect(classifyFlyerProjectSlot({ ...row, user_id: templateOwner }, input)).toBe('foreign')

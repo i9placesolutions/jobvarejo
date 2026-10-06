@@ -1026,7 +1026,20 @@ export const whatsappFlyerProjectId = (userId: string, orderId: string, version 
   deterministicUuid(`${userId}:${orderId}:encarte${version > 1 ? `:v${version}` : ''}`)
 
 const MAX_FLYER_PROJECT_VERSIONS = 20
-export const projectCanvasHash = (canvasData: unknown): string => sha256(Buffer.from(stableJson(canvasData)))
+/**
+ * Assinatura do conteúdo editável do projeto. Considera só o que muda quando a pessoa
+ * edita no painel (páginas, tamanho, nome, arquivo e momento em que o canvas foi salvo);
+ * miniatura e página ativa mudam só de abrir/navegar e não podem gerar uma versão nova.
+ */
+export const projectCanvasHash = (canvasData: unknown): string => {
+  const root = canvasData && typeof canvasData === 'object' ? canvasData as Record<string, unknown> : {}
+  const pages = Array.isArray(canvasData) ? canvasData : Array.isArray(root.pages) ? root.pages : []
+  const editable = pages.map((page: any) => ({
+    id: page?.id, name: page?.name, width: page?.width, height: page?.height,
+    canvasDataPath: page?.canvasDataPath, canvasSavedAt: page?.canvasSavedAt
+  }))
+  return sha256(Buffer.from(stableJson(editable)))
+}
 
 type FlyerProjectMetadata = { orderId: string; revision: number; stage: FlyerProjectStage; canvasHash: string }
 export type FlyerProjectSlot = 'absent' | 'ours' | 'edited' | 'newer' | 'foreign'
