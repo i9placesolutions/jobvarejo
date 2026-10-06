@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { gunzipSync } from 'node:zlib'
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
 import { createError } from 'h3'
 import type { CreationKind } from '~/shared/whatsapp-creation'
@@ -19,6 +19,8 @@ import { restoreCanvasStickerOutlines } from '~/utils/editorStickerOutline'
 const MAX_THUMBNAIL_BYTES = 8 * 1024 * 1024
 const MAX_CANVAS_BYTES = 32 * 1024 * 1024
 const HEADER_WIDTH = 800
+// Incrementar quando a renderização do cabeçalho mudar, para invalidar o cache.
+const HEADER_CACHE_VERSION = 1
 let headerFontsReady = false
 
 export function flyerHeaderCropHeight(canvas: { objects?: any[] }, pageHeight: number, imageHeight: number): number {
@@ -76,6 +78,48 @@ async function registerHeaderFonts(): Promise<void> {
   headerFontsReady = true
 }
 
+const DECODED_IMAGE_REF = '__headerDecodedImage'
+const PLACEHOLDER_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+/**
+ * O Fabric no Node carrega data URLs pelo jsdom, que leva ~1,7s por imagem de
+ * alguns MB e bloqueia o event loop; o node-canvas decodifica o mesmo buffer em
+ * ~20ms. As imagens raster são decodificadas antes e entram no lugar de um placeholder.
+ */
+async function decodeRasterImages(objects: any[]): Promise<Map<string, unknown>> {
+  const { loadImage } = await import('canvas')
+  const decoded = new Map<string, unknown>()
+  const pending: Promise<void>[] = []
+  const visit = (items: any[]): void => {
+    for (const object of items || []) {
+      const match = object?.type === 'Image' && typeof object.src === 'string'
+        ? object.src.match(/^data:image\/(?:png|jpeg|gif);base64,(.+)$/) : null
+      if (match) {
+        const ref = String(pending.length)
+        pending.push(loadImage(Buffer.from(match[1]!, 'base64')).then(element => {
+          decoded.set(ref, element)
+          object.src = PLACEHOLDER_PNG
+          object[DECODED_IMAGE_REF] = ref
+        }).catch(() => {
+          // Mantém a data URL original; o Fabric ainda consegue carregá-la pelo caminho lento.
+        }))
+      }
+      if (Array.isArray(object?.objects)) visit(object.objects)
+    }
+  }
+  visit(objects)
+  await Promise.all(pending)
+  return decoded
+}
+
+function attachDecodedImages(objects: any[], decoded: Map<string, unknown>): void {
+  for (const object of objects || []) {
+    const element = object?.[DECODED_IMAGE_REF] !== undefined ? decoded.get(object[DECODED_IMAGE_REF]) : undefined
+    if (element) object.setElement(element, { width: object.width, height: object.height })
+    if (typeof object?.getObjects === 'function') attachDecodedImages(object.getObjects(), decoded)
+  }
+}
+
 /** Uses the same Fabric logo binding and sticker renderer as the editor preview. */
 async function renderHeaderCanvas(canvas: any, sourceOwnerId: string, account: ResolvedWhatsAppAccount, logo: Buffer, height: number): Promise<Buffer> {
   const config = useRuntimeConfig()
@@ -130,6 +174,7 @@ async function renderHeaderCanvas(canvas: any, sourceOwnerId: string, account: R
     const mime = metadata.format === 'svg' ? 'image/svg+xml' : supported ? `image/${metadata.format}` : 'image/png'
     object.src = `data:${mime};base64,${encoded.toString('base64')}`
   }))
+  const decoded = await decodeRasterImages(prepared.objects)
   await registerHeaderFonts()
   const { StaticCanvas, getEnv } = await import('fabric/node')
   const document = getEnv().document as unknown as Document
@@ -138,6 +183,7 @@ async function renderHeaderCanvas(canvas: any, sourceOwnerId: string, account: R
   })
   try {
     await output.loadFromJSON(prepared)
+    attachDecodedImages(output.getObjects(), decoded)
     output.setDimensions({ width: HEADER_WIDTH, height })
     output.viewportTransform = [scale, 0, 0, scale, 0, 0]
     restoreCanvasStickerOutlines(output, () => document.createElement('canvas') as HTMLCanvasElement)
@@ -174,14 +220,32 @@ async function renderFlyerHeaderPreview(header: CreationHeader, account: Resolve
   return renderHeaderCanvas(canvas, sourceOwnerId, account, logo, height)
 }
 
+/** A logo pode ser substituída no mesmo caminho; o ETag garante que o cache acompanhe o arquivo atual. */
+async function flyerHeaderCacheKey(header: CreationHeader, account: ResolvedWhatsAppAccount): Promise<string | undefined> {
+  const config = useRuntimeConfig()
+  const logoKey = extractStorageKeyFromRef(account.businessProfile.logo, { bucket: config.wasabiBucket, endpoint: config.wasabiEndpoint })
+  if (!logoKey || !isValidStoragePath(logoKey) || !isStorageKeyAllowedForUser(logoKey, account.user.id)) return undefined
+  const logoTag = await getS3Client().send(new HeadObjectCommand({ Bucket: videoBucket(), Key: logoKey })).then(head => head.ETag, () => undefined)
+  if (!logoTag) return undefined
+  const hash = createHash('sha256').update(JSON.stringify([
+    HEADER_CACHE_VERSION, header.id, header.revision, header.sourceCanvasKey, header.sourcePageHeight, logoTag, account.businessProfile
+  ])).digest('hex')
+  return `whatsapp-creation/${account.user.id}/headers/cache-${hash}.png`
+}
+
 /** Reusable preview in this customer's namespace; no project/job/paid call. */
 export async function prepareCreationHeader(header: CreationHeader, kind: CreationKind, account: ResolvedWhatsAppAccount): Promise<CreationHeader> {
   if (kind !== 'encarte' && (header.headerKey || header.previewUrl)) return header
+  // A mesma revisão do modelo com o mesmo perfil e a mesma logo gera o mesmo PNG; reaproveita sem renderizar de novo.
+  const cacheKey = kind === 'encarte' ? await flyerHeaderCacheKey(header, account) : undefined
+  if (cacheKey) {
+    const cached = await getS3Client().send(new HeadObjectCommand({ Bucket: videoBucket(), Key: cacheKey })).then(() => true, () => false)
+    if (cached) return { ...header, headerKey: cacheKey }
+  }
   const png = kind === 'encarte'
     ? await renderFlyerHeaderPreview(header, account)
     : await renderCreationHeaderPreview(header, kind, account.user, account.businessProfile)
-  const hash = createHash('sha256').update(png).digest('hex')
-  const key = `whatsapp-creation/${account.user.id}/headers/${hash}.png`
+  const key = cacheKey || `whatsapp-creation/${account.user.id}/headers/${createHash('sha256').update(png).digest('hex')}.png`
   await getS3Client().send(new PutObjectCommand({ Bucket: videoBucket(), Key: key, Body: png, ContentType: 'image/png' }))
   return { ...header, headerKey: key }
 }
