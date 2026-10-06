@@ -411,7 +411,9 @@ let warmAllInFlight: Promise<{ total: number; ready: number; failed: number }> |
  * Modelos com prévia válida custam só um HEAD; os demais são desenhados um a um,
  * deixando as outras vagas da fila livres para quem está navegando na galeria.
  */
-export const warmAllCatalogPreviews = (): Promise<{ total: number; ready: number; failed: number }> => {
+export const warmAllCatalogPreviews = (
+  options: { shouldStop?: () => boolean } = {}
+): Promise<{ total: number; ready: number; failed: number }> => {
   if (warmAllInFlight) return warmAllInFlight
   warmAllInFlight = (async () => {
     const result = await pgQuery<{ id: string; user_id: string }>(
@@ -426,6 +428,8 @@ export const warmAllCatalogPreviews = (): Promise<{ total: number; ready: number
     let ready = 0
     let failed = 0
     for (const row of rows) {
+      // Desligamento em andamento (ex.: recompilação no dev): não começa outro desenho nativo.
+      if (options.shouldStop?.()) break
       try {
         await getProjectCatalogPreview(String(row.id), { id: String(row.user_id) }, false)
         ready += 1
