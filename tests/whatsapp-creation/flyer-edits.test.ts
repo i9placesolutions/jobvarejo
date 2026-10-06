@@ -167,3 +167,26 @@ describe('resumo', () => {
     expect(describeFlyerChanges(result)).toMatch(/^Pronto: a logo maior \(\+20%\) e o nome dos produtos maior \(\+35%\)\.$/)
   })
 })
+
+describe('valores de cor e endereço ditos na mensagem', () => {
+  it('reconhece cores que começam com a/o e ignora artigo solto', async () => {
+    const { resolveColorValue } = await import('../../server/utils/whatsapp-creation/flyer-edits')
+    expect(resolveColorValue('azul', 'muda a cor dos destaques para azul')).toBe('#1d4ed8')
+    expect(resolveColorValue('a azul', 'muda a cor dos destaques para azul')).toBe('#1d4ed8')
+    expect(resolveColorValue('amarelo', 'deixa os destaques amarelo')).toBeTruthy()
+  })
+
+  it('não usa o próprio pedido como endereço', async () => {
+    const { resolveAddressValue } = await import('../../server/utils/whatsapp-creation/flyer-edits')
+    expect(resolveAddressValue('muda o endereço', 'muda o endereço')).toBeUndefined()
+    expect(resolveAddressValue('Rua Garibaldi Leão 277, Martins', 'muda o endereço para Rua Garibaldi Leão 277, Martins')).toBe('Rua Garibaldi Leão 277, Martins')
+  })
+})
+
+describe('ajuste sem evidência literal', () => {
+  it('aceita quando a mensagem fala do alvo e descarta quando não fala', async () => {
+    const { validFlyerEdits } = await import('../../server/utils/whatsapp-creation/flyer-edits')
+    expect(validFlyerEdits([{ target: 'price_label', operation: 'choose', scope: 'all', evidence: '' } as any], 'muda a etiqueta de preço')).toHaveLength(1)
+    expect(validFlyerEdits([{ target: 'logo', operation: 'increase', scope: 'all', evidence: '' } as any], 'muda a etiqueta de preço')).toHaveLength(0)
+  })
+})

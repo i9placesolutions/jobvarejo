@@ -601,7 +601,7 @@ export const interpretationSchema = {
     script: stringProperty, transcript: stringProperty, itemNumbers: { type: 'array', items: { type: 'integer' } },
     artifactNumbers: { type: 'array', items: { type: 'integer' } }, approvalRevision: { type: 'integer' },
     projectQuery: stringProperty,
-    edits: { type: 'array', maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['target', 'operation', 'evidence'], properties: {
+    edits: { type: 'array', maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['target', 'operation'], properties: {
       target: { type: 'string', enum: ['logo', 'seal', 'product_names', 'price_label', 'alcohol_badge', 'highlight_color', 'card_color', 'validity_format', 'whatsapp', 'address', 'product_images'] },
       operation: { type: 'string', enum: ['increase', 'decrease', 'set', 'choose', 'hide', 'show'] },
       scope: { type: 'string', enum: ['all', 'items', 'unclear'] }, itemNumbers: { type: 'array', items: { type: 'integer' } },

@@ -26,7 +26,8 @@ export const flyerEditSchema = z.object({
   value: z.string().max(300).optional(),
   choice: z.number().int().positive().optional(),
   persist: z.enum(['order', 'account']).optional(),
-  evidence: z.string().max(300)
+  // A IA às vezes omite; sem evidência o alvo precisa aparecer na própria mensagem.
+  evidence: z.string().max(300).default('')
 }).strict()
 export type FlyerEdit = z.infer<typeof flyerEditSchema>
 
@@ -67,7 +68,8 @@ export function resolveColorValue(value: string | undefined, text: string): stri
     const message = text.toLowerCase()
     return message.includes(raw.toLowerCase()) || message.includes(color) ? color : undefined
   }
-  const name = normalize(raw).replace(/^(?:cor\s+)?(?:o|a|de|do|da)?\s*/, '').replace(/^cor\s+/, '').trim()
+  // Artigo só sai quando é palavra solta: “a azul” → “azul”, mas “azul”/“amarelo” ficam intactos.
+  const name = normalize(raw).replace(/^(?:cor\s+)?(?:(?:o|a|de|do|da|para|pra)\s+)?/, '').replace(/^cor\s+/, '').trim()
   const found = COLOR_NAMES.find(([label]) => label === name)
   if (!found) return undefined
   // A cor dita precisa aparecer na mensagem; evita a IA inventar uma cor.
@@ -93,6 +95,20 @@ const COMBINATIONS: Record<FlyerEditTarget, ReadonlyArray<FlyerEdit['operation']
  * Só aceita `edits` com evidência literal na mensagem (mesmo padrão da aprovação semântica)
  * e combinação de alvo/operação conhecida. O resto é descartado em silêncio.
  */
+// Palavras que mostram, na própria mensagem, de qual parte do encarte a pessoa está falando.
+const TARGET_WORDS: Record<FlyerEdit['target'], RegExp> = {
+  logo: /\blogo|logomarca|marca da loja\b/,
+  seal: /\bselo/,
+  product_names: /\bnome/,
+  price_label: /\betiqueta|preco|precos|valor/,
+  alcohol_badge: /\bselo|18|bebida|alcool/,
+  highlight_color: /\bdestaque|cor/,
+  card_color: /\bcard|cor|fundo/,
+  validity_format: /\bdata|validade|extenso|numeric/,
+  whatsapp: /\bwhats|zap|telefone|celular|contato/,
+  address: /\bendereco|rua|avenida|bairro/,
+  product_images: /\bfoto|imagem|imagens/
+}
 export function validFlyerEdits(edits: readonly FlyerEdit[] | undefined, text: string): FlyerEdit[] {
   if (!edits?.length) return []
   const message = normalize(text)
@@ -100,7 +116,7 @@ export function validFlyerEdits(edits: readonly FlyerEdit[] | undefined, text: s
   const output: FlyerEdit[] = []
   for (const edit of edits.slice(0, 6)) {
     const evidence = normalize(edit.evidence || '')
-    if (evidence.length < 2 || !message.includes(evidence)) continue
+    if (evidence.length >= 2 ? !message.includes(evidence) : !TARGET_WORDS[edit.target].test(message)) continue
     if (!COMBINATIONS[edit.target].includes(edit.operation)) continue
     const key = `${edit.target}:${edit.operation}:${(edit.itemNumbers || []).join(',')}`
     if (seen.has(key)) continue
@@ -163,6 +179,9 @@ export function resolveWhatsappValue(value: string | undefined, text: string): s
 export function resolveAddressValue(value: string | undefined, text: string): string | undefined {
   const raw = String(value || '').replace(/\s+/g, ' ').trim()
   if (raw.length < 5 || raw.length > 300) return undefined
+  // A IA às vezes devolve o próprio pedido (“muda o endereço”) como valor: isso não é endereço.
+  const command = normalize(raw).replace(/\b(?:muda|mude|mudar|troca|troque|trocar|altera|altere|alterar|coloca|coloque|atualiza|atualize|o|a|novo|nova|meu|minha|endereco|enderecos|da|de|do|loja)\b/g, '').trim()
+  if (command.length < 4) return undefined
   return normalize(text).includes(normalize(raw)) ? raw : undefined
 }
 
