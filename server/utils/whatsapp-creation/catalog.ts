@@ -25,12 +25,18 @@ export type CreationHeader = {
   sourceThumbnailKey?: string
   sourceCanvasKey?: string
   sourcePageHeight?: number
+  /** Modelo de tema parecido, oferecido porque não há modelo com o tema exato pedido. */
+  related?: boolean
 }
 
 export type CreationHeaderPage = {
   headers: CreationHeader[]
   hasMore: boolean
   missingTheme: boolean
+  /** Temas parecidos oferecidos no lugar do tema pedido. */
+  relatedThemes?: string[]
+  /** Temas existentes para sugerir quando nada parecido foi encontrado. */
+  suggestedThemes?: string[]
 }
 
 type ProjectTemplateRow = {
@@ -131,6 +137,36 @@ const encarteThemeMatches = (requested: string, values: unknown[]): boolean => {
   return normalizedValues.some(value => value.startsWith(`${target} `))
 }
 
+// Palavras genéricas que não distinguem um tema de outro.
+const THEME_GENERIC_WORDS = new Set(['oferta', 'ofertas', 'encarte', 'encartes', 'promocao', 'promocoes', 'tabloide', 'panfleto', 'super', 'mega', 'loja'])
+const WEEKDAY_WORDS = new Set(['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'])
+// Sinônimos de seção/campanha usados pelos clientes, levados aos nomes do catálogo.
+const THEME_SYNONYMS: Array<[RegExp, string[]]> = [
+  [/^(?:carne|carnes|churrasco|bovina|bovino|boi|frango|frangos|suina|suino|porco|linguica|linguicas|picanha|costela|acougue|acougues|frios)$/, ['acougue', 'carne']],
+  [/^(?:fruta|frutas|verdura|verduras|legume|legumes|feira|hortifruti|hortifrutti|hortfruti|horti|verde|verdes)$/, ['hortifruti', 'verde', 'feira']],
+  [/^(?:pao|paes|padaria|bolo|bolos|confeitaria)$/, ['padaria']],
+  [/^(?:cerveja|cervejas|bebida|bebidas|refrigerante|refrigerantes|refri|vinho|vinhos)$/, ['bebidas']],
+  [/^(?:limpeza|higiene)$/, ['limpeza']],
+  [/^(?:fds|finde|sabado|domingo)$/, ['fim', 'semana']],
+  [/^(?:black|blackfriday)$/, ['black', 'friday']],
+  [/^(?:aniversario|niver)$/, ['aniversario']]
+]
+const themeTokens = (value: unknown): string[] => normalizeCreationTheme(value).split(' ')
+  .filter(term => term && !ENCARTE_THEME_STOPWORDS.has(term) && !THEME_GENERIC_WORDS.has(term))
+const expandThemeTokens = (terms: string[]): Set<string> => {
+  const expanded = new Set(terms)
+  for (const term of terms) for (const [pattern, extra] of THEME_SYNONYMS) if (pattern.test(term)) extra.forEach(item => expanded.add(item))
+  return expanded
+}
+/** Afinidade entre o tema pedido e o tema de um modelo (0 = nada em comum). Dia da semana pesa pouco. */
+export const encarteThemeAffinity = (requested: string, category: unknown, subcategory: unknown): number => {
+  const wanted = expandThemeTokens(themeTokens(requested))
+  if (!wanted.size) return 0
+  const score = (value: unknown, weight: number) => [...expandThemeTokens(themeTokens(value))]
+    .reduce((sum, term) => sum + (wanted.has(term) ? (WEEKDAY_WORDS.has(term) ? 0.5 : weight) : 0), 0)
+  return score(subcategory, 2) + score(category, 1)
+}
+
 const projectPages = (value: unknown): Record<string, any>[] => {
   const root = asRecord(value)
   const pages = Array.isArray(value) ? value : Array.isArray(root.pages) ? root.pages : []
@@ -141,7 +177,7 @@ const encarteHeaders = async (
   accountId: string,
   requestedTheme: string,
   requestedFormats: string[]
-): Promise<{ headers: CreationHeader[]; themeExists: boolean }> => {
+): Promise<{ headers: CreationHeader[]; themeExists: boolean; relatedThemes?: string[]; suggestedThemes?: string[] }> => {
   const { rows } = await pgQuery<ProjectTemplateRow>(
     `select project.id, project.name, project.user_id as owner_id, project.updated_at,
             project.preview_url, project.template_config,
@@ -168,14 +204,20 @@ const encarteHeaders = async (
   )
 
   const matches: CreationHeader[] = []
+  const related: Array<{ header: CreationHeader; score: number; label: string; category: string }> = []
+  const suggestions = new Map<string, number>()
   let themeExists = false
   for (const row of rows || []) {
     const config = asRecord(row.template_config)
     const pages = projectPages(row.page_metadata)
     const themeValues = [config.category, config.subcategory, config.theme, config.themeName,
       ...pages.flatMap(page => [page.templateThemeId, page.templateThemeName])]
-    if (!encarteThemeMatches(requestedTheme, themeValues)) continue
-    themeExists = true
+    const label = text(config.subcategory || config.category || config.theme)
+    if (label) suggestions.set(label, (suggestions.get(label) || 0) + 1)
+    const exact = encarteThemeMatches(requestedTheme, themeValues)
+    const affinity = exact ? 0 : encarteThemeAffinity(requestedTheme, config.category, config.subcategory || config.theme)
+    if (!exact && affinity < 1) continue
+    if (exact) themeExists = true
     const availableFormats = uniqueStrings([
       ...(Array.isArray(config.formatIds) ? config.formatIds : []),
       ...pages.flatMap(page => [page.templateFormatId, page.templateFormatLabel,
@@ -193,7 +235,7 @@ const encarteHeaders = async (
       pages.find(page => page.templateFormatId === 'stories') || pages[0]
     const sourceThumbnailKey = extractStorageKey(previewPage?.thumbnailPath || previewPage?.thumbnailUrl)
     const sourceCanvasKey = extractStorageKey(previewPage?.canvasDataPath)
-    matches.push({
+    const header: CreationHeader = {
       id: row.id,
       revision: revision.revision,
       theme: text(config.category || config.subcategory || config.theme || requestedTheme),
@@ -206,9 +248,18 @@ const encarteHeaders = async (
         sourceThumbnailKey, sourceCanvasKey, sourcePageHeight: Number(previewPage.height)
       } : {}),
       ...(revision.sourceUpdatedAt ? { sourceUpdatedAt: revision.sourceUpdatedAt } : {})
-    })
+    }
+    if (exact) matches.push(header)
+    else related.push({ header: { ...header, theme: label || header.theme, related: true }, score: affinity, label, category: text(config.category) || label })
   }
-  return { headers: matches, themeExists }
+  if (matches.length || themeExists) return { headers: matches, themeExists }
+  // Sem modelo do tema exato: oferece os de tema mais parecido em vez de travar a conversa.
+  related.sort((a, b) => b.score - a.score)
+  const topScore = related[0]?.score || 0
+  // Mantém a seção inteira (ex.: todos os modelos de Açougue), com os mais parecidos primeiro.
+  const closest = related.filter(item => item.score >= Math.max(1, topScore / 3))
+  const suggestedThemes = [...suggestions.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name).slice(0, 8)
+  return { headers: closest.map(item => item.header), themeExists: false, relatedThemes: [...new Set(closest.map(item => item.category).filter(Boolean))].slice(0, 3), suggestedThemes }
 }
 
 const videoHeaders = (requestedTheme: string, requestedFormats: string[]): { headers: CreationHeader[]; themeExists: boolean } => {
@@ -405,7 +456,10 @@ export async function listCreationHeaders(
   const preferredIndex = preferredHeaderId ? orderedHeaders.findIndex(header => header.id === text(preferredHeaderId)) : -1
   if (safeOffset === 0 && preferredIndex > 0) orderedHeaders.unshift(...orderedHeaders.splice(preferredIndex, 1))
   const headers = orderedHeaders.slice(safeOffset, safeOffset + PAGE_SIZE)
-  return { headers, hasMore: catalog.headers.length > safeOffset + PAGE_SIZE, missingTheme: !catalog.themeExists }
+  const extra = catalog as { relatedThemes?: string[]; suggestedThemes?: string[] }
+  return { headers, hasMore: catalog.headers.length > safeOffset + PAGE_SIZE, missingTheme: !catalog.themeExists,
+    ...(extra.relatedThemes?.length ? { relatedThemes: extra.relatedThemes } : {}),
+    ...(extra.suggestedThemes?.length ? { suggestedThemes: extra.suggestedThemes } : {}) }
 }
 
 type ProductImageRow = {

@@ -50,7 +50,7 @@ export const proposalSchema = z.object({
 }).strict()
 export type Proposal = z.infer<typeof proposalSchema>
 export type ConversationArtifact = { artifactId: string; formatId: string; key: string; previewKey?: string; hash: string; mimeType: string; projectId: string; editUrl: string }
-type Header = { id: string; revision: number; theme: string; nativeThemeId?: string; formats: string[]; name: string; headerKey?: string; previewUrl?: string }
+type Header = { id: string; revision: number; theme: string; nativeThemeId?: string; formats: string[]; name: string; headerKey?: string; previewUrl?: string; related?: boolean }
 export interface ConversationState {
   phase: 'collecting' | 'header' | 'data' | 'images' | 'script' | 'rendering' | 'preview' | 'approved' | 'delivered' | 'cancelled' | 'theme_pending'
   draft: {
@@ -153,6 +153,9 @@ export const isAmbiguousNewFlyerRequest = (text: string): boolean => {
   if (/\b(?:versao|de novo|novamente|refaz|refaca|refazer|outra vez|mesmo encarte|esse mesmo|este mesmo)\b/.test(normalized)) return false
   return /\b(?:outro|novo)\s+encarte\b|\bencarte\s+novo\b/.test(normalized)
 }
+/** Encarte parado na coleta com modelo, produtos e uma foto escolhida para cada produto: dá para gerar direto. */
+const resumableFlyer = (state: ConversationState): boolean => state.phase === 'collecting' && state.order?.kind === 'encarte' && Boolean(state.order.header) &&
+  state.order.products.length > 0 && state.order.products.every(product => state.order!.images.some(image => image.itemId === product.id && image.key && image.hash))
 /** Encarte gerado (entregue ou não) pode ganhar uma nova versão com os mesmos dados. */
 /** Pedido para receber de novo o arquivo já gerado (“manda a imagem”, “envia o png”). */
 export const isResendRequest = (text: string): boolean => {
@@ -909,7 +912,11 @@ export async function advanceConversation(input: {
             : s.phase === 'preview' ? 'A prévia está pronta. Se quiser algum ajuste, me conte; se estiver do jeito que você quer, pode me confirmar.'
               : s.phase === 'rendering' ? (s.draft.kind === 'video' ? 'Estou gerando o vídeo em MP4. Em breve ele chega aqui no WhatsApp.' : 'Estou montando o material e envio aqui assim que ficar pronto.')
                 : ['approved', 'delivered'].includes(s.phase) && s.artifacts.length ? 'Seu encarte já está pronto. Se quiser, eu reenvio a imagem, gero uma nova versão, mando em outro formato, divido os produtos em mais encartes ou ajusto algum produto.'
+                : resumableFlyer(s) ? `Seu encarte de ${s.draft.theme} está salvo com ${s.draft.products.length} produto${s.draft.products.length > 1 ? 's' : ''}. Quer que eu gere agora? Se quiser mudar algo antes, é só me dizer.`
+                : s.phase === 'theme_pending' ? 'Me diga o tema da campanha para eu mostrar os modelos.'
                 : 'Me conte o que você quer criar e eu organizo os detalhes com você.'
+    // “Sim/pode” depois da oferta de retomar gera direto, com o que já foi confirmado.
+    if (resumableFlyer(s) && s.phase === 'collecting') s.generationFailed = true
     say(nextStep); return { state: s, send, generate: false }
   }
   if (s.phase === 'rendering') { say(s.draft.kind === 'video' ? 'Estou gerando o vídeo em MP4. Em breve ele chega aqui; se quiser mudar algo, me fala depois que ele chegar.' : 'Estou montando o material e envio aqui assim que ficar pronto. Se quiser mudar algo, me fala depois que ele chegar.'); return { state: s, send, generate: false } }
@@ -958,6 +965,8 @@ export async function advanceConversation(input: {
   if (p.action === 'choose_header' && p.choice && s.phase === 'header') {
     const chosen = s.choices[p.choice - 1]
     if (!chosen) { say('escolha um dos números do último lote de cabeçalhos.'); return { state: s, send, generate: false } }
+    // Modelo de tema parecido: o pedido passa a usar o tema do modelo escolhido.
+    if (chosen.related && chosen.theme) d.theme = chosen.theme
     s.header = { ...chosen, theme: d.theme }; s.phase = 'collecting'; s.headerRefreshPending = false
   }
   if (!s.header || p.action === 'more_headers') {
@@ -977,12 +986,17 @@ export async function advanceConversation(input: {
       s.choices = prepared
     }
     if (!s.choices.length) {
-      s.phase = 'theme_pending'; say('ainda não encontrei um cabeçalho desse tema compatível com seus formatos. Vou verificar novas opções e retornar em algumas horas. Se preferir, diga outro tema para continuar agora.')
+      const suggestions = (catalog.suggestedThemes || []).slice(0, 6)
+      s.phase = 'theme_pending'; say(suggestions.length
+        ? `Ainda não tenho modelo de “${d.theme}”. Tenho modelos de ${suggestions.slice(0, -1).join(', ')}${suggestions.length > 1 ? ' e ' : ''}${suggestions[suggestions.length - 1]}. Qual desses combina com a sua campanha?`
+        : 'Ainda não tenho modelo desse tema compatível com seus formatos. Me diga outro tema para continuar agora.')
       return { state: s, send, generate: false, missingTheme: true }
     }
     s.phase = 'header'
     s.choices.forEach((h, i) => send.push(h.headerKey || h.previewUrl ? { type: 'image', text: d.kind === 'encarte' ? String(i + 1) : `${i + 1} — ${h.name}. Tema ${d.theme}; formatos ${h.formats.join(', ')}.`, key: h.headerKey, url: h.previewUrl, purpose: 'review' } : { type: 'text', text: `${i + 1} — ${h.name}. A imagem deste modelo precisa ser preparada antes da escolha.` }))
-    if (d.kind !== 'encarte') say(catalog.hasMore ? 'Qual desses modelos você prefere? Quer ver mais opções?' : 'Qual desses modelos você prefere?')
+    if (catalog.relatedThemes?.length && s.choiceOffset === 0) {
+      say(`Não tenho modelo de “${d.theme}”, mas estes de ${catalog.relatedThemes.join(' e ')} combinam. Qual você prefere?${catalog.hasMore ? ' Se quiser, mostro mais opções.' : ''}`)
+    } else if (d.kind !== 'encarte') say(catalog.hasMore ? 'Qual desses modelos você prefere? Quer ver mais opções?' : 'Qual desses modelos você prefere?')
     return { state: s, send, generate: false }
   }
   if (!formats.length) {

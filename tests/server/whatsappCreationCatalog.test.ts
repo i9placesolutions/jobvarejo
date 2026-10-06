@@ -121,8 +121,20 @@ describe('catálogo de criação pelo WhatsApp', () => {
 
     mocks.query.mockResolvedValueOnce({ rows })
     const shortTheme = await listCreationHeaders(accountId, 'encarte', 'Feira', ['stories'])
-    expect(shortTheme.headers).toEqual([])
+    // Sem modelo com o tema exato, oferece os de tema parecido (feira → hortifruti/verde).
     expect(shortTheme.missingTheme).toBe(true)
+    expect(shortTheme.headers.length).toBeGreaterThan(0)
+    expect(shortTheme.headers.every(header => header.related)).toBe(true)
+    expect(shortTheme.relatedThemes?.length).toBeGreaterThan(0)
+  })
+
+  it('relaciona temas parecidos por sinônimo sem confundir dia da semana', async () => {
+    const { encarteThemeAffinity } = await import('../../server/utils/whatsapp-creation/catalog')
+    expect(encarteThemeAffinity('quarta da carne', 'Açougue', '')).toBeGreaterThanOrEqual(1)
+    expect(encarteThemeAffinity('quarta da carne', 'Açougue', 'Quinta da Carne')).toBeGreaterThan(encarteThemeAffinity('quarta da carne', 'Hortifruti', 'Quarta mais verde'))
+    expect(encarteThemeAffinity('oferta de carne', 'Açougue', '')).toBeGreaterThanOrEqual(1)
+    expect(encarteThemeAffinity('oferta de carne', 'Ofertas gerais', 'Ofertas do Dia')).toBe(0)
+    expect(encarteThemeAffinity('frutas e verduras', 'Hortifruti', 'Dia de Hortifruti')).toBeGreaterThanOrEqual(1)
   })
 
   it('usa a página Story salva para preparar só o cabeçalho quando o formato ainda não foi escolhido', async () => {
