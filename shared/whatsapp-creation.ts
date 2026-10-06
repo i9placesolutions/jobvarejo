@@ -71,6 +71,114 @@ export interface MissingThemeTicket {
   scheduledEta?: string
 }
 
+/** Quantidade/direção da duplicação da foto do produto no card (mesmo contrato do editor rápido). */
+export interface FlyerImageFillCustomization {
+  /** 1 a 4 cópias; ausente mantém a regra automática do WhatsApp. */
+  count?: number
+  direction?: 'auto' | 'horizontal' | 'vertical'
+}
+
+/**
+ * Personalização do encarte pedida pelo cliente. Só guarda valores absolutos já validados
+ * no servidor (nunca a frase do cliente): escalas são multiplicadores sobre o tamanho do
+ * modelo (1 = original) e o resultado é limitado de novo na hora de aplicar no canvas.
+ */
+export interface FlyerCustomization {
+  logoScale?: number
+  /** Selo decorativo do cabeçalho do modelo (não é o selo +18 do card). */
+  sealScale?: number
+  nameScale?: number
+  labelScale?: number
+  /** Selo +18 (bebida alcoólica) do card. */
+  badgeScale?: number
+  /** Etiqueta de preço de todos os produtos. */
+  labelTemplateId?: string
+  /** Etiqueta de produtos específicos (ID do produto -> ID da etiqueta). */
+  itemLabelTemplateIds?: Record<string, string>
+  imageFill?: FlyerImageFillCustomization
+  itemImageFill?: Record<string, FlyerImageFillCustomization>
+  palette?: { highlightCardColor?: string; highlightProdNameColor?: string; cardColor?: string; prodNameColor?: string }
+  validityDateFormat?: 'numeric' | 'long'
+  /** Valores só deste pedido; o cadastro da loja só muda com confirmação explícita. */
+  business?: { whatsapp?: string; address?: string }
+}
+
+export const FLYER_CUSTOMIZATION_LIMITS = {
+  nameScale: [0.5, 2.5], labelScale: [0.6, 1.6], badgeScale: [0.6, 1.6], logoScale: [0.6, 1.8], sealScale: [0.6, 1.8]
+} as const satisfies Record<string, readonly [number, number]>
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+const IMAGE_FILL_DIRECTIONS = ['auto', 'horizontal', 'vertical']
+
+/**
+ * Normaliza uma personalização vinda do estado salvo ou do servidor: descarta campos
+ * desconhecidos e valores fora dos limites. Retorna undefined quando nada sobra.
+ */
+export function normalizeFlyerCustomization(value: unknown): FlyerCustomization | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const source = value as Record<string, any>
+  const out: FlyerCustomization = {}
+  for (const key of ['logoScale', 'sealScale', 'nameScale', 'labelScale', 'badgeScale'] as const) {
+    const number = Number(source[key])
+    const [min, max] = FLYER_CUSTOMIZATION_LIMITS[key]
+    if (source[key] !== undefined && Number.isFinite(number) && number > 0) out[key] = Math.round(Math.min(max, Math.max(min, number)) * 1000) / 1000
+  }
+  const id = (item: unknown) => typeof item === 'string' && item.trim() && item.length <= 200 ? item.trim() : undefined
+  const labelTemplateId = id(source.labelTemplateId)
+  if (labelTemplateId) out.labelTemplateId = labelTemplateId
+  const fill = (item: any): FlyerImageFillCustomization | undefined => {
+    if (!item || typeof item !== 'object') return undefined
+    const count = Number(item.count)
+    const result: FlyerImageFillCustomization = {}
+    if (Number.isInteger(count) && count >= 1 && count <= 4) result.count = count
+    if (IMAGE_FILL_DIRECTIONS.includes(item.direction)) result.direction = item.direction
+    return Object.keys(result).length ? result : undefined
+  }
+  const itemMap = <T>(map: unknown, convert: (item: unknown) => T | undefined): Record<string, T> | undefined => {
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return undefined
+    const entries = Object.entries(map as Record<string, unknown>).slice(0, 200)
+      .flatMap(([key, item]) => { const converted = convert(item); return key.length <= 100 && converted !== undefined ? [[key, converted] as [string, T]] : [] })
+    return entries.length ? Object.fromEntries(entries) : undefined
+  }
+  const itemLabels = itemMap(source.itemLabelTemplateIds, id)
+  if (itemLabels) out.itemLabelTemplateIds = itemLabels
+  const imageFill = fill(source.imageFill)
+  if (imageFill) out.imageFill = imageFill
+  const itemImageFill = itemMap(source.itemImageFill, fill)
+  if (itemImageFill) out.itemImageFill = itemImageFill
+  if (source.palette && typeof source.palette === 'object') {
+    const palette: NonNullable<FlyerCustomization['palette']> = {}
+    for (const key of ['highlightCardColor', 'highlightProdNameColor', 'cardColor', 'prodNameColor'] as const) {
+      if (typeof source.palette[key] === 'string' && HEX_COLOR.test(source.palette[key])) palette[key] = source.palette[key].toLowerCase()
+    }
+    if (Object.keys(palette).length) out.palette = palette
+  }
+  if (source.validityDateFormat === 'numeric' || source.validityDateFormat === 'long') out.validityDateFormat = source.validityDateFormat
+  if (source.business && typeof source.business === 'object') {
+    const business: NonNullable<FlyerCustomization['business']> = {}
+    const whatsapp = typeof source.business.whatsapp === 'string' ? source.business.whatsapp.trim() : ''
+    const address = typeof source.business.address === 'string' ? source.business.address.trim() : ''
+    if (/^[+\d\s().-]{8,30}$/.test(whatsapp) && whatsapp.replace(/\D/g, '').length >= 10 && whatsapp.replace(/\D/g, '').length <= 13) business.whatsapp = whatsapp
+    if (address && address.length <= 300) business.address = address
+    if (Object.keys(business).length) out.business = business
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+/** Junta duas personalizações; o que vem em `next` vence, mapas por item são mesclados. */
+export function mergeFlyerCustomization(current: FlyerCustomization | undefined, next: FlyerCustomization | undefined): FlyerCustomization | undefined {
+  if (!next) return current
+  const merged: FlyerCustomization = { ...(current || {}), ...next }
+  if (current?.itemLabelTemplateIds || next.itemLabelTemplateIds) merged.itemLabelTemplateIds = { ...(current?.itemLabelTemplateIds || {}), ...(next.itemLabelTemplateIds || {}) }
+  if (current?.itemImageFill || next.itemImageFill) merged.itemImageFill = { ...(current?.itemImageFill || {}), ...(next.itemImageFill || {}) }
+  if (current?.palette || next.palette) merged.palette = { ...(current?.palette || {}), ...(next.palette || {}) }
+  if (current?.business || next.business) merged.business = { ...(current?.business || {}), ...(next.business || {}) }
+  // Etiqueta para todos substitui as escolhas por item feitas antes.
+  if (next.labelTemplateId && !next.itemLabelTemplateIds) delete merged.itemLabelTemplateIds
+  if (next.imageFill && !next.itemImageFill) delete merged.itemImageFill
+  return normalizeFlyerCustomization(merged)
+}
+
 export interface CreationOrder {
   readonly id: string
   readonly accountId: string
@@ -94,6 +202,8 @@ export interface CreationOrder {
   readonly scriptApprovedRevision: number | null
   readonly previews: readonly CreationPreview[]
   readonly previewApprovals: readonly PreviewApproval[]
+  /** Ajustes visuais do encarte pedidos pelo cliente (tamanhos, etiqueta, cores, contato). */
+  readonly customization?: FlyerCustomization
 }
 
 export interface CreateOrderInput {
@@ -109,11 +219,12 @@ export interface CreateOrderInput {
   conditions?: string
   institutionalText?: InstitutionalText | null
   themeTicket?: MissingThemeTicket | null
+  customization?: FlyerCustomization | null
 }
 
 export type EditableOrderFields = Pick<
   CreationOrder,
-  'kind' | 'theme' | 'formats' | 'division' | 'pageCount' | 'products' | 'validity' | 'conditions' | 'institutionalText' | 'header' | 'script'
+  'kind' | 'theme' | 'formats' | 'division' | 'pageCount' | 'products' | 'validity' | 'conditions' | 'institutionalText' | 'header' | 'script' | 'customization'
 >
 export type OrderPatch = Partial<EditableOrderFields> & Record<string, unknown>
 type MutableOrder = { -readonly [Key in keyof CreationOrder]: CreationOrder[Key] }
@@ -240,6 +351,7 @@ export function createOrder(input: CreateOrderInput): CreationOrder {
   const products = clone(input.products ?? [])
   validateProducts(products)
   const theme = input.theme?.trim() || null
+  const customization = normalizeFlyerCustomization(input.customization)
   const order: CreationOrder = {
     id: input.id,
     accountId: input.identity.accountId,
@@ -261,7 +373,8 @@ export function createOrder(input: CreateOrderInput): CreationOrder {
     script: null,
     scriptApprovedRevision: null,
     previews: [],
-    previewApprovals: []
+    previewApprovals: [],
+    ...(customization ? { customization } : {})
   }
   return immutable(order)
 }
@@ -270,7 +383,7 @@ export function updateOrder(order: CreationOrder, accountId: string, patch: Orde
   assertAccount(order, accountId)
   const forbidden = ['accountId', 'ownerId', 'sender', 'id', 'revision'].filter((key) => key in patch)
   if (forbidden.length) fail('IMMUTABLE_ORDER_FIELD', 'Identidade e propriedade do pedido não podem ser alteradas.', { fields: forbidden })
-  const allowed = new Set(['kind', 'theme', 'formats', 'division', 'pageCount', 'products', 'validity', 'conditions', 'institutionalText', 'header', 'script'])
+  const allowed = new Set(['kind', 'theme', 'formats', 'division', 'pageCount', 'products', 'validity', 'conditions', 'institutionalText', 'header', 'script', 'customization'])
   const unknown = Object.keys(patch).filter((key) => !allowed.has(key))
   if (unknown.length) fail('UNKNOWN_ORDER_FIELD', 'O pedido contém campos que não podem ser editados.', { fields: unknown })
   const next = { ...clone(order), ...clone(patch), revision: order.revision + 1 } as MutableOrder
@@ -280,6 +393,9 @@ export function updateOrder(order: CreationOrder, accountId: string, patch: Orde
   validateProducts(next.products)
   if (next.kind === 'studio' && next.products.length === 0) assertDataComplete(next)
   next.theme = next.theme?.trim() || null
+  const customization = normalizeFlyerCustomization(next.customization)
+  if (customization) next.customization = customization
+  else delete next.customization
   next.themeTicket = next.theme
     ? null
     : clone(patch.theme !== undefined && patch.theme !== order.theme ? { status: 'pending' as const } : order.themeTicket ?? { status: 'pending' as const })
@@ -291,6 +407,19 @@ export function updateOrder(order: CreationOrder, accountId: string, patch: Orde
   next.previews = []
   next.previewApprovals = []
   next.images = next.images.map((image) => ({ ...image, approvedRevision: null }))
+  return immutable(next)
+}
+
+/**
+ * Guarda a personalização antes da geração (conferência de dados/fotos) sem invalidar
+ * aprovações: ela só muda o visual, nunca os dados que o cliente conferiu.
+ */
+export function withCustomization(order: CreationOrder, accountId: string, customization: FlyerCustomization | undefined): CreationOrder {
+  assertAccount(order, accountId)
+  const next = clone(order) as MutableOrder
+  const normalized = normalizeFlyerCustomization(customization)
+  if (normalized) next.customization = normalized
+  else delete next.customization
   return immutable(next)
 }
 

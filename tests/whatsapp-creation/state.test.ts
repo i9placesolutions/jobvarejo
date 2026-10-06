@@ -8,8 +8,11 @@ import {
   assertCanGeneratePaidVoice,
   assertCanRender,
   createOrder,
+  mergeFlyerCustomization,
+  normalizeFlyerCustomization,
   registerPreview,
   updateOrder,
+  withCustomization,
   type CreationOrder,
   type CreationProduct
 } from '../../shared/whatsapp-creation'
@@ -140,5 +143,47 @@ describe('estado puro de criação via WhatsApp', () => {
     expect(() => assertCanGeneratePaidVoice(video, accountId)).toThrowError(expect.objectContaining({ code: 'SCRIPT_NOT_APPROVED' }))
     video = approveScript(video, accountId, 'Oferta de arroz a R$ 19,90.')
     expect(() => assertCanGeneratePaidVoice(video, accountId)).not.toThrow()
+  })
+})
+
+describe('personalização do encarte', () => {
+  it('descarta campos desconhecidos e limita as escalas', () => {
+    const value = normalizeFlyerCustomization({
+      logoScale: 9, nameScale: 0.1, labelScale: 1.2, injected: 'x', labelTemplateId: ' etiqueta-1 ',
+      palette: { highlightCardColor: '#FF0000', cardColor: 'vermelho' },
+      business: { whatsapp: '(11) 99999-0000', address: 'Rua A, 10' }, validityDateFormat: 'long'
+    })
+    expect(value).toEqual({
+      logoScale: 1.8, nameScale: 0.5, labelScale: 1.2, labelTemplateId: 'etiqueta-1',
+      palette: { highlightCardColor: '#ff0000' }, business: { whatsapp: '(11) 99999-0000', address: 'Rua A, 10' }, validityDateFormat: 'long'
+    })
+    expect(normalizeFlyerCustomization({ foo: 1 })).toBeUndefined()
+    expect(normalizeFlyerCustomization({ business: { whatsapp: '123' } })).toBeUndefined()
+  })
+
+  it('mescla etiquetas por item e a etiqueta para todos limpa as escolhas por item', () => {
+    const itemLevel = mergeFlyerCustomization({ itemLabelTemplateIds: { a: 'x' } }, { itemLabelTemplateIds: { b: 'y' } })
+    expect(itemLevel?.itemLabelTemplateIds).toEqual({ a: 'x', b: 'y' })
+    expect(mergeFlyerCustomization(itemLevel, { labelTemplateId: 'z' })).toEqual({ labelTemplateId: 'z' })
+    expect(mergeFlyerCustomization({ logoScale: 1.2 }, { logoScale: 1.4 })).toEqual({ logoScale: 1.4 })
+  })
+
+  it('updateOrder avança a revisão e invalida aprovações; withCustomization só guarda o visual', () => {
+    const base = withHeader(create())
+    const approved = approveData(base, accountId)
+    const quiet = withCustomization(approved, accountId, { logoScale: 1.2 })
+    expect(quiet.revision).toBe(approved.revision)
+    expect(quiet.dataApprovedRevision).toBe(approved.dataApprovedRevision)
+    expect(quiet.customization).toEqual({ logoScale: 1.2 })
+    const next = updateOrder(quiet, accountId, { customization: { logoScale: 1.4 } })
+    expect(next.revision).toBe(quiet.revision + 1)
+    expect(next.dataApprovedRevision).toBeNull()
+    expect(next.customization).toEqual({ logoScale: 1.4 })
+    expect(updateOrder(next, accountId, { customization: null as never }).customization).toBeUndefined()
+  })
+
+  it('createOrder copia a personalização do rascunho', () => {
+    const order = createOrder({ id: orderId, identity: { accountId, normalizedSender: '+5511999999999' }, kind: 'encarte', theme: 'Fecha Mês', formats: [format], products: [product('item-1')], customization: { nameScale: 1.3 } })
+    expect(order.customization).toEqual({ nameScale: 1.3 })
   })
 })
