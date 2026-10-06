@@ -225,7 +225,7 @@ describe('recuperação de jobs WhatsApp', () => {
     log.mockRestore()
   })
 
-  it('apresenta a prévia com uma pergunta natural e salva essa fala no contexto', async () => {
+  it('entrega o encarte gerado já como final aprovado e salva a fala no contexto', async () => {
     const initialState = renderingState()
     const fixture = installHeaderRecoveryMocks(initialState, new Error('unused'))
     mocks.generate.mockResolvedValue({ artifacts: [{ artifactId: 'fresh-preview', formatId: 'stories', key: 'preview.png', hash: 'hash', mimeType: 'image/png', projectId: 'project', editUrl: '/editor' }] })
@@ -233,15 +233,17 @@ describe('recuperação de jobs WhatsApp', () => {
     const result = await generateWhatsAppOrder(orderId, token, 'encarte', { context: {}, $fetch: vi.fn() } as any)
 
     expect(result).toMatchObject({ ok: true, count: 1 })
-    expect(fixture.state.phase).toBe('preview')
+    expect(fixture.state.phase).toBe('approved')
+    expect(fixture.state.order!.previewApprovals.map(approval => approval.artifactId)).toEqual(['fresh-preview'])
     expect(fixture.client.query.mock.calls.map(call => String(call[0]).replace(/\s+/g, ' ').trim()).slice(0, 2)).toEqual([
       expect.stringContaining('FROM public.whatsapp_creation_conversations'),
       expect.stringContaining('FROM public.whatsapp_creation_orders')
     ])
     expect(mocks.queue.mock.calls[0]![5]).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'text', text: 'A prévia ficou pronta. Está tudo certo ou quer ajustar algo?' })
+      expect.objectContaining({ type: 'image', key: 'preview.png', artifactId: 'fresh-preview', formatId: 'stories', purpose: 'final' }),
+      expect.objectContaining({ type: 'text', text: 'Seu encarte está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.' })
     ]))
-    expect(fixture.state.recentTurns?.at(-1)).toMatchObject({ role: 'assistant', text: 'A prévia ficou pronta. Está tudo certo ou quer ajustar algo?' })
+    expect(fixture.state.recentTurns?.at(-1)).toMatchObject({ role: 'assistant', text: 'Seu encarte está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.' })
     expect(fixture.state.previewPresentedRevision).toBe(fixture.state.order!.revision)
   })
 

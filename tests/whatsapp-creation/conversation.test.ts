@@ -513,7 +513,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(redone.state.order?.images[0]?.approvedRevision).toBe(redone.state.order?.revision)
     expect(redone.state.order?.previews).toEqual([])
     expect(redone.state.artifacts).toEqual([])
-    expect(redone.send.map(message => message.text).join(' ')).toMatch(/refazer a prévia/i)
+    expect(redone.send.map(message => message.text).join(' ')).toMatch(/nova versão do encarte/i)
   })
 
   it('rejeita estado de pedido pertencente a outra conta', async () => {

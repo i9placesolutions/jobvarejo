@@ -108,7 +108,10 @@ export const isRegenerateRequest = (text: string): boolean => {
   const target = /\b(?:previa|previsa|previas|arte|encarte|imagem|versao)\b/.test(normalized)
   return verb && again && target
 }
-const referencesAnotherHeader =(text: string) => /\b(?:cabecalho|modelo|template)\b/.test(normalizedText(text))
+/** Encarte gerado (entregue ou não) pode ganhar uma nova versão com os mesmos dados. */
+const canRegenerate = (state: ConversationState): boolean =>
+  ['preview', 'approved', 'delivered'].includes(state.phase) && state.order?.kind === 'encarte' && Boolean(state.order.header)
+const referencesAnotherHeader = (text: string) => /\b(?:cabecalho|modelo|template)\b/.test(normalizedText(text))
 const hasOrderMaterial = (state: ConversationState) => {
   const draft = state.draft
   const order = state.order
@@ -135,6 +138,8 @@ const expectedQuestion = (state: ConversationState) => {
   return { lastAssistantQuestion: lastAssistant, expectedControl: state.pendingOrderChoice ? 'continue_or_start_new' : undefined, expectedMissingField: missingField }
 }
 export function normalizeConversationIntent(proposal: Proposal, text: string, state: ConversationState): Proposal {
+  // Nova versão do encarte entregue continua no mesmo pedido, não abre outro.
+  if (canRegenerate(state) && isRegenerateRequest(text)) return { ...proposal, action: 'status' }
   const normalized = normalizedText(text)
   const startsAnother = /\b(?:outro|outra|novo|nova|recomecar|comecar outro|fazer outro|criar outro)\b/.test(normalized)
   const continuesCurrent = /\b(?:continuar|continua|continuando|esse mesmo|esta mesmo|seguir com esse|pode seguir|mantem esse)\b/.test(normalized)
@@ -455,7 +460,7 @@ export async function advanceConversation(input: {
   }
   if (canResume && /^(?:tentar novamente|tente novamente|repetir|retomar)[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'update', products: undefined }
   else if (p.action === 'status' && canResume && !asksStatus && !continuingPendingChoice) p = { ...p, action: 'update', products: undefined }
-  if (s.phase === 'preview' && s.order?.kind === 'encarte' && isRegenerateRequest(input.text)) {
+  if (s.order && canRegenerate(s) && isRegenerateRequest(input.text)) {
     // A new renderer can replace an obsolete preview without making the
     // customer approve unchanged product data and photos a second time.
     assertCanRender(s.order, input.accountId)
@@ -465,7 +470,7 @@ export async function advanceConversation(input: {
     assertCanRender(s.order, input.accountId)
     s.artifacts = []
     s.phase = 'rendering'
-    say('Vou refazer a prévia com o modelo escolhido e as fotos já confirmadas.')
+    say('Vou gerar uma nova versão do encarte com o modelo escolhido e as fotos já confirmadas.')
     return { state: s, send, generate: true }
   }
   if (p.action === 'status') {

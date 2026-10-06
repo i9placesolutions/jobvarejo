@@ -8,7 +8,7 @@ import { ownedStorageBytes } from './media'
 import { listCreationHeaders, type CreationHeader } from './catalog'
 import { prepareCreationHeader } from './header-preview'
 import { advanceConversation, rememberConversationTurns, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
-import { assertCanRender, registerPreview, updateOrder } from '~/shared/whatsapp-creation'
+import { approvePreview, assertCanDeliver, assertCanRender, registerPreview, updateOrder } from '~/shared/whatsapp-creation'
 
 const failure = (code: number, text: string): never => { throw createError({ statusCode: code, statusMessage: text }) }
 const loadOrder = async (id: string): Promise<any> => {
@@ -56,14 +56,25 @@ async function saveGeneration(row: any, state: ConversationState, artifacts: Con
     if (native) current.runtime = native
     if (artifacts.length) {
       current.artifacts = artifacts.map(artifact => ({ ...artifact, editUrl: new URL(artifact.editUrl, 'https://jobvarejo.com.br').toString() }))
-      for (const artifact of artifacts) current.order = registerPreview(current.order!, row.owner_id, { artifactId: artifact.artifactId, revision: current.order!.revision, formatIds: [artifact.formatId] })
-      current.phase = 'preview'; current.runtime = undefined
+      // O material gerado já é o final: dados e fotos foram confirmados antes da
+      // geração, então os arquivos saem aprovados sem uma etapa extra de prévia.
+      for (const artifact of artifacts) {
+        current.order = registerPreview(current.order!, row.owner_id, { artifactId: artifact.artifactId, revision: current.order!.revision, formatIds: [artifact.formatId] })
+        current.order = approvePreview(current.order!, row.owner_id, { artifactId: artifact.artifactId, revision: current.order!.revision, formatId: artifact.formatId })
+        assertCanDeliver(current.order!, row.owner_id, artifact.artifactId, [artifact.formatId])
+      }
+      current.phase = 'approved'; current.runtime = undefined
       current.previewPresentedRevision = current.order!.revision
-      for (const [index, artifact] of artifacts.entries()) send.push({ type: artifact.mimeType === 'video/mp4' ? 'video' : 'image', key: artifact.previewKey || artifact.key, text: `Prévia ${index + 1} — ${artifact.formatId}, revisão ${current.order!.revision}. Confira todos os textos, preços e fotos.`, purpose: 'preview' })
-      send.push({ type: 'text', text: 'A prévia ficou pronta. Está tudo certo ou quer ajustar algo?' })
+      const label = state.draft.kind === 'video' ? 'Seu vídeo' : state.draft.kind === 'cartaz' ? 'Seu cartaz' : state.draft.kind === 'studio' ? 'Sua arte' : 'Seu encarte'
+      for (const artifact of artifacts) {
+        const printable = artifact.mimeType === 'application/pdf' || artifact.formatId === 'print'
+        send.push({ type: artifact.mimeType === 'video/mp4' ? 'video' : printable ? 'document' : 'image', key: artifact.key,
+          text: `${label} — ${artifact.formatId}. Edite na sua conta: ${artifact.editUrl}`, artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
+      }
+      send.push({ type: 'text', text: `${label} está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.` })
       rememberConversationTurns(current, send.map(item => ({ role: 'assistant', text: item.text })))
     }
-    await client.query('UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,status=$4,updated_at=now() WHERE id=$1 AND owner_id=$2', [row.id, row.owner_id, JSON.stringify(current), current.phase === 'preview' ? 'awaiting_preview' : 'rendering'])
+    await client.query('UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,status=$4,updated_at=now() WHERE id=$1 AND owner_id=$2', [row.id, row.owner_id, JSON.stringify(current), current.phase === 'approved' ? 'approved' : 'rendering'])
     await queueCreationSend(client, row.conversation_id, row.owner_id, row.id, current, send, `preview:${row.id}:${current.order!.revision}`)
     return { ok: true, pending: !artifacts.length, count: artifacts.length }
   })
