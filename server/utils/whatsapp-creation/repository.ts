@@ -7,7 +7,7 @@ import { resolveWhatsAppAccount } from './access'
 import { newConversationState, type ConversationState, type ConversationSend } from './conversation'
 import { validateProviderEvent, signOwnedArtifact, authenticateCreationProvider } from './media'
 import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
-import { assertCanDeliver, type CreationKind } from '~/shared/whatsapp-creation'
+import { assertCanDeliver, updateOrder, type CreationKind } from '~/shared/whatsapp-creation'
 import { listCreationHeaders } from './catalog'
 import { hasEditorPermission, REGULAR_USER_AREAS, type AccessArea } from '~/shared/access-control'
 
@@ -114,16 +114,36 @@ export async function queueCreationSend(client: PoolClient, conversationId: stri
 }
 
 /** Preserve completed orders; a new request always gets a new immutable owner/order identity. */
-export async function beginCreationOrder(eventId: string, token: string, kind?: ConversationState['draft']['kind']) {
+export async function beginCreationOrder(eventId: string, token: string, kind?: ConversationState['draft']['kind'], options: { cancelCurrent?: boolean } = {}) {
   return pgTx(async client => {
-    const context = await loadLeasedMessage(eventId, token, client)
-    await client.query('SELECT id FROM public.whatsapp_creation_conversations WHERE id=$1 FOR UPDATE', [context.conversation_id])
-    if (!['approved', 'delivered', 'cancelled'].includes(context.state.phase)) return context
+    let context = await loadLeasedMessage(eventId, token, client)
+    const lock = await client.query('SELECT id FROM public.whatsapp_creation_conversations WHERE id=$1 AND owner_id=$2 FOR UPDATE', [context.conversation_id, context.owner_id])
+    if (!lock.rows[0]) throw createError({ statusCode: 409, statusMessage: 'A conversa mudou; tente novamente.' })
+    // The lease and current order can change while another worker is finishing
+    // remote work. Re-read both only after serializing on the conversation row.
+    context = await loadLeasedMessage(eventId, token, client)
+    if (context.state.startedByEventId === eventId) return context
+    const terminal = ['approved', 'delivered', 'cancelled'].includes(context.state.phase)
+    if (!terminal && !options.cancelCurrent) return context
     const id = randomUUID()
     const state = newConversationState()
-    if (kind && context.state.draft.additionalKinds?.includes(kind)) state.draft = { ...structuredClone(context.state.draft), kind, formats: kind === context.state.draft.kind ? [...context.state.draft.formats] : [], script: undefined, additionalKinds: context.state.draft.additionalKinds.filter((value: CreationKind) => value !== kind) }
+    state.startedByEventId = eventId
+    if (!options.cancelCurrent && kind && context.state.draft.additionalKinds?.includes(kind)) state.draft = { ...structuredClone(context.state.draft), kind, formats: kind === context.state.draft.kind ? [...context.state.draft.formats] : [], script: undefined, additionalKinds: context.state.draft.additionalKinds.filter((value: CreationKind) => value !== kind) }
+    if (!terminal && options.cancelCurrent) {
+      const cancelled = structuredClone(context.state)
+      if (cancelled.order) cancelled.order = updateOrder(cancelled.order, context.owner_id, {})
+      cancelled.phase = 'cancelled'; cancelled.runtime = undefined; cancelled.pendingUploaded = undefined; cancelled.pendingCorrectionItemId = undefined
+      cancelled.candidates = []; cancelled.artifacts = []; cancelled.reviewPresentedRevision = undefined; cancelled.previewPresentedRevision = undefined
+      await client.query(`UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,revision=$4,status='cancelled',updated_at=now()
+        WHERE id=$1 AND owner_id=$2 AND status NOT IN ('delivered','cancelled')`, [context.current_order_id, context.owner_id, JSON.stringify(cancelled), Math.max(1, cancelled.order?.revision || 1)])
+      await client.query(`UPDATE public.whatsapp_creation_outbox SET status='failed',error='order_cancelled_before_send',updated_at=now()
+        WHERE order_id=$1 AND owner_id=$2 AND status='pending'`, [context.current_order_id, context.owner_id])
+      await client.query(`UPDATE public.whatsapp_creation_theme_requests SET status='cancelled',updated_at=now()
+        WHERE order_id=$1 AND owner_id=$2 AND status IN ('pending','scheduled')`, [context.current_order_id, context.owner_id])
+    }
     await client.query("INSERT INTO public.whatsapp_creation_orders(id,conversation_id,owner_id,kind,state) VALUES($1,$2,$3,$4,$5::jsonb)", [id, context.conversation_id, context.owner_id, kind || 'encarte', JSON.stringify(state)])
-    await client.query('UPDATE public.whatsapp_creation_conversations SET current_order_id=$2 WHERE id=$1 AND owner_id=$3', [context.conversation_id, id, context.owner_id])
+    const changed = await client.query('UPDATE public.whatsapp_creation_conversations SET current_order_id=$2 WHERE id=$1 AND owner_id=$3 AND current_order_id=$4 RETURNING id', [context.conversation_id, id, context.owner_id, context.current_order_id])
+    if (!changed.rows[0]) throw createError({ statusCode: 409, statusMessage: 'O pedido atual mudou; nada foi substituído.' })
     return loadLeasedMessage(eventId, token, client)
   })
 }
@@ -133,9 +153,16 @@ export async function persistConversationResult(eventId: string, token: string, 
     const context = await loadLeasedMessage(eventId, token, client)
     // Serialize the compare/write after any remote catalogue or storage work.
     await client.query('SELECT id FROM public.whatsapp_creation_conversations WHERE id=$1 FOR UPDATE', [context.conversation_id])
-    await loadLeasedMessage(eventId, token, client)
+    const current = await loadLeasedMessage(eventId, token, client)
+    if (current.current_order_id !== context.current_order_id) throw createError({ statusCode: 409, statusMessage: 'O pedido mudou enquanto a mensagem era processada.' })
     const phase = ({ images: 'awaiting_images', script: 'awaiting_script', preview: 'awaiting_preview', header: 'collecting', theme_pending: 'collecting', data: 'collecting', approved: 'approved' } as Record<string, string>)[state.phase] || state.phase
     await client.query('UPDATE public.whatsapp_creation_orders SET kind=$3,state=$4::jsonb,revision=$5,status=$6,updated_at=now() WHERE id=$1 AND owner_id=$2', [context.current_order_id, context.owner_id, state.draft.kind || 'encarte', JSON.stringify(state), Math.max(1, state.order?.revision || 1), phase])
+    if (state.phase === 'cancelled') {
+      await client.query(`UPDATE public.whatsapp_creation_outbox SET status='failed',error='order_cancelled_before_send',updated_at=now()
+        WHERE order_id=$1 AND owner_id=$2 AND status='pending'`, [context.current_order_id, context.owner_id])
+      await client.query(`UPDATE public.whatsapp_creation_theme_requests SET status='cancelled',updated_at=now()
+        WHERE order_id=$1 AND owner_id=$2 AND status IN ('pending','scheduled')`, [context.current_order_id, context.owner_id])
+    }
     await queueCreationSend(client, context.conversation_id, context.owner_id, context.current_order_id, state, send, `event:${eventId}:${state.turns}`)
     // A different theme/format cannot inherit the previous theme's reminder.
     await client.query(`UPDATE public.whatsapp_creation_theme_requests SET status='cancelled',updated_at=now()

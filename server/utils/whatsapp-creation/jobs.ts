@@ -5,9 +5,9 @@ import { resolveWhatsAppAccount } from './access'
 import { assertCreationAccess, queueCreationSend } from './repository'
 import { generateCreationArtifact } from './render'
 import { ownedStorageBytes } from './media'
-import { listCreationHeaders } from './catalog'
+import { listCreationHeaders, type CreationHeader } from './catalog'
 import { prepareCreationHeader } from './header-preview'
-import { advanceConversation, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
+import { advanceConversation, rememberConversationTurns, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
 import { assertCanRender, registerPreview, updateOrder } from '~/shared/whatsapp-creation'
 
 const failure = (code: number, text: string): never => { throw createError({ statusCode: code, statusMessage: text }) }
@@ -47,16 +47,21 @@ async function nativeJob(event: H3Event, row: any, projectId: string, revision: 
 /** Commit only artifacts of the locked order/revision; late jobs cannot overwrite an edited draft. */
 async function saveGeneration(row: any, state: ConversationState, artifacts: ConversationArtifact[], native?: ConversationState['runtime']) {
   return pgTx(async client => {
+    const conversation = (await client.query('SELECT current_order_id FROM public.whatsapp_creation_conversations WHERE id=$1 AND owner_id=$2 FOR UPDATE', [row.conversation_id, row.owner_id])).rows[0]
+    if (!conversation || conversation.current_order_id !== row.id) return { ok: true, stale: true }
     const current = (await client.query('SELECT state FROM public.whatsapp_creation_orders WHERE id=$1 AND owner_id=$2 FOR UPDATE', [row.id, row.owner_id])).rows[0]?.state as ConversationState | undefined
-    if (!current || current.phase !== 'rendering' || current.runtime?.token !== state.runtime?.token || current.order?.revision !== state.order?.revision) return { ok: true, stale: true }
+    if (!current?.order || current.phase !== 'rendering' || current.runtime?.token !== state.runtime?.token ||
+      current.order.id !== row.id || current.order.revision !== state.order?.revision) return { ok: true, stale: true }
     const send: ConversationSend[] = []
     if (native) current.runtime = native
     if (artifacts.length) {
       current.artifacts = artifacts.map(artifact => ({ ...artifact, editUrl: new URL(artifact.editUrl, 'https://jobvarejo.com.br').toString() }))
       for (const artifact of artifacts) current.order = registerPreview(current.order!, row.owner_id, { artifactId: artifact.artifactId, revision: current.order!.revision, formatIds: [artifact.formatId] })
       current.phase = 'preview'; current.runtime = undefined
+      current.previewPresentedRevision = current.order!.revision
       for (const [index, artifact] of artifacts.entries()) send.push({ type: artifact.mimeType === 'video/mp4' ? 'video' : 'image', key: artifact.previewKey || artifact.key, text: `Prévia ${index + 1} — ${artifact.formatId}, revisão ${current.order!.revision}. Confira todos os textos, preços e fotos.`, purpose: 'preview' })
-      send.push({ type: 'text', text: `Para liberar os arquivos finais, responda APROVAR ${current.order!.revision}. Pode informar os números das prévias para aprovar só algumas. Correções geram uma nova revisão.` })
+      send.push({ type: 'text', text: 'A prévia ficou pronta. Está tudo certo ou quer ajustar algo?' })
+      rememberConversationTurns(current, send.map(item => ({ role: 'assistant', text: item.text })))
     }
     await client.query('UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,status=$4,updated_at=now() WHERE id=$1 AND owner_id=$2', [row.id, row.owner_id, JSON.stringify(current), current.phase === 'preview' ? 'awaiting_preview' : 'rendering'])
     await queueCreationSend(client, row.conversation_id, row.owner_id, row.id, current, send, `preview:${row.id}:${current.order!.revision}`)
@@ -66,15 +71,86 @@ async function saveGeneration(row: any, state: ConversationState, artifacts: Con
 
 async function failGeneration(row: any, state: ConversationState) {
   await pgTx(async client => {
+    const conversation = (await client.query('SELECT current_order_id FROM public.whatsapp_creation_conversations WHERE id=$1 AND owner_id=$2 FOR UPDATE', [row.conversation_id, row.owner_id])).rows[0]
+    if (!conversation || conversation.current_order_id !== row.id) return
     const current = (await client.query('SELECT state FROM public.whatsapp_creation_orders WHERE id=$1 AND owner_id=$2 FOR UPDATE', [row.id, row.owner_id])).rows[0]?.state as ConversationState | undefined
-    if (!current || current.runtime?.token !== state.runtime?.token || current.phase !== 'rendering') return
+    if (!current?.order || current.runtime?.token !== state.runtime?.token || current.phase !== 'rendering' ||
+      current.order.id !== row.id || current.order.revision !== state.order?.revision) return
     current.phase = 'collecting'; current.runtime = undefined; current.artifacts = []
     if (current.order) current.order = updateOrder(current.order, row.owner_id, {})
-    await client.query("UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,status='failed',revision=$4,updated_at=now() WHERE id=$1 AND owner_id=$2", [row.id, row.owner_id, JSON.stringify(current), current.order!.revision])
+    current.previewPresentedRevision = undefined
     const message = state.draft.kind === 'video'
-      ? 'Não consegui montar o vídeo. Seu pedido está salvo e a locução paga não será repetida automaticamente. Revise o pedido ou peça atendimento.'
-      : 'Não consegui montar a prévia. Seu pedido e as fotos estão salvos. Responda “tentar novamente” para receber uma nova conferência.'
-    await queueCreationSend(client, row.conversation_id, row.owner_id, row.id, current, [{ type: 'text', text: message }], `generation-error:${row.id}:${state.order!.revision}`)
+      ? 'Não consegui montar o vídeo. Seu pedido continua salvo. Quer ajustar algo ou prefere ajuda?'
+      : 'Não consegui montar a prévia. Seu pedido e as fotos continuam salvos. Quer tentar de novo ou ajustar algo?'
+    const send: ConversationSend[] = [{ type: 'text', text: message }]
+    rememberConversationTurns(current, send.map(item => ({ role: 'assistant', text: item.text })))
+    await client.query("UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,status='failed',revision=$4,updated_at=now() WHERE id=$1 AND owner_id=$2", [row.id, row.owner_id, JSON.stringify(current), current.order!.revision])
+    await queueCreationSend(client, row.conversation_id, row.owner_id, row.id, current, send, `generation-error:${row.id}:${state.order!.revision}`)
+  })
+}
+
+/** Refresh an obsolete flyer header after rendering has failed, without touching products or approved source images. */
+async function recoverChangedFlyerHeader(row: any, state: ConversationState, account: any): Promise<'recovered' | 'stale'> {
+  const previousHeader = state.order?.header
+  if (!previousHeader || state.draft.kind !== 'encarte') return 'stale'
+
+  let choices: CreationHeader[] = []
+  try {
+    const catalog = await listCreationHeaders(row.owner_id, 'encarte', state.draft.theme || '', state.draft.formats, 0, previousHeader.id)
+    const selected = catalog.headers.find(header => header.id === previousHeader.id)
+    const candidates = selected ? [selected] : catalog.headers
+    for (const header of candidates) {
+      try {
+        choices.push(await prepareCreationHeader(header, 'encarte', account))
+      } catch {
+        // An inaccessible or broken candidate is omitted; another authorized template may still work.
+      }
+    }
+    if (selected && !choices.length) {
+      for (const header of catalog.headers.filter(item => item.id !== selected.id)) {
+        try { choices.push(await prepareCreationHeader(header, 'encarte', account)) } catch { /* keep looking */ }
+      }
+    }
+  } catch {
+    // Even if the catalogue is temporarily unavailable, invalidate the stale snapshot below.
+  }
+
+  const messages: ConversationSend[] = choices.map((header, index) => ({
+    type: 'image',
+    key: header.headerKey,
+    text: choices.length === 1 ? 'Cabeçalho atualizado' : `${index + 1} — ${header.name}`,
+    purpose: 'review'
+  }))
+  messages.push({ type: 'text', text: choices.length === 1
+    ? 'O cabeçalho escolhido foi atualizado. Esse modelo funciona para você ou prefere ver outro?'
+    : choices.length
+      ? 'O cabeçalho escolhido mudou. Qual destas opções combina melhor com o seu encarte?'
+      : 'O cabeçalho mudou e não consegui preparar uma nova prévia. Quer que eu procure outro modelo para o mesmo tema ou prefere mudar o tema?'
+  })
+
+  return pgTx(async client => {
+    const conversation = (await client.query('SELECT current_order_id FROM public.whatsapp_creation_conversations WHERE id=$1 AND owner_id=$2 FOR UPDATE', [row.conversation_id, row.owner_id])).rows[0]
+    if (!conversation || conversation.current_order_id !== row.id) return 'stale'
+    const current = (await client.query('SELECT state FROM public.whatsapp_creation_orders WHERE id=$1 AND owner_id=$2 FOR UPDATE', [row.id, row.owner_id])).rows[0]?.state as ConversationState | undefined
+    if (!current?.order || current.phase !== 'rendering' ||
+      current.runtime?.token !== state.runtime?.token || current.order.id !== row.id ||
+      current.order.revision !== state.order?.revision) return 'stale'
+
+    current.order = updateOrder(current.order, row.owner_id, { header: null })
+    current.phase = choices.length ? 'header' : 'collecting'
+    current.header = undefined
+    current.choices = choices
+    current.choiceOffset = 0
+    current.artifacts = []
+    current.runtime = undefined
+    current.reviewPresentedRevision = undefined
+    current.previewPresentedRevision = undefined
+    current.headerRefreshPending = choices.length > 0
+    rememberConversationTurns(current, messages.map(item => ({ role: 'assistant', text: item.text })))
+    await client.query(`UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,status='collecting',revision=$4,updated_at=now()
+      WHERE id=$1 AND owner_id=$2`, [row.id, row.owner_id, JSON.stringify(current), current.order.revision])
+    await queueCreationSend(client, row.conversation_id, row.owner_id, row.id, current, messages, `header-revision:${row.id}:${state.order!.revision}`)
+    return 'recovered'
   })
 }
 
@@ -93,7 +169,16 @@ export async function generateWhatsAppOrder(id: string, token: string, kind: str
     const output = await generateCreationArtifact(state.order!, account.user, account.businessProfile, event)
     return saveGeneration(row, state, output.artifacts, output.video ? { ...state.runtime, native: output.video } : undefined)
   } catch (error: any) {
-    console.error('[whatsapp-creation:generation-failed]', JSON.stringify({ kind, statusCode: Number(error?.statusCode || 500), reason: String(error?.statusMessage || error?.name || 'unknown').slice(0, 200) }))
+    const statusCode = Number(error?.statusCode || 500)
+    const code = String(error?.data?.code || error?.code || '')
+    const sourceReason = error?.statusCode && typeof error?.statusMessage === 'string' ? error.statusMessage : error?.name || 'unknown'
+    const reason = String(sourceReason).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
+    console.error('[whatsapp-creation:generation-failed]', JSON.stringify({ kind, orderId: id, revision: state.order?.revision, statusCode, code, reason }))
+    if (code === 'HEADER_REVISION_CHANGED' && state.draft.kind === 'encarte') {
+      const recovered = await recoverChangedFlyerHeader(row, state, account)
+      if (recovered === 'recovered') return { ok: true, recovered: true }
+      return { ok: true, stale: true }
+    }
     await failGeneration(row, state)
     throw error
   }

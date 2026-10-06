@@ -369,7 +369,8 @@ export async function listCreationHeaders(
   kind: 'encarte' | 'video' | 'cartaz' | 'studio',
   theme: string,
   formats: string[],
-  offset = 0
+  offset = 0,
+  preferredHeaderId?: string
 ): Promise<CreationHeaderPage> {
   const normalizedAccountId = text(accountId)
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedAccountId)) {
@@ -386,7 +387,10 @@ export async function listCreationHeaders(
       : kind === 'cartaz'
         ? await cartazHeaders(normalizedTheme, requestedFormats)
         : await studioHeaders(normalizedTheme, requestedFormats)
-  const headers = catalog.headers.slice(safeOffset, safeOffset + PAGE_SIZE)
+  const orderedHeaders = [...catalog.headers]
+  const preferredIndex = preferredHeaderId ? orderedHeaders.findIndex(header => header.id === text(preferredHeaderId)) : -1
+  if (safeOffset === 0 && preferredIndex > 0) orderedHeaders.unshift(...orderedHeaders.splice(preferredIndex, 1))
+  const headers = orderedHeaders.slice(safeOffset, safeOffset + PAGE_SIZE)
   return { headers, hasMore: catalog.headers.length > safeOffset + PAGE_SIZE, missingTheme: !catalog.themeExists }
 }
 

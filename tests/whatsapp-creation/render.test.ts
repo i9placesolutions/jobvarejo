@@ -21,6 +21,7 @@ import {
   applyFlyerLogoStickers,
   approvedProductImages,
   isPublishedArtAssetStorageKey,
+  headerRevisionChangedError,
   fillHeaderPreviewPlaceholders,
   renderCreationHeaderPreview,
   resolveVideoHeaderPreviewAsset
@@ -104,6 +105,11 @@ describe('adapter de render da criação WhatsApp', () => {
     expect(flyerTemplateRevision(new Date('2026-10-04T02:54:56.083Z'))).toBe(1791082496083)
     expect(flyerTemplateRevision('2026-10-04T02:54:56.083Z')).toBe(1791082496083)
     expect(() => flyerTemplateRevision('not-a-date')).toThrow()
+  })
+
+  it('marca somente revisão desatualizada de cabeçalho com código recuperável', () => {
+    const error = headerRevisionChangedError('O cabeçalho mudou depois da escolha.')
+    expect(error).toMatchObject({ statusCode: 409, statusMessage: 'O cabeçalho mudou depois da escolha.', data: { code: 'HEADER_REVISION_CHANGED' } })
   })
 
   it('reconhece tema por slug ou nome e aceita paginação Story por departamento', () => {

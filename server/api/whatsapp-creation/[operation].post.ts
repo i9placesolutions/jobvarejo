@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { authenticateWhatsAppService } from '~/server/utils/whatsapp-creation/access'
 import { ingestCreationEvent, claimCreationMessage, loadLeasedMessage, persistConversationResult,
   claimCreationOutbound, acknowledgeCreationOutbound, assertCreationAccess, beginCreationOrder } from '~/server/utils/whatsapp-creation/repository'
-import { interpretationRequest, transcriptionRequest, advanceConversation, proposalSchema } from '~/server/utils/whatsapp-creation/conversation'
+import { interpretationRequest, transcriptionRequest, advanceConversation, normalizeConversationIntent, rememberConversationTurns, proposalSchema } from '~/server/utils/whatsapp-creation/conversation'
 import { pollWhatsAppJobs, followUpWhatsAppThemes } from '~/server/utils/whatsapp-creation/jobs'
 import { downloadProviderMedia } from '~/server/utils/whatsapp-creation/media'
 import { pgQuery } from '~/server/utils/postgres'
@@ -64,17 +64,32 @@ export default defineEventHandler(async event => {
       ? await suggestJevRoute({ text: messageText, phase: context.state.phase, kind: context.state.draft.kind }) : null
     if (route) {
       const nextAction = route.action
-      const explicitCancel = /\b(cancelar|cancela|cancele|desistir|desisto)\b/i.test(messageText)
-      const explicitNewOrder = /\b(nov[oa]s?\s+(pedido|encarte|v[ií]deo|cartaz|arte)|outro\s+pedido|come[çc]ar\s+(de novo|outro))\b/i.test(messageText)
-      if ((nextAction !== 'cancel' || explicitCancel) && (nextAction !== 'new_order' || explicitNewOrder)) {
-        proposal.action = nextAction
+      if (proposal.action !== 'cancel_and_start_new') {
+        const explicitCancel = /\b(?:cancela|cancele|cancelar|desistir|desisto)\b/i.test(messageText)
+        const explicitNewOrder = /\b(?:novo pedido|novo encarte|novo v[ií]deo|novo cartaz|nova arte|outro pedido|come[cç]ar (?:de novo|outro)|fazer outro|criar outro)\b/i.test(messageText)
+        const safeRoute = proposal.confirmationIntent !== 'reject' && proposal.confirmationIntent !== 'unclear' && (nextAction !== 'cancel' && nextAction !== 'new_order' && nextAction !== 'cancel_and_start_new' ||
+          nextAction === 'cancel' && (proposal.action === 'cancel' || explicitCancel) ||
+          nextAction === 'new_order' && (proposal.action === 'new_order' || explicitNewOrder || context.state.pendingOrderChoice && /\b(?:outro|outra|novo|nova)\b/i.test(messageText)) ||
+          nextAction === 'cancel_and_start_new' && explicitCancel && explicitNewOrder)
+        if (safeRoute) proposal.action = nextAction
         if (nextAction === 'choose_header' && !proposal.choice && context.state.phase === 'header') {
           const number = messageText.trim().match(/^(?:(?:op[çc][ãa]o|n[úu]mero)\s*)?(\d{1,2})\s*\.?$/i)
           if (number) proposal.choice = Number(number[1])
         }
       }
     }
-    if (proposal.action === 'new_order' && ['approved', 'delivered', 'cancelled'].includes(context.state.phase)) {
+    Object.assign(proposal, normalizeConversationIntent(proposal, messageText, context.state))
+    if (proposal.action === 'cancel_and_start_new') {
+      const requestedKind = proposal.kind || context.state.draft.kind
+      if (requestedKind) assertCreationAccess(context.account.user, requestedKind)
+      context = await beginCreationOrder(eventId, leaseToken, requestedKind, { cancelCurrent: true })
+      proposal.action = 'update'
+      if (requestedKind) proposal.kind = requestedKind
+    }
+    if (proposal.action === 'new_order' && context.state.startedByEventId === eventId) {
+      proposal.action = 'update'
+    } else if (proposal.action === 'new_order' && ['approved', 'delivered', 'cancelled'].includes(context.state.phase)) {
+      if (proposal.kind) assertCreationAccess(context.account.user, proposal.kind)
       context = await beginCreationOrder(eventId, leaseToken, proposal.kind)
       proposal.action = 'update'
     }
@@ -86,6 +101,10 @@ export default defineEventHandler(async event => {
       prepareHeader: (header, selectedKind) => prepareCreationHeader(header, selectedKind, context.account) })
     const usage = response.usage || {}, prior = result.state.usage, audio = context.payload.transcriptionUsage
     result.state.usage = { promptTokens: Number(prior?.promptTokens || 0) + Number(audio?.promptTokens || 0) + Math.max(0, Number(usage.prompt_tokens || 0)), completionTokens: Number(prior?.completionTokens || 0) + Number(audio?.completionTokens || 0) + Math.max(0, Number(usage.completion_tokens || 0)), cost: Number(prior?.cost || 0) + Number(audio?.cost || 0) + Math.max(0, Number(usage.cost || 0)) }
+    rememberConversationTurns(result.state, [
+      { role: 'user', text: messageText },
+      ...result.send.filter(item => item.type === 'text').map(item => ({ role: 'assistant' as const, text: item.text }))
+    ])
     let generation: { orderId: string; token: string; kind: string } | undefined
     if (result.generate) {
       const token = randomUUID()
@@ -98,7 +117,12 @@ export default defineEventHandler(async event => {
   if (operation === 'fail') {
     const { eventId, leaseToken } = leaseSchema.parse(body)
     const context = await loadLeasedMessage(eventId, leaseToken)
-    await persistConversationResult(eventId, leaseToken, context.state, [{ type: 'text', text: `${context.account.user.user_metadata.name || 'Cliente'}, não consegui processar essa mensagem. Seu pedido está salvo. Envie os dados em partes ou tente novamente em alguns instantes.` }], true)
+    const text = 'Não consegui processar essa mensagem agora. Seu pedido está salvo. Quer tentar de novo?'
+    rememberConversationTurns(context.state, [
+      { role: 'user', text: context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || '' },
+      { role: 'assistant', text }
+    ])
+    await persistConversationResult(eventId, leaseToken, context.state, [{ type: 'text', text }], true)
     await pgQuery("UPDATE public.whatsapp_creation_events SET status='failed',last_error='workflow_failed' WHERE id=$1 AND owner_id=$2", [eventId, context.owner_id])
     return { ok: true }
   }

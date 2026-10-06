@@ -21,7 +21,8 @@ const actionDescriptions: Record<Proposal['action'], string> = {
   more_headers: 'O cliente pede para ver mais cabeçalhos ou outras opções do lote. Só se aplica quando a fase atual é header.',
   status: 'O cliente pergunta pelo andamento ou estado do pedido atual.',
   cancel: 'O cliente pede de forma explícita para cancelar o pedido atual.',
-  new_order: 'O cliente pede explicitamente para iniciar um pedido novo e separado, não apenas alterar o pedido atual.'
+  new_order: 'O cliente pede outro pedido, mas ainda não está claro se deseja substituir o pedido ativo. Não descarte o atual.',
+  cancel_and_start_new: 'O cliente quer encerrar/substituir o pedido atual e começar outro, inclusive quando responde “outro” à pergunta se quer continuar ou começar outro. Preserve isso como ação composta.'
 }
 
 const phaseForAction: Partial<Record<Proposal['action'], Phase>> = {

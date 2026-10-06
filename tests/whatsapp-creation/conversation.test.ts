@@ -81,8 +81,10 @@ describe('workflow da conversa de criação via WhatsApp', () => {
   it('instrui a IA a preservar dados ambíguos e distinguir lista substituta, adição, foto e preço', () => {
     const request = interpretationRequest(newConversationState(), 'cenoura esta errado', 'Rafa')
     const systemPrompt = String(request.messages[0]?.content)
-    expect(systemPrompt).toMatch(/lista substitui\/troca a anterior/i)
-    expect(systemPrompt).toMatch(/não envie products/i)
+    expect(systemPrompt).toMatch(/productOperation=patch altera somente os itens\/campos identificados/i)
+    expect(systemPrompt).toMatch(/append soma os itens novos e deduplica/i)
+    expect(systemPrompt).toMatch(/replace substitui a lista apenas quando a pessoa pedir isso explicitamente/i)
+    expect(systemPrompt).toMatch(/unclear pede esclarecimento sem alterar a lista/i)
     expect(systemPrompt).toMatch(/correção de preço explícita/i)
     expect(systemPrompt).toMatch(/foto citada pelo nome de um único produto/i)
   })
@@ -100,6 +102,16 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     })
     expect(prepared.send.map(message => message.text)).toEqual(['1', '2', '3', '4'])
     expect(prepared.send.map(message => message.key)).toEqual(headers.map(selected => `headers/${selected.id}.png`))
+  })
+
+  it('pergunta naturalmente qual modelo prefere e oferece mais opções quando há outras', async () => {
+    mocks.headers.mockResolvedValue({ headers: [{ ...header, name: 'Modelo azul' }], hasMore: true, missingTheme: false })
+    const result = await input(newConversationState(), {
+      action: 'update', kind: 'video', theme: 'Fecha Mês', formats: ['stories'],
+      products: [product()], division: 'single', validity: 'sem validade'
+    }, 'Quero um vídeo Fecha Mês')
+    expect(result.send.at(-1)?.text).toBe('Qual desses modelos você prefere? Quer ver mais opções?')
+    expect(result.send.at(-1)?.text).not.toMatch(/responda o número|diga.*ver mais/i)
   })
 
   it('envia as imagens dos cabeçalhos depois do tema e só pede formato após a escolha', async () => {
@@ -265,6 +277,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const preview = {
       ...data.state,
       phase: 'preview' as const,
+      previewPresentedRevision: revision,
       order: registerPreview(data.state.order!, accountId, { artifactId, revision, formatIds: ['stories'] }),
       artifacts: [{ artifactId, formatId: 'stories', key: 'whatsapp-creation/story.png', hash: 'hash', mimeType: 'image/png', projectId: 'project-story', editUrl: '/edit/story' }]
     }
@@ -312,7 +325,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(rejected.state.candidates).toHaveLength(1)
     expect(rejected.state.candidates[0]?.itemId).toBe(review.state.order!.products[0]!.id)
     expect(rejected.state.reviewPresentedRevision).toBeUndefined()
-    expect(rejected.send[0]?.text).toMatch(/envie as imagens corretas/i)
+    expect(rejected.send[0]?.text).toMatch(/imagens corretas/i)
   })
 
   it('corrige a foto literal mesmo se a IA disser status e alterar a lista', async () => {
@@ -321,7 +334,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const rejected = await input(review.state, { action: 'status', itemNumbers: [1], products: [] }, 'a foto 2 está errada')
     expect(rejected.state.draft.products).toHaveLength(2)
     expect(rejected.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
-    expect(rejected.send[0]?.text).toMatch(/itens 2 foram rejeitadas/i)
+    expect(rejected.send[0]?.text).toMatch(/itens 2 foram removidas/i)
   })
 
   it('preserva o preço e guarda o produto quando a reclamação não diz o que está errado', async () => {
@@ -341,7 +354,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(clarified.state.draft.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 2,99' })
     expect(clarified.state.pendingCorrectionItemId).toBeUndefined()
     expect(clarified.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
-    expect(clarified.send[0]?.text).toMatch(/fotos dos itens 2 foram rejeitadas/i)
+    expect(clarified.send[0]?.text).toMatch(/fotos dos itens 2 foram removidas/i)
   })
 
   it('resolve reclamação de foto pelo nome único e pergunta o item na reclamação genérica', async () => {
@@ -356,7 +369,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const named = await input(review.state, { action: 'update', products: [], itemNumbers: [1] }, 'troque a foto da Cenoura')
     expect(named.state.draft.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 2,99' })
     expect(named.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
-    expect(named.send[0]?.text).toMatch(/fotos dos itens 2 foram rejeitadas/i)
+    expect(named.send[0]?.text).toMatch(/fotos dos itens 2 foram removidas/i)
   })
 
   it('associa uma foto recebida ao produto pelo nome sem aceitar lista ou número inventados', async () => {
@@ -430,12 +443,12 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const initial = await beginOrder({ products: [product('mamao', { name: 'Mamão Formosa', brand: '', variant: '', weight: '' })], division: 'single', formats: ['stories'] })
     const review = await input(initial.state, { action: 'choose_header', choice: 1 }, '1')
     expect(review.state.phase).toBe('data')
-    expect(review.send.some(message => message.text.includes('envie essas fotos'))).toBe(true)
+    expect(review.send.some(message => message.text.includes('pode enviar essas fotos'))).toBe(true)
 
     const uploaded = { key: `whatsapp-creation/${accountId}/inbound/mamao.png`, hash: 'uploaded-hash' }
     const waiting = await input(review.state, { action: 'status' }, '', { uploaded })
     expect(waiting.state.pendingUploaded).toEqual(uploaded)
-    expect(waiting.send[0]?.text).toMatch(/qual número de produto/i)
+    expect(waiting.send[0]?.text).toMatch(/de qual produto/i)
 
     const assigned = await input(waiting.state, { action: 'status' }, '1')
     expect(assigned.state.pendingUploaded).toBeUndefined()
@@ -452,7 +465,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(rejected.state.candidates).toEqual([])
     expect(rejected.state.order?.images[0]?.key).toBe('')
     expect(rejected.state.order?.revision).toBe(confirmed.state.order!.revision + 1)
-    expect(rejected.send[0]?.text).toMatch(/envie as imagens corretas/i)
+    expect(rejected.send[0]?.text).toMatch(/imagens corretas/i)
     const cannotApprove = await input(rejected.state, { action: 'approve_images' }, 'confirmar todas as fotos')
     expect(cannotApprove.generate).toBe(false)
     expect(cannotApprove.send[0]?.text).toMatch(/envie as fotos corretas/i)
@@ -472,6 +485,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const state = {
       ...newConversationState(),
       phase: 'preview' as const,
+      previewPresentedRevision: order.revision,
       draft: { kind: 'encarte' as const, theme: 'Fecha Mês', formats: ['stories', 'tv'], division: 'single' as const, products: [product()], validity: 'sem validade' },
       header: { ...header },
       order,
@@ -517,6 +531,186 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(partial.generate).toBe(false)
     expect(partial.state.order?.images[0]?.approvedRevision).toBe(partial.state.order?.revision)
     expect(partial.state.order?.images[1]?.approvedRevision).toBeNull()
+  })
+
+  it('aceita confirmação natural, preserva negação e aplica preço corrigido antes de aprovar', async () => {
+    const first = await beginOrder({ products: [product()], division: 'single' })
+    const review = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+
+    const natural = await input(review.state, { action: 'status', confirmationIntent: 'approve', confirmationEvidence: 'Fechado' }, 'Fechado')
+    expect(natural.generate).toBe(true)
+    expect(natural.state.order?.dataApprovedRevision).toBe(natural.state.order?.revision)
+
+    const positiveNegation = await input(review.state, {
+      action: 'approve_data', confirmationIntent: 'approve', confirmationEvidence: 'não precisa mudar nada, segue'
+    }, 'Não precisa mudar nada, segue')
+    expect(positiveNegation.generate).toBe(true)
+
+    const continueCurrent = await input(review.state, { action: 'cancel' }, 'Não cancela, vamos continuar')
+    expect(continueCurrent.state.phase).toBe('data')
+    expect(continueCurrent.state.order?.id).toBe(review.state.order?.id)
+    expect(continueCurrent.send[0]?.text).not.toMatch(/cancelei/i)
+
+    const mixed = await input(review.state, {
+      action: 'update', confirmationIntent: 'approve', confirmationEvidence: 'Pode seguir',
+      products: [product('rice', { price: 'R$ 20,00' })]
+    }, 'Pode seguir, mas põe R$ 20,00 no arroz')
+    expect(mixed.generate).toBe(false)
+    expect(mixed.state.draft.products[0]?.price).toBe('R$ 20,00')
+    expect(mixed.state.order?.dataApprovedRevision).toBeNull()
+
+    const disagrees = await input(review.state, { action: 'approve_data' }, 'Sim, o preço não confere')
+    expect(disagrees.generate).toBe(false)
+    expect(disagrees.state.order?.dataApprovedRevision).toBeNull()
+    expect(disagrees.send[0]?.text).toMatch(/qual produto ou parte/i)
+
+    const list = await beginOrder({ products: [product('rice', { name: 'Arroz' }), product('beans', { name: 'Feijão' })], division: 'single' })
+    const listReview = await input(list.state, { action: 'choose_header', choice: 1 }, '1')
+    const correctedPrice = await input(listReview.state, {
+      action: 'update', confirmationIntent: 'approve', confirmationEvidence: 'tudo certo',
+      products: [product('rice', { name: 'Arroz', price: 'R$ 8,99' })]
+    }, 'Tudo certo, mas o arroz é 8,99')
+    expect(correctedPrice.generate).toBe(false)
+    expect(correctedPrice.state.draft.products).toHaveLength(2)
+    expect(correctedPrice.state.draft.products.map(item => [item.name, item.price])).toEqual([
+      ['Arroz', 'R$ 8,99'], ['Feijão', 'R$ 19,90']
+    ])
+    expect(correctedPrice.state.order?.dataApprovedRevision).toBeNull()
+
+    const single = await beginOrder({ products: [product('rice', { name: 'Arroz MarcaX', brand: 'MarcaX', weight: '5 kg' })], division: 'single' })
+    const singleReview = await input(single.state, { action: 'choose_header', choice: 1 }, '1')
+    const singlePatch = await input(singleReview.state, {
+      action: 'update', productOperation: 'patch',
+      products: [{ id: 'rice', name: 'Arroz MarcaX', price: 'R$ 17,90', brand: '', weight: '' }]
+    }, 'Corrigir preço do Arroz MarcaX para R$ 17,90')
+    expect(singlePatch.state.draft.products).toHaveLength(1)
+    expect(singlePatch.state.draft.products[0]).toMatchObject({ brand: 'MarcaX', weight: '5 kg', price: 'R$ 17,90' })
+  })
+
+  it('acrescenta ofertas sem substituir nem duplicar os itens que já existem', async () => {
+    const first = await beginOrder({ products: [product('rice', { name: 'Arroz' }), product('beans', { name: 'Feijão' })], division: 'single' })
+    const review = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const appended = await input(review.state, {
+      action: 'update', productOperation: 'append',
+      products: [product('rice', { name: 'Arroz' }), product('beans', { name: 'Feijão' }), product('yogurt', { name: 'Iogurte', price: 'R$ 5,99' })]
+    }, 'Adiciona iogurte por 5,99')
+    expect(appended.state.draft.products).toHaveLength(3)
+    expect(appended.state.draft.products.map(item => item.name)).toEqual(['Arroz', 'Feijão', 'Iogurte'])
+    expect(appended.state.draft.products.slice(0, 2).map(item => item.id)).toEqual(review.state.draft.products.map(item => item.id))
+    const otherBrand = await input(review.state, {
+      action: 'update', productOperation: 'append',
+      products: [product('rice-other', { name: 'Arroz', brand: 'Outra marca', weight: '1 kg', price: 'R$ 4,99' })]
+    }, 'Adiciona também Arroz Outra marca 1 kg por 4,99')
+    expect(otherBrand.state.draft.products).toHaveLength(3)
+    expect(otherBrand.state.draft.products[0]).toMatchObject({ id: review.state.draft.products[0]!.id, brand: 'Marca', weight: '5 kg' })
+    expect(otherBrand.state.draft.products[2]).toMatchObject({ brand: 'Outra marca', weight: '1 kg', price: 'R$ 4,99' })
+    expect(otherBrand.state.draft.products[2]!.id).not.toBe(review.state.draft.products[0]!.id)
+  })
+
+  it('usa confirmação natural em fotos e roteiro, mas respeita rejeição explícita', async () => {
+    const first = await beginOrder({ products: [product('rice'), product('milk', { name: 'Leite' })], division: 'single' })
+    const selected = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const imageReview = {
+      ...selected.state,
+      phase: 'images' as const,
+      order: approveData(selected.state.order!, accountId)
+    }
+    const acceptedPhotos = await input(imageReview, {
+      action: 'approve_images', confirmationIntent: 'approve', confirmationEvidence: 'essas imagens estão certas'
+    }, 'Perfeito, essas imagens estão certas')
+    expect(acceptedPhotos.generate).toBe(true)
+
+    const rejectedSecond = await input(imageReview, {
+      action: 'approve_images', confirmationIntent: 'reject', confirmationEvidence: 'segunda não', itemNumbers: [2]
+    }, 'A primeira certa, a segunda não')
+    expect(rejectedSecond.generate).toBe(false)
+    expect(rejectedSecond.state.candidates).toHaveLength(1)
+    expect(rejectedSecond.send[0]?.text).toMatch(/fotos de Leite ficam de fora/i)
+
+    const videoStart = await beginOrder({ kind: 'video', products: [product()], division: 'single', formats: ['stories'] })
+    const videoReview = await input(videoStart.state, { action: 'choose_header', choice: 1 }, '1')
+    const scriptReview = await input(videoReview.state, { action: 'approve_data' }, 'confirmar dados')
+    expect(scriptReview.state.phase).toBe('script')
+    const scriptApproved = await input(scriptReview.state, {
+      action: 'status', confirmationIntent: 'approve', confirmationEvidence: 'manda ver'
+    }, 'Manda ver')
+    expect(scriptApproved.generate).toBe(true)
+    expect(scriptApproved.state.order?.scriptApprovedRevision).toBe(scriptApproved.state.order?.revision)
+  })
+
+  it('aprova somente o formato citado na confirmação natural da prévia', async () => {
+    const order = createOrder({
+      id: orderId,
+      identity: { accountId, normalizedSender: sender },
+      kind: 'encarte', theme: 'Fecha Mês',
+      formats: [{ id: 'stories', width: 1080, height: 1920 }, { id: 'feed', width: 1080, height: 1350 }],
+      division: 'single', products: [product()]
+    })
+    const currentOrder = registerPreview(order, accountId, { artifactId: 'preview-current', revision: order.revision, formatIds: ['stories', 'feed'] })
+    const preview = {
+      ...newConversationState(), phase: 'preview' as const, previewPresentedRevision: currentOrder.revision,
+      draft: { kind: 'encarte' as const, theme: 'Fecha Mês', formats: ['stories', 'feed'], division: 'single' as const, products: [product()], validity: 'sem validade' },
+      header: { ...header }, order: currentOrder,
+      artifacts: [
+        { artifactId: 'preview-current', formatId: 'stories', key: 'whatsapp-creation/file-story.png', hash: 'h1', mimeType: 'image/png', projectId: 'project-story', editUrl: '/edit/story' },
+        { artifactId: 'preview-current', formatId: 'feed', key: 'whatsapp-creation/file-feed.png', hash: 'h2', mimeType: 'image/png', projectId: 'project-feed', editUrl: '/edit/feed' }
+      ]
+    }
+    const result = await input(preview, {
+      action: 'approve_preview', confirmationIntent: 'approve', confirmationEvidence: 'Pode seguir', artifactNumbers: [1, 2]
+    }, 'Pode seguir só com o Story')
+    expect(result.send.filter(message => message.purpose === 'final').map(message => message.formatId)).toEqual(['stories'])
+    expect(result.state.phase).toBe('preview')
+    for (const artifactNumbers of [[1], [1, 2]]) {
+      const pendingFeed = await input(preview, {
+        action: 'approve_preview', confirmationIntent: 'approve', confirmationEvidence: 'pode mandar', artifactNumbers
+      }, 'Pode mandar a do Story, o Feed ainda vou revisar')
+      expect(pendingFeed.send.filter(message => message.purpose === 'final').map(message => message.formatId)).toEqual(['stories'])
+      expect(pendingFeed.state.phase).toBe('preview')
+    }
+    for (const text of ['Pode mandar, o Feed ainda vou revisar', 'Pode mandar o arquivo 2, o Feed ainda vou revisar']) {
+      const onlyPending = await input(preview, {
+        action: 'approve_preview', confirmationIntent: 'approve', confirmationEvidence: 'pode mandar', artifactNumbers: [2]
+      }, text)
+      expect(onlyPending.send.filter(message => message.purpose === 'final')).toEqual([])
+      expect(onlyPending.state.phase).toBe('preview')
+    }
+  })
+
+  it('não confunde outro cabeçalho com outro encarte e entende a resposta ao escolher continuar ou recomeçar', async () => {
+    const first = await beginOrder({ products: [product()], division: 'single' })
+    const greeting = await input(first.state, { action: 'status' }, 'Oi')
+    expect(greeting.send[0]?.text).toBe('Oi! Quer continuar esse encarte ou começar outro?')
+    const anotherHeader = await input(first.state, { action: 'cancel_and_start_new' }, 'Quero outro cabeçalho')
+    expect(anotherHeader.state.phase).toBe('header')
+    expect(anotherHeader.state.draft.theme).toBe('Fecha Mês')
+    expect(anotherHeader.state.draft.products).toHaveLength(1)
+
+    const selected = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const ask = await input(selected.state, { action: 'new_order' }, 'Quero outro pedido')
+    expect(ask.state.pendingOrderChoice).toBe(true)
+    expect(ask.send[0]?.text).toBe('Quer continuar esse encarte ou começar outro?')
+    const startAnother = await input(ask.state, { action: 'status' }, 'Outro')
+    expect(startAnother.state.draft.products).toEqual([])
+    expect(startAnother.state.draft.theme).toBeUndefined()
+    expect(startAnother.state.phase).toBe('collecting')
+
+    const pendingChoice = { ...selected.state, pendingOrderChoice: true }
+    const keepCurrent = await input(pendingChoice, { action: 'cancel_and_start_new' }, 'Não quero outro, vamos continuar esse')
+    expect(keepCurrent.state.order?.id).toBe(selected.state.order?.id)
+    expect(keepCurrent.state.phase).toBe(selected.state.phase)
+    expect(keepCurrent.state.draft.products).toEqual(selected.state.draft.products)
+  })
+
+  it('preserva a ação composta explícita mesmo quando a recusa é sobre o pedido atual', async () => {
+    const first = await beginOrder({ products: [product()], division: 'single' })
+    const selected = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const next = await input(selected.state, {
+      action: 'cancel_and_start_new', confirmationIntent: 'reject', confirmationEvidence: 'cancela esse'
+    }, 'Cancela esse, faz outro')
+    expect(next.state.phase).toBe('collecting')
+    expect(next.state.draft.products).toEqual([])
+    expect(next.send[0]?.text).toMatch(/pedido novo/i)
   })
 
   it('não trunca vídeo com mais de seis ofertas; pede ao cliente para escolher os itens', async () => {

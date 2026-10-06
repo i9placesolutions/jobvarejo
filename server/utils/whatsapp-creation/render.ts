@@ -77,6 +77,9 @@ const fail = (statusCode: number, statusMessage: string): never => {
   throw createError({ statusCode, statusMessage })
 }
 
+export const headerRevisionChangedError = (statusMessage: string) =>
+  createError({ statusCode: 409, statusMessage, data: { code: 'HEADER_REVISION_CHANGED' } })
+
 export const deterministicUuid = (value: string): string => {
   const bytes = createHash('sha256').update(value).digest().subarray(0, 16)
   bytes[6] = (bytes[6]! & 0x0f) | 0x40
@@ -333,7 +336,7 @@ export async function renderCreationHeaderPreview(
       if (selectedAt
         ? flyerTemplateRevision(selectedAt) !== liveAtRevision
         : header.revision !== Number(dbTemplate.revision) && header.revision !== liveAtRevision) {
-        return fail(409, 'O modelo de cartaz mudou depois da escolha do cabeçalho.')
+        throw headerRevisionChangedError('O modelo de cartaz mudou depois da escolha do cabeçalho.')
       }
     } else if (!isCartazistaModelKey(modelKey) || header.revision !== 1) {
       return fail(409, 'O modelo de cartaz não está mais publicado com esta revisão.')
@@ -358,7 +361,8 @@ export async function renderCreationHeaderPreview(
     'select id,owner_id,name,composition,published,revision from public.art_studio_templates where id=$1 and published=true',
     [header.id]
   )
-  if (!template || Number(template.revision) !== header.revision) return fail(409, 'O modelo do Estúdio mudou depois da escolha do cabeçalho.')
+  if (!template) return fail(409, 'O modelo do Estúdio não está mais publicado.')
+  if (Number(template.revision) !== header.revision) throw headerRevisionChangedError('O modelo do Estúdio mudou depois da escolha do cabeçalho.')
   const sourceOwnerId = String(template.owner_id)
   const composition = personalizeArt(cloneArt(template.composition as ArtComposition), {
     companyName: profile.companyName, logo: profile.logo ? '/api/art-studio/brand-logo' : '',
@@ -874,7 +878,7 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
     [order.header!.id, user.id]
   )
   if (!projectTemplate) fail(404, 'O modelo de encarte não está disponível para esta conta.')
-  if (flyerTemplateRevision(projectTemplate.updated_at) !== order.header!.revision) fail(409, 'O cabeçalho do encarte mudou depois da escolha do cliente.')
+  if (flyerTemplateRevision(projectTemplate.updated_at) !== order.header!.revision) throw headerRevisionChangedError('O cabeçalho do encarte mudou depois da escolha do cliente.')
 
   const sourceOwnerId = String(projectTemplate.user_id)
   const logo = await profileLogo(profile, user.id)

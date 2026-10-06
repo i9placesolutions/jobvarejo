@@ -80,6 +80,33 @@ describe('catálogo de criação pelo WhatsApp', () => {
     expect(result.headers[0]).not.toHaveProperty('previewUrl')
   })
 
+  it('prioriza um cabeçalho preferido autorizado e compatível mesmo fora da primeira página', async () => {
+    const rows = Array.from({ length: 6 }, (_, index) => ({
+      id: `template-${index + 1}`, name: `Fecha Mês ${index + 1}`, owner_id: accountId,
+      updated_at: `2026-10-03T14:15:0${index}.000Z`, preview_url: null,
+      template_config: { category: 'Fecha Mês', formatIds: ['stories'] }, page_metadata: []
+    }))
+    rows.push({
+      id: 'wrong-theme', name: 'Feira', owner_id: accountId,
+      updated_at: '2026-10-03T14:15:10.000Z', preview_url: null,
+      template_config: { category: 'Feira', formatIds: ['stories'] }, page_metadata: []
+    })
+    mocks.query.mockResolvedValueOnce({ rows })
+
+    const preferred = await listCreationHeaders(accountId, 'encarte', 'Fecha Mês', ['stories'], 0, 'template-6')
+
+    expect(preferred.headers.map(header => header.id)).toEqual(['template-6', 'template-1', 'template-2', 'template-3'])
+    expect(preferred.hasMore).toBe(true)
+    const [sql] = mocks.query.mock.calls[0]!
+    expect(sql).toContain('project.is_template')
+    expect(sql).toContain("owner.role in ('admin', 'super_admin')")
+
+    mocks.query.mockResolvedValueOnce({ rows })
+    const incompatible = await listCreationHeaders(accountId, 'encarte', 'Fecha Mês', ['stories'], 0, 'wrong-theme')
+    expect(incompatible.headers[0]?.id).toBe('template-1')
+    expect(incompatible.headers.some(header => header.id === 'wrong-theme')).toBe(false)
+  })
+
   it('usa IDs nativos de vídeo e de cabeçalho do Cartazista', async () => {
     const video = await listCreationHeaders(accountId, 'video', 'Fecha Mês', ['stories', 'tv'])
     expect(video.headers).toHaveLength(1)

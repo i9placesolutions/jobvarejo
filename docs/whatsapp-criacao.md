@@ -35,7 +35,13 @@ Os 11 workflows e seus IDs estão em `integrations/n8n/whatsapp-creation/`. Cred
 
 ## Aprovações e falhas
 
-Tema → formatos → cabeçalhos reais → lista/divisão → dados → fotos → roteiro (vídeo) → geração → prévia → aprovação versionada → envio. Uma aprovação parcial é limitada aos números do texto humano. A IA não pode ampliar a seleção. Foto rejeitada exige substituição; alteração invalida aprovações anteriores.
+Tema → formatos → cabeçalhos reais → lista/divisão → dados → fotos → roteiro (vídeo) → geração → prévia → aprovação versionada → envio. Uma aprovação parcial é limitada aos produtos, números ou formatos identificados pelo cliente. A IA não pode ampliar a seleção. Foto rejeitada exige substituição; alteração invalida aprovações anteriores.
+
+As respostas são interpretadas pela etapa e pelas últimas falas da conversa, sem exigir comandos como `CONFIRMADO` ou `APROVAR 3`. Uma confirmação natural vale para o que acabou de ser apresentado; dúvida, recusa ou correção não aprovam uma revisão anterior. A prévia só pode liberar artefatos da revisão corrente, e uma revisão antiga mencionada explicitamente continua recusada.
+
+Quando a intenção de retomar estiver indefinida, o atendimento pergunta diretamente se o cliente quer continuar ou começar outro pedido. Cancelar e começar outro na mesma mensagem cria uma nova identidade de pedido dentro da transação da conversa, preservando os projetos salvos e impedindo que uma repetição do mesmo evento crie vários pedidos.
+
+Se o modelo de encarte mudar depois da escolha, a geração mantém a validação de revisão e apresenta o cabeçalho atualizado para uma nova escolha. Ofertas e fotos permanecem no rascunho; a versão antiga não é aprovada nem repetida automaticamente.
 
 Story contém até nove ofertas por página; excesso exige páginas ou departamentos. Vídeo contém no máximo seis ofertas por vídeo. Não descartar produtos automaticamente.
 

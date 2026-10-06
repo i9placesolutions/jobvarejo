@@ -144,7 +144,7 @@ describe('persistência e propriedade da criação WhatsApp', () => {
       if (sql.startsWith('UPDATE public.whatsapp_creation_conversations SET current_order_id=')) {
         expect(params[2]).toBe(ownerId)
         currentOrderId = String(params[1])
-        return { rows: [], rowCount: 1 }
+        return { rows: [{ id: conversationId }], rowCount: 1 }
       }
       throw new Error(`Unexpected SQL: ${sql}`)
     }) }
@@ -159,6 +159,59 @@ describe('persistência e propriedade da criação WhatsApp', () => {
     expect(statements.some(({ sql }) => sql.startsWith('DELETE FROM public.whatsapp_creation_orders'))).toBe(false)
     expect(statements.some(({ sql, params }) => sql.startsWith('UPDATE public.whatsapp_creation_orders') && params[0] === oldOrderId)).toBe(false)
     expect(statements.filter(({ sql }) => sql.startsWith('INSERT INTO public.whatsapp_creation_orders'))).toHaveLength(1)
+  })
+
+  it('cancela um pedido ativo e cria um único pedido vazio por evento, sem afetar envios já iniciados', async () => {
+    const active: any = deliveredState()
+    active.phase = 'data'
+    active.order = createOrder({
+      id: oldOrderId,
+      identity: { accountId: ownerId, normalizedSender: '+5511999999999' },
+      kind: 'encarte', theme: 'Fecha Mês', formats: [{ id: 'stories', width: 1080, height: 1920 }],
+      division: 'single', products: []
+    })
+    active.draft = { ...active.draft, products: [], validity: undefined }
+    let currentOrderId = oldOrderId
+    const states = new Map<string, any>([[oldOrderId, active]])
+    const statements: Array<{ sql: string; params: any[] }> = []
+    let inserted = 0
+    const client = { query: vi.fn(async (query: string, params: any[] = []) => {
+      const sql = query.replace(/\s+/g, ' ').trim()
+      statements.push({ sql, params })
+      if (sql.startsWith('SELECT e.id event_id')) return { rows: [{ event_id: eventId, payload: {}, conversation_id: conversationId, owner_id: ownerId,
+        sender_phone: '+5511999999999', current_order_id: currentOrderId, state: states.get(currentOrderId) }] }
+      if (sql.startsWith('SELECT id FROM public.whatsapp_creation_conversations')) return { rows: [{ id: conversationId }] }
+      if (sql.startsWith('UPDATE public.whatsapp_creation_orders SET state=')) {
+        states.set(String(params[0]), JSON.parse(String(params[2])))
+        return { rows: [], rowCount: 1 }
+      }
+      if (sql.startsWith("UPDATE public.whatsapp_creation_outbox SET status='failed'")) return { rows: [], rowCount: 2 }
+      if (sql.startsWith("UPDATE public.whatsapp_creation_theme_requests SET status='cancelled'")) return { rows: [], rowCount: 0 }
+      if (sql.startsWith('INSERT INTO public.whatsapp_creation_orders')) {
+        inserted++
+        const id = String(params[0]); states.set(id, JSON.parse(String(params[4])))
+        return { rows: [{ id }] }
+      }
+      if (sql.startsWith('UPDATE public.whatsapp_creation_conversations SET current_order_id=')) {
+        expect(params[3]).toBe(oldOrderId)
+        currentOrderId = String(params[1])
+        return { rows: [{ id: conversationId }], rowCount: 1 }
+      }
+      throw new Error(`Unexpected SQL: ${sql}`)
+    }) }
+    mocks.tx.mockImplementation(async (callback: (client: any) => unknown) => callback(client))
+
+    const first = await beginCreationOrder(eventId, leaseToken, 'encarte', { cancelCurrent: true })
+    const retry = await beginCreationOrder(eventId, leaseToken, 'encarte', { cancelCurrent: true })
+
+    expect(first.current_order_id).toBe(currentOrderId)
+    expect(retry.current_order_id).toBe(first.current_order_id)
+    expect(retry.state.startedByEventId).toBe(eventId)
+    expect(inserted).toBe(1)
+    expect(states.get(oldOrderId)?.phase).toBe('cancelled')
+    expect(states.get(oldOrderId)?.runtime).toBeUndefined()
+    expect(statements.some(({ sql }) => sql.includes("status='pending'"))).toBe(true)
+    expect(statements.some(({ sql }) => /status IN \('accepted','delivered','sending'\)/i.test(sql))).toBe(false)
   })
 
   it('mantém criação do Estúdio disponível para a conta e bloqueia envio após revogar create do editor', async () => {
