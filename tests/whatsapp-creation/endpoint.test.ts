@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   authenticate: vi.fn(), load: vi.fn(), begin: vi.fn(), persist: vi.fn(), access: vi.fn(),
@@ -61,11 +61,13 @@ beforeEach(() => {
   mocks.advance.mockImplementation(async ({ state }: any) => ({ state, send: [{ type: 'text', text: 'certo' }], generate: false }))
   mocks.persist.mockResolvedValue({ orderId: oldOrderId })
 })
+afterEach(() => vi.restoreAllMocks())
 
 describe('roteamento do pedido WhatsApp', () => {
   it('executa cancelar e iniciar outro em uma transação, mesmo se reject se refere ao pedido antigo', async () => {
     const proposal = { action: 'cancel_and_start_new', confirmationIntent: 'reject', confirmationEvidence: 'cancela esse' }
-    context.payload.text = 'Cancela esse, faz outro'
+    context.state.pendingOrderChoice = true
+    context.payload.text = 'Cancela esse pedido e faz outro com cabeçalho azul'
     await handler(request(proposal, context.payload.text) as any)
     expect(mocks.begin).toHaveBeenCalledWith(eventId, leaseToken, 'encarte', { cancelCurrent: true })
     expect(mocks.advance.mock.calls[0]?.[0].proposal.action).toBe('update')
@@ -80,6 +82,14 @@ describe('roteamento do pedido WhatsApp', () => {
     expect(mocks.begin).not.toHaveBeenCalled()
     expect(mocks.advance.mock.calls[0]?.[0].proposal.action).toBe('more_headers')
     expect(mocks.advance.mock.calls[0]?.[0].state.draft.theme).toBe('Fecha Mês')
+  })
+
+  it('não troca o pedido quando a ação composta aponta apenas para cabeçalho', async () => {
+    context.state = { ...makeState('header'), pendingOrderChoice: true }
+    context.payload.text = 'Cancela esse cabeçalho e faz outro'
+    await handler(request({ action: 'cancel_and_start_new' }, context.payload.text) as any)
+    expect(mocks.begin).not.toHaveBeenCalled()
+    expect(mocks.advance.mock.calls[0]?.[0].proposal.action).toBe('more_headers')
   })
 
   it('não cancela por pergunta hipotética e mantém a escolha de continuar', async () => {
@@ -101,6 +111,50 @@ describe('roteamento do pedido WhatsApp', () => {
     context.payload.text = 'Vamos no novo'
     await handler(request({ action: 'new_order', confirmationIntent: 'unclear' }, context.payload.text) as any)
     expect(mocks.begin).toHaveBeenCalledWith(eventId, leaseToken, 'encarte', { cancelCurrent: true })
+    expect(mocks.advance.mock.calls[0]?.[0].proposal.action).toBe('update')
+  })
+
+  it('mantém o UUID vazio ao receber tema ou controles mal classificados como novo pedido', async () => {
+    context.state = {
+      ...makeState('collecting'),
+      pendingOrderChoice: true,
+      draft: { kind: 'encarte', formats: [], products: [] },
+      recentTurns: [
+        { role: 'user', text: 'COMEÇAR OUTRO' },
+        { role: 'assistant', text: 'Qual tema ou campanha você deseja?' },
+        { role: 'user', text: 'TERÇA E QUARTA' },
+        { role: 'assistant', text: 'Quer continuar esse encarte ou começar outro?' },
+        { role: 'user', text: 'COMECAR' },
+        { role: 'assistant', text: 'Quer continuar esse encarte ou começar outro?' }
+      ]
+    }
+    context.payload.text = 'COMEÇAR'
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    await handler(request({ action: 'new_order', confirmationIntent: 'unclear', confirmationEvidence: '', productOperation: 'unclear', kind: 'encarte' }, context.payload.text) as any)
+    expect(mocks.begin).not.toHaveBeenCalled()
+    expect(mocks.advance.mock.calls[0]?.[0].proposal).toMatchObject({ action: 'update', theme: 'TERÇA E QUARTA' })
+    expect(info).toHaveBeenCalledWith('whatsapp_creation_decision', expect.objectContaining({
+      eventId, orderId: oldOrderId, modelAction: 'new_order', routeAction: null,
+      action: 'update', phaseBefore: 'collecting', phaseAfter: 'collecting', generate: false
+    }))
+    const logged = JSON.stringify(info.mock.calls)
+    expect(logged).not.toContain('TERÇA E QUARTA')
+    expect(logged).not.toContain(context.sender_phone)
+  })
+
+  it('aplica tema literal numa proposta new_order sem trocar a ordem vazia', async () => {
+    context.state = { ...makeState('collecting'), draft: { kind: 'encarte', formats: [], products: [] } }
+    context.payload.text = 'TERÇA E QUARTA'
+    await handler(request({ action: 'new_order', theme: 'TERÇA E QUARTA' }, context.payload.text) as any)
+    expect(mocks.begin).not.toHaveBeenCalled()
+    expect(mocks.advance.mock.calls[0]?.[0].proposal).toMatchObject({ action: 'update', theme: 'TERÇA E QUARTA' })
+  })
+
+  it('não revive ordem terminal vazia; inicia uma nova sem cancelCurrent', async () => {
+    context.state = { ...makeState('cancelled'), draft: { kind: 'encarte', formats: [], products: [] } }
+    context.payload.text = 'COMEÇAR OUTRO'
+    await handler(request({ action: 'new_order' }, context.payload.text) as any)
+    expect(mocks.begin).toHaveBeenCalledWith(eventId, leaseToken, undefined)
     expect(mocks.advance.mock.calls[0]?.[0].proposal.action).toBe('update')
   })
 

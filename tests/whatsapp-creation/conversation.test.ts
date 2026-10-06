@@ -702,6 +702,183 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(keepCurrent.state.draft.products).toEqual(selected.state.draft.products)
   })
 
+  it('mantém o mesmo rascunho vazio e recupera somente o tema respondido à pergunta do bot', async () => {
+    const empty = {
+      ...newConversationState(),
+      pendingOrderChoice: true,
+      draft: { kind: 'encarte' as const, formats: [] as string[], products: [] as CreationProduct[] },
+      recentTurns: [
+        { role: 'user' as const, text: 'COMEÇAR OUTRO' },
+        { role: 'assistant' as const, text: 'Qual tema ou campanha você deseja?' }
+      ]
+    }
+    const directTheme = await input(empty, { action: 'new_order', theme: 'TERÇA E QUARTA' }, 'TERÇA E QUARTA')
+    expect(directTheme.state.draft.theme).toBe('TERÇA E QUARTA')
+    expect(directTheme.state.pendingOrderChoice).toBe(false)
+    expect(directTheme.state.phase).toBe('header')
+    expect(directTheme.send.map(item => item.text).join(' ')).not.toMatch(/continuar esse encarte ou começar outro/i)
+
+    const stuck = {
+      ...empty,
+      recentTurns: [
+        { role: 'user' as const, text: 'COMEÇAR OUTRO' },
+        { role: 'assistant' as const, text: 'Qual tema ou campanha você deseja?' },
+        { role: 'user' as const, text: 'TERÇA E QUARTA' },
+        { role: 'assistant' as const, text: 'Quer continuar esse encarte ou começar outro?' },
+        { role: 'user' as const, text: 'COMECAR' },
+        { role: 'assistant' as const, text: 'Quer continuar esse encarte ou começar outro?' }
+      ]
+    }
+    for (const proposal of [
+      { action: 'new_order', confirmationIntent: 'unclear', confirmationEvidence: '', productOperation: 'unclear', kind: 'encarte' },
+      { action: 'cancel_and_start_new', confirmationIntent: 'unclear', confirmationEvidence: 'começar' }
+    ]) {
+      const resumed = await input(stuck, proposal, 'COMEÇAR')
+      expect(resumed.state.draft.theme).toBe('TERÇA E QUARTA')
+      expect(resumed.state.pendingOrderChoice).toBe(false)
+      expect(resumed.state.phase).toBe('header')
+      expect(resumed.send.map(item => item.text).join(' ')).not.toMatch(/continuar esse encarte ou começar outro/i)
+    }
+    const continued = await input(stuck, { action: 'new_order' }, 'CONTINUAR')
+    expect(continued.state.draft.theme).toBe('TERÇA E QUARTA')
+    expect(continued.state.pendingOrderChoice).toBe(false)
+
+    for (const control of ['pode fazer', 'não sei', 'qual tema você tem?', 'vamos começar']) {
+      const noThemeFromControl = await input({ ...empty, recentTurns: [
+        { role: 'assistant' as const, text: 'Qual tema ou campanha você deseja?' },
+        { role: 'user' as const, text: control }
+      ] }, { action: 'new_order' }, 'COMEÇAR')
+      expect(noThemeFromControl.state.draft.theme).toBeUndefined()
+      expect(noThemeFromControl.send.map(item => item.text).join(' ')).toMatch(/qual tema ou campanha/i)
+    }
+    const cancelOrNew = await input({ ...empty, phase: 'cancelled' as const }, { action: 'new_order' }, 'COMEÇAR OUTRO')
+    expect(cancelOrNew.state.phase).toBe('collecting')
+    expect(cancelOrNew.state.draft.kind).toBeUndefined()
+  })
+
+  it('trata saudação vazia como continuação do próximo campo e informa a pergunta esperada ao modelo', async () => {
+    const empty = {
+      ...newConversationState(),
+      draft: { kind: 'encarte' as const, formats: [] as string[], products: [] as CreationProduct[] },
+      recentTurns: [{ role: 'assistant' as const, text: 'Qual tema ou campanha você deseja?' }]
+    }
+    const request = interpretationRequest(empty, 'TERÇA E QUARTA', 'Rafa')
+    const context = ((request.messages[1]?.content || []) as Array<{ text?: string }>).map(block => block.text || '').join(' ')
+    expect(context).toContain('"expectedMissingField":"theme"')
+    expect(context).toContain('Qual tema ou campanha você deseja?')
+
+    const greeting = await input(empty, { action: 'status' }, 'Oi')
+    expect(greeting.state.phase).toBe('collecting')
+    expect(greeting.state.pendingOrderChoice).toBe(false)
+    expect(greeting.send[0]?.text).toMatch(/qual tema ou campanha/i)
+
+    const noKind = await input(newConversationState(), { action: 'new_order' }, 'COMEÇAR OUTRO')
+    expect(noKind.state.phase).toBe('collecting')
+    expect(noKind.state.draft.kind).toBeUndefined()
+    expect(noKind.send[0]?.text).toMatch(/você quer encarte, vídeo/i)
+    const terminal = await input({ ...empty, phase: 'cancelled' as const }, { action: 'new_order' }, 'COMEÇAR OUTRO')
+    expect(terminal.state.phase).toBe('collecting')
+    expect(terminal.state.draft.kind).toBeUndefined()
+  })
+
+  it('consome a escolha de continuar sem aprovar fases nem cancelar em andamento', async () => {
+    for (const phase of ['header', 'data', 'rendering'] as const) {
+      const state = {
+        ...newConversationState(), phase, pendingOrderChoice: true,
+        draft: { kind: 'encarte' as const, theme: 'TERÇA E QUARTA', formats: ['stories'], products: [product()], validity: 'sem validade' }
+      }
+      const continued = await input(state, { action: 'new_order', confirmationIntent: 'unclear' }, 'Não quero outro, vamos continuar esse')
+      expect(continued.state.phase).toBe(phase)
+      expect(continued.state.pendingOrderChoice).toBe(false)
+      expect(continued.generate).toBe(false)
+      expect(continued.state.draft.products).toEqual(state.draft.products)
+    }
+
+    const reviewed = await beginOrder({ products: [product()], division: 'single' })
+    const selected = await input(reviewed.state, { action: 'choose_header', choice: 1 }, '1')
+    const dataChoice = { ...selected.state, pendingOrderChoice: true }
+    const resumed = await input(dataChoice, {
+      action: 'approve_data', confirmationIntent: 'approve', confirmationEvidence: 'Pode seguir'
+    }, 'Pode seguir')
+    expect(resumed.state.phase).toBe('data')
+    expect(resumed.state.pendingOrderChoice).toBe(false)
+    expect(resumed.state.order?.dataApprovedRevision).toBeNull()
+    expect(resumed.generate).toBe(false)
+
+    const otherHeader = await input(dataChoice, {
+      action: 'cancel_and_start_new', confirmationIntent: 'approve', confirmationEvidence: 'outro cabeçalho'
+    }, 'Quero outro cabeçalho')
+    expect(otherHeader.state.phase).toBe('data')
+    expect(otherHeader.state.pendingOrderChoice).toBe(false)
+    expect(otherHeader.state.order?.id).toBe(selected.state.order?.id)
+    expect(otherHeader.state.order?.dataApprovedRevision).toBeNull()
+    expect(otherHeader.generate).toBe(false)
+
+    let previewOrder = createOrder({
+      id: orderId, identity: { accountId, normalizedSender: sender }, kind: 'encarte', theme: 'TERÇA E QUARTA',
+      formats: [{ id: 'stories', width: 1080, height: 1920 }], division: 'single', products: [product()], validity: 'sem validade'
+    })
+    previewOrder = updateOrder(previewOrder, accountId, { header: { id: header.id, revision: header.revision, theme: header.theme, formats: header.formats } })
+    previewOrder = approveImage(previewOrder, accountId, { itemId: 'rice', key: 'images/rice.png', hash: 'rice-hash' })
+    previewOrder = approveData(previewOrder, accountId)
+    previewOrder = registerPreview(previewOrder, accountId, { artifactId: 'preview-choice', revision: previewOrder.revision, formatIds: ['stories'] })
+    const previewChoice = {
+      ...newConversationState(), phase: 'preview' as const, pendingOrderChoice: true, previewPresentedRevision: previewOrder.revision,
+      draft: { kind: 'encarte' as const, theme: 'TERÇA E QUARTA', formats: ['stories'], division: 'single' as const, products: [product()], validity: 'sem validade' },
+      header: { ...header }, order: previewOrder,
+      artifacts: [{ artifactId: 'preview-choice', formatId: 'stories', key: 'preview/story.png', hash: 'h', mimeType: 'image/png', projectId: 'project-story', editUrl: '/edit/story' }]
+    }
+    const previewContinue = await input(previewChoice, {
+      action: 'approve_preview', confirmationIntent: 'approve', confirmationEvidence: 'Pode seguir'
+    }, 'Pode seguir')
+    expect(previewContinue.state.phase).toBe('preview')
+    expect(previewContinue.state.pendingOrderChoice).toBe(false)
+    expect(previewContinue.state.order?.previewApprovals).toHaveLength(0)
+    expect(previewContinue.send.some(message => message.purpose === 'final')).toBe(false)
+    expect(previewContinue.generate).toBe(false)
+
+    const resumable = { ...selected.state, phase: 'collecting' as const, pendingOrderChoice: true }
+    const before = { revision: resumable.order?.revision, orderId: resumable.order?.id, candidates: structuredClone(resumable.candidates), artifacts: structuredClone(resumable.artifacts) }
+    const resumeFilled = await input(resumable, { action: 'new_order' }, 'CONTINUAR')
+    expect(resumeFilled.state.phase).toBe('collecting')
+    expect(resumeFilled.state.pendingOrderChoice).toBe(false)
+    expect(resumeFilled.state.order?.id).toBe(before.orderId)
+    expect(resumeFilled.state.order?.revision).toBe(before.revision)
+    expect(resumeFilled.state.candidates).toEqual(before.candidates)
+    expect(resumeFilled.state.artifacts).toEqual(before.artifacts)
+    expect(resumeFilled.generate).toBe(false)
+  })
+
+  it('não cancela o pedido ao rejeitar apenas cabeçalho/modelo, mas deixa passar cancelamento do pedido', async () => {
+    const first = await beginOrder({ products: [product()], division: 'single' })
+    const headerPending = { ...first.state, pendingOrderChoice: true }
+    const headerOnly = await input(headerPending, { action: 'cancel_and_start_new' }, 'Cancela esse cabeçalho e faz outro')
+    expect(headerOnly.state.phase).toBe('header')
+    expect(headerOnly.state.draft.products).toHaveLength(1)
+    expect(headerOnly.state.draft.theme).toBe('Fecha Mês')
+    const selectedWhilePending = await input(headerPending, { action: 'choose_header', choice: 1 }, 'Quero esse modelo')
+    expect(selectedWhilePending.state.phase).toBe('data')
+    expect(selectedWhilePending.state.header?.id).toBe(header.id)
+    expect(selectedWhilePending.state.draft.products).toHaveLength(1)
+    expect(selectedWhilePending.state.pendingOrderChoice).toBe(false)
+    const deniedHeaderCancel = await input(headerPending, { action: 'cancel' }, 'Não cancela esse cabeçalho, vamos continuar')
+    expect(deniedHeaderCancel.state.phase).toBe('header')
+    expect(deniedHeaderCancel.state.draft.products).toHaveLength(1)
+    expect(deniedHeaderCancel.state.pendingOrderChoice).toBe(false)
+
+    const selected = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
+    const dataPending = { ...selected.state, pendingOrderChoice: true }
+    const modelOnly = await input(dataPending, { action: 'cancel_and_start_new' }, 'Cancela esse modelo e faz outro')
+    expect(modelOnly.state.phase).toBe('data')
+    expect(modelOnly.state.order?.id).toBe(selected.state.order?.id)
+    expect(modelOnly.state.order?.products).toEqual(selected.state.order?.products)
+    expect(modelOnly.state.pendingOrderChoice).toBe(false)
+
+    const explicitNew = await input(dataPending, { action: 'cancel_and_start_new' }, 'Cancela esse pedido e faz outro com cabeçalho azul')
+    expect(explicitNew.state.draft.products).toEqual([])
+    expect(explicitNew.state.order).toBeUndefined()
+  })
+
   it('preserva a ação composta explícita mesmo quando a recusa é sobre o pedido atual', async () => {
     const first = await beginOrder({ products: [product()], division: 'single' })
     const selected = await input(first.state, { action: 'choose_header', choice: 1 }, '1')

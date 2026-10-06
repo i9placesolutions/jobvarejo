@@ -41,6 +41,10 @@ As respostas são interpretadas pela etapa e pelas últimas falas da conversa, s
 
 Quando a intenção de retomar estiver indefinida, o atendimento pergunta diretamente se o cliente quer continuar ou começar outro pedido. Cancelar e começar outro na mesma mensagem cria uma nova identidade de pedido dentro da transação da conversa, preservando os projetos salvos e impedindo que uma repetição do mesmo evento crie vários pedidos.
 
+Um pedido que acabou de ser aberto e ainda não tem dados segue para a próxima informação necessária. A resposta à pergunta de tema preenche a campanha, mesmo que o modelo classifique a mensagem como início de pedido. Ao retomar, a escolha pendente é consumida; se a campanha foi respondida mas não persistida, só pode ser recuperada do par explícito de pergunta e resposta nas falas desse próprio pedido vazio.
+
+No catálogo de encartes, um tema base com pelo menos dois termos significativos também encontra subcategorias que começam com essa mesma frase completa. Assim, “Terça e quarta” apresenta os modelos “Terça e quarta verde” e “Terça e quarta mais verde” para escolha visual. A busca usa os metadados temáticos autorizados e mantém os filtros de formato; a campanha informada pelo cliente permanece literal.
+
 Se o modelo de encarte mudar depois da escolha, a geração mantém a validação de revisão e apresenta o cabeçalho atualizado para uma nova escolha. Ofertas e fotos permanecem no rascunho; a versão antiga não é aprovada nem repetida automaticamente.
 
 Story contém até nove ofertas por página; excesso exige páginas ou departamentos. Vídeo contém no máximo seis ofertas por vídeo. Não descartar produtos automaticamente.

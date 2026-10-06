@@ -51,12 +51,15 @@ export default defineEventHandler(async event => {
   if (operation === 'apply') {
     const { eventId, leaseToken } = leaseSchema.parse(body)
     let context = await loadLeasedMessage(eventId, leaseToken)
+    const phaseBefore = context.state.phase
     const response = body.result
     const choice = response?.choices?.[0]
     if (!choice?.message?.content || choice.finish_reason === 'length') throw createError({ statusCode: 422, statusMessage: 'A mensagem precisa ser dividida ou interpretada novamente.' })
     let proposed: unknown
     try { proposed = JSON.parse(String(choice.message.content).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')) } catch { throw createError({ statusCode: 422, statusMessage: 'Interpretação incompleta. Nenhuma criação foi autorizada.' }) }
     const proposal = proposalSchema.parse(proposed)
+    const modelAction = proposal.action
+    let routeAction: string | null = null
     const messageText = context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || ''
     if (proposal.action === 'status' && hasBriefFields(proposal) &&
       !/\b(?:status|andamento|como (?:est[aá]|t[aá]) (?:o |meu )?pedido)\b/i.test(messageText)) proposal.action = 'update'
@@ -64,6 +67,7 @@ export default defineEventHandler(async event => {
       ? await suggestJevRoute({ text: messageText, phase: context.state.phase, kind: context.state.draft.kind }) : null
     if (route) {
       const nextAction = route.action
+      routeAction = nextAction
       if (proposal.action !== 'cancel_and_start_new') {
         const explicitCancel = /\b(?:cancela|cancele|cancelar|desistir|desisto)\b/i.test(messageText)
         const explicitNewOrder = /\b(?:novo pedido|novo encarte|novo v[ií]deo|novo cartaz|nova arte|outro pedido|come[cç]ar (?:de novo|outro)|fazer outro|criar outro)\b/i.test(messageText)
@@ -112,6 +116,16 @@ export default defineEventHandler(async event => {
       generation = { orderId: context.current_order_id, token, kind: result.state.draft.kind! }
     }
     await persistConversationResult(eventId, leaseToken, result.state, result.send, true, result.missingTheme)
+    console.info('whatsapp_creation_decision', {
+      eventId,
+      orderId: context.current_order_id,
+      modelAction,
+      routeAction,
+      action: proposal.action,
+      phaseBefore,
+      phaseAfter: result.state.phase,
+      generate: result.generate
+    })
     return { ok: true, generation: generation || null }
   }
   if (operation === 'fail') {

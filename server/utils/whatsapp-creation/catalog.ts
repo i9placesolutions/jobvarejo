@@ -117,6 +117,20 @@ const themeMatches = (requested: string, values: unknown[]): boolean => {
   return Boolean(target) && values.some(value => normalizeCreationTheme(value) === target)
 }
 
+const ENCARTE_THEME_STOPWORDS = new Set(['e', 'de', 'do', 'da', 'dos', 'das', 'no', 'na', 'em', 'para'])
+
+const encarteThemeMatches = (requested: string, values: unknown[]): boolean => {
+  const target = normalizeCreationTheme(requested)
+  if (!target) return false
+
+  const normalizedValues = values.map(normalizeCreationTheme)
+  if (normalizedValues.includes(target)) return true
+
+  const significantTerms = target.split(' ').filter(term => !ENCARTE_THEME_STOPWORDS.has(term))
+  if (significantTerms.length < 2) return false
+  return normalizedValues.some(value => value.startsWith(`${target} `))
+}
+
 const projectPages = (value: unknown): Record<string, any>[] => {
   const root = asRecord(value)
   const pages = Array.isArray(value) ? value : Array.isArray(root.pages) ? root.pages : []
@@ -160,7 +174,7 @@ const encarteHeaders = async (
     const pages = projectPages(row.page_metadata)
     const themeValues = [config.category, config.subcategory, config.theme, config.themeName,
       ...pages.flatMap(page => [page.templateThemeId, page.templateThemeName])]
-    if (!themeMatches(requestedTheme, themeValues)) continue
+    if (!encarteThemeMatches(requestedTheme, themeValues)) continue
     themeExists = true
     const availableFormats = uniqueStrings([
       ...(Array.isArray(config.formatIds) ? config.formatIds : []),

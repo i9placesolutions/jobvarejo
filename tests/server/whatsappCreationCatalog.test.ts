@@ -62,6 +62,69 @@ describe('catálogo de criação pelo WhatsApp', () => {
     expect(params).toEqual([accountId])
   })
 
+  it('trata tema de encarte como família por prefixo de frase completa, sem ampliar temas específicos', async () => {
+    const makeTemplate = (id: string, name: string, subcategory: string, formatIds = ['stories']) => ({
+      id,
+      name,
+      owner_id: accountId,
+      updated_at: '2026-10-05T15:16:39.000Z',
+      preview_url: null,
+      template_config: { category: 'Hortifruti', subcategory, formatIds },
+      page_metadata: []
+    })
+    const rows = [
+      makeTemplate('7506f335-2bf6-4650-8206-b283585a5a16', 'Terça e quarta verde', 'Terça e quarta verde'),
+      makeTemplate('4b8b98f0-9a34-46e3-ab41-ddcc6135c79d', 'Terça e quarta verde', 'Terça e quarta verde'),
+      makeTemplate('66aaabb8-33ef-43f3-a3f4-f8cb406f8862', 'Terça e quarta mais verde', 'Terça e quarta mais verde'),
+      makeTemplate('2db9ae75-936e-4f95-815c-636a3c5bb0c4', 'Terça e quarta mais verde', 'Terça e quarta mais verde'),
+      makeTemplate('ab7f7789-7298-4b34-b4c7-6d8f583d870a', 'Terça e quarta verde', 'Terça e quarta verde'),
+      makeTemplate('tuesday-green', 'Terça verde', 'Terça verde'),
+      makeTemplate('wednesday-green', 'Quarta verde', 'Quarta verde'),
+      makeTemplate('monday-tuesday', 'Segunda e terça', 'Segunda e terça'),
+      makeTemplate('name-only-match', 'Terça e quarta', 'Liquidação'),
+      makeTemplate('wrong-format', 'Terça e quarta verde feed', 'Terça e quarta verde', ['feed']),
+      makeTemplate('fair-offers', 'Feira de ofertas', 'Feira de ofertas')
+    ]
+
+    mocks.query.mockResolvedValueOnce({ rows })
+    const family = await listCreationHeaders(accountId, 'encarte', 'TERÇA E QUARTA', ['stories'])
+    expect(family.headers.map(header => header.id)).toEqual([
+      '7506f335-2bf6-4650-8206-b283585a5a16',
+      '4b8b98f0-9a34-46e3-ab41-ddcc6135c79d',
+      '66aaabb8-33ef-43f3-a3f4-f8cb406f8862',
+      '2db9ae75-936e-4f95-815c-636a3c5bb0c4'
+    ])
+    expect(family.headers[0]).toMatchObject({
+      revision: 1791213399000,
+      theme: 'Hortifruti',
+      formats: ['stories']
+    })
+    expect(family.headers[0]?.sourceOwnerId).toBe(accountId)
+    expect(family.hasMore).toBe(true)
+    expect(family.missingTheme).toBe(false)
+    mocks.query.mockResolvedValueOnce({ rows })
+    const remainingFamily = await listCreationHeaders(accountId, 'encarte', 'TERÇA E QUARTA', ['stories'], 4)
+    expect(remainingFamily.headers.map(header => header.id)).toEqual(['ab7f7789-7298-4b34-b4c7-6d8f583d870a'])
+    expect([...family.headers, ...remainingFamily.headers].map(header => header.id)).toHaveLength(5)
+
+    mocks.query.mockResolvedValueOnce({ rows })
+    const specific = await listCreationHeaders(accountId, 'encarte', 'Terça e quarta mais verde', ['stories'])
+    expect(specific.headers.map(header => header.id)).toEqual([
+      '66aaabb8-33ef-43f3-a3f4-f8cb406f8862',
+      '2db9ae75-936e-4f95-815c-636a3c5bb0c4'
+    ])
+
+    mocks.query.mockResolvedValueOnce({ rows: [rows[9]] })
+    const incompatible = await listCreationHeaders(accountId, 'encarte', 'TERÇA E QUARTA', ['stories'])
+    expect(incompatible.headers).toEqual([])
+    expect(incompatible.missingTheme).toBe(false)
+
+    mocks.query.mockResolvedValueOnce({ rows })
+    const shortTheme = await listCreationHeaders(accountId, 'encarte', 'Feira', ['stories'])
+    expect(shortTheme.headers).toEqual([])
+    expect(shortTheme.missingTheme).toBe(true)
+  })
+
   it('usa a página Story salva para preparar só o cabeçalho quando o formato ainda não foi escolhido', async () => {
     const prefix = `projects/${accountId}/22222222-2222-4222-8222-222222222222/`
     mocks.query.mockResolvedValue({ rows: [{
