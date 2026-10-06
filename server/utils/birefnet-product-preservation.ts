@@ -100,6 +100,49 @@ export const restoreHorizontalPackshotInterior = (
   return { data: restored, bounds }
 }
 
+/**
+ * Sombra projetada sobre fundo claro também difere do fundo, mas não é produto.
+ * Marca como sombra o pixel removido pelo modelo que é neutro (sem cor) e que se
+ * liga ao fundo removido por um caminho de pixels removidos também neutros.
+ */
+export const markRemovedShadowPixels = (
+  sourceData: Buffer,
+  lost: Uint8Array,
+  removedBackground: Uint8Array,
+  width: number,
+  height: number
+): Uint8Array => {
+  const neutral = (p: number): boolean => {
+    const offset = p * 4
+    const r = sourceData[offset]!, g = sourceData[offset + 1]!, b = sourceData[offset + 2]!
+    return Math.max(r, g, b) - Math.min(r, g, b) <= 28
+  }
+  const shadow = new Uint8Array(width * height)
+  const queue = new Int32Array(width * height)
+  let head = 0, tail = 0
+  const neighbors = (p: number): number[] => {
+    const list: number[] = []
+    if (p % width) list.push(p - 1)
+    if (p % width < width - 1) list.push(p + 1)
+    if (p >= width) list.push(p - width)
+    if (p < width * (height - 1)) list.push(p + width)
+    return list
+  }
+  for (let p = 0; p < width * height; p++) {
+    if (!lost[p] || !neutral(p) || !neighbors(p).some(n => removedBackground[n])) continue
+    shadow[p] = 1
+    queue[tail++] = p
+  }
+  while (head < tail) {
+    for (const n of neighbors(queue[head++]!)) {
+      if (shadow[n] || !lost[n] || !neutral(n)) continue
+      shadow[n] = 1
+      queue[tail++] = n
+    }
+  }
+  return shadow
+}
+
 export const segmentProductWithBiRefNet = async (source: Buffer, sharp: any): Promise<Buffer> => {
   const original = await sharp(source).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   const { width, height } = original.info
@@ -123,7 +166,9 @@ export const segmentProductWithBiRefNet = async (source: Buffer, sharp: any): Pr
   const models: Array<'birefnet-general-lite' | 'birefnet-general'> = configuredModel === 'birefnet-general-lite'
     ? ['birefnet-general-lite', 'birefnet-general']
     : [configuredModel as 'birefnet-general-lite' | 'birefnet-general']
-  let lastLostPercent = 0
+  const isProductPixel = (p: number): boolean => Boolean(background) &&
+    [0, 1, 2].some(c => Math.abs(original.data[p * 4 + c]! - background![c]!) > 60)
+  let best: { result: Buffer; lost: Uint8Array; shadow: Uint8Array; lostPixels: number } | null = null
   for (const model of models) {
     const prediction = await removeBackgroundBiRefNet(input, model)
     const meta = await sharp(prediction).metadata()
@@ -136,25 +181,34 @@ export const segmentProductWithBiRefNet = async (source: Buffer, sharp: any): Pr
       ? restoreHorizontalPackshotInterior(original.data, mask.data, width, height, background)?.data
       : null
     const alphaMask: Buffer = repaired || mask.data
-    let lostPixels = 0
+    const lost = new Uint8Array(width * height)
+    const removedBackground = new Uint8Array(width * height)
     const result = Buffer.from(original.data)
     for (let p = 0; p < width * height; p++) {
       const offset = p * 4
-      if (background && [0, 1, 2].some(c => Math.abs(original.data[offset + c]! - background[c]!) > 60) && alphaMask[offset + 3]! < 128) {
-        lostPixels++
-      }
+      const removed = alphaMask[offset + 3]! < 128
+      if (removed && isProductPixel(p)) lost[p] = 1
+      else if (removed) removedBackground[p] = 1
       // RGB sempre vem do original; apenas o alpha vem da máscara semântica.
       result[offset + 3] = Math.min(original.data[offset + 3]!, alphaMask[offset + 3]!)
     }
-    lastLostPercent = lostPixels / Math.max(1, productPixels) * 100
-    if (lostPixels > 32 && lostPixels / Math.max(1, productPixels) > 0.04) {
-      if (model !== models[models.length - 1]) {
-        console.warn(`⚠️ [BiRefNet] ${model} apagou ${lastLostPercent.toFixed(1)}% do packshot; tentando modelo General`)
-        continue
-      }
-      throw new Error(`O recorte apagaria partes da embalagem (${lastLostPercent.toFixed(1)}%); imagem original preservada`)
+    const shadow = markRemovedShadowPixels(original.data, lost, removedBackground, width, height)
+    let lostPixels = 0
+    for (let p = 0; p < width * height; p++) if (lost[p] && !shadow[p]) lostPixels++
+    if (lostPixels <= 32 || lostPixels / Math.max(1, productPixels) <= 0.04) {
+      return sharp(result, { raw: original.info }).png().toBuffer()
     }
-    return sharp(result, { raw: original.info }).png().toBuffer()
+    if (!best || lostPixels < best.lostPixels) best = { result, lost, shadow, lostPixels }
+    if (model !== models[models.length - 1]) {
+      console.warn(`⚠️ [BiRefNet] ${model} apagou ${(lostPixels / Math.max(1, productPixels) * 100).toFixed(1)}% do packshot; tentando modelo General`)
+    }
   }
-  throw new Error(`O recorte apagaria partes da embalagem (${lastLostPercent.toFixed(1)}%); imagem original preservada`)
+  // Nenhum modelo preservou o produto inteiro: em vez de recusar o recorte,
+  // devolve ao melhor resultado os pixels de produto apagados (sombras continuam fora).
+  const repaired = best!
+  for (let p = 0; p < width * height; p++) {
+    if (repaired.lost[p] && !repaired.shadow[p]) repaired.result[p * 4 + 3] = original.data[p * 4 + 3]!
+  }
+  console.warn(`⚠️ [BiRefNet] ${(repaired.lostPixels / Math.max(1, productPixels) * 100).toFixed(1)}% do packshot restaurado a partir do original`)
+  return sharp(repaired.result, { raw: original.info }).png().toBuffer()
 }

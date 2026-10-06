@@ -3,7 +3,6 @@ import sharp from 'sharp'
 vi.mock('../../server/utils/birefnet', () => ({ removeBackgroundBiRefNet: vi.fn() }))
 import { removeBackgroundBiRefNet } from '../../server/utils/birefnet'
 import { restoreHorizontalPackshotInterior, segmentProductWithBiRefNet } from '../../server/utils/birefnet-product-preservation'
-import { processImageWithOptions } from '../../server/utils/image-processor'
 
 beforeEach(() => vi.resetAllMocks())
 afterEach(() => vi.unstubAllEnvs())
@@ -41,11 +40,36 @@ it('dá margem à embalagem perto da borda e retira apenas a margem temporária'
   }
 })
 
-it('rejeita perda conectada ao exterior mesmo se restar bastante conteúdo no recorte', async () => {
+it('restaura do original a parte da embalagem apagada em vez de recusar o recorte', async () => {
   vi.stubEnv('BIREFNET_MODEL', 'birefnet-general')
   mockMask(true)
-  await expect(processImageWithOptions(await makePackshot(), { strict: true, outputFormat: 'png' }))
-    .rejects.toThrow('apagaria partes da embalagem')
+  const output = await segmentProductWithBiRefNet(await makePackshot(), sharp)
+  const { data } = await sharp(output).raw().toBuffer({ resolveWithObject: true })
+  expect(data[(20 * 100 + 50) * 4 + 3]).toBe(255)
+  expect(data[(20 * 100 + 50) * 4]).toBe(0xce)
+  expect(data[3]).toBe(0)
+})
+
+it('aceita o recorte que remove a sombra cinza do produto sem contar como perda', async () => {
+  vi.stubEnv('BIREFNET_MODEL', 'birefnet-general')
+  // Fruta laranja com sombra neutra logo abaixo, sobre fundo branco.
+  const source = await sharp({ create: { width: 100, height: 100, channels: 4, background: 'white' } }).composite([
+    { input: await sharp({ create: { width: 60, height: 30, channels: 4, background: '#8a8a8a' } }).png().toBuffer(), left: 20, top: 65 },
+    { input: await sharp({ create: { width: 60, height: 50, channels: 4, background: '#e8851a' } }).png().toBuffer(), left: 20, top: 15 }
+  ]).png().toBuffer()
+  vi.mocked(removeBackgroundBiRefNet).mockImplementationOnce(async input => {
+    const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    for (let p = 0; p < info.width * info.height; p++) {
+      const r = data[p * 4]!, g = data[p * 4 + 1]!, b = data[p * 4 + 2]!
+      if (Math.max(r, g, b) - Math.min(r, g, b) < 30) data[p * 4 + 3] = 0
+    }
+    return sharp(data, { raw: info }).png().toBuffer()
+  })
+  const output = await segmentProductWithBiRefNet(source, sharp)
+  const { data } = await sharp(output).raw().toBuffer({ resolveWithObject: true })
+  expect(data[(40 * 100 + 50) * 4 + 3]).toBe(255)
+  expect(data[(80 * 100 + 50) * 4 + 3]).toBe(0)
+  expect(vi.mocked(removeBackgroundBiRefNet)).toHaveBeenCalledTimes(1)
 })
 
 it('preserva RGB do original mesmo quando a resposta do modelo muda suas cores', async () => {
