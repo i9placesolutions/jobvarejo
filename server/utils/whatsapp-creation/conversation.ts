@@ -3,8 +3,13 @@ import { z } from 'zod'
 import {
   createOrder, updateOrder, setImageCandidates, rejectImageCandidates, approveData, approveImage,
   approveScript, approvePreview, assertCanRender, assertCanDeliver, splitPageSizes, MAX_PAGE_COUNT,
-  type CreationOrder, type CreationKind, type CreationProduct, type CreationFormat, type OrderPatch
+  withCustomization, mergeFlyerCustomization,
+  type CreationOrder, type CreationKind, type CreationProduct, type CreationFormat, type OrderPatch, type FlyerCustomization
 } from '~/shared/whatsapp-creation'
+import {
+  describeFlyerChanges, flyerEditSchema, referencedProducts, resolveFlyerEdits, validFlyerEdits,
+  type FlyerEdit, type FlyerEditAmount, type FlyerEditAsk
+} from './flyer-edits'
 import { CARTAZISTA_FORMATS } from '~/types/cartazista'
 import { listCreationHeaders, listProductCandidates } from './catalog'
 import { createProductReviewBoards } from './product-review'
@@ -49,11 +54,20 @@ export const proposalSchema = z.object({
   artifactNumbers: z.array(z.number().int().positive()).max(100).optional(),
   approvalRevision: z.number().int().positive().optional(),
   transcript: z.string().max(12000).optional(),
-  projectQuery: z.string().max(300).optional()
+  projectQuery: z.string().max(300).optional(),
+  /** Ajustes visuais do encarte (logo, etiqueta, cores...): a IA só propõe, o servidor valida em flyer-edits. */
+  edits: z.array(flyerEditSchema).max(6).optional()
 }).strict()
 export type Proposal = z.infer<typeof proposalSchema>
 export type ConversationArtifact = { artifactId: string; formatId: string; key: string; previewKey?: string; hash: string; mimeType: string; projectId: string; editUrl: string }
 type Header = { id: string; revision: number; theme: string; nativeThemeId?: string; formats: string[]; name: string; headerKey?: string; previewUrl?: string; related?: boolean; listPreviewKey?: string }
+/** Perguntas de ajuste que a conversa espera responder sem consultar a IA. */
+export type PendingFlyerEdit =
+  | { kind: 'label'; at: number; options: Array<{ id: string; name: string }>; scope: 'all' | 'items' | 'unclear'; itemIds: string[]; choice?: number }
+  | { kind: 'seal'; at: number; operation: 'increase' | 'decrease'; amount: FlyerEditAmount }
+  | { kind: 'business_scope'; at: number; field: 'whatsapp' | 'address'; value: string; persistRequested: boolean }
+  | { kind: 'fork'; at: number; customization: FlyerCustomization; lead: string }
+  | { kind: 'card_color_offer'; at: number; color: string }
 export interface ConversationState {
   phase: 'collecting' | 'header' | 'data' | 'images' | 'script' | 'rendering' | 'preview' | 'approved' | 'delivered' | 'cancelled' | 'theme_pending'
   draft: {
@@ -61,6 +75,8 @@ export interface ConversationState {
     products: CreationProduct[]; validity?: string; conditions?: string;
     institutionalText?: { title: string; message: string; callToAction: string }; script?: string;
     additionalKinds?: CreationKind[]
+    /** Ajustes visuais pedidos para o encarte; vão para o pedido ao criar e a cada nova versão. */
+    customization?: FlyerCustomization
   }
   order?: CreationOrder
   header?: Header
@@ -86,6 +102,8 @@ export interface ConversationState {
   lastPromptAt?: number
   usage?: { promptTokens: number; completionTokens: number; cost: number }
   runtime?: { token: string; until: string; started?: string; native?: { projectId: string; revision: number; phase: string; jobId: string } }
+  /** Pergunta de ajuste do encarte aguardando resposta curta (número da etiqueta, escopo, confirmação). */
+  pendingEdit?: PendingFlyerEdit
   /** Projeto do painel que acompanha o encarte em andamento (ver draft-project-state.ts). */
   draftProject?: DraftProjectState
   /** Encarte já salvo na conta que a pessoa pediu pelo WhatsApp. */
@@ -297,7 +315,9 @@ function rerenderApproved(s: ConversationState, accountId: string, patch: OrderP
   // ter modelo e uma foto já escolhida para cada produto para gerar de novo.
   const approvedImages = order.products.map(product => order.images.find(image => image.itemId === product.id && image.key && image.hash))
   if (!order.header || approvedImages.some(image => !image)) throw new Error('Faltam o modelo ou fotos dos produtos para gerar de novo.')
-  let next = approveData(updateOrder(order, accountId, patch), accountId)
+  // A personalização do rascunho vai em toda nova versão (preço, formato, repetir...), nunca se perde.
+  const withVisuals: OrderPatch = 'customization' in patch || !s.draft.customization ? patch : { ...patch, customization: s.draft.customization }
+  let next = approveData(updateOrder(order, accountId, withVisuals), accountId)
   for (const image of approvedImages) next = approveImage(next, accountId, image!)
   assertCanRender(next, accountId)
   s.order = next
@@ -370,6 +390,10 @@ export function sanitizeThemeAndValidity(proposal: Proposal, text: string): Prop
   return next
 }
 export function normalizeConversationIntent(proposal: Proposal, text: string, state: ConversationState): Proposal {
+  // Ajuste visual do encarte com evidência válida: segue como atualização, sem virar pedido novo, cancelamento ou aprovação.
+  if (validFlyerEdits(proposal.edits, text).length && (state.order?.kind === 'encarte' || state.draft.kind === 'encarte')) {
+    return { ...proposal, action: 'update' }
+  }
   // Depois do “o que vamos criar?”, citar o tipo de material começa um pedido novo desse tipo.
   const kindReply = requestedKindReply(text)
   if (state.pendingOrderChoice && kindReply && !/\b(?:continuar|continua|esse mesmo|este mesmo)\b/.test(normalizedText(text))) {
@@ -439,6 +463,8 @@ const semanticApproval = (proposal: Proposal, text: string) => {
 }
 function hasProposedChanges(proposal: Proposal, state: ConversationState) {
   const draft = state.draft
+  // Pedido de ajuste visual nunca conta como aprovação da etapa.
+  if (proposal.edits?.length) return true
   const normalizedList = (value?: readonly string[]) => [...(value || [])].map(item => normalizedText(item)).sort()
   if (proposal.kind !== undefined && proposal.kind !== draft.kind) return true
   if (proposal.theme !== undefined && normalizedText(proposal.theme) !== normalizedText(draft.theme || '')) return true
@@ -574,7 +600,14 @@ export const interpretationSchema = {
     institutionalText: { type: 'object', additionalProperties: false, required: ['title','message','callToAction'], properties: { title: stringProperty, message: stringProperty, callToAction: stringProperty } },
     script: stringProperty, transcript: stringProperty, itemNumbers: { type: 'array', items: { type: 'integer' } },
     artifactNumbers: { type: 'array', items: { type: 'integer' } }, approvalRevision: { type: 'integer' },
-    projectQuery: stringProperty
+    projectQuery: stringProperty,
+    edits: { type: 'array', maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['target', 'operation', 'evidence'], properties: {
+      target: { type: 'string', enum: ['logo', 'seal', 'product_names', 'price_label', 'alcohol_badge', 'highlight_color', 'card_color', 'validity_format', 'whatsapp', 'address', 'product_images'] },
+      operation: { type: 'string', enum: ['increase', 'decrease', 'set', 'choose', 'hide', 'show'] },
+      scope: { type: 'string', enum: ['all', 'items', 'unclear'] }, itemNumbers: { type: 'array', items: { type: 'integer' } },
+      amount: { type: 'string', enum: ['little', 'normal', 'lot'] }, value: stringProperty, choice: { type: 'integer' },
+      persist: { type: 'string', enum: ['order', 'account'] }, evidence: stringProperty
+    } } }
   }
 }
 
@@ -587,8 +620,9 @@ export function interpretationRequest(state: ConversationState, text: string, na
       : process.env.JOBVAREJO_OPENROUTER_MODEL || 'xiaomi/mimo-v2.6-flash', max_tokens: 2500,
     temperature: 0, provider: { require_parameters: true, allow_fallbacks: false },
     response_format: { type: 'json_object' },
-    messages: [{ role: 'system', content: `Você conversa pelo WhatsApp do Job Varejo em português brasileiro informal, com respostas curtas, naturais e contextualizadas. Entenda a intenção pelo sentido da mensagem e pelo histórico; nunca ensine palavras ou frases que a pessoa precise repetir. Retorne só JSON neste contrato: ${JSON.stringify({ action: 'update|choose_header|approve_data|approve_images|approve_script|approve_preview|more_headers|status|cancel|new_order|cancel_and_start_new|account_project', confirmationIntent: 'approve|reject|unclear', confirmationEvidence: 'trecho literal da mensagem que demonstra a confirmação ou vazio', productOperation: 'patch|replace|append|unclear', kind: 'encarte|video|cartaz|studio', additionalKinds: ['outros tipos pedidos explicitamente'], theme: 'tema literal pedido', catalogTheme: 'tema da lista do catálogo que melhor corresponde ao pedido pelo sentido, copiado exatamente da lista, ou vazio', formats: CREATION_FORMATS.map(format => format.id), division: 'single|pages|department', pageCount: 2, products: [{ id: 'ID existente se conhecido', name: '', brand: '', variant: '', weight: '', price: 'preço literal', department: '', condition: '' }], validity: 'datas explícitas completas ou sem validade', conditions: 'condições literais', choice: 1, institutionalText: { title: '', message: '', callToAction: '' }, script: 'locução literal por extenso', itemNumbers: [1], artifactNumbers: [1], approvalRevision: 1, projectQuery: 'descrição literal do encarte já salvo' })}.
+    messages: [{ role: 'system', content: `Você conversa pelo WhatsApp do Job Varejo em português brasileiro informal, com respostas curtas, naturais e contextualizadas. Entenda a intenção pelo sentido da mensagem e pelo histórico; nunca ensine palavras ou frases que a pessoa precise repetir. Retorne só JSON neste contrato: ${JSON.stringify({ action: 'update|choose_header|approve_data|approve_images|approve_script|approve_preview|more_headers|status|cancel|new_order|cancel_and_start_new|account_project', confirmationIntent: 'approve|reject|unclear', confirmationEvidence: 'trecho literal da mensagem que demonstra a confirmação ou vazio', productOperation: 'patch|replace|append|unclear', kind: 'encarte|video|cartaz|studio', additionalKinds: ['outros tipos pedidos explicitamente'], theme: 'tema literal pedido', catalogTheme: 'tema da lista do catálogo que melhor corresponde ao pedido pelo sentido, copiado exatamente da lista, ou vazio', formats: CREATION_FORMATS.map(format => format.id), division: 'single|pages|department', pageCount: 2, products: [{ id: 'ID existente se conhecido', name: '', brand: '', variant: '', weight: '', price: 'preço literal', department: '', condition: '' }], validity: 'datas explícitas completas ou sem validade', conditions: 'condições literais', choice: 1, institutionalText: { title: '', message: '', callToAction: '' }, script: 'locução literal por extenso', itemNumbers: [1], artifactNumbers: [1], approvalRevision: 1, projectQuery: 'descrição literal do encarte já salvo', edits: [{ target: 'logo|seal|product_names|price_label|alcohol_badge|highlight_color|card_color|validity_format|whatsapp|address|product_images', operation: 'increase|decrease|set|choose', scope: 'all|items|unclear', itemNumbers: [1], amount: 'little|normal|lot', value: 'valor literal dito', choice: 1, persist: 'order|account', evidence: 'trecho literal da mensagem' }] })}.
 Encarte já pronto na conta: quando a pessoa pedir um encarte que já existe ou está salvo na conta dela (por exemplo “me manda o encarte de terça e quarta que fiz ontem”, “quero aquele encarte do açougue que está na minha conta”, “manda o último encarte”), use action=account_project e copie em projectQuery só a descrição literal (nome, tema, dia ou data citados). Isso não é pedido novo: não preencha kind, tema, produtos nem validade. Nunca invente nomes de encartes.
+Ajustes visuais do encarte (em qualquer fase): quando a pessoa pedir para mexer na aparência do encarte, devolva edits (no máximo 6) e use action=update sem products. Alvos: logo (tamanho da logo), seal (selo decorativo do modelo/cabeçalho; “selo” sem contexto é este), alcohol_badge (selo +18 de bebida alcoólica), product_names (tamanho do nome dos produtos), price_label (tamanho da etiqueta de preço com increase/decrease; trocar o modelo da etiqueta é operation=choose), highlight_color (cor dos cards em destaque), card_color (cor de todos os cards), validity_format (data por extenso ou numérica, value=“por extenso”/“numérica”), whatsapp e address (trocar o contato do encarte, value=literal dito), product_images (quantas fotos por produto, value=“2”, “3 lado a lado”...). amount só para increase/decrease: “um pouco” = little, sem qualificador = normal, “bem maior/muito” = lot. scope=items com itemNumbers (ou produto citado) quando for só alguns produtos; scope=all quando for todos; unclear se não disser. choice só se a pessoa já respondeu o número de uma etiqueta que foi apresentada. persist=account só se pedir para atualizar o cadastro da loja. evidence é o trecho literal da mensagem que pede o ajuste. Nunca invente cor, telefone ou endereço: precisam estar escritos na mensagem. Se a pessoa só responder “3” ou “só do arroz” a uma pergunta sobre etiqueta, não devolva edits.
 Use a fala anterior do atendente e as últimas mensagens para entender respostas curtas como “pode fazer”, “fechado”, “manda ver”, “perfeito”, “o outro”, “esse mesmo” ou correções referidas por contexto. Extraia apenas campos novos ou realmente alterados. OMITA todo campo igual ao rascunho/contexto, inclusive products, validade, tema e formatos; isso permite aprovar sem tratar eco do estado como correção. Campo igual não significa mudança. Exemplo: cliente “fechado” numa revisão de dados => action=approve_data, confirmação approve com evidência “fechado”, sem products; cliente “Pode seguir, mas põe 20 reais no arroz” => action=update, products com preço corrigido, sem aprovação.
 Temas: o cliente fala do jeito dele (“quarta da carne”, “promoção de aniversário”, “frutas e verduras”); copie em theme o que ele disse e em catalogTheme o tema do catálogo mais próximo pelo sentido (seção, produto ou campanha), escolhido só da lista de temas do catálogo. Ex.: “quarta da carne” => catalogTheme “Açougue” ou “Quinta da Carne”; “feira” => “Hortifruti”. Nunca diga que não existe modelo; o servidor confere. Sempre devolva o campo action. Remover produto (“tira o feijão”, “remove o item 2”) usa productOperation=remove com products contendo só o nome do item (ou itemNumbers); nunca escreva “remover” como condição. Com o encarte já entregue (etapa approved/delivered): reenviar a imagem (“reenvie”, “manda de novo”) é status; agradecimento ou elogio é status; gerar de novo/nova versão é status; corrigir preço/produto é update com products; outro encarte com outros produtos é new_order.
 Siga a fase: data aceita approve_data; images aceita approve_images e usa itemNumbers para itens/fotos; script aceita approve_script; preview aceita approve_preview, approvalRevision só se dita e artifactNumbers para selecionar arquivos. Cabeçalho atualizado único aceita confirmação como choose_header, choice=1. Exemplo: “não precisa mudar nada, segue” em data é approve_data; “sim, pode seguir” com uma opção de cabeçalho atualizada é choose_header. Respostas com pergunta ou hesitação (por exemplo “será que pode mandar?”) usam unclear.
@@ -661,6 +695,217 @@ async function prepareHeaderPage(page: Header[], kind: CreationKind, prepare: (h
   }
   return result as Header[]
 }
+/** Dependências injetáveis dos ajustes do encarte (banco/storage ficam fora da regra de conversa). */
+export interface FlyerEditDeps {
+  /** Etiquetas compatíveis numeradas; `imageKey` é a montagem com as prévias (ou ausente → lista em texto). */
+  labelOptions?: (input: { accountId: string; orderId: string; products: readonly CreationProduct[]; itemIds: string[] }) => Promise<{ options: Array<{ id: string; name: string }>; imageKey?: string } | null>
+  /** WhatsApp/endereço do cadastro da loja, para não perguntar o que já é igual. */
+  businessProfile?: { whatsapp?: string; address?: string }
+  /** Atualiza o cadastro da loja; só chamado depois da confirmação da pessoa. */
+  saveBusinessProfile?: (patch: { whatsapp?: string; address?: string }) => Promise<void>
+  /** O encarte já foi editado no painel? Então a nova versão é salva como outro encarte e a pessoa confirma. */
+  flyerProjectEdited?: (order: CreationOrder) => Promise<boolean>
+}
+type AdvanceResult = { state: ConversationState; send: ConversationSend[]; generate: boolean; missingTheme?: boolean; accountProjectJob?: { token: string; projectId: string } }
+type FlyerEditArgs = { s: ConversationState; p: Proposal; text: string; accountId: string; orderId: string; deps: FlyerEditDeps; send: ConversationSend[]; say: (text: string) => void }
+const PENDING_EDIT_TTL_MS = 30 * 60_000
+const isYes = (text: string) => /^(?:sim|pode|pode sim|pode ser|ok|claro|isso|isso mesmo|quero|fechado|bora|manda ver|confirmo|por favor)[.!]?$/.test(normalizedText(text))
+const isNo = (text: string) => /^(?:nao|nao precisa|deixa|deixa assim|melhor nao|nao quero)[.!]?$/.test(normalizedText(text))
+const listNames = (names: readonly string[]) => names.length > 1 ? `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}` : names[0] || ''
+const contrastColorFor = (hex: string) => {
+  const rgb = /^#([0-9a-f]{6})$/i.exec(hex)?.[1]
+  if (!rgb) return '#111111'
+  return .299 * parseInt(rgb.slice(0, 2), 16) + .587 * parseInt(rgb.slice(2, 4), 16) + .114 * parseInt(rgb.slice(4, 6), 16) > 150 ? '#111111' : '#ffffff'
+}
+
+/** Guarda (e, com encarte já gerado, aplica) a personalização: nova versão com revisão nova e geração. */
+async function commitFlyerCustomization(a: FlyerEditArgs, customization: FlyerCustomization | undefined, lead: string, force = false): Promise<AdvanceResult> {
+  const { s } = a
+  s.pendingEdit = undefined
+  const regenerates = Boolean(s.order && canRegenerate(s))
+  if (!regenerates) {
+    s.draft.customization = customization
+    if (s.order) s.order = withCustomization(s.order, a.accountId, customization)
+    a.say(`${lead.replace(/^Pronto:/, 'Anotei:')} Aplico quando eu gerar o encarte.`.trim())
+    return { state: s, send: a.send, generate: false }
+  }
+  if (!force && a.deps.flyerProjectEdited && await a.deps.flyerProjectEdited(s.order!)) {
+    s.pendingEdit = { kind: 'fork', at: Date.now(), customization: customization || {}, lead }
+    a.say('Vi que você mexeu nesse encarte pelo painel. Para não apagar suas alterações, posso salvar a versão ajustada como um encarte novo na sua conta. Pode ser?')
+    return { state: s, send: a.send, generate: false }
+  }
+  s.draft.customization = customization
+  s.generationFailed = undefined
+  rerenderApproved(s, a.accountId, { customization })
+  a.say(`${lead} Já estou gerando o encarte atualizado.`.trim())
+  return { state: s, send: a.send, generate: true }
+}
+
+/** Primeira pergunta pendente do pedido de ajuste; as demais voltam quando a pessoa responder. */
+async function askFlyerEdit(a: FlyerEditArgs, ask: FlyerEditAsk): Promise<void> {
+  const { s } = a
+  const products = s.order?.products ?? s.draft.products
+  if (ask.kind === 'label') {
+    const offered = await a.deps.labelOptions?.({ accountId: a.accountId, orderId: a.orderId, products, itemIds: ask.itemIds }).catch(() => null)
+    if (!offered?.options.length) { a.say('Não consegui listar as etiquetas agora. Tente de novo daqui a pouco ou troque pelo painel de edição.'); return }
+    const options = offered.options.slice(0, 8)
+    s.pendingEdit = { kind: 'label', at: Date.now(), options, scope: ask.scope, itemIds: ask.itemIds }
+    if (offered.imageKey) a.send.push({ type: 'image', key: offered.imageKey, text: 'Etiquetas disponíveis para o seu encarte', purpose: 'review' })
+    else a.say(options.map((option, index) => `${index + 1} — ${option.name}`).join('\n'))
+    const names = ask.itemIds.map(id => products.find(product => product.id === id)?.name).filter((name): name is string => Boolean(name))
+    a.say(ask.scope === 'items' ? `Qual número você prefere para ${listNames(names)}?` : ask.scope === 'all'
+      ? 'Qual número você prefere para todos os produtos?' : 'Qual número? É para todos os produtos ou só algum?')
+    return
+  }
+  if (ask.kind === 'seal') {
+    s.pendingEdit = { kind: 'seal', at: Date.now(), operation: ask.operation, amount: ask.amount }
+    a.say('Você quer mexer no selo do modelo (a arte do cabeçalho) ou no selo +18 dos produtos de bebida?')
+  } else if (ask.kind === 'business_scope') {
+    s.pendingEdit = { kind: 'business_scope', at: Date.now(), field: ask.field, value: ask.value, persistRequested: ask.persistRequested }
+    const what = ask.field === 'whatsapp' ? `o WhatsApp ${ask.value}` : `o endereço “${ask.value}”`
+    a.say(ask.persistRequested
+      ? `Confirma que eu atualizo o cadastro da loja com ${what}? Ele passa a valer nos próximos encartes também.`
+      : `Uso ${what} só neste encarte ou atualizo o cadastro da loja?`)
+  } else if (ask.kind === 'business_value') {
+    a.say(ask.field === 'whatsapp' ? 'Qual número de WhatsApp devo colocar no encarte? Pode mandar com o DDD.' : 'Qual endereço devo colocar no encarte? Pode mandar completo.')
+  } else if (ask.kind === 'items') {
+    a.say('Em quais produtos? Pode dizer o nome ou o número da lista.')
+  } else if (ask.kind === 'validity_dates') {
+    a.say('Para escrever a data por extenso preciso das datas completas da validade, por exemplo “06 e 07 de outubro”. Quais são?')
+  } else {
+    a.say(ask.target === 'highlight_color' ? 'Qual cor você quer nos cards em destaque? Por exemplo vermelho, amarelo ou azul.' : 'Qual cor você quer nos cards? Por exemplo vermelho, amarelo ou azul.')
+  }
+}
+
+/** Resposta curta a uma pergunta de ajuste pendente. Retorna null quando a mensagem é outro assunto. */
+async function answerPendingFlyerEdit(a: FlyerEditArgs): Promise<AdvanceResult | null> {
+  const { s, text } = a
+  const pending = s.pendingEdit
+  if (!pending) return null
+  const normalized = normalizedText(text)
+  const products = s.order?.products ?? s.draft.products
+  const current = s.draft.customization ?? s.order?.customization
+  const done = (): AdvanceResult => ({ state: s, send: a.send, generate: false })
+  if (normalized.length > 90 || /[?？]/.test(text)) return null
+  if (pending.kind === 'fork') {
+    if (isYes(text)) return commitFlyerCustomization(a, pending.customization, pending.lead, true)
+    if (isNo(text)) { s.pendingEdit = undefined; a.say('Tudo bem, deixei o encarte como está.'); return done() }
+    return null
+  }
+  if (pending.kind === 'card_color_offer') {
+    if (isNo(text)) { s.pendingEdit = undefined; a.say('Tudo bem, deixei os cards como estão.'); return done() }
+    if (!isYes(text) && !/\b(?:todos|todas|geral)\b/.test(normalized)) return null
+    const palette = { cardColor: pending.color, prodNameColor: contrastColorFor(pending.color) }
+    return commitFlyerCustomization(a, mergeFlyerCustomization(current, { palette }), 'Pronto: mudei a cor de todos os cards.')
+  }
+  if (pending.kind === 'seal') {
+    const badge = /\b(?:18|alcool|bebidas?|produtos?|cerveja|vinho)\b/.test(normalized)
+    const model = /\b(?:modelo|cabecalho|arte|decorativ[oa]|topo)\b/.test(normalized)
+    if (badge === model) return null
+    const edits = validFlyerEdits([{ target: badge ? 'alcohol_badge' : 'seal', operation: pending.operation, amount: pending.amount, evidence: text.slice(0, 300) }], text)
+    const resolution = resolveFlyerEdits(edits, { text, customization: current, products, validity: s.order?.validity ?? s.draft.validity, profile: a.deps.businessProfile })
+    s.pendingEdit = undefined
+    if (!resolution.changed) { a.say(describeFlyerChanges(resolution) || 'Esse selo já está no limite de tamanho.'); return done() }
+    return commitFlyerCustomization(a, resolution.customization, describeFlyerChanges(resolution))
+  }
+  if (pending.kind === 'business_scope') {
+    const account = /\b(?:cadastro|atualiza|atualize|sempre|definitiv[oa]|loja toda|proximos|todos os encartes)\b/.test(normalized) || pending.persistRequested && isYes(text)
+    const order = /\b(?:neste|nesse|deste|desse|este|esse|encarte|pedido|agora)\b/.test(normalized) || pending.persistRequested && isNo(text)
+    if (account === order) return null
+    const { field, value } = pending
+    const label = field === 'whatsapp' ? 'WhatsApp' : 'endereço'
+    let saved = false
+    if (account && a.deps.saveBusinessProfile) {
+      try { await a.deps.saveBusinessProfile({ [field]: value }); saved = true } catch { saved = false }
+    }
+    const lead = account
+      ? saved ? `Pronto: atualizei o cadastro da loja e o ${label} do encarte.` : `Pronto: usei o ${label} neste encarte, mas não consegui atualizar o cadastro agora.`
+      : `Pronto: usei o ${label} só neste encarte.`
+    return commitFlyerCustomization(a, mergeFlyerCustomization(current, { business: { [field]: value } }), lead)
+  }
+  // Etiqueta: número da opção e/ou escopo (todos ou produtos).
+  const itemNumbers = [...normalized.matchAll(/\b(?:item|produto)\s*(\d{1,2})\b/g)].map(match => Number(match[1]))
+  const withoutItems = normalized.replace(/\b(?:item|produto)\s*\d{1,2}\b/g, ' ')
+  const optionNumbers = [...withoutItems.matchAll(/(?:^|[^\d])(\d{1,2})(?!\d)/g)].map(match => Number(match[1]))
+  const allWords = /\b(?:todos|todas|tudo|geral)\b/.test(normalized)
+  const named = referencedProducts(text, products).map(product => product.id)
+  const numberedItems = itemNumbers.map(number => products[number - 1]?.id).filter((id): id is string => Boolean(id))
+  const itemIds = [...new Set([...named, ...numberedItems])]
+  if (!optionNumbers.length && !allWords && !itemIds.length) return null
+  if (optionNumbers[0] !== undefined && (optionNumbers[0] < 1 || optionNumbers[0] > pending.options.length)) {
+    a.say(`Me diga um número de 1 a ${pending.options.length}.`)
+    return done()
+  }
+  const choice = optionNumbers[0] ?? pending.choice
+  const scope: 'all' | 'items' | 'unclear' = allWords ? 'all' : itemIds.length ? 'items' : pending.scope
+  const ids = scope === 'items' ? [...new Set([...(pending.scope === 'items' ? pending.itemIds : []), ...itemIds])] : []
+  s.pendingEdit = { ...pending, ...(choice ? { choice } : {}), scope, itemIds: ids }
+  if (!choice) { a.say('Qual número de etiqueta você prefere?'); return done() }
+  if (scope === 'unclear') { a.say('E é para todos os produtos ou só algum? Se for só alguns, me diga o nome.'); return done() }
+  const option = pending.options[choice - 1]!
+  const patch: FlyerCustomization = scope === 'all'
+    ? { labelTemplateId: option.id }
+    : { itemLabelTemplateIds: Object.fromEntries(ids.map(id => [id, option.id])) }
+  const target = scope === 'all' ? 'em todos os produtos' : `em ${listNames(ids.map(id => products.find(product => product.id === id)?.name || '').filter(Boolean))}`
+  return commitFlyerCustomization(a, mergeFlyerCustomization(current, patch), `Pronto: etiqueta “${option.name}” ${target}.`)
+}
+
+/**
+ * Ajustes visuais do encarte (logo, etiqueta, cores, contato...). A IA propõe `edits`; aqui só
+ * entram os validados pelo servidor. Retorna null quando a mensagem não é um ajuste.
+ */
+async function handleFlyerEdits(a: FlyerEditArgs): Promise<AdvanceResult | null> {
+  const { s, p, text } = a
+  if (s.pendingEdit) {
+    const expired = Date.now() - s.pendingEdit.at > PENDING_EDIT_TTL_MS
+    const answered = expired ? null : await answerPendingFlyerEdit(a)
+    if (answered) { s.turns++; return answered }
+    s.pendingEdit = undefined
+  }
+  const edits = validFlyerEdits(p.edits, text)
+  if (!edits.length) return null
+  const kind = s.order?.kind ?? s.draft.kind
+  if (!kind || s.phase === 'cancelled') return null
+  s.turns++
+  if (kind !== 'encarte') {
+    a.say('Esse tipo de ajuste está disponível só em encarte. Para vídeo, cartaz ou arte, me diga o que mudar que eu refaço.')
+    return { state: s, send: a.send, generate: false }
+  }
+  if (s.phase === 'rendering') {
+    a.say('Estou montando o encarte agora. Quando ele chegar, me peça esse ajuste de novo que eu aplico na hora.')
+    return { state: s, send: a.send, generate: false }
+  }
+  const products = s.order?.products ?? s.draft.products
+  const resolution = resolveFlyerEdits(edits, {
+    text, customization: s.draft.customization ?? s.order?.customization, products,
+    validity: s.order?.validity ?? s.draft.validity, profile: a.deps.businessProfile
+  })
+  const lead = describeFlyerChanges(resolution)
+  // Pedido misto (ex.: corrigir preço e aumentar a logo): guarda o visual e deixa o fluxo normal continuar.
+  if (hasProposedChanges({ ...p, edits: undefined }, s)) {
+    if (resolution.changed) s.draft.customization = resolution.customization
+    if (lead) a.say(lead)
+    return null
+  }
+  const [ask] = resolution.asks
+  if (ask) {
+    // O que já foi entendido fica anotado e entra junto com a resposta.
+    if (resolution.changed) {
+      s.draft.customization = resolution.customization
+      if (s.order && !canRegenerate(s)) s.order = withCustomization(s.order, a.accountId, resolution.customization)
+    }
+    if (lead) a.say(lead.replace(/^Pronto:/, 'Anotei:'))
+    await askFlyerEdit(a, ask)
+    return { state: s, send: a.send, generate: false }
+  }
+  if (!resolution.changed) {
+    a.say(lead || resolution.unsupported[0] || 'Esse ajuste já está assim no encarte.')
+    return { state: s, send: a.send, generate: false }
+  }
+  const unsupportedNote = resolution.unsupported.length ? ` ${resolution.unsupported.join(' ')}` : ''
+  return commitFlyerCustomization(a, resolution.customization, `${lead}${unsupportedNote}`.trim())
+}
+
 export async function advanceConversation(input: {
   state: ConversationState; proposal: Proposal; text: string; accountId: string; sender: string; orderId: string; name: string;
   uploaded?: { key: string; hash: string }
@@ -669,7 +914,7 @@ export async function advanceConversation(input: {
   cachedHeader?: (header: Header) => Promise<Header | null>
   /** Lista os encartes do dono; injetável nos testes. Sempre filtrada por accountId. */
   listAccountProjects?: (accountId: string) => Promise<AccountProjectSummary[]>
-}): Promise<{ state: ConversationState; send: ConversationSend[]; generate: boolean; missingTheme?: boolean; accountProjectJob?: { token: string; projectId: string } }> {
+} & FlyerEditDeps): Promise<AdvanceResult> {
   let s = structuredClone(input.state), p = sanitizeThemeAndValidity(proposalSchema.parse(input.proposal), input.text)
   // Esperando o tema (nenhum modelo achado): resposta curta como “Açougue” é o novo tema, mesmo se a IA não extrair.
   if (s.phase === 'theme_pending' && !p.theme && !p.products?.length && input.text.trim().length <= 40 && !/\d/.test(input.text) &&
@@ -680,6 +925,11 @@ export async function advanceConversation(input: {
   if (s.order && s.order.accountId !== input.accountId) throw new Error('ACCOUNT_MISMATCH')
   const preserveHeaderCandidates = Boolean(s.headerRefreshPending && s.phase === 'header' && s.order)
   p = normalizeConversationIntent(p, input.text, s)
+  // Ajustes do encarte (tamanhos, etiqueta, cores, contato) e respostas curtas às perguntas deles.
+  if (!s.accountProject?.awaitingChoice) {
+    const edited = await handleFlyerEdits({ s, p, text: input.text, accountId: input.accountId, orderId: input.orderId, deps: input, send, say })
+    if (edited) return edited
+  }
   // Escolha numerada de um encarte da conta tem prioridade só enquanto a lista é a última pergunta.
   const pendingProjects = s.accountProject?.awaitingChoice ? s.accountProject.choices || [] : []
   const projectChoice = pendingProjects.length && p.action !== 'account_project' ? accountProjectChoiceNumber(input.text, pendingProjects) : undefined
@@ -1119,7 +1369,7 @@ export async function advanceConversation(input: {
       `Aproveite!${d.validity && d.validity !== 'sem validade' ? ' Ofertas válidas: ' + d.validity + '.' : ''}`
     ].join('\n')
     const previousRevision = s.order?.revision || 0
-    let order = createOrder({ id: input.orderId, identity: { accountId: input.accountId, normalizedSender: '+' + input.sender.replace(/^\+/, '') }, kind: d.kind, theme: d.theme, formats: formats as CreationFormat[], division: d.division ?? null, ...(d.kind === 'encarte' && d.division === 'pages' && d.pageCount ? { pageCount: d.pageCount } : {}), products: d.products, institutionalText: d.institutionalText, validity: d.validity === 'sem validade' ? '' : d.validity, conditions: d.conditions || '' })
+    let order = createOrder({ id: input.orderId, identity: { accountId: input.accountId, normalizedSender: '+' + input.sender.replace(/^\+/, '') }, kind: d.kind, theme: d.theme, formats: formats as CreationFormat[], division: d.division ?? null, ...(d.kind === 'encarte' && d.division === 'pages' && d.pageCount ? { pageCount: d.pageCount } : {}), products: d.products, institutionalText: d.institutionalText, validity: d.validity === 'sem validade' ? '' : d.validity, conditions: d.conditions || '', customization: d.customization })
     order = updateOrder(order, input.accountId, { header: { id: s.header.id, revision: s.header.revision, theme: d.theme, formats: s.header.formats, ...(s.header.nativeThemeId ? { nativeThemeId: s.header.nativeThemeId } : {}) }, ...(d.script ? { script: d.script } : {}) })
     // Replacing a draft must never reuse a revision that the customer approved earlier.
     while (order.revision <= previousRevision) order = updateOrder(order, input.accountId, {})

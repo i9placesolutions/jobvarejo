@@ -1170,3 +1170,177 @@ describe('um encarte por produto', () => {
     expect(requestedPageCount('coloca três produtos em cada encarte', 9)).toBe(3)
   })
 })
+
+describe('ajustes do encarte pelo WhatsApp', () => {
+  const twoProducts = () => [product('rice', { name: 'Arroz' }), product('beans', { name: 'Feijão', price: 'R$ 8,50' })]
+  const labelOptions = vi.fn(async () => ({
+    options: [{ id: 'label-a', name: 'Redonda' }, { id: 'label-b', name: 'Faixa' }, { id: 'label-c', name: 'Selo' }],
+    imageKey: 'whatsapp-creation/labels.png'
+  }))
+  const run = (state: ReturnType<typeof newConversationState>, proposal: Record<string, unknown>, text: string, deps: Record<string, unknown> = {}) =>
+    advanceConversation({ state, proposal: proposal as any, text, accountId, sender, orderId, name: 'Rafa', labelOptions, ...deps } as any)
+  const logoEdit = { target: 'logo', operation: 'increase', evidence: 'aumenta a logo' }
+
+  beforeEach(() => labelOptions.mockClear())
+
+  it('“aumenta a logo” gera uma nova versão com a escala absoluta', async () => {
+    const state = deliveredState()
+    const result = await run(state, { action: 'update', edits: [logoEdit] }, 'aumenta a logo')
+    expect(result.generate).toBe(true)
+    expect(result.state.phase).toBe('rendering')
+    expect(result.state.order?.customization).toEqual({ logoScale: 1.2 })
+    expect(result.state.order?.revision).toBe(state.order.revision + 1)
+    expect(result.state.draft.customization).toEqual({ logoScale: 1.2 })
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/logo maior \(\+20%\)/)
+  })
+
+  it('evidência que não está na mensagem é ignorada', async () => {
+    const result = await run(deliveredState(), { action: 'status', edits: [{ ...logoEdit, evidence: 'logo gigante' }] }, 'manda de novo')
+    expect(result.state.order?.customization).toBeUndefined()
+  })
+
+  it('a regra de intenção mantém o ajuste como atualização, nunca como pedido novo', () => {
+    const state = deliveredState()
+    expect(normalizeConversationIntent({ action: 'new_order', edits: [logoEdit] } as any, 'aumenta a logo, do encarte novo', state).action).toBe('update')
+  })
+
+  it('“troca a etiqueta” mostra as opções e pergunta o número e o escopo', async () => {
+    const result = await run(deliveredState(), { action: 'update', edits: [{ target: 'price_label', operation: 'choose', scope: 'unclear', evidence: 'troca a etiqueta' }] }, 'troca a etiqueta')
+    expect(result.generate).toBe(false)
+    expect(labelOptions).toHaveBeenCalledTimes(1)
+    expect(result.send[0]).toMatchObject({ type: 'image', key: 'whatsapp-creation/labels.png', purpose: 'review' })
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/Qual número\? É para todos os produtos ou só algum\?/)
+    expect(result.state.pendingEdit).toMatchObject({ kind: 'label', scope: 'unclear' })
+  })
+
+  it('número e depois “só do arroz” aplica a etiqueta só naquele produto, sem consultar a IA', async () => {
+    const asked = await run(deliveredState({ products: twoProducts() }), { action: 'update', edits: [{ target: 'price_label', operation: 'choose', evidence: 'troca a etiqueta' }] }, 'troca a etiqueta')
+    const number = await run(asked.state, { action: 'status' }, '3')
+    expect(number.generate).toBe(false)
+    expect(number.send.map(message => message.text).join(' ')).toMatch(/todos os produtos ou só algum/)
+    expect(number.state.pendingEdit).toMatchObject({ kind: 'label', choice: 3 })
+    const scoped = await run(number.state, { action: 'status' }, 'só do arroz')
+    expect(scoped.generate).toBe(true)
+    expect(scoped.state.order?.customization).toEqual({ itemLabelTemplateIds: { rice: 'label-c' } })
+    expect(scoped.state.pendingEdit).toBeUndefined()
+  })
+
+  it('“2, todos” resolve número e escopo juntos e uma etiqueta para todos limpa as por item', async () => {
+    const asked = await run(deliveredState({ products: twoProducts() }), { action: 'update', edits: [{ target: 'price_label', operation: 'choose', evidence: 'troca a etiqueta' }] }, 'troca a etiqueta')
+    const result = await run(asked.state, { action: 'status' }, '2, todos')
+    expect(result.generate).toBe(true)
+    expect(result.state.order?.customization).toEqual({ labelTemplateId: 'label-b' })
+  })
+
+  it('número fora das opções pede outro e outro assunto expira a pergunta', async () => {
+    const asked = await run(deliveredState(), { action: 'update', edits: [{ target: 'price_label', operation: 'choose', evidence: 'troca a etiqueta' }] }, 'troca a etiqueta')
+    const invalid = await run(asked.state, { action: 'status' }, '9')
+    expect(invalid.send.map(message => message.text).join(' ')).toMatch(/de 1 a 3/)
+    expect(invalid.state.pendingEdit).toBeDefined()
+    const other = await run(asked.state, { action: 'status' }, 'obrigado pelo atendimento')
+    expect(other.state.pendingEdit).toBeUndefined()
+    expect(other.state.order?.customization).toBeUndefined()
+  })
+
+  it('WhatsApp sem número pergunta o número', async () => {
+    const result = await run(deliveredState(), { action: 'update', edits: [{ target: 'whatsapp', operation: 'set', evidence: 'troca o whatsapp' }] }, 'troca o whatsapp')
+    expect(result.generate).toBe(false)
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/Qual número de WhatsApp/)
+  })
+
+  it('WhatsApp diferente pergunta se vale só neste encarte ou no cadastro e só grava o cadastro com a resposta', async () => {
+    const edits = [{ target: 'whatsapp', operation: 'set', value: '(11) 98888-7777', evidence: 'troca o whatsapp' }]
+    const text = 'troca o whatsapp para (11) 98888-7777'
+    const saveBusinessProfile = vi.fn(async () => undefined)
+    const deps = { businessProfile: { whatsapp: '(11) 90000-0000' }, saveBusinessProfile }
+    const asked = await run(deliveredState(), { action: 'update', edits }, text, deps)
+    expect(asked.generate).toBe(false)
+    expect(asked.state.pendingEdit).toMatchObject({ kind: 'business_scope', field: 'whatsapp' })
+    expect(saveBusinessProfile).not.toHaveBeenCalled()
+    const onlyHere = await run(asked.state, { action: 'status' }, 'só neste encarte', deps)
+    expect(onlyHere.generate).toBe(true)
+    expect(onlyHere.state.order?.customization?.business).toEqual({ whatsapp: '(11) 98888-7777' })
+    expect(saveBusinessProfile).not.toHaveBeenCalled()
+    const account = await run(asked.state, { action: 'status' }, 'atualiza o cadastro da loja', deps)
+    expect(account.generate).toBe(true)
+    expect(saveBusinessProfile).toHaveBeenCalledWith({ whatsapp: '(11) 98888-7777' })
+  })
+
+  it('na conferência de dados guarda o ajuste sem gerar nem pedir nova revisão', async () => {
+    const started = await beginOrder({ products: [product()] })
+    const first = await run(started.state, { action: 'choose_header', choice: 1 }, '1')
+    expect(first.state.phase).toBe('data')
+    const result = await run(first.state, { action: 'update', edits: [logoEdit] }, 'aumenta a logo')
+    expect(result.generate).toBe(false)
+    expect(result.state.phase).toBe('data')
+    expect(result.state.draft.customization).toEqual({ logoScale: 1.2 })
+    expect(result.state.order?.customization).toEqual({ logoScale: 1.2 })
+    expect(result.state.order?.revision).toBe(first.state.order?.revision)
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/Anotei: a logo maior/)
+  })
+
+  it('durante a geração pede para repetir depois', async () => {
+    const state = { ...deliveredState(), phase: 'rendering' as const }
+    const result = await run(state, { action: 'update', edits: [logoEdit] }, 'aumenta a logo')
+    expect(result.generate).toBe(false)
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/me peça esse ajuste de novo/)
+  })
+
+  it('vídeo recebe a orientação de que o ajuste é só de encarte', async () => {
+    const started = await beginOrder({ kind: 'video', products: [product()] })
+    const first = await run(started.state, { action: 'choose_header', choice: 1 }, '1')
+    const result = await run(first.state, { action: 'update', edits: [logoEdit] }, 'aumenta a logo')
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/só em encarte/)
+    expect(result.state.draft.customization).toBeUndefined()
+  })
+
+  it('selo sem contexto com bebida pergunta qual; a resposta aplica no selo certo', async () => {
+    const state = deliveredState({ products: [product('beer', { name: 'Cerveja Pilsen' })] })
+    const asked = await run(state, { action: 'update', edits: [{ target: 'seal', operation: 'increase', evidence: 'aumenta o selo' }] }, 'aumenta o selo')
+    expect(asked.generate).toBe(false)
+    expect(asked.state.pendingEdit).toMatchObject({ kind: 'seal' })
+    const answered = await run(asked.state, { action: 'status' }, 'o do modelo')
+    expect(answered.generate).toBe(true)
+    expect(answered.state.order?.customization).toEqual({ sealScale: 1.2 })
+    const badge = await run(asked.state, { action: 'status' }, 'o selo +18 das bebidas')
+    expect(badge.state.order?.customization).toEqual({ badgeScale: 1.2 })
+  })
+
+  it('encarte editado no painel pede confirmação antes de salvar como outro encarte', async () => {
+    const flyerProjectEdited = vi.fn(async () => true)
+    const asked = await run(deliveredState(), { action: 'update', edits: [logoEdit] }, 'aumenta a logo', { flyerProjectEdited })
+    expect(asked.generate).toBe(false)
+    expect(asked.state.pendingEdit).toMatchObject({ kind: 'fork' })
+    expect(asked.state.order?.customization).toBeUndefined()
+    const confirmed = await run(asked.state, { action: 'status' }, 'sim', { flyerProjectEdited })
+    expect(confirmed.generate).toBe(true)
+    expect(confirmed.state.order?.customization).toEqual({ logoScale: 1.2 })
+    const declined = await run(asked.state, { action: 'status' }, 'não', { flyerProjectEdited })
+    expect(declined.generate).toBe(false)
+    expect(declined.state.pendingEdit).toBeUndefined()
+  })
+
+  it('pedido misto (preço + logo) guarda o visual e aplica junto com a correção', async () => {
+    const state = deliveredState({ products: twoProducts() })
+    const products = state.draft.products.map(item => item.id === 'rice' ? { ...item, price: 'R$ 20,00' } : item)
+    const result = await run(state, { action: 'update', products, productOperation: 'patch', edits: [logoEdit] }, 'põe 20 no arroz e aumenta a logo')
+    expect(result.generate).toBe(true)
+    expect(result.state.order?.products.find(item => item.id === 'rice')?.price).toBe('R$ 20,00')
+    expect(result.state.order?.customization).toEqual({ logoScale: 1.2 })
+  })
+
+  it('a personalização do rascunho vai em novas versões', async () => {
+    const state = deliveredState()
+    state.draft.customization = { nameScale: 1.3 }
+    const regenerated = await run(state, { action: 'status' }, 'gera outra prévia')
+    expect(regenerated.generate).toBe(true)
+    expect(regenerated.state.order?.customization).toEqual({ nameScale: 1.3 })
+  })
+
+  it('o contrato da IA aceita edits no esquema e rejeita campos extras', async () => {
+    const { proposalSchema, interpretationSchema } = await import('../../server/utils/whatsapp-creation/conversation')
+    expect(proposalSchema.parse({ action: 'update', edits: [logoEdit] }).edits).toHaveLength(1)
+    expect(() => proposalSchema.parse({ action: 'update', edits: [{ ...logoEdit, extra: 1 }] })).toThrow()
+    expect((interpretationSchema.properties as any).edits.maxItems).toBe(6)
+  })
+})
