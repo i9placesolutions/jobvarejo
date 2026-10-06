@@ -100,7 +100,7 @@ export interface FlyerCustomization {
   palette?: { highlightCardColor?: string; highlightProdNameColor?: string; cardColor?: string; prodNameColor?: string }
   validityDateFormat?: 'numeric' | 'long'
   /** Valores só deste pedido; o cadastro da loja só muda com confirmação explícita. */
-  business?: { whatsapp?: string; address?: string }
+  business?: { whatsapp?: string; address?: string; instagram?: string }
 }
 
 export const FLYER_CUSTOMIZATION_LIMITS = {
@@ -160,6 +160,8 @@ export function normalizeFlyerCustomization(value: unknown): FlyerCustomization 
     const address = typeof source.business.address === 'string' ? source.business.address.trim() : ''
     if (/^[+\d\s().-]{8,30}$/.test(whatsapp) && whatsapp.replace(/\D/g, '').length >= 10 && whatsapp.replace(/\D/g, '').length <= 13) business.whatsapp = whatsapp
     if (address && address.length <= 300) business.address = address
+    const instagram = typeof source.business.instagram === 'string' ? source.business.instagram.trim() : ''
+    if (/^@?[a-z0-9._]{1,30}$/i.test(instagram)) business.instagram = instagram.startsWith('@') ? instagram : `@${instagram}`
     if (Object.keys(business).length) out.business = business
   }
   return Object.keys(out).length ? out : undefined

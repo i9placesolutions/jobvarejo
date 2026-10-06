@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { authenticateWhatsAppService } from '~/server/utils/whatsapp-creation/access'
 import { ingestCreationEvent, claimCreationMessage, loadLeasedMessage, persistConversationResult,
   claimCreationOutbound, acknowledgeCreationOutbound, assertCreationAccess, beginCreationOrder } from '~/server/utils/whatsapp-creation/repository'
-import { interpretationRequest, transcriptionRequest, advanceConversation, normalizeConversationIntent, rememberConversationTurns, proposalSchema } from '~/server/utils/whatsapp-creation/conversation'
+import { interpretationRequest, transcriptionRequest, advanceConversation, normalizeConversationIntent, rememberConversationTurns, proposalSchema, effectiveMessageText } from '~/server/utils/whatsapp-creation/conversation'
 import { pollWhatsAppJobs, followUpWhatsAppThemes } from '~/server/utils/whatsapp-creation/jobs'
 import { listCreationThemeNames } from '~/server/utils/whatsapp-creation/catalog'
 import { downloadProviderMedia } from '~/server/utils/whatsapp-creation/media'
@@ -37,7 +37,7 @@ export default defineEventHandler(async event => {
         await pgQuery("UPDATE public.whatsapp_creation_events SET payload=jsonb_set(payload,'{uploaded}',$3::jsonb) WHERE id=$1 AND lease_token=$2 AND status='processing'", [claim.eventId, claim.leaseToken, JSON.stringify({ key: media.key, hash: media.hash })])
       }
       return { ok: true, claimed: true, eventId: claim.eventId, leaseToken: claim.leaseToken, isAudio: context.payload.type === 'audio',
-        request: context.payload.type === 'audio' ? transcriptionRequest(content) : interpretationRequest(context.state, context.payload.text || '', context.account.user.user_metadata.name || context.account.businessProfile.companyName || 'cliente', content, await catalogThemesFor(context.owner_id)) }
+        request: context.payload.type === 'audio' ? transcriptionRequest(content) : interpretationRequest(context.state, effectiveMessageText(context.state, context.payload.text || ''), context.account.user.user_metadata.name || context.account.businessProfile.companyName || 'cliente', content, await catalogThemesFor(context.owner_id)) }
     } catch (error) {
       await pgQuery("UPDATE public.whatsapp_creation_events SET status='failed',last_error='prepare_failed',lease_until=NULL WHERE id=$1 AND lease_token=$2", [claim.eventId, claim.leaseToken])
       await pgQuery('UPDATE public.whatsapp_creation_conversations SET lease_token=NULL,lease_until=NULL WHERE lease_token=$1', [claim.leaseToken])
@@ -53,7 +53,7 @@ export default defineEventHandler(async event => {
     const usage = body.result?.usage || {}
     const transcriptionUsage = { promptTokens: Math.max(0, Number(usage.prompt_tokens || 0)), completionTokens: Math.max(0, Number(usage.completion_tokens || 0)), cost: Math.max(0, Number(usage.cost || 0)) }
     await pgQuery("UPDATE public.whatsapp_creation_events SET payload=jsonb_set(jsonb_set(payload,'{transcript}',to_jsonb($3::text)),'{transcriptionUsage}',$4::jsonb) WHERE id=$1 AND lease_token=$2 AND status='processing'", [eventId, leaseToken, transcript, JSON.stringify(transcriptionUsage)])
-    return { request: interpretationRequest(context.state, transcript, context.account.user.user_metadata.name || 'Cliente', undefined, await catalogThemesFor(context.owner_id)) }
+    return { request: interpretationRequest(context.state, effectiveMessageText(context.state, transcript), context.account.user.user_metadata.name || 'Cliente', undefined, await catalogThemesFor(context.owner_id)) }
   }
   if (operation === 'apply') {
     const { eventId, leaseToken } = leaseSchema.parse(body)
@@ -67,7 +67,7 @@ export default defineEventHandler(async event => {
     const proposal = proposalSchema.parse(proposed)
     const modelAction = proposal.action
     let routeAction: string | null = null
-    const messageText = context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || ''
+    const messageText = effectiveMessageText(context.state, context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || '')
     if (proposal.action === 'status' && hasBriefFields(proposal) &&
       !/\b(?:status|andamento|como (?:est[aá]|t[aá]) (?:o |meu )?pedido)\b/i.test(messageText)) proposal.action = 'update'
     const route = shouldConsultJev(proposal, messageText)
@@ -116,9 +116,14 @@ export default defineEventHandler(async event => {
       headerThumbnail: header => croppedCreationHeaderThumbnail(header, context.account),
       // Ajustes do encarte pedidos na conversa (etiquetas, contato do cadastro, edição do painel).
       labelOptions: labels => buildLabelOptions(labels),
-      businessProfile: { whatsapp: context.account.businessProfile.whatsapp || context.account.businessProfile.phone, address: context.account.businessProfile.address },
+      businessProfile: { whatsapp: context.account.businessProfile.whatsapp || context.account.businessProfile.phone, address: context.account.businessProfile.address, instagram: context.account.businessProfile.instagram },
       saveBusinessProfile: patch => updateBusinessContact(context.owner_id, patch),
       flyerProjectEdited: flyer => flyerProjectEditedInPanel(flyer, context.owner_id) })
+    // Mensagem de texto/áudio nunca fica sem resposta (ex.: “sim” solto depois do encarte entregue).
+    if (context.payload.type !== 'image' && !result.send.length && !result.generate && !result.accountProjectJob) {
+      result.send.push({ type: 'text', text: 'Não entendi bem o que você quer agora. Pode me explicar com mais detalhes? Se for um ajuste no encarte, diga o que mudar (ex.: “troque o WhatsApp para …”).' })
+    }
+    result.state.retryMessage = undefined
     const usage = response.usage || {}, prior = result.state.usage, audio = context.payload.transcriptionUsage
     result.state.usage = { promptTokens: Number(prior?.promptTokens || 0) + Number(audio?.promptTokens || 0) + Math.max(0, Number(usage.prompt_tokens || 0)), completionTokens: Number(prior?.completionTokens || 0) + Number(audio?.completionTokens || 0) + Math.max(0, Number(usage.completion_tokens || 0)), cost: Number(prior?.cost || 0) + Number(audio?.cost || 0) + Math.max(0, Number(usage.cost || 0)) }
     rememberConversationTurns(result.state, [
@@ -158,9 +163,15 @@ export default defineEventHandler(async event => {
   if (operation === 'fail') {
     const { eventId, leaseToken } = leaseSchema.parse(body)
     const context = await loadLeasedMessage(eventId, leaseToken)
-    const text = 'Não consegui processar essa mensagem agora. Seu pedido está salvo. Quer tentar de novo?'
+    const failedText = effectiveMessageText(context.state, context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || '')
+    // Guarda o texto para um “sim” reprocessar; a segunda falha seguida não reabre a pergunta em loop.
+    const retried = Boolean(context.state.retryMessage) && failedText === context.state.retryMessage!.text
+    context.state.retryMessage = failedText.trim() && !retried ? { text: failedText.slice(0, 4000), at: Date.now() } : undefined
+    const text = context.state.retryMessage
+      ? 'Não consegui processar essa mensagem agora. Seu pedido está salvo. Quer tentar de novo?'
+      : 'Ainda não consegui processar. Seu pedido está salvo; pode me mandar o pedido de novo com outras palavras?'
     rememberConversationTurns(context.state, [
-      { role: 'user', text: context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || '' },
+      { role: 'user', text: failedText },
       { role: 'assistant', text }
     ])
     await persistConversationResult(eventId, leaseToken, context.state, [{ type: 'text', text }], true)

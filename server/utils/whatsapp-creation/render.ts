@@ -728,11 +728,11 @@ export async function readFlyerPaymentIcon(src: string): Promise<Buffer | null> 
 }
 
 /**
- * Perfil usado só neste encarte: WhatsApp/endereço pedidos pelo cliente substituem os do cadastro
+ * Perfil usado só neste encarte: WhatsApp/endereço/Instagram pedidos pelo cliente substituem os do cadastro
  * na cópia; o cadastro da loja só muda por confirmação explícita (mergeBusinessProfile).
  */
 export function applyBusinessOverrides(profile: BusinessProfile, business: FlyerCustomization['business'] | undefined): BusinessProfile {
-  if (!business?.whatsapp && !business?.address) return profile
+  if (!business?.whatsapp && !business?.address && !business?.instagram) return profile
   const next: BusinessProfile = { ...profile }
   const digitsOf = (value: string) => value.replace(/\D/g, '')
   if (business.whatsapp) {
@@ -745,6 +745,7 @@ export function applyBusinessOverrides(profile: BusinessProfile, business: Flyer
     next.address = business.address
     next.addresses = [{ id: profile.addresses?.[0]?.id || 'address-1', label: profile.addresses?.[0]?.label || '', value: business.address }]
   }
+  if (business.instagram) next.instagram = business.instagram
   return next
 }
 

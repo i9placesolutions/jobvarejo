@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  contrastingTextColor, describeFlyerChanges, flyerEditSchema, referencedProducts, resolveAddressValue, resolveColorValue,
+  contrastingTextColor, describeFlyerChanges, flyerEditSchema, referencedProducts, resolveAddressValue, resolveInstagramValue, resolveColorValue,
   resolveFlyerEdits, resolveWhatsappValue, validFlyerEdits, type FlyerEdit
 } from '../../server/utils/whatsapp-creation/flyer-edits'
 
@@ -110,7 +110,7 @@ describe('cores, contato, data e fotos', () => {
     const text = 'troca o whatsapp para (11) 98888-7777'
     const base = [edit({ target: 'whatsapp', operation: 'set', value: '(11) 98888-7777', evidence: 'troca o whatsapp' })]
     const different = run(base, text, { profile: { whatsapp: '(11) 90000-0000' } })
-    expect(different.asks).toEqual([{ kind: 'business_scope', field: 'whatsapp', value: '(11) 98888-7777', persistRequested: false }])
+    expect(different.asks).toEqual([{ kind: 'business_scope', values: { whatsapp: '(11) 98888-7777' }, persistRequested: false }])
     expect(different.customization).toBeUndefined()
     const same = run(base, text, { profile: { whatsapp: '11 98888 7777' } })
     expect(same.asks).toEqual([])
@@ -118,6 +118,23 @@ describe('cores, contato, data e fotos', () => {
     const local = run([edit({ target: 'whatsapp', operation: 'set', value: '(11) 98888-7777', persist: 'order', evidence: 'só nesse encarte' })],
       'só nesse encarte o whatsapp é (11) 98888-7777', { profile: { whatsapp: '(11) 90000-0000' } })
     expect(local.customization?.business?.whatsapp).toBe('(11) 98888-7777')
+  })
+
+  it('WhatsApp, endereço e Instagram juntos viram uma pergunta só de escopo', () => {
+    const text = 'Altere o WhatsApp para (64) 99302-0251 altere o endereço para VÁLIDO SOMENTE NAS LOJAS DE SANTA HELENA - GO\n\naltere instagram para @_supermercadorodrigues'
+    const result = run([
+      edit({ target: 'whatsapp', operation: 'set', value: '(64) 99302-0251', evidence: 'Altere o WhatsApp' }),
+      edit({ target: 'address', operation: 'set', value: 'VÁLIDO SOMENTE NAS LOJAS DE SANTA HELENA - GO', evidence: 'altere o endereço' }),
+      edit({ target: 'instagram', operation: 'set', value: '@_supermercadorodrigues', evidence: 'altere instagram' })
+    ], text, { profile: { whatsapp: '(64) 90000-0000', address: 'Rua A', instagram: '@antigo' } })
+    expect(result.asks).toEqual([{ kind: 'business_scope', persistRequested: false,
+      values: { whatsapp: '(64) 99302-0251', address: 'VÁLIDO SOMENTE NAS LOJAS DE SANTA HELENA - GO', instagram: '@_supermercadorodrigues' } }])
+  })
+
+  it('Instagram precisa estar escrito na mensagem e ganha @', () => {
+    expect(resolveInstagramValue('_supermercadorodrigues', 'instagram @_supermercadorodrigues')).toBe('@_supermercadorodrigues')
+    expect(resolveInstagramValue('https://instagram.com/loja.x/', 'meu insta é instagram.com/loja.x')).toBe('@loja.x')
+    expect(resolveInstagramValue('@inventado', 'troca o instagram')).toBeUndefined()
   })
 
   it('WhatsApp sem número pergunta o valor', () => {

@@ -2,14 +2,15 @@ import { pgOneOrNull } from '../postgres'
 import { ensureBusinessProfileColumn, mergeBusinessProfile } from '../business-profile'
 
 /**
- * Atualiza WhatsApp e/ou endereço do cadastro da loja a pedido do cliente (depois da confirmação na
+ * Atualiza WhatsApp, endereço e/ou Instagram do cadastro da loja a pedido do cliente (depois da confirmação na
  * conversa). Usa o mesmo merge do painel (PUT /api/profile) e preserva logoPreference, internalOnly e
  * adminAccess; só o dono da conta é alterado.
  */
-export async function updateBusinessContact(userId: string, patch: { whatsapp?: string; address?: string }): Promise<void> {
+export async function updateBusinessContact(userId: string, patch: { whatsapp?: string; address?: string; instagram?: string }): Promise<void> {
   const incoming: Record<string, string> = {}
   if (patch.whatsapp?.trim()) incoming.whatsapp = patch.whatsapp.trim().slice(0, 80)
   if (patch.address?.trim()) incoming.address = patch.address.trim().slice(0, 300)
+  if (patch.instagram?.trim()) incoming.instagram = patch.instagram.trim().slice(0, 120)
   if (!Object.keys(incoming).length) return
   await ensureBusinessProfileColumn()
   const current = await pgOneOrNull<{ business_profile: unknown }>('select business_profile from public.profiles where id = $1 limit 1', [userId])

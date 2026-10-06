@@ -12,7 +12,7 @@ import { parseLiteralValidityPeriod } from './validity-period'
  * personalização absoluta. Nada neste arquivo acessa banco, storage ou rede.
  */
 
-export const FLYER_EDIT_TARGETS = ['logo', 'seal', 'product_names', 'price_label', 'alcohol_badge', 'highlight_color', 'card_color', 'validity_format', 'whatsapp', 'address', 'product_images'] as const
+export const FLYER_EDIT_TARGETS = ['logo', 'seal', 'product_names', 'price_label', 'alcohol_badge', 'highlight_color', 'card_color', 'validity_format', 'whatsapp', 'address', 'instagram', 'product_images'] as const
 export const FLYER_EDIT_OPERATIONS = ['increase', 'decrease', 'set', 'choose', 'hide', 'show'] as const
 export type FlyerEditTarget = typeof FLYER_EDIT_TARGETS[number]
 export type FlyerEditAmount = 'little' | 'normal' | 'lot'
@@ -88,7 +88,7 @@ const COMBINATIONS: Record<FlyerEditTarget, ReadonlyArray<FlyerEdit['operation']
   logo: ['increase', 'decrease'], seal: ['increase', 'decrease'], product_names: ['increase', 'decrease'],
   price_label: ['increase', 'decrease', 'choose'], alcohol_badge: ['increase', 'decrease'],
   highlight_color: ['set'], card_color: ['set'], validity_format: ['set'],
-  whatsapp: ['set'], address: ['set'], product_images: ['set']
+  whatsapp: ['set'], address: ['set'], instagram: ['set'], product_images: ['set']
 }
 
 /**
@@ -107,6 +107,7 @@ const TARGET_WORDS: Record<FlyerEdit['target'], RegExp> = {
   validity_format: /\bdata|validade|extenso|numeric/,
   whatsapp: /\bwhats|zap|telefone|celular|contato/,
   address: /\bendereco|rua|avenida|bairro/,
+  instagram: /\binsta|@/,
   product_images: /\bfoto|imagem|imagens/
 }
 export function validFlyerEdits(edits: readonly FlyerEdit[] | undefined, text: string): FlyerEdit[] {
@@ -138,8 +139,8 @@ export function referencedProducts<T extends { id: string; name: string }>(text:
 export type FlyerEditAsk =
   | { kind: 'label'; scope: 'all' | 'items' | 'unclear'; itemIds: string[]; choice?: number }
   | { kind: 'seal'; operation: 'increase' | 'decrease'; amount: FlyerEditAmount }
-  | { kind: 'business_scope'; field: 'whatsapp' | 'address'; value: string; persistRequested: boolean }
-  | { kind: 'business_value'; field: 'whatsapp' | 'address' }
+  | { kind: 'business_scope'; values: BusinessContact; persistRequested: boolean }
+  | { kind: 'business_value'; field: BusinessContactField }
   | { kind: 'items'; target: FlyerEditTarget }
   | { kind: 'validity_dates' }
   | { kind: 'color_value'; target: 'highlight_color' | 'card_color' }
@@ -151,8 +152,20 @@ export interface FlyerEditContext {
   products: ReadonlyArray<Pick<CreationProduct, 'id' | 'name'> & Partial<CreationProduct>>
   validity?: string
   /** Contato do cadastro da loja, para não pedir confirmação do que já é igual. */
-  profile?: { whatsapp?: string; address?: string }
+  profile?: BusinessContact
   today?: Date
+}
+
+export type BusinessContactField = 'whatsapp' | 'address' | 'instagram'
+export type BusinessContact = Partial<Record<BusinessContactField, string>>
+const CONTACT_LABELS: Record<BusinessContactField, string> = { whatsapp: 'WhatsApp', address: 'endereço', instagram: 'Instagram' }
+/** Rótulo de um contato para a resposta (“o WhatsApp (64) 9…”, “o endereço “…””). */
+export const contactLabel = (field: BusinessContactField, value?: string) =>
+  value ? field === 'address' ? `o endereço “${value}”` : `o ${CONTACT_LABELS[field]} ${value}` : `o ${CONTACT_LABELS[field]}`
+/** Lista dos contatos em texto corrido: “o WhatsApp, o endereço e o Instagram”. */
+export const contactList = (values: BusinessContact, withValues = false) => {
+  const items = (Object.keys(values) as BusinessContactField[]).map(field => contactLabel(field, withValues ? values[field] : undefined))
+  return items.length > 1 ? `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}` : items[0] || ''
 }
 
 export interface FlyerEditResolution {
@@ -173,6 +186,14 @@ export function resolveWhatsappValue(value: string | undefined, text: string): s
   const only = digits(raw)
   if (!/^[+\d\s().-]{8,30}$/.test(raw) || only.length < 10 || only.length > 13) return undefined
   return digits(text).includes(only) ? raw : undefined
+}
+
+/** Instagram: @usuario do Instagram (até 30 caracteres) citado na mensagem. */
+export function resolveInstagramValue(value: string | undefined, text: string): string | undefined {
+  const raw = String(value || '').trim().replace(/^(?:https?:\/\/)?(?:www\.)?instagram\.com\//i, '').replace(/\/+$/, '')
+  const handle = raw.replace(/^@/, '')
+  if (!/^[a-z0-9._]{1,30}$/i.test(handle) || !/[a-z]/i.test(handle)) return undefined
+  return text.toLowerCase().includes(handle.toLowerCase()) ? `@${handle}` : undefined
 }
 
 /** Endereço até 300 caracteres e copiado literalmente da mensagem. */
@@ -276,23 +297,26 @@ export function resolveFlyerEdits(edits: readonly FlyerEdit[], context: FlyerEdi
       changes.push(`data da validade ${format === 'long' ? 'por extenso' : 'numérica'}`)
       continue
     }
-    if (edit.target === 'whatsapp' || edit.target === 'address') {
+    if (edit.target === 'whatsapp' || edit.target === 'address' || edit.target === 'instagram') {
       const field = edit.target
-      const value = field === 'whatsapp' ? resolveWhatsappValue(edit.value, context.text) : resolveAddressValue(edit.value, context.text)
+      const value = field === 'whatsapp' ? resolveWhatsappValue(edit.value, context.text)
+        : field === 'address' ? resolveAddressValue(edit.value, context.text) : resolveInstagramValue(edit.value, context.text)
       if (!value) { asks.push({ kind: 'business_value', field }); continue }
-      const stored = context.profile?.[field] || ''
-      const same = field === 'whatsapp' ? digits(stored) === digits(value) : normalize(stored) === normalize(value)
-      if (same) { notices.push(field === 'whatsapp' ? 'Esse WhatsApp já é o do cadastro da loja.' : 'Esse endereço já é o do cadastro da loja.'); continue }
-      const sameOrder = field === 'whatsapp'
-        ? digits(current?.business?.whatsapp || '') === digits(value) : normalize(current?.business?.address || '') === normalize(value)
-      if (sameOrder) { notices.push(field === 'whatsapp' ? 'Esse WhatsApp já está no encarte.' : 'Esse endereço já está no encarte.'); continue }
+      const comparable = (input: string) => field === 'whatsapp' ? digits(input) : normalize(input).replace(/^@/, '')
+      if (comparable(context.profile?.[field] || '') === comparable(value)) { notices.push(`Esse ${CONTACT_LABELS[field]} já é o do cadastro da loja.`); continue }
+      if (comparable(current?.business?.[field] || '') === comparable(value)) { notices.push(`Esse ${CONTACT_LABELS[field]} já está no encarte.`); continue }
       const onlyHere = edit.persist === 'order' && /\b(?:so|apenas|somente)\b.{0,20}\b(?:neste|nesse|deste|desse|esse|este|encarte|pedido)\b/.test(message)
       if (onlyHere) {
         patch = { ...patch, business: { ...(patch.business || {}), [field]: value } }
-        changes.push(field === 'whatsapp' ? `WhatsApp ${value} só neste encarte` : 'endereço só neste encarte')
+        changes.push(field === 'whatsapp' ? `WhatsApp ${value} só neste encarte` : field === 'instagram' ? `Instagram ${value} só neste encarte` : 'endereço só neste encarte')
         continue
       }
-      asks.push({ kind: 'business_scope', field, value, persistRequested: edit.persist === 'account' })
+      // Vários contatos no mesmo pedido viram uma pergunta só (neste encarte ou no cadastro).
+      const pending = asks.find((ask): ask is Extract<FlyerEditAsk, { kind: 'business_scope' }> => ask.kind === 'business_scope')
+      if (pending) {
+        pending.values[field] = value
+        pending.persistRequested = pending.persistRequested && edit.persist === 'account'
+      } else asks.push({ kind: 'business_scope', values: { [field]: value }, persistRequested: edit.persist === 'account' })
       continue
     }
     if (edit.target === 'product_images') {

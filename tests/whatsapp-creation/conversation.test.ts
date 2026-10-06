@@ -25,7 +25,7 @@ vi.mock('../../server/utils/whatsapp-creation/catalog', () => ({
 vi.mock('../../server/utils/whatsapp-creation/media', () => ({ ownedStorageBytes: mocks.storageBytes }))
 vi.mock('../../server/utils/whatsapp-creation/product-review', () => ({ createProductReviewBoards: mocks.productReview }))
 
-const { advanceConversation, isOnePerProductRequest, isAmbiguousNewFlyerRequest, isNewMaterialRequest, regenerateChoiceAnswer, sanitizeThemeAndValidity, finalSendType, interpretationRequest, isRegenerateRequest, isResendRequest, mentionedFlyerFormats, newConversationState, normalizeConversationIntent, requestedPageCount } = await import('../../server/utils/whatsapp-creation/conversation')
+const { advanceConversation, proposalSchema, effectiveMessageText, isOnePerProductRequest, isAmbiguousNewFlyerRequest, isNewMaterialRequest, regenerateChoiceAnswer, sanitizeThemeAndValidity, finalSendType, interpretationRequest, isRegenerateRequest, isResendRequest, mentionedFlyerFormats, newConversationState, normalizeConversationIntent, requestedPageCount } = await import('../../server/utils/whatsapp-creation/conversation')
 
 const accountId = '11111111-1111-4111-8111-111111111111'
 const otherAccountId = '22222222-2222-4222-8222-222222222222'
@@ -1255,7 +1255,7 @@ describe('ajustes do encarte pelo WhatsApp', () => {
     const deps = { businessProfile: { whatsapp: '(11) 90000-0000' }, saveBusinessProfile }
     const asked = await run(deliveredState(), { action: 'update', edits }, text, deps)
     expect(asked.generate).toBe(false)
-    expect(asked.state.pendingEdit).toMatchObject({ kind: 'business_scope', field: 'whatsapp' })
+    expect(asked.state.pendingEdit).toMatchObject({ kind: 'business_scope', values: { whatsapp: '(11) 98888-7777' } })
     expect(saveBusinessProfile).not.toHaveBeenCalled()
     const onlyHere = await run(asked.state, { action: 'status' }, 'só neste encarte', deps)
     expect(onlyHere.generate).toBe(true)
@@ -1264,6 +1264,35 @@ describe('ajustes do encarte pelo WhatsApp', () => {
     const account = await run(asked.state, { action: 'status' }, 'atualiza o cadastro da loja', deps)
     expect(account.generate).toBe(true)
     expect(saveBusinessProfile).toHaveBeenCalledWith({ whatsapp: '(11) 98888-7777' })
+  })
+
+  it('WhatsApp, endereço e Instagram juntos: uma pergunta e todos aplicados com a resposta', async () => {
+    const text = 'Altere o WhatsApp para (64) 99302-0251 altere o endereço para VÁLIDO SOMENTE NAS LOJAS DE SANTA HELENA - GO\n\naltere instagram para @_supermercadorodrigues'
+    const proposal = proposalSchema.parse({ action: 'update', edits: [
+      { target: 'whatsapp', operation: 'set', value: '(64) 99302-0251', evidence: 'Altere o WhatsApp' },
+      { target: 'address', operation: 'set', value: 'VÁLIDO SOMENTE NAS LOJAS DE SANTA HELENA - GO', evidence: 'altere o endereço' },
+      { target: 'instagram', operation: 'set', value: '@_supermercadorodrigues', evidence: 'altere instagram' }
+    ] })
+    const saveBusinessProfile = vi.fn(async () => undefined)
+    const deps = { businessProfile: { whatsapp: '(64) 90000-0000' }, saveBusinessProfile }
+    const asked = await run(deliveredState(), proposal, text, deps)
+    expect(asked.send.map(message => message.text).join(' ')).toMatch(/WhatsApp \(64\) 99302-0251.*endereço.*Instagram @_supermercadorodrigues/)
+    const account = await run(asked.state, { action: 'status' }, 'atualiza o cadastro', deps)
+    expect(account.generate).toBe(true)
+    expect(saveBusinessProfile).toHaveBeenCalledWith({ whatsapp: '(64) 99302-0251', address: 'VÁLIDO SOMENTE NAS LOJAS DE SANTA HELENA - GO', instagram: '@_supermercadorodrigues' })
+    expect(account.state.order?.customization?.business).toEqual({ whatsapp: '(64) 99302-0251', address: 'VÁLIDO SOMENTE NAS LOJAS DE SANTA HELENA - GO', instagram: '@_supermercadorodrigues' })
+  })
+
+  it('ajuste com alvo desconhecido é descartado sem derrubar a proposta', () => {
+    const parsed = proposalSchema.parse({ action: 'update', edits: [{ target: 'whatsapp', operation: 'set', value: '(64) 99302-0251' }, { target: 'facebook', operation: 'set', value: 'x' }] })
+    expect(parsed.edits?.map(item => item.target)).toEqual(['whatsapp'])
+  })
+
+  it('“sim” logo depois de uma falha reprocessa a mensagem original', () => {
+    const state = { ...deliveredState(), retryMessage: { text: 'troca o whatsapp para (11) 98888-7777', at: Date.now() } }
+    expect(effectiveMessageText(state, 'Sim')).toBe('troca o whatsapp para (11) 98888-7777')
+    expect(effectiveMessageText(state, 'aumenta a logo')).toBe('aumenta a logo')
+    expect(effectiveMessageText({ ...state, retryMessage: { ...state.retryMessage, at: Date.now() - 31 * 60_000 } }, 'Sim')).toBe('Sim')
   })
 
   it('na conferência de dados guarda o ajuste sem gerar nem pedir nova revisão', async () => {
@@ -1358,10 +1387,10 @@ describe('ajustes do encarte pelo WhatsApp', () => {
     expect(regenerated.state.order?.customization).toEqual({ nameScale: 1.3 })
   })
 
-  it('o contrato da IA aceita edits no esquema e rejeita campos extras', async () => {
+  it('o contrato da IA aceita edits no esquema e descarta os fora dele', async () => {
     const { proposalSchema, interpretationSchema } = await import('../../server/utils/whatsapp-creation/conversation')
     expect(proposalSchema.parse({ action: 'update', edits: [logoEdit] }).edits).toHaveLength(1)
-    expect(() => proposalSchema.parse({ action: 'update', edits: [{ ...logoEdit, extra: 1 }] })).toThrow()
+    expect(proposalSchema.parse({ action: 'update', edits: [{ ...logoEdit, extra: 1 }, logoEdit] }).edits).toEqual([logoEdit])
     expect((interpretationSchema.properties as any).edits.maxItems).toBe(6)
   })
 })
