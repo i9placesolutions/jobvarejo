@@ -3,7 +3,7 @@ import { hasBriefFields, shouldConsultJev, suggestJevRoute } from '../../server/
 
 const actions = [
   'update', 'choose_header', 'approve_data', 'approve_images', 'approve_script',
-  'approve_preview', 'more_headers', 'status', 'cancel', 'new_order', 'cancel_and_start_new'
+  'approve_preview', 'more_headers', 'status', 'cancel', 'new_order', 'cancel_and_start_new', 'account_project'
 ] as const
 
 const validPayload = (choice: string, confidence = 0.96) => ({

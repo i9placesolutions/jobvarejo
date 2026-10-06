@@ -246,3 +246,69 @@ describe('persistência e propriedade da criação WhatsApp', () => {
     expect(mocks.sign).not.toHaveBeenCalled()
   })
 })
+
+describe('envio de encarte já salvo na conta', () => {
+  const projectId = 'aaaaaaaa-0000-4000-8000-000000000001'
+  const key = `whatsapp-creation/${ownerId}/account-projects/${projectId}/${'a'.repeat(40)}.png`
+  const chosenState = () => ({ ...newConversationState(), accountProject: { projectId, projectName: 'Açougue' } })
+  const item = (overrides: Record<string, unknown> = {}) => ({ type: 'image' as const, text: '', key, purpose: 'account_project' as const, accountProjectId: projectId, scope: 'account_project' as const, formatId: 'pagina-1', ...overrides })
+
+  it('só enfileira PNG do projeto escolhido, na pasta do dono', async () => {
+    const client = { query: vi.fn(async () => ({ rows: [] })) }
+    await queueCreationSend(client as any, conversationId, ownerId, oldOrderId, chosenState(), [item(), item({ type: 'document' })], 'ok')
+    expect(client.query).toHaveBeenCalledTimes(2)
+    for (const bad of [
+      item({ key: `whatsapp-creation/${otherOwnerId}/account-projects/${projectId}/${'a'.repeat(40)}.png` }),
+      item({ accountProjectId: 'bbbbbbbb-0000-4000-8000-000000000002', key: `whatsapp-creation/${ownerId}/account-projects/bbbbbbbb-0000-4000-8000-000000000002/x.png` }),
+      item({ key: `projects/${ownerId}/${projectId}/thumb.png` }),
+      item({ type: 'video' })
+    ]) {
+      await expect(queueCreationSend(client as any, conversationId, ownerId, oldOrderId, chosenState(), [bad as any], 'bad')).rejects.toMatchObject({ statusCode: 409 })
+    }
+    await expect(queueCreationSend(client as any, conversationId, ownerId, oldOrderId, newConversationState(), [item()], 'none')).rejects.toMatchObject({ statusCode: 409 })
+  })
+
+  function outboxClient(payload: Record<string, unknown>, failures: string[]) {
+    return { query: vi.fn(async (query: string) => {
+      const sql = query.replace(/\s+/g, ' ').trim()
+      if (sql.startsWith("UPDATE public.whatsapp_creation_outbox SET status='uncertain'")) return { rows: [], rowCount: 0 }
+      if (sql.startsWith("UPDATE public.whatsapp_creation_ingress SET status='uncertain'")) return { rows: [], rowCount: 0 }
+      if (sql.startsWith("SELECT * FROM public.whatsapp_creation_ingress WHERE status='pending'")) return { rows: [] }
+      if (sql.startsWith('SELECT b.*,c.sender_phone,o.state FROM public.whatsapp_creation_outbox')) {
+        return { rows: [{ id: outboxId, status: 'pending', owner_id: ownerId, conversation_id: conversationId, order_id: oldOrderId, sender_phone: '+5511999999999', payload, state: chosenState() }] }
+      }
+      if (sql.startsWith("UPDATE public.whatsapp_creation_outbox SET status='failed'")) { failures.push(sql); return { rows: [], rowCount: 1 } }
+      if (sql.startsWith("UPDATE public.whatsapp_creation_outbox SET status='sending'")) return { rows: [], rowCount: 1 }
+      throw new Error(`Unexpected SQL: ${sql}`)
+    }) }
+  }
+
+  it('revalida o dono do projeto ao enviar e usa a permissão de encartes mesmo sem tipo no rascunho', async () => {
+    const failures: string[] = []
+    mocks.tx.mockImplementation(async (callback: (client: any) => unknown) => callback(outboxClient(item({ type: 'document' }), failures)))
+    mocks.query.mockResolvedValue({ rows: [{ id: projectId, name: 'Açougue' }] })
+    const result: any = await claimCreationOutbound()
+    expect(failures).toEqual([])
+    expect(mocks.query.mock.calls[0]![1]).toEqual([projectId, ownerId])
+    expect(mocks.sign).toHaveBeenCalledWith(key, ownerId, undefined)
+    expect(result.send.body).toMatchObject({ type: 'document', file: 'https://signed.test/file', docName: 'encarte-pagina-1.png' })
+  })
+
+  it('falha o envio quando o projeto não pertence mais à conta', async () => {
+    const failures: string[] = []
+    mocks.tx.mockImplementation(async (callback: (client: any) => unknown) => callback(outboxClient(item(), failures)))
+    mocks.query.mockResolvedValue({ rows: [] })
+    const result = await claimCreationOutbound()
+    expect(result).toMatchObject({ ok: true, claimed: false })
+    expect(failures[0]).toContain("error='account_project_unavailable'")
+    expect(mocks.sign).not.toHaveBeenCalled()
+  })
+
+  it('não usa a permissão de encartes para envio comum sem tipo', async () => {
+    const failures: string[] = []
+    mocks.tx.mockImplementation(async (callback: (client: any) => unknown) => callback(outboxClient({ type: 'text', text: 'oi' }, failures)))
+    const result = await claimCreationOutbound()
+    expect(result).toMatchObject({ ok: true, claimed: false })
+    expect(failures[0]).toContain("error='account_permission_changed'")
+  })
+})

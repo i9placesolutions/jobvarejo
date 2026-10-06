@@ -1196,7 +1196,9 @@ export async function saveDraftFlyerProject(order: CreationOrder, candidates: Re
   return saved
 }
 
-export async function applyFlyerLogoStickers(png: Buffer, canvas: any): Promise<Buffer> {
+export type CanvasRegion = { left: number; top: number; width: number; height: number }
+
+export async function applyFlyerLogoStickers(png: Buffer, canvas: any, region?: CanvasRegion): Promise<Buffer> {
   const stickers = (objects: any[]): any[] => (objects || []).flatMap(object => {
     if (String(object?.type || '').toLowerCase() === 'image' && object.quickLogoSource && object.__stickerOutlineEnabled) return [object]
     if (Array.isArray(object?.objects)) {
@@ -1207,7 +1209,8 @@ export async function applyFlyerLogoStickers(png: Buffer, canvas: any): Promise<
   })
   const logos = stickers(canvas.objects)
   if (!logos.length) return png
-  const width = Number(canvas.width), height = Number(canvas.height)
+  // Com recorte (frame do editor), desenha só a área exportada, deslocada para a origem.
+  const width = Number(region ? region.width : canvas.width), height = Number(region ? region.height : canvas.height)
   if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) fail(422, 'Dimensões inválidas para o contorno da logo.')
   const { StaticCanvas, getEnv } = await import('fabric/node')
   const document = getEnv().document as unknown as Document
@@ -1216,6 +1219,7 @@ export async function applyFlyerLogoStickers(png: Buffer, canvas: any): Promise<
   })
   try {
     await overlay.loadFromJSON({ version: canvas.version, objects: logos })
+    if (region) overlay.viewportTransform = [1, 0, 0, 1, -region.left, -region.top]
     bakeLogoCrops(overlay.getObjects(), () => document.createElement('canvas') as HTMLCanvasElement)
     restoreCanvasStickerOutlines(overlay, () => document.createElement('canvas') as HTMLCanvasElement)
     overlay.renderAll()
@@ -1270,6 +1274,45 @@ export async function renderEditableFlyerCanvas(input: { canvas: any; products: 
     flyerRenders--
     if (backgroundFlyerRender === controller) backgroundFlyerRender = null
     release()
+    if (dir) await rm(dir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Renderiza uma página salva do editor como o export do editor (zonas e guias
+ * ocultas, um PNG por frame, escala 1). O canvas precisa chegar com todas as
+ * imagens já embutidas: o worker bloqueia qualquer acesso de rede.
+ */
+export async function renderSavedCanvasPage(input: { canvas: any; width: number; height: number; maxOutputs?: number }): Promise<Array<{ png: Buffer; region: CanvasRegion }>> {
+  if (flyerRenders >= 1) fail(503, 'O renderizador de encartes está ocupado. Tente novamente em instantes.')
+  flyerRenders++
+  let dir: string | undefined
+  try {
+    dir = await mkdtemp(join((await import('node:os')).tmpdir(), 'whatsapp-creation-'))
+    const worker = resolve(process.cwd(), 'workers/whatsapp-creation/render.py')
+    const inputFile = join(dir, 'input.json')
+    await writeFile(inputFile, JSON.stringify({ mode: 'saved_page', canvas: input.canvas, width: input.width, height: input.height, maxOutputs: input.maxOutputs || 10 }), { mode: 0o600 })
+    const python = process.env.PRODUCT_IMAGE_PYTHON || process.env.WHATSAPP_CREATION_PYTHON || 'python3'
+    const result = await execute(python, [worker, '--input', inputFile, '--output-dir', dir], { timeout: 90_000, maxBuffer: MAX_WORKER_BYTES, env: { PATH: process.env.PATH, LANG: 'en_US.UTF-8', PYTHONIOENCODING: 'utf-8', PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH,
+      PYTHONPATH: process.env.PYTHONPATH, WHATSAPP_CREATION_CHROMIUM_EXECUTABLE: process.env.WHATSAPP_CREATION_CHROMIUM_EXECUTABLE } })
+    const manifest = JSON.parse(result.stdout)
+    if (!Array.isArray(manifest.pages) || !manifest.pages.length || manifest.pages.length > 20) fail(502, 'O renderizador não retornou páginas válidas.')
+    const pages: Array<{ png: Buffer; region: CanvasRegion }> = []
+    for (const page of manifest.pages) {
+      if (!/^page-\d+\.png$/.test(page.name)) fail(502, 'O renderizador retornou caminhos inválidos.')
+      const region = page.region || {}
+      const bounds = { left: Number(region.left), top: Number(region.top), width: Number(region.width), height: Number(region.height) }
+      if (![bounds.left, bounds.top, bounds.width, bounds.height].every(Number.isFinite) || bounds.width < 1 || bounds.height < 1) fail(502, 'O renderizador retornou uma área inválida.')
+      const canvas = { ...input.canvas, width: input.width, height: input.height }
+      pages.push({ png: await applyFlyerLogoStickers(await readFile(join(dir!, page.name)), canvas, bounds), region: bounds })
+    }
+    return pages
+  } catch (error: any) {
+    if (error?.statusCode) throw error
+    console.error('[whatsapp-creation:saved-page-render]', String(error?.stderr || error?.message || 'worker failed').slice(0, 500))
+    throw createError({ statusCode: error?.killed ? 504 : 422, statusMessage: error?.killed ? 'A geração do encarte excedeu o tempo limite.' : 'Não foi possível gerar a imagem do encarte salvo.' })
+  } finally {
+    flyerRenders--
     if (dir) await rm(dir, { recursive: true, force: true })
   }
 }

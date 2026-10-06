@@ -22,7 +22,8 @@ const actionDescriptions: Record<Proposal['action'], string> = {
   status: 'O cliente pergunta pelo andamento ou estado do pedido atual.',
   cancel: 'O cliente pede de forma explícita para cancelar o pedido atual.',
   new_order: 'O cliente pede outro pedido, mas ainda não está claro se deseja substituir o pedido ativo. Não descarte o atual.',
-  cancel_and_start_new: 'O cliente quer encerrar/substituir o pedido atual e começar outro, inclusive quando responde “outro” à pergunta se quer continuar ou começar outro. Preserve isso como ação composta.'
+  cancel_and_start_new: 'O cliente quer encerrar/substituir o pedido atual e começar outro, inclusive quando responde “outro” à pergunta se quer continuar ou começar outro. Preserve isso como ação composta.',
+  account_project: 'O cliente pede para receber um encarte que já existe e está salvo na conta dele (por exemplo o último, o de ontem ou um citado pelo nome/tema). Não é pedido novo.'
 }
 
 const phaseForAction: Partial<Record<Proposal['action'], Phase>> = {
