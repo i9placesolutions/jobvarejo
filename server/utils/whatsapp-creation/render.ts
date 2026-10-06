@@ -17,7 +17,7 @@ import {
   type CreationFormat,
   type CreationProduct
 } from '~/shared/whatsapp-creation'
-import { pgOneOrNull, pgQuery } from '../postgres'
+import { pgOneOrNull, pgQuery, pgTx } from '../postgres'
 import { getS3Client } from '../s3'
 import { videoBucket, videoJson } from '../video-studio/service'
 import { loadVideoBrandFromProfile } from '../video-studio/brand'
@@ -58,6 +58,11 @@ const execute = promisify(execFile)
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_WORKER_BYTES = 20 * 1024 * 1024
 let flyerRenders = 0
+// Render de rascunho (segundo plano) que pode ser interrompido por uma geração final.
+let backgroundFlyerRender: AbortController | null = null
+let flyerRenderReleased: Promise<void> = Promise.resolve()
+export const isFlyerRendererBusy = (): boolean => flyerRenders > 0
+export const FLYER_RENDER_PREEMPTED = 'FLYER_RENDER_PREEMPTED'
 
 type CreationArtifact = {
   artifactId: string
@@ -73,6 +78,8 @@ type CreationArtifact = {
 type CreationArtifactResult = {
   artifacts: CreationArtifact[]
   video?: { projectId: string; revision: number; phase: 'voice'; jobId: string }
+  /** Aviso curto para o cliente junto da entrega (ex.: nova versão para preservar edição do painel). */
+  notice?: string
 }
 
 const fail = (statusCode: number, statusMessage: string): never => {
@@ -958,7 +965,17 @@ export async function externalizeInlineCanvasImages(canvas: any, userId: string,
   for (const key of ['backgroundImage', 'overlayImage']) if (canvas?.[key]) await visit(canvas[key])
 }
 
-async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profile: BusinessProfile, formats: CreationFormat[], images: Map<string, { bytes: Buffer; dataUrl: string }>): Promise<CreationArtifactResult> {
+type FlyerPayloadPage = { format: CreationFormat; page: { canvas: any; png: Buffer | null }; productIds: string[]; department: string | null }
+type FlyerProjectStage = 'draft' | 'final'
+type FlyerImages = Map<string, { bytes: Buffer; dataUrl: string }>
+
+/**
+ * Monta as páginas editáveis do encarte com a mesma lógica do editor manual.
+ * Sem produtos (cabeçalho recém-escolhido) devolve o modelo já com os dados da
+ * loja, sem abrir o Chromium.
+ */
+async function buildFlyerPages(order: CreationOrder, user: AuthenticatedUser, profile: BusinessProfile, formats: CreationFormat[], images: FlyerImages,
+  options: { allowMissingImages?: boolean; background?: boolean } = {}): Promise<{ projectTemplate: any; pages: FlyerPayloadPage[] }> {
   const cardConfigRow = await pgOneOrNull<{ configuration: unknown }>(
     'select configuration from public.product_card_configurations where user_id=$1 limit 1', [user.id]
   )
@@ -976,8 +993,7 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
 
   const sourceOwnerId = String(projectTemplate.user_id)
   const logo = await profileLogo(profile, user.id)
-  const payloadPages: Array<{ format: CreationFormat; page: any; productIds: string[]; department: string | null }> = []
-  const productsById = new Map(order.products.map((product) => [product.id, product]))
+  const payloadPages: FlyerPayloadPage[] = []
   for (const format of formats) {
     const { page, canvas } = await getTemplateCanvasPage(projectTemplate, format, format.id, user.id)
     assertFlyerProfileBindings(canvas, profile, !!logo, order.validity)
@@ -988,68 +1004,196 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
     const preparedCanvas = await loadFlyerAccountLabelTemplates(
       await embedFlyerAssets(canvas, user.id, sourceOwnerId, logo, profile, order), user.id
     )
+    if (!order.products.length) {
+      payloadPages.push({ format, page: { canvas: preparedCanvas, png: null }, productIds: [], department: null })
+      continue
+    }
     const items = order.products.map((product) => {
       const image = images.get(product.id)
-      if (!image) return fail(422, `A foto de “${product.name}” não está disponível.`)
-      return { ...product, imageDataUrl: image.dataUrl, condition: product.condition || order.conditions, validity: order.validity }
+      if (!image && !options.allowMissingImages) return fail(422, `A foto de “${product.name}” não está disponível.`)
+      return { ...product, imageDataUrl: image?.dataUrl || '', condition: product.condition || order.conditions, validity: order.validity }
     })
     if (!flyerDivisionSupportsProductCount(items.length, order.division, format)) fail(422, 'Story com mais de nove produtos precisa ser dividido em páginas.')
-    const pages = await renderEditableFlyerCanvas({ canvas: preparedCanvas, products: items, division: order.division, ...(order.pageCount ? { pageCount: order.pageCount } : {}), formatId: format.id, cardLayout })
+    const pages = await renderEditableFlyerCanvas({ canvas: preparedCanvas, products: items, division: order.division, ...(order.pageCount ? { pageCount: order.pageCount } : {}), formatId: format.id, cardLayout },
+      { background: options.background })
     for (const result of pages) payloadPages.push({ format, page: result, productIds: result.productIds, department: result.department || null })
   }
-  const projectId = deterministicUuid(`${user.id}:${order.id}:${order.revision}:encarte`)
-  const savedPages: any[] = []
-  const artifacts: CreationArtifact[] = []
-  for (let index = 0; index < payloadPages.length; index++) {
-    const output = payloadPages[index]!
-    const pageId = deterministicUuid(`${projectId}:page:${output.format.id}:${index}`)
-    const pageKey = `projects/${user.id}/${projectId}/page_${pageId}.json`
-    const now = Date.now()
-    await externalizeInlineCanvasImages(output.page.canvas, user.id, projectId)
-    const canvasBuffer = Buffer.from(JSON.stringify(output.page.canvas), 'utf8')
-    await getS3Client().send(new (await import('@aws-sdk/client-s3')).PutObjectCommand({
-      Bucket: videoBucket(), Key: pageKey, Body: gzipSync(canvasBuffer), ContentType: 'application/octet-stream', CacheControl: 'no-store'
-    }))
-    savedPages.push({
-      id: pageId,
-      name: output.department ? `${output.department} · ${output.format.id}` : `Página ${index + 1} · ${output.format.id}`,
-      width: output.format.width,
-      height: output.format.height,
-      type: 'RETAIL_OFFER',
-      templateModelId: String(output.page.canvas.templateModelId || projectTemplate.template_config?.defaultModelId || projectTemplate.id),
-      templateModelName: String(projectTemplate.name),
-      templateFormatId: output.format.id,
-      templateFormatLabel: output.format.id,
-      templateThemeId: order.theme,
-      canvasDataPath: pageKey,
-      canvasSavedAt: now,
-      whatsappCreation: { orderId: order.id, revision: order.revision, productIds: output.productIds }
+  return { projectTemplate, pages: payloadPages }
+}
+
+/** Projeto do painel por pedido (não por revisão): o rascunho e o final são o mesmo encarte. */
+export const whatsappFlyerProjectId = (userId: string, orderId: string, version = 1): string =>
+  deterministicUuid(`${userId}:${orderId}:encarte${version > 1 ? `:v${version}` : ''}`)
+
+const MAX_FLYER_PROJECT_VERSIONS = 20
+export const projectCanvasHash = (canvasData: unknown): string => sha256(Buffer.from(stableJson(canvasData)))
+
+type FlyerProjectMetadata = { orderId: string; revision: number; stage: FlyerProjectStage; canvasHash: string }
+export type FlyerProjectSlot = 'absent' | 'ours' | 'edited' | 'newer' | 'foreign'
+
+/**
+ * Classifica o projeto existente para decidir se o WhatsApp pode gravar nele.
+ * - edited: o canvas mudou desde a última gravação do WhatsApp (edição manual no painel);
+ * - newer: já contém uma revisão mais nova (job atrasado nunca sobrescreve);
+ * - foreign: não pertence a este pedido/conta.
+ */
+export function classifyFlyerProjectSlot(row: { user_id?: unknown; canvas_data?: unknown; template_config?: any } | null | undefined,
+  input: { userId: string; orderId: string; revision: number; stage: FlyerProjectStage }): FlyerProjectSlot {
+  if (!row) return 'absent'
+  const meta = row.template_config?.whatsappCreation as Partial<FlyerProjectMetadata> | undefined
+  if (String(row.user_id) !== input.userId || meta?.orderId !== input.orderId) return 'foreign'
+  if (!meta.canvasHash || projectCanvasHash(row.canvas_data) !== meta.canvasHash) return 'edited'
+  const rank = (revision: unknown, stage: unknown) => Number(revision || 0) * 2 + (stage === 'final' ? 1 : 0)
+  if (rank(meta.revision, meta.stage) > rank(input.revision, input.stage)) return 'newer'
+  return 'ours'
+}
+
+async function resolveFlyerProjectTarget(input: { userId: string; orderId: string; revision: number; stage: FlyerProjectStage }): Promise<{ projectId: string; version: number; slot: FlyerProjectSlot }> {
+  for (let version = 1; version <= MAX_FLYER_PROJECT_VERSIONS; version++) {
+    const projectId = whatsappFlyerProjectId(input.userId, input.orderId, version)
+    const row = await pgOneOrNull<any>('select id,user_id,canvas_data,template_config from public.projects where id=$1', [projectId])
+    const slot = classifyFlyerProjectSlot(row, input)
+    if (slot === 'absent' || slot === 'ours' || slot === 'newer') return { projectId, version, slot }
+  }
+  return fail(409, 'Este pedido já tem versões demais editadas no painel.')
+}
+
+export type FlyerProjectResult = { projectId: string; version: number; created: boolean; stale: boolean; forked: boolean; pngs: Array<{ format: CreationFormat; png: Buffer | null }> }
+
+/**
+ * Grava o encarte no painel como um projeto do editor (páginas no storage +
+ * canvas_data). Nunca sobrescreve edição manual: nesse caso cria a próxima versão.
+ */
+async function saveFlyerProject(order: CreationOrder, user: AuthenticatedUser, projectTemplate: any, payloadPages: FlyerPayloadPage[], stage: FlyerProjectStage): Promise<FlyerProjectResult> {
+  const pngs = payloadPages.map(output => ({ format: output.format, png: output.page.png }))
+  const key = { userId: user.id, orderId: order.id, revision: order.revision, stage }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const target = await resolveFlyerProjectTarget(key)
+    const { projectId, version } = target
+    if (target.slot === 'newer') return { projectId, version, created: false, stale: true, forked: false, pngs }
+    const savedPages: any[] = []
+    for (let index = 0; index < payloadPages.length; index++) {
+      const output = payloadPages[index]!
+      // Revisão e etapa no ID: um job atrasado não troca o JSON de uma página mais nova,
+      // e o cache/rascunho local do editor não reaproveita conteúdo de outra revisão.
+      const pageId = deterministicUuid(`${projectId}:r${order.revision}:${stage}:page:${output.format.id}:${index}`)
+      const pageKey = `projects/${user.id}/${projectId}/page_${pageId}.json`
+      const canvas = structuredClone(output.page.canvas)
+      await externalizeInlineCanvasImages(canvas, user.id, projectId)
+      await getS3Client().send(new (await import('@aws-sdk/client-s3')).PutObjectCommand({
+        Bucket: videoBucket(), Key: pageKey, Body: gzipSync(Buffer.from(JSON.stringify(canvas), 'utf8')), ContentType: 'application/octet-stream', CacheControl: 'no-store'
+      }))
+      savedPages.push({
+        id: pageId,
+        name: output.department ? `${output.department} · ${output.format.id}` : `Página ${index + 1} · ${output.format.id}`,
+        width: output.format.width,
+        height: output.format.height,
+        type: 'RETAIL_OFFER',
+        templateModelId: String(output.page.canvas.templateModelId || projectTemplate.template_config?.defaultModelId || projectTemplate.id),
+        templateModelName: String(projectTemplate.name),
+        templateFormatId: output.format.id,
+        templateFormatLabel: output.format.id,
+        templateThemeId: order.theme,
+        canvasDataPath: pageKey,
+        canvasSavedAt: Date.now(),
+        whatsappCreation: { orderId: order.id, revision: order.revision, productIds: output.productIds }
+      })
+    }
+    const canvasJson = parseAndStringifyJsonbParam({ pages: savedPages, activePageIndex: 0 }, 'canvas_data')
+    const stablePages = savedPages.map(({ canvasSavedAt: _savedAt, ...page }) => page)
+    const metadata = {
+      orderId: order.id, revision: order.revision, stage, version, templateId: projectTemplate.id,
+      contentHash: sha256(Buffer.from(stableJson(stablePages))), canvasHash: projectCanvasHash(JSON.parse(canvasJson))
+    }
+    const firstPng = pngs.find(item => item.png)
+    const preview = firstPng?.png
+      ? (await putArtifact(user.id, order, projectId, firstPng.format.id, firstPng.png, 'image/png', `${stage}-cover.png`)).key
+      : null
+    const committed = await pgTx(async client => {
+      const row = (await client.query('select id,user_id,canvas_data,template_config from public.projects where id=$1 for update', [projectId])).rows[0]
+      const slot = classifyFlyerProjectSlot(row, key)
+      if (slot === 'newer') return 'stale' as const
+      if (slot !== target.slot) return 'retry' as const
+      if (slot === 'absent') {
+        const name = `WhatsApp · ${order.theme}${version > 1 ? ` (versão ${version})` : ''}`.slice(0, 120)
+        await client.query(
+          `insert into public.projects(id,name,canvas_data,preview_url,user_id,updated_at,folder_id,last_viewed,is_template,template_config)
+           values($1,$2,$3::jsonb,$4,$5,now(),null,now(),false,$6::jsonb)`,
+          [projectId, name, canvasJson, preview, user.id, parseAndStringifyJsonbParam({ whatsappCreation: metadata }, 'template_config')]
+        )
+        return 'created' as const
+      }
+      // O nome e as demais chaves do template_config ficam como o cliente deixou.
+      await client.query(
+        `update public.projects set canvas_data=$3::jsonb, preview_url=coalesce($4,preview_url),
+           template_config=coalesce(template_config,'{}'::jsonb) || jsonb_build_object('whatsappCreation',$5::jsonb), updated_at=now()
+         where id=$1 and user_id=$2`,
+        [projectId, user.id, canvasJson, preview, parseAndStringifyJsonbParam(metadata, 'template_config')]
+      )
+      return 'updated' as const
     })
-    const png = Buffer.from(output.page.png)
-    const artifact = await putArtifact(user.id, order, projectId, output.format.id, png, 'image/png', `page-${index + 1}.png`)
-    artifact.editUrl = `/editor/${projectId}`
+    if (committed === 'retry') continue
+    if (committed === 'stale') return { projectId, version, created: false, stale: true, forked: false, pngs }
+    try {
+      await publishProjectChange({ projectId, userId: user.id, action: committed === 'created' ? 'created' : 'updated', updatedAt: new Date().toISOString() })
+    } catch (error) { console.warn('[whatsapp-creation] project realtime publication failed', error) }
+    return { projectId, version, created: committed === 'created', stale: false, forked: committed === 'created' && version > 1, pngs }
+  }
+  return fail(409, 'O projeto do encarte mudou durante a gravação. Tente novamente.')
+}
+
+const FORKED_PROJECT_NOTICE = 'Vi que você mexeu nesse encarte pelo painel. Para não apagar suas alterações, salvei esta versão do WhatsApp como um novo encarte na sua conta.'
+
+async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profile: BusinessProfile, formats: CreationFormat[], images: FlyerImages): Promise<CreationArtifactResult> {
+  const { projectTemplate, pages } = await buildFlyerPages(order, user, profile, formats, images)
+  const saved = await saveFlyerProject(order, user, projectTemplate, pages, 'final')
+  const artifacts: CreationArtifact[] = []
+  for (let index = 0; index < saved.pngs.length; index++) {
+    const output = saved.pngs[index]!
+    if (!output.png) return fail(502, 'O renderizador não retornou a imagem do encarte.')
+    const artifact = await putArtifact(user.id, order, saved.projectId, output.format.id, Buffer.from(output.png), 'image/png', `page-${index + 1}.png`)
+    artifact.editUrl = `/editor/${saved.projectId}`
     artifacts.push(artifact)
   }
-  const canvasData = { pages: savedPages, activePageIndex: 0 }
-  const json = parseAndStringifyJsonbParam(canvasData, 'canvas_data')
-  const firstPreview = artifacts[0]?.key || null
-  const stablePages = savedPages.map(({ canvasSavedAt: _savedAt, ...page }) => page)
-  const projectMetadata = { whatsappCreation: { orderId: order.id, revision: order.revision, templateId: projectTemplate.id, contentHash: sha256(Buffer.from(stableJson(stablePages))) } }
-  const projectMetadataJson = parseAndStringifyJsonbParam(projectMetadata, 'template_config')
-  const inserted = await pgOneOrNull<any>(
-    `insert into public.projects(id,name,canvas_data,preview_url,user_id,updated_at,folder_id,last_viewed,is_template,template_config)
-     values($1,$2,$3::jsonb,$4,$5,now(),null,now(),false,$6::jsonb)
-     on conflict(id) do nothing returning id`,
-    [projectId, `WhatsApp · ${order.theme}`.slice(0,120), json, firstPreview, user.id,
-      projectMetadataJson]
-  )
-  if (!inserted) {
-    const existing = await pgOneOrNull<any>('select id,user_id,template_config from public.projects where id=$1', [projectId])
-    if (existing?.user_id !== user.id || stableJson(existing.template_config) !== stableJson(JSON.parse(projectMetadataJson))) fail(409, 'O projeto desta revisão já existe com outro conteúdo ou pertence a outra conta.')
-  } else {
-    try { await publishProjectChange({ projectId, userId: user.id, action: 'created', updatedAt: new Date().toISOString() }) } catch (error) { console.warn('[whatsapp-creation] project realtime publication failed', error) }
+  return { artifacts, ...(saved.forked ? { notice: FORKED_PROJECT_NOTICE } : {}) }
+}
+
+/**
+ * Fotos do rascunho: usa as fotos já encontradas/enviadas mesmo antes da
+ * confirmação. Item sem foto entra sem imagem, como no editor manual.
+ */
+export async function draftProductImages(order: CreationOrder, candidates: ReadonlyArray<{ itemId: string; key: string; hash: string }>, userId: string,
+  readOwnedBytes: typeof ownedStorageBytes = ownedStorageBytes): Promise<FlyerImages> {
+  const output: FlyerImages = new Map()
+  for (const product of order.products) {
+    const candidate = candidates.find(item => item.itemId === product.id) || order.images.find(image => image.itemId === product.id && image.key)
+    const key = String(candidate?.key || '').trim()
+    if (!key || !candidate?.hash || !isValidStoragePath(key)) continue
+    try {
+      const bytes = await readOwnedBytes(key, userId)
+      if (!bytes.length || bytes.length > MAX_IMAGE_BYTES || sha256(bytes) !== candidate.hash.toLowerCase()) continue
+      const processed = isRawWhatsAppPhoto(key)
+        ? await ensureProcessedWhatsAppPhoto({ userId, product, rawKey: key, rawHash: candidate.hash.toLowerCase(), rawBytes: bytes }).catch(() => null)
+        : null
+      output.set(product.id, processed ? { bytes: processed, dataUrl: dataUri(processed, 'image/webp') } : { bytes, dataUrl: dataUri(bytes, mimeFrom('', key)) })
+    } catch {
+      // Foto indisponível não impede o rascunho; o cliente completa no painel ou no WhatsApp.
+    }
   }
-  return { artifacts }
+  return output
+}
+
+/**
+ * Grava o encarte em andamento no painel (mesmo projeto do final). Roda em
+ * segundo plano e cede o renderizador para uma geração final.
+ */
+export async function saveDraftFlyerProject(order: CreationOrder, candidates: ReadonlyArray<{ itemId: string; key: string; hash: string }>, user: AuthenticatedUser, profile: BusinessProfile): Promise<Omit<FlyerProjectResult, 'pngs'>> {
+  if (order.accountId !== user.id) fail(403, 'O pedido pertence a outra conta.')
+  if (order.kind !== 'encarte' || !order.header) fail(422, 'Só encartes com cabeçalho escolhido têm rascunho no painel.')
+  const images = order.products.length ? await draftProductImages(order, candidates, user.id) : new Map()
+  const { projectTemplate, pages } = await buildFlyerPages(order, user, profile, [...order.formats], images, { allowMissingImages: true, background: true })
+  const { pngs: _pngs, ...saved } = await saveFlyerProject(order, user, projectTemplate, pages, 'draft')
+  return saved
 }
 
 export async function applyFlyerLogoStickers(png: Buffer, canvas: any): Promise<Buffer> {
@@ -1083,9 +1227,19 @@ export async function applyFlyerLogoStickers(png: Buffer, canvas: any): Promise<
   }
 }
 
-export async function renderEditableFlyerCanvas(input: { canvas: any; products: Array<CreationProduct & { imageDataUrl: string }>; division: CreationOrder['division']; pageCount?: number; formatId: string; cardLayout?: ReturnType<typeof createDefaultProductCardConfiguration> }): Promise<Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }>> {
+export async function renderEditableFlyerCanvas(input: { canvas: any; products: Array<CreationProduct & { imageDataUrl: string }>; division: CreationOrder['division']; pageCount?: number; formatId: string; cardLayout?: ReturnType<typeof createDefaultProductCardConfiguration> },
+  options: { background?: boolean } = {}): Promise<Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }>> {
+  if (flyerRenders >= 1 && !options.background && backgroundFlyerRender) {
+    // A geração pedida pelo cliente tem prioridade: interrompe o rascunho, que volta depois.
+    backgroundFlyerRender.abort()
+    await Promise.race([flyerRenderReleased, new Promise<void>(done => setTimeout(done, 10_000).unref?.())])
+  }
   if (flyerRenders >= 1) fail(503, 'O renderizador de encartes está ocupado. Tente novamente em instantes.')
   flyerRenders++
+  const controller = options.background ? new AbortController() : null
+  backgroundFlyerRender = controller
+  let release: () => void = () => {}
+  flyerRenderReleased = new Promise<void>(done => { release = done })
   let dir: string | undefined
   try {
     dir = await mkdtemp(join((await import('node:os')).tmpdir(), 'whatsapp-creation-'))
@@ -1094,7 +1248,7 @@ export async function renderEditableFlyerCanvas(input: { canvas: any; products: 
     await writeFile(inputFile, JSON.stringify(input), { mode: 0o600 })
     const python = process.env.PRODUCT_IMAGE_PYTHON || process.env.WHATSAPP_CREATION_PYTHON || 'python3'
     const result = await execute(python, [worker, '--input', inputFile, '--output-dir', dir], { timeout: 90_000, maxBuffer: MAX_WORKER_BYTES, env: { PATH: process.env.PATH, LANG: 'en_US.UTF-8', PYTHONIOENCODING: 'utf-8', PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH,
-      PYTHONPATH: process.env.PYTHONPATH, WHATSAPP_CREATION_CHROMIUM_EXECUTABLE: process.env.WHATSAPP_CREATION_CHROMIUM_EXECUTABLE } })
+      PYTHONPATH: process.env.PYTHONPATH, WHATSAPP_CREATION_CHROMIUM_EXECUTABLE: process.env.WHATSAPP_CREATION_CHROMIUM_EXECUTABLE }, ...(controller ? { signal: controller.signal } : {}) })
     const manifest = JSON.parse(result.stdout)
     if (!Array.isArray(manifest.pages) || !manifest.pages.length || manifest.pages.length > 100) fail(502, 'O renderizador não retornou páginas válidas.')
     const pages: Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }> = []
@@ -1109,10 +1263,13 @@ export async function renderEditableFlyerCanvas(input: { canvas: any; products: 
     return pages
   } catch (error: any) {
     if (error?.statusCode) throw error
+    if (controller?.signal.aborted) throw createError({ statusCode: 503, statusMessage: 'O rascunho do encarte foi interrompido por uma geração prioritária.', data: { code: FLYER_RENDER_PREEMPTED } })
     console.error('[whatsapp-creation:flyer-render]', String(error?.stderr || error?.message || 'worker failed').slice(0, 500))
     throw createError({ statusCode: error?.killed ? 504 : 422, statusMessage: error?.killed ? 'A prévia do encarte excedeu o tempo limite.' : 'Não foi possível montar a prévia editável do encarte.' })
   } finally {
     flyerRenders--
+    if (backgroundFlyerRender === controller) backgroundFlyerRender = null
+    release()
     if (dir) await rm(dir, { recursive: true, force: true })
   }
 }

@@ -9,6 +9,7 @@ import { CARTAZISTA_FORMATS } from '~/types/cartazista'
 import { listCreationHeaders, listProductCandidates } from './catalog'
 import { createProductReviewBoards } from './product-review'
 import { ownedStorageBytes } from './media'
+import type { DraftProjectState } from './draft-project-state'
 
 export const CREATION_FORMATS: CreationFormat[] = [
   { id: 'feed', width: 1080, height: 1350 }, { id: 'square', width: 1080, height: 1080 },
@@ -71,6 +72,8 @@ export interface ConversationState {
   lastPromptAt?: number
   usage?: { promptTokens: number; completionTokens: number; cost: number }
   runtime?: { token: string; until: string; started?: string; native?: { projectId: string; revision: number; phase: string; jobId: string } }
+  /** Projeto do painel que acompanha o encarte em andamento (ver draft-project-state.ts). */
+  draftProject?: DraftProjectState
 }
 export type ConversationSend = { type: 'text' | 'image' | 'document' | 'video'; text: string; key?: string; url?: string; artifactId?: string; formatId?: string; purpose?: 'final' | 'preview' | 'review' }
 export const newConversationState = (): ConversationState => ({ phase: 'collecting', draft: { formats: [], products: [] }, choices: [], choiceOffset: 0, candidates: [], artifacts: [], turns: 0 })

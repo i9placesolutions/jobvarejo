@@ -9,6 +9,7 @@ import { validateProviderEvent, signOwnedArtifact, authenticateCreationProvider 
 import { normalizeBrazilWhatsApp } from '~/utils/whatsapp-auth'
 import { assertCanDeliver, updateOrder, type CreationKind } from '~/shared/whatsapp-creation'
 import { listCreationHeaders } from './catalog'
+import { reconcileDraftProjectState } from './draft-project-state'
 import { hasEditorPermission, REGULAR_USER_AREAS, type AccessArea } from '~/shared/access-control'
 
 export function assertCreationAccess(user: AuthenticatedUser, kind: string): void {
@@ -155,6 +156,8 @@ export async function persistConversationResult(eventId: string, token: string, 
     await client.query('SELECT id FROM public.whatsapp_creation_conversations WHERE id=$1 FOR UPDATE', [context.conversation_id])
     const current = await loadLeasedMessage(eventId, token, client)
     if (current.current_order_id !== context.current_order_id) throw createError({ statusCode: 409, statusMessage: 'O pedido mudou enquanto a mensagem era processada.' })
+    // Mantém o projeto do painel já gravado pelo job e marca se o conteúdo novo precisa ir para lá.
+    reconcileDraftProjectState(state, current.state?.draftProject)
     const phase = ({ images: 'awaiting_images', script: 'awaiting_script', preview: 'awaiting_preview', header: 'collecting', theme_pending: 'collecting', data: 'collecting', approved: 'approved' } as Record<string, string>)[state.phase] || state.phase
     await client.query('UPDATE public.whatsapp_creation_orders SET kind=$3,state=$4::jsonb,revision=$5,status=$6,updated_at=now() WHERE id=$1 AND owner_id=$2', [context.current_order_id, context.owner_id, state.draft.kind || 'encarte', JSON.stringify(state), Math.max(1, state.order?.revision || 1), phase])
     if (state.phase === 'cancelled') {
