@@ -27,10 +27,11 @@ const literal = z.string().max(300)
 const productInput = z.object({ id: z.string().optional(), name: literal.default(''), brand: literal.default(''),
   variant: literal.default(''), weight: literal.default(''), price: literal.default(''), department: literal.optional(), condition: literal.optional() }).strict()
 export const proposalSchema = z.object({
-  action: z.enum(['update', 'choose_header', 'approve_data', 'approve_images', 'approve_script', 'approve_preview', 'more_headers', 'status', 'cancel', 'new_order', 'cancel_and_start_new', 'account_project']),
+  // O modelo às vezes omite a ação quando só extrai campos; isso é uma atualização do pedido.
+  action: z.enum(['update', 'choose_header', 'approve_data', 'approve_images', 'approve_script', 'approve_preview', 'more_headers', 'status', 'cancel', 'new_order', 'cancel_and_start_new', 'account_project']).default('update'),
   confirmationIntent: z.enum(['approve', 'reject', 'unclear']).optional(),
   confirmationEvidence: z.string().max(300).optional(),
-  productOperation: z.enum(['patch', 'replace', 'append', 'unclear']).optional(),
+  productOperation: z.enum(['patch', 'replace', 'append', 'remove', 'unclear']).optional(),
   kind: z.enum(['encarte', 'video', 'cartaz', 'studio']).optional(),
   additionalKinds: z.array(z.enum(['encarte', 'video', 'cartaz', 'studio'])).max(3).optional(),
   theme: literal.optional(), formats: z.array(z.string().max(40)).max(8).optional(),
@@ -70,6 +71,10 @@ export interface ConversationState {
   previewPresentedRevision?: number
   pendingOrderChoice?: boolean
   headerRefreshPending?: boolean
+  /** A última geração falhou; “tenta de novo” gera outra vez com o que já foi confirmado. */
+  generationFailed?: boolean
+  /** Perguntamos se “novo encarte” é nova versão deste ou um encarte novo. */
+  pendingRegenerateChoice?: boolean
   /** Encarte pronto aguardando a escolha de um cabeçalho compatível com o novo formato/divisão. */
   pendingRerender?: { formats: string[]; division: 'single' | 'pages' | 'department'; pageCount: number | null }
   recentTurns?: Array<{ role: 'user' | 'assistant'; text: string }>
@@ -127,7 +132,7 @@ const isAffirmativeChoice = (text: string) => /^(?:sim|ok|t[aá] certo|est[aá] 
 export const isRegenerateRequest = (text: string): boolean => {
   const normalized = normalizedText(text)
   if (!normalized || normalized.length > 80 || /\d/.test(normalized) || correctionSignal(text)) return false
-  // “Novo pedido” é material novo; “outro encarte” com o pedido pronto é uma nova versão dele.
+  if (isNewMaterialRequest(text) || isAmbiguousNewFlyerRequest(text)) return false
   if (/\b(?:outro|novo)\s+(?:pedido|video|cartaz)\b|\bpedido\s+novo\b/.test(normalized)) return false
   if (/^(?:refazer|refaz|refaca|gerar de novo|gera de novo|gere de novo|de novo|novamente|outra|outra vez)[.!]?$/.test(normalized)) return true
   const verb = /\b(?:gera|gere|gerar|faz|faca|fazer|refaz|refaca|refazer|monta|monte|montar|cria|crie|criar|manda|mande|mandar|envia|envie|enviar)\b/.test(normalized)
@@ -135,14 +140,31 @@ export const isRegenerateRequest = (text: string): boolean => {
   const target = /\b(?:previa|previsa|previas|arte|encarte|imagem|versao)\b/.test(normalized)
   return verb && again && target
 }
+/** Encarte com outros produtos/tema é um pedido novo, não uma nova versão do atual. */
+export const isNewMaterialRequest = (text: string): boolean =>
+  /\b(?:outros produtos|outras ofertas|novas ofertas|novos produtos|produtos diferentes|do zero|novo pedido|outro pedido|pedido novo|outro tema|nova campanha|outra campanha|comecar outro|comecar um novo|comecar de novo)\b/.test(normalizedText(text))
+/**
+ * “Crie um novo encarte”/“gere outro encarte” com um encarte pronto pode ser nova versão
+ * deste ou um encarte novo: o atendimento pergunta em vez de adivinhar.
+ */
+export const isAmbiguousNewFlyerRequest = (text: string): boolean => {
+  const normalized = normalizedText(text)
+  if (normalized.length > 60 || /\d/.test(normalized) || isNewMaterialRequest(text)) return false
+  if (/\b(?:versao|de novo|novamente|refaz|refaca|refazer|outra vez|mesmo encarte|esse mesmo|este mesmo)\b/.test(normalized)) return false
+  return /\b(?:outro|novo)\s+encarte\b|\bencarte\s+novo\b/.test(normalized)
+}
 /** Encarte gerado (entregue ou não) pode ganhar uma nova versão com os mesmos dados. */
 /** Pedido para receber de novo o arquivo já gerado (“manda a imagem”, “envia o png”). */
 export const isResendRequest = (text: string): boolean => {
   const normalized = normalizedText(text)
   if (!normalized || normalized.length > 60 || /\d/.test(normalized) || correctionSignal(text)) return false
+  if (/^(?:me )?(?:reenvia|reenvie|reenviar|manda de novo|mande de novo|envia de novo|envie de novo|manda novamente|envia novamente|manda ai|manda aqui|manda|mande|envia|envie)(?: (?:de novo|novamente|ai|aqui|por favor|pfv|pf))*[.!]?$/.test(normalized)) return true
   return /\b(?:manda|mande|mandar|envia|envie|enviar|reenvia|reenvie|reenviar|me da|quero)\b/.test(normalized) &&
-    /\b(?:imagem|png|arquivo|encarte|arte|foto)\b/.test(normalized) && !/\b(?:outra|outro|nova|novo|de novo|novamente)\b/.test(normalized)
+    /\b(?:imagem|imagens|png|arquivo|arquivos|encarte|arte|foto)\b/.test(normalized) && !/\b(?:outra|outro|nova|novo|versao)\b/.test(normalized.replace(/\bde novo\b/g, ''))
 }
+/** Agradecimento ou elogio depois da entrega não é pedido de nova ação. */
+export const isCourtesy = (text: string): boolean =>
+  /^(?:muito )?(?:obrigad[oa]|obg|valeu|vlw|brigad[oa]|show|top|perfeito|otimo|excelente|ficou (?:otimo|lindo|bom|show|top|perfeito|massa|bonito)|gostei|amei|beleza|blz|tmj|ok obrigad[oa])(?: (?:demais|mesmo|muito|viu|ta|amigo|amiga))*[.! ]*$/.test(normalizedText(text))
 /** Envio final: vídeo como vídeo, cartaz/impressão/PDF como arquivo e o restante como imagem PNG. */
 export const finalSendType = (artifact: Pick<ConversationArtifact, 'mimeType' | 'formatId'>, kind?: CreationKind): ConversationSend['type'] =>
   artifact.mimeType === 'video/mp4' ? 'video'
@@ -157,7 +179,11 @@ export const finalSends = (artifact: ConversationArtifact, kind?: CreationKind):
   return type === 'image' ? [{ ...base, type }, { ...base, type: 'document' }] : [{ ...base, type }]
 }
 const canRegenerate = (state: ConversationState): boolean =>
-  ['preview', 'approved', 'delivered'].includes(state.phase) && state.order?.kind === 'encarte' && Boolean(state.order.header)
+  (['preview', 'approved', 'delivered'].includes(state.phase) || state.phase === 'collecting' && Boolean(state.generationFailed)) &&
+  state.order?.kind === 'encarte' && Boolean(state.order.header)
+/** Resposta curta ao “Não consegui gerar… quer que eu tente de novo?”. */
+export const isRetryRequest = (text: string): boolean =>
+  /^(?:sim|pode|pode sim|pode tentar|tenta|tente|tentar|tenta de novo|tente de novo|tenta novamente|tente novamente|tentar novamente|de novo|novamente|outra vez|manda ver|vai|bora|ok)(?: (?:por favor|pfv|pf|ai|de novo|novamente))*[.!]?$/.test(normalizedText(text))
 /** Formatos de tela/impressão que o encarte aceita, com os nomes usados na conversa. */
 const FLYER_FORMAT_ALIASES: ReadonlyArray<{ id: string; label: string; pattern: RegExp }> = [
   { id: 'stories', label: 'Story', pattern: /\b(?:story|stories|storie|storys|reels)\b/g },
@@ -251,10 +277,12 @@ export function requestedRerender(text: string, proposal: Pick<Proposal, 'format
  */
 function rerenderApproved(s: ConversationState, accountId: string, patch: OrderPatch) {
   const order = s.order!
-  assertCanRender(order, accountId)
-  const approvedImages = order.products.map(product => order.images.find(image => image.itemId === product.id)!)
+  // Depois de uma falha a revisão avança e as aprovações antigas não valem mais; basta
+  // ter modelo e uma foto já escolhida para cada produto para gerar de novo.
+  const approvedImages = order.products.map(product => order.images.find(image => image.itemId === product.id && image.key && image.hash))
+  if (!order.header || approvedImages.some(image => !image)) throw new Error('Faltam o modelo ou fotos dos produtos para gerar de novo.')
   let next = approveData(updateOrder(order, accountId, patch), accountId)
-  for (const image of approvedImages) next = approveImage(next, accountId, image)
+  for (const image of approvedImages) next = approveImage(next, accountId, image!)
   assertCanRender(next, accountId)
   s.order = next
   s.artifacts = []
@@ -291,7 +319,38 @@ const expectedQuestion = (state: ConversationState) => {
   const missingField = !state.draft.kind ? 'kind' : !state.draft.theme ? 'theme' : state.draft.kind !== 'encarte' && !state.draft.formats.length ? 'formats' : !state.draft.products.length && state.draft.kind !== 'studio' ? 'products' : state.draft.validity === undefined ? 'validity' : undefined
   return { lastAssistantQuestion: lastAssistant, expectedControl: state.pendingOrderChoice ? 'continue_or_start_new' : undefined, expectedMissingField: missingField }
 }
+const deliveredFlyer = (state: ConversationState): boolean => ['approved', 'delivered'].includes(state.phase) && state.order?.kind === 'encarte' && Boolean(state.artifacts.length)
+/** Resposta à pergunta “gerar de novo este encarte ou começar um novo?”. */
+export const regenerateChoiceAnswer = (text: string): 'same' | 'new' | undefined => {
+  const normalized = normalizedText(text)
+  if (isNewMaterialRequest(text) || /\b(?:novo|nova|outro|outra|outros|outras|comecar|zero)\b/.test(normalized) && !/\b(?:de novo|novamente)\b/.test(normalized)) return 'new'
+  if (/\b(?:mesmo|mesma|este|esse|esta|essa|de novo|novamente|igual|versao|gera|gere|refaz|sim|pode)\b/.test(normalized)) return 'same'
+  return undefined
+}
+/**
+ * Nome de campanha não é validade: “terça e quarta verde” é o tema inteiro. Validade sem
+ * data (sem números e sem “sem validade”) é descartada e, se for parte do tema dito, volta para ele.
+ */
+export function sanitizeThemeAndValidity(proposal: Proposal, text: string): Proposal {
+  const validity = proposal.validity?.trim()
+  if (!validity || /\d/.test(validity) || /sem validade|enquanto durarem/i.test(validity)) return proposal
+  const next: Proposal = { ...proposal }
+  delete next.validity
+  const theme = proposal.theme?.trim()
+  if (theme) {
+    const combined = new RegExp(`${validity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+${theme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').exec(text)
+    if (combined) next.theme = combined[0]
+  }
+  return next
+}
 export function normalizeConversationIntent(proposal: Proposal, text: string, state: ConversationState): Proposal {
+  if (state.pendingRegenerateChoice && deliveredFlyer(state)) {
+    const answer = regenerateChoiceAnswer(text)
+    if (answer === 'new') return { ...proposal, action: 'new_order', kind: proposal.kind || 'encarte' }
+    if (answer === 'same') return { ...proposal, action: 'status' }
+  }
+  if (deliveredFlyer(state) && isNewMaterialRequest(text)) return { ...proposal, action: 'new_order', kind: proposal.kind || 'encarte' }
+  if (deliveredFlyer(state) && isAmbiguousNewFlyerRequest(text)) return { ...proposal, action: 'status' }
   // Encarte já salvo na conta é uma busca, não um pedido novo nem um reenvio do pedido atual.
   if (isAccountProjectRequest(text)) return { ...proposal, action: 'account_project' }
   if (proposal.action === 'account_project' && !isPlausibleAccountProjectRequest(text)) return { ...proposal, action: 'update' }
@@ -375,6 +434,21 @@ const approvalRequested = (proposal: Proposal, text: string, state: Conversation
 function reconcileProductList(proposal: Proposal, state: ConversationState, text: string): { proposal: Proposal; unclear: boolean } {
   const existing = state.draft.products
   const proposed = proposal.products
+  // “Tira o feijão”/“remove o item 2”: retira só os itens identificados, sem mexer nos demais.
+  const removeWords = /\b(?:tira|tire|tirar|remove|remova|remover|exclui|exclua|excluir|apaga|apague|apagar|retira|retire|retirar)\b/.test(normalizedText(text))
+  if (existing.length && (proposal.productOperation === 'remove' || removeWords && !/\b(?:foto|imagem|fundo)\b/.test(normalizedText(text)))) {
+    const ids = new Set<string>()
+    for (const number of proposal.itemNumbers || []) if (existing[number - 1]) ids.add(existing[number - 1]!.id)
+    for (const item of proposed || []) {
+      const key = normalizedText(item.name || '')
+      const matches = existing.filter(product => item.id === product.id || key && normalizedText(product.name) === key)
+      if (matches.length === 1) ids.add(matches[0]!.id)
+    }
+    const named = productReference(text, existing)
+    if (!ids.size && named) ids.add(named.id)
+    if (!ids.size) return { proposal: { ...proposal, products: undefined }, unclear: true }
+    return { proposal: { ...proposal, products: existing.filter(product => !ids.has(product.id)), productOperation: 'replace' }, unclear: false }
+  }
   if (!proposed || !existing.length) return { proposal, unclear: false }
   if (!proposed.length && (proposal.confirmationIntent === 'approve' || proposal.confirmationIntent === undefined && explicit(text)) && !correctionSignal(text)) {
     return { proposal: { ...proposal, products: undefined }, unclear: false }
@@ -459,7 +533,7 @@ export const interpretationSchema = {
   type: 'object', additionalProperties: false, required: ['action'], properties: {
     action: { type: 'string', enum: ['update', 'choose_header', 'approve_data', 'approve_images', 'approve_script', 'approve_preview', 'more_headers', 'status', 'cancel', 'new_order', 'cancel_and_start_new', 'account_project'] },
     confirmationIntent: { type: 'string', enum: ['approve', 'reject', 'unclear'] }, confirmationEvidence: stringProperty,
-    productOperation: { type: 'string', enum: ['patch', 'replace', 'append', 'unclear'] },
+    productOperation: { type: 'string', enum: ['patch', 'replace', 'append', 'remove', 'unclear'] },
     kind: { type: 'string', enum: ['encarte', 'video', 'cartaz', 'studio'] },
     additionalKinds: { type: 'array', items: { type: 'string', enum: ['encarte', 'video', 'cartaz', 'studio'] } },
     theme: stringProperty, formats: { type: 'array', items: { type: 'string', enum: CREATION_FORMATS.map(f => f.id) } },
@@ -485,6 +559,7 @@ export function interpretationRequest(state: ConversationState, text: string, na
     messages: [{ role: 'system', content: `Você conversa pelo WhatsApp do Job Varejo em português brasileiro informal, com respostas curtas, naturais e contextualizadas. Entenda a intenção pelo sentido da mensagem e pelo histórico; nunca ensine palavras ou frases que a pessoa precise repetir. Retorne só JSON neste contrato: ${JSON.stringify({ action: 'update|choose_header|approve_data|approve_images|approve_script|approve_preview|more_headers|status|cancel|new_order|cancel_and_start_new|account_project', confirmationIntent: 'approve|reject|unclear', confirmationEvidence: 'trecho literal da mensagem que demonstra a confirmação ou vazio', productOperation: 'patch|replace|append|unclear', kind: 'encarte|video|cartaz|studio', additionalKinds: ['outros tipos pedidos explicitamente'], theme: 'tema literal pedido', formats: CREATION_FORMATS.map(format => format.id), division: 'single|pages|department', pageCount: 2, products: [{ id: 'ID existente se conhecido', name: '', brand: '', variant: '', weight: '', price: 'preço literal', department: '', condition: '' }], validity: 'datas explícitas completas ou sem validade', conditions: 'condições literais', choice: 1, institutionalText: { title: '', message: '', callToAction: '' }, script: 'locução literal por extenso', itemNumbers: [1], artifactNumbers: [1], approvalRevision: 1, projectQuery: 'descrição literal do encarte já salvo' })}.
 Encarte já pronto na conta: quando a pessoa pedir um encarte que já existe ou está salvo na conta dela (por exemplo “me manda o encarte de terça e quarta que fiz ontem”, “quero aquele encarte do açougue que está na minha conta”, “manda o último encarte”), use action=account_project e copie em projectQuery só a descrição literal (nome, tema, dia ou data citados). Isso não é pedido novo: não preencha kind, tema, produtos nem validade. Nunca invente nomes de encartes.
 Use a fala anterior do atendente e as últimas mensagens para entender respostas curtas como “pode fazer”, “fechado”, “manda ver”, “perfeito”, “o outro”, “esse mesmo” ou correções referidas por contexto. Extraia apenas campos novos ou realmente alterados. OMITA todo campo igual ao rascunho/contexto, inclusive products, validade, tema e formatos; isso permite aprovar sem tratar eco do estado como correção. Campo igual não significa mudança. Exemplo: cliente “fechado” numa revisão de dados => action=approve_data, confirmação approve com evidência “fechado”, sem products; cliente “Pode seguir, mas põe 20 reais no arroz” => action=update, products com preço corrigido, sem aprovação.
+Sempre devolva o campo action. Remover produto (“tira o feijão”, “remove o item 2”) usa productOperation=remove com products contendo só o nome do item (ou itemNumbers); nunca escreva “remover” como condição. Com o encarte já entregue (etapa approved/delivered): reenviar a imagem (“reenvie”, “manda de novo”) é status; agradecimento ou elogio é status; gerar de novo/nova versão é status; corrigir preço/produto é update com products; outro encarte com outros produtos é new_order.
 Siga a fase: data aceita approve_data; images aceita approve_images e usa itemNumbers para itens/fotos; script aceita approve_script; preview aceita approve_preview, approvalRevision só se dita e artifactNumbers para selecionar arquivos. Cabeçalho atualizado único aceita confirmação como choose_header, choice=1. Exemplo: “não precisa mudar nada, segue” em data é approve_data; “sim, pode seguir” com uma opção de cabeçalho atualizada é choose_header. Respostas com pergunta ou hesitação (por exemplo “será que pode mandar?”) usam unclear.
 Nunca ensine palavras ou frases para a pessoa repetir. Entenda a intenção pelo sentido e pelo histórico. Não pergunte de novo algo já conhecido. Se a pessoa corrigir algum dado, essa mensagem não aprova nenhuma etapa; não misture aprovação com mudança. Pergunta, hesitação, recusa e correção não são confirmação. “Não precisa mudar nada, segue” é confirmação quando o sentido for claro. Para aprovação, defina confirmationIntent=approve e copie em confirmationEvidence o trecho literal suficiente; rejeição/hesitação/correção usa reject/unclear. Não invente aprovação nem evidência. Aprovação sem etapa clara fica unclear.
 Use a pergunta esperada e o histórico imediato como contexto principal da resposta. Quando expectedMissingField=theme, uma resposta com nome de campanha preenche theme literalmente mesmo que action venha como new_order; não transforme uma resposta de controle como “começar” ou “continuar” em tema, nem datas em validade sem pedido claro. Se o rascunho ainda não tem nenhum conteúdo comercial (mesmo que o tipo ainda esteja faltando), “novo pedido”/“começar outro” sem pedido explícito para cancelar mantém este mesmo rascunho e segue para o próximo campo faltante. Se a resposta atual for controle, recupere um tema somente do par recente e explícito “atendente perguntou o tema” → “cliente respondeu”, dentro deste pedido vazio; nunca recupere texto de pedido cancelado. Perguntas, respostas de controle e confirmações curtas como “pode fazer”, “não sei”, “vamos começar” ou “qual tema você tem?” não são temas.
@@ -528,7 +603,7 @@ export async function advanceConversation(input: {
   /** Lista os encartes do dono; injetável nos testes. Sempre filtrada por accountId. */
   listAccountProjects?: (accountId: string) => Promise<AccountProjectSummary[]>
 }): Promise<{ state: ConversationState; send: ConversationSend[]; generate: boolean; missingTheme?: boolean; accountProjectJob?: { token: string; projectId: string } }> {
-  let s = structuredClone(input.state), p = proposalSchema.parse(input.proposal)
+  let s = structuredClone(input.state), p = sanitizeThemeAndValidity(proposalSchema.parse(input.proposal), input.text)
   const send: ConversationSend[] = [], say = (text: string) => send.push({ type: 'text', text })
   if (s.order && s.order.accountId !== input.accountId) throw new Error('ACCOUNT_MISMATCH')
   const preserveHeaderCandidates = Boolean(s.headerRefreshPending && s.phase === 'header' && s.order)
@@ -578,7 +653,9 @@ export async function advanceConversation(input: {
   const productList = reconcileProductList(p, s, input.text)
   p = productList.proposal
   if (productList.unclear) {
-    say('Você quer substituir a lista toda ou corrigir algum produto que já está aqui?')
+    say(p.productOperation === 'remove' || /\b(?:tira|tire|tirar|remove|remova|remover|exclui|exclua|excluir|apaga|apague|apagar|retira|retire|retirar)\b/.test(normalizedText(input.text))
+      ? 'Qual produto você quer tirar? Pode me dizer o nome ou o número da lista.'
+      : 'Você quer substituir a lista toda ou corrigir algum produto que já está aqui?')
     return { state: s, send, generate: false }
   }
   if (p.action === 'approve_data' || p.action === 'approve_images' || p.action === 'approve_script' || p.action === 'approve_preview') {
@@ -788,12 +865,40 @@ export async function advanceConversation(input: {
     }
     if (send.length) return { state: s, send, generate: false }
   }
-  if (s.order && canRegenerate(s) && isRegenerateRequest(input.text)) {
+  if (s.order && deliveredFlyer(s) && !s.pendingRegenerateChoice && isAmbiguousNewFlyerRequest(input.text)) {
+    s.pendingRegenerateChoice = true
+    say('Quer que eu gere de novo este mesmo encarte (mesmos produtos e preços) ou prefere começar um encarte novo com outros produtos?')
+    return { state: s, send, generate: false }
+  }
+  const sameFlyerAgain = Boolean(s.pendingRegenerateChoice) && regenerateChoiceAnswer(input.text) === 'same'
+  s.pendingRegenerateChoice = undefined
+  // Correção de preço/nome depois da entrega: aplica e gera de novo, sem refazer a conferência inteira.
+  if (s.order && deliveredFlyer(s) && p.action === 'update' && p.products?.length && !p.formats && !p.pageCount && !p.division &&
+    p.products.length === s.order.products.length && p.products.every(product => s.order!.products.some(current => current.id === product.id))) {
+    const before = s.order.products
+    const changed = p.products.filter(product => {
+      const current = before.find(item => item.id === product.id)!
+      return (['name', 'brand', 'variant', 'weight', 'price', 'condition'] as const).some(field => normalizedText(product[field] || '') !== normalizedText(current[field] || ''))
+    })
+    if (changed.length) {
+      const products = p.products.map(product => ({ ...before.find(item => item.id === product.id)!, ...product }))
+      s.draft.products = products
+      rerenderApproved(s, input.accountId, { products })
+      say(`Pronto, ajustei ${changed.map(product => `${product.name}${product.price ? ` (R$ ${product.price})` : ''}`).join(', ')}. Já estou gerando o encarte atualizado.`)
+      return { state: s, send, generate: true }
+    }
+  }
+  if (s.order && canRegenerate(s) && (isRegenerateRequest(input.text) || sameFlyerAgain || s.generationFailed && isRetryRequest(input.text))) {
+    s.generationFailed = undefined
     // A new renderer can replace an obsolete preview without making the
     // customer approve unchanged product data and photos a second time.
     rerenderApproved(s, input.accountId, {})
     say('Vou gerar uma nova versão do encarte com o modelo escolhido e as fotos já confirmadas.')
     return { state: s, send, generate: true }
+  }
+  if (['approved', 'delivered'].includes(s.phase) && isCourtesy(input.text)) {
+    say('Por nada! Seu encarte fica salvo na sua conta. Se precisar de outro formato, ajuste ou de um encarte novo, é só me chamar.')
+    return { state: s, send, generate: false }
   }
   if (p.action === 'status') {
     if (s.pendingOrderChoice && (isContinueOrDeclineNew(input.text) || isAffirmativeChoice(input.text) || referencesAnotherHeader(input.text))) s.pendingOrderChoice = false
@@ -807,7 +912,7 @@ export async function advanceConversation(input: {
                 : 'Me conte o que você quer criar e eu organizo os detalhes com você.'
     say(nextStep); return { state: s, send, generate: false }
   }
-  if (s.phase === 'rendering') { say('sua criação está em andamento. Vou enviar a prévia quando ficar pronta; aguarde antes de alterar este pedido.'); return { state: s, send, generate: false } }
+  if (s.phase === 'rendering') { say(s.draft.kind === 'video' ? 'Estou gerando o vídeo em MP4. Em breve ele chega aqui; se quiser mudar algo, me fala depois que ele chegar.' : 'Estou montando o material e envio aqui assim que ficar pronto. Se quiser mudar algo, me fala depois que ele chegar.'); return { state: s, send, generate: false } }
   if (p.action === 'update' || p.action === 'new_order') {
     if (p.action === 'update' && isEmptyCreationDraft(s)) s.pendingOrderChoice = false
     const before = JSON.stringify(s.draft)
@@ -837,16 +942,17 @@ export async function advanceConversation(input: {
       // Changes invalidate all previously generated artifacts before any further delivery.
       s.order = updateOrder(s.order, input.accountId, {})
       s.artifacts = []; s.candidates = []; s.runtime = undefined; s.phase = 'collecting'
+      s.generationFailed = undefined
       s.reviewPresentedRevision = undefined; s.pendingRerender = undefined
       if (s.header && (s.header.theme !== s.draft.theme || !s.draft.formats.every(f => s.header!.formats.includes(f)))) { s.header = undefined; s.choiceOffset = 0 }
     }
   }
   const d = s.draft
-  if (!d.kind) { say('você quer encarte, vídeo, cartazes ou arte do Estúdio?'); return { state: s, send, generate: false } }
-  if (!d.theme?.trim()) { say('qual tema ou campanha você deseja? Por exemplo: Fecha Mês, fim de semana ou aniversário da loja.'); return { state: s, send, generate: false } }
+  if (!d.kind) { say(/^(?:oi|ol[aá]|bom dia|boa tarde|boa noite|opa|e a[ií])[!. ]*$/i.test(input.text.trim()) ? `Oi, ${input.name.split(' ')[0]}! O que vamos criar hoje: encarte, vídeo, cartaz ou arte do Estúdio?` : 'O que você quer criar: encarte, vídeo, cartaz ou arte do Estúdio?'); return { state: s, send, generate: false } }
+  if (!d.theme?.trim()) { say('Qual o tema ou campanha? Por exemplo: Fecha Mês, Terça e Quarta Verde, fim de semana ou aniversário da loja.'); return { state: s, send, generate: false } }
   const formats = [...new Set(d.formats)].map(formatFor)
   if ((!formats.length && d.kind !== 'encarte') || (d.formats.length && (formats.some(f => !f) || (d.kind === 'video' && d.formats.some(f => !['stories', 'tv'].includes(f))) || (d.kind === 'cartaz' && d.formats.some(f => !CARTAZISTA_FORMATS.some(size => size.id === f)))))) {
-    say(`qual formato deseja${d.kind === 'video' ? ': Story/Reels vertical, TV horizontal ou os dois' : d.kind === 'cartaz' ? ': A1, A2, A3, A4, A5, A6, A7 ou faixa' : ': Feed, quadrado, Story, TV ou impressão'}? Pode escolher mais de um com as mesmas ofertas.`)
+    say(`Qual formato você quer${d.kind === 'video' ? ': Story/Reels vertical, TV horizontal ou os dois' : d.kind === 'cartaz' ? ': A1, A2, A3, A4, A5, A6, A7 ou faixa' : ': Feed, quadrado, Story, TV ou impressão'}? Pode escolher mais de um com as mesmas ofertas.`)
     return { state: s, send, generate: false }
   }
   if (p.action === 'choose_header' && p.choice && s.phase === 'header') {
@@ -979,7 +1085,7 @@ export async function advanceConversation(input: {
         return { state: s, send, generate: false }
       }
       assertCanRender(s.order, input.accountId); s.phase = 'rendering'
-      say('fotos e preços confirmados. Vou montar a prévia e enviar aqui.')
+      say(`Tudo confirmado! Estou montando ${d.kind === 'cartaz' ? 'os cartazes' : d.kind === 'studio' ? 'a arte' : 'o encarte'} e já envio aqui.`)
       return { state: s, send, generate: true }
     }
     s.phase = 'images'
@@ -994,12 +1100,15 @@ export async function advanceConversation(input: {
     const selected = named || pending
     const resolvedNumbers = numbers.length ? numbers : selected ? [s.order!.products.findIndex(product => product.id === selected.id) + 1] : []
     const itemIds = resolvedNumbers.map(number => s.order!.products[number - 1]?.id).filter((id): id is string => Boolean(id))
-    if (!itemIds.length) { say('qual produto está com a foto errada? Diga o nome ou o número mostrado na prancha.'); return { state: s, send, generate: false } }
+    if (!itemIds.length) { say('Qual produto está com a foto errada? Pode dizer o nome ou o número da lista.'); return { state: s, send, generate: false } }
     s.order = rejectImageCandidates(s.order, input.accountId, itemIds)
     s.candidates = s.candidates.filter(candidate => !itemIds.includes(candidate.itemId))
     s.pendingCorrectionItemId = undefined
     s.reviewPresentedRevision = undefined
-    say(`As fotos dos itens ${resolvedNumbers.join(', ')} foram removidas da conferência. Pode mandar as imagens corretas e indicar cada produto.`)
+    const names = itemIds.map(id => s.order!.products.find(product => product.id === id)!.name)
+    say(names.length === 1
+      ? `Certo, tirei a foto de ${names[0]}. Me manda a foto certa dele por aqui.`
+      : `Certo, tirei as fotos de ${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}. Me manda as fotos certas e diga de qual produto é cada uma.`)
     return { state: s, send, generate: false }
   }
   if (p.action === 'approve_images' && s.phase === 'images' && approvalRequested(p, input.text, s)) {

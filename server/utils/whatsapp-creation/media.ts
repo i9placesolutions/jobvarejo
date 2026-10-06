@@ -8,6 +8,8 @@ import { getS3Client } from '../s3'
 import {
   getLegacyUserProjectPrefix,
   isLegacyProjectPageKey,
+  isPublicStorageKey,
+  isServerManagedStorageKey,
   isUserProjectKey,
   isValidStoragePath,
   normalizeStoragePath
@@ -141,6 +143,9 @@ const assertSafeKey = (key: string): string => {
 
 const isKnownProductImageKey = async (key: string): Promise<boolean> => {
   if (!key.startsWith('imagens/')) return false
+  // Fotos de produto em imagens/ são gravadas com leitura pública. Uma foto já aprovada
+  // continua válida mesmo depois que o cache do banco passa a apontar para outra imagem.
+  if (isPublicStorageKey(key) && !isServerManagedStorageKey(key)) return true
   const row = await pgOneOrNull<{ s3_key: string }>(
     `select s3_key from public.product_image_cache
       where s3_key = $1 and image_url is not null

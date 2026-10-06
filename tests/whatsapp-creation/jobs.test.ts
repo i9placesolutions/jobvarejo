@@ -125,9 +125,9 @@ describe('recuperação de jobs WhatsApp', () => {
     expect(mocks.queue).toHaveBeenCalledTimes(1)
     const [, queuedConversationId, queuedOwnerId, queuedOrderId, queuedState, queuedMessages, idempotencyKey] = mocks.queue.mock.calls[0]!
     expect([queuedConversationId, queuedOwnerId, queuedOrderId]).toEqual([conversationId, ownerId, orderId])
-    expect(queuedState).toMatchObject({ phase: 'collecting' })
-    expect(queuedMessages).toEqual([expect.objectContaining({ type: 'text', text: expect.stringMatching(/tentar de novo.*ajustar/i) })])
-    expect(queuedState.recentTurns?.at(-1)).toMatchObject({ role: 'assistant', text: expect.stringMatching(/não consegui montar a prévia/i) })
+    expect(queuedState).toMatchObject({ phase: 'collecting', generationFailed: true })
+    expect(queuedMessages).toEqual([expect.objectContaining({ type: 'text', text: expect.stringMatching(/tenta de novo.*ajustar/i) })])
+    expect(queuedState.recentTurns?.at(-1)).toMatchObject({ role: 'assistant', text: expect.stringMatching(/não consegui gerar o encarte/i) })
     expect(idempotencyKey).toMatch(new RegExp(`^generation-error:${orderId}:\\d+$`))
     expect(queryCalls.some(sql => /UPDATE public\.whatsapp_creation_orders.*status='rendering'/.test(sql))).toBe(false)
   })
@@ -294,7 +294,7 @@ describe('recuperação de jobs WhatsApp', () => {
     expect(mocks.prepareHeader).not.toHaveBeenCalled()
     expect(mocks.generate).toHaveBeenCalledTimes(1)
     expect(mocks.queue).toHaveBeenCalledTimes(1)
-    expect(mocks.queue.mock.calls[0]![5][0]!.text).toMatch(/procure outro modelo/i)
+    expect(mocks.queue.mock.calls[0]![5][0]!.text).toMatch(/outros modelos do mesmo tema/i)
   })
 
   it('não trata um 409 genérico como revisão de cabeçalho', async () => {

@@ -90,11 +90,12 @@ async function failGeneration(row: any, state: ConversationState) {
     if (!current?.order || current.runtime?.token !== state.runtime?.token || current.phase !== 'rendering' ||
       current.order.id !== row.id || current.order.revision !== state.order?.revision) return
     current.phase = 'collecting'; current.runtime = undefined; current.artifacts = []
+    current.generationFailed = true
     if (current.order) current.order = updateOrder(current.order, row.owner_id, {})
     current.previewPresentedRevision = undefined
     const message = state.draft.kind === 'video'
       ? 'Não consegui montar o vídeo. Seu pedido continua salvo. Quer ajustar algo ou prefere ajuda?'
-      : 'Não consegui montar a prévia. Seu pedido e as fotos continuam salvos. Quer tentar de novo ou ajustar algo?'
+      : 'Não consegui gerar o encarte agora. Seus produtos e fotos continuam salvos. Me fala "tenta de novo" que eu gero outra vez, ou me diga o que ajustar.'
     const send: ConversationSend[] = [{ type: 'text', text: message }]
     rememberConversationTurns(current, send.map(item => ({ role: 'assistant', text: item.text })))
     await client.query("UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,status='failed',revision=$4,updated_at=now() WHERE id=$1 AND owner_id=$2", [row.id, row.owner_id, JSON.stringify(current), current.order!.revision])
@@ -138,7 +139,7 @@ async function recoverChangedFlyerHeader(row: any, state: ConversationState, acc
     ? 'O cabeçalho escolhido foi atualizado. Esse modelo funciona para você ou prefere ver outro?'
     : choices.length
       ? 'O cabeçalho escolhido mudou. Qual destas opções combina melhor com o seu encarte?'
-      : 'O cabeçalho mudou e não consegui preparar uma nova prévia. Quer que eu procure outro modelo para o mesmo tema ou prefere mudar o tema?'
+      : 'O modelo escolhido foi atualizado e não consegui prepará-lo de novo. Quer que eu mostre outros modelos do mesmo tema ou prefere mudar o tema?'
   })
 
   return pgTx(async client => {

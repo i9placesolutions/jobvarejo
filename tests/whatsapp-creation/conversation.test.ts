@@ -25,7 +25,7 @@ vi.mock('../../server/utils/whatsapp-creation/catalog', () => ({
 vi.mock('../../server/utils/whatsapp-creation/media', () => ({ ownedStorageBytes: mocks.storageBytes }))
 vi.mock('../../server/utils/whatsapp-creation/product-review', () => ({ createProductReviewBoards: mocks.productReview }))
 
-const { advanceConversation, finalSendType, interpretationRequest, isRegenerateRequest, isResendRequest, mentionedFlyerFormats, newConversationState, normalizeConversationIntent, requestedPageCount } = await import('../../server/utils/whatsapp-creation/conversation')
+const { advanceConversation, isAmbiguousNewFlyerRequest, isNewMaterialRequest, regenerateChoiceAnswer, sanitizeThemeAndValidity, finalSendType, interpretationRequest, isRegenerateRequest, isResendRequest, mentionedFlyerFormats, newConversationState, normalizeConversationIntent, requestedPageCount } = await import('../../server/utils/whatsapp-creation/conversation')
 
 const accountId = '11111111-1111-4111-8111-111111111111'
 const otherAccountId = '22222222-2222-4222-8222-222222222222'
@@ -145,7 +145,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
       action: 'update', kind: 'encarte', formats: ['stories', 'tv'], products: [product('rice'), product('milk')]
     }, 'quero um encarte')
     expect(noTheme.state.phase).toBe('collecting')
-    expect(noTheme.send.map(message => message.text).join(' ')).toMatch(/qual tema/i)
+    expect(noTheme.send.map(message => message.text).join(' ')).toMatch(/tema ou campanha/i)
     expect(mocks.headers).not.toHaveBeenCalled()
 
     const needsHeader = await input(noTheme.state, {
@@ -328,7 +328,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(rejected.state.candidates).toHaveLength(1)
     expect(rejected.state.candidates[0]?.itemId).toBe(review.state.order!.products[0]!.id)
     expect(rejected.state.reviewPresentedRevision).toBeUndefined()
-    expect(rejected.send[0]?.text).toMatch(/imagens corretas/i)
+    expect(rejected.send[0]?.text).toMatch(/tirei a foto de/i)
   })
 
   it('corrige a foto literal mesmo se a IA disser status e alterar a lista', async () => {
@@ -337,7 +337,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const rejected = await input(review.state, { action: 'status', itemNumbers: [1], products: [] }, 'a foto 2 está errada')
     expect(rejected.state.draft.products).toHaveLength(2)
     expect(rejected.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
-    expect(rejected.send[0]?.text).toMatch(/itens 2 foram removidas/i)
+    expect(rejected.send[0]?.text).toMatch(/tirei a foto de/i)
   })
 
   it('preserva o preço e guarda o produto quando a reclamação não diz o que está errado', async () => {
@@ -357,7 +357,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(clarified.state.draft.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 2,99' })
     expect(clarified.state.pendingCorrectionItemId).toBeUndefined()
     expect(clarified.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
-    expect(clarified.send[0]?.text).toMatch(/fotos dos itens 2 foram removidas/i)
+    expect(clarified.send[0]?.text).toMatch(/tirei a foto de/i)
   })
 
   it('resolve reclamação de foto pelo nome único e pergunta o item na reclamação genérica', async () => {
@@ -372,7 +372,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const named = await input(review.state, { action: 'update', products: [], itemNumbers: [1] }, 'troque a foto da Cenoura')
     expect(named.state.draft.products[1]).toMatchObject({ name: 'Cenoura', price: 'R$ 2,99' })
     expect(named.state.candidates.map(candidate => candidate.itemId)).toEqual([review.state.order!.products[0]!.id])
-    expect(named.send[0]?.text).toMatch(/fotos dos itens 2 foram removidas/i)
+    expect(named.send[0]?.text).toMatch(/tirei a foto de/i)
   })
 
   it('associa uma foto recebida ao produto pelo nome sem aceitar lista ou número inventados', async () => {
@@ -468,7 +468,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(rejected.state.candidates).toEqual([])
     expect(rejected.state.order?.images[0]?.key).toBe('')
     expect(rejected.state.order?.revision).toBe(confirmed.state.order!.revision + 1)
-    expect(rejected.send[0]?.text).toMatch(/imagens corretas/i)
+    expect(rejected.send[0]?.text).toMatch(/tirei a foto de/i)
     const cannotApprove = await input(rejected.state, { action: 'approve_images' }, 'confirmar todas as fotos')
     expect(cannotApprove.generate).toBe(false)
     expect(cannotApprove.send[0]?.text).toMatch(/envie as fotos corretas/i)
@@ -752,7 +752,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
         { role: 'user' as const, text: control }
       ] }, { action: 'new_order' }, 'COMEÇAR')
       expect(noThemeFromControl.state.draft.theme).toBeUndefined()
-      expect(noThemeFromControl.send.map(item => item.text).join(' ')).toMatch(/qual tema ou campanha/i)
+      expect(noThemeFromControl.send.map(item => item.text).join(' ')).toMatch(/tema ou campanha/i)
     }
     const cancelOrNew = await input({ ...empty, phase: 'cancelled' as const }, { action: 'new_order' }, 'COMEÇAR OUTRO')
     expect(cancelOrNew.state.phase).toBe('collecting')
@@ -773,12 +773,12 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const greeting = await input(empty, { action: 'status' }, 'Oi')
     expect(greeting.state.phase).toBe('collecting')
     expect(greeting.state.pendingOrderChoice).toBe(false)
-    expect(greeting.send[0]?.text).toMatch(/qual tema ou campanha/i)
+    expect(greeting.send[0]?.text).toMatch(/tema ou campanha/i)
 
     const noKind = await input(newConversationState(), { action: 'new_order' }, 'COMEÇAR OUTRO')
     expect(noKind.state.phase).toBe('collecting')
     expect(noKind.state.draft.kind).toBeUndefined()
-    expect(noKind.send[0]?.text).toMatch(/você quer encarte, vídeo/i)
+    expect(noKind.send[0]?.text).toMatch(/criar: encarte, vídeo/i)
     const terminal = await input({ ...empty, phase: 'cancelled' as const }, { action: 'new_order' }, 'COMEÇAR OUTRO')
     expect(terminal.state.phase).toBe('collecting')
     expect(terminal.state.draft.kind).toBeUndefined()
@@ -908,7 +908,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
 
 describe('pedido para gerar a arte de novo', () => {
   it('entende pedidos naturais de nova prévia do encarte', () => {
-    for (const text of ['GERE OUTRA PREVIA', 'quero que gere outra previsa agora', 'GERE OUTRO ENCARTE', 'Refazer prévia', 'refaz o encarte', 'manda uma nova arte', 'gera de novo', 'faz outra versão'])
+    for (const text of ['GERE OUTRA PREVIA', 'quero que gere outra previsa agora', 'Refazer prévia', 'refaz o encarte', 'manda uma nova arte', 'gera de novo', 'faz outra versão'])
       expect(isRegenerateRequest(text), text).toBe(true)
   })
 
@@ -1114,5 +1114,23 @@ describe('dividir os produtos em mais encartes', () => {
     expect(result.generate).toBe(true)
     expect(result.state.order?.formats.map(format => format.id)).toEqual(['stories', 'tv'])
     expect(result.state.order?.pageCount).toBe(2)
+  })
+})
+
+describe('encarte novo ou nova versão depois da entrega', () => {
+  it('pergunta quando o pedido de novo encarte é ambíguo e entende a resposta', () => {
+    for (const text of ['GERE OUTRO ENCARTE', 'crie um novo encarte', 'quero um encarte novo']) expect(isAmbiguousNewFlyerRequest(text), text).toBe(true)
+    for (const text of ['gera outra versão', 'refaz o encarte', 'quero outro encarte com outros produtos']) expect(isAmbiguousNewFlyerRequest(text), text).toBe(false)
+    expect(isNewMaterialRequest('quero fazer outro encarte com outros produtos')).toBe(true)
+    expect(regenerateChoiceAnswer('esse mesmo')).toBe('same')
+    expect(regenerateChoiceAnswer('gera de novo')).toBe('same')
+    expect(regenerateChoiceAnswer('um novo com outros produtos')).toBe('new')
+  })
+
+  it('não trata nome de campanha como validade', () => {
+    const fixed = sanitizeThemeAndValidity({ action: 'update', theme: 'verde', validity: 'terça e quarta' } as any, 'quero um encarte de terça e quarta verde')
+    expect(fixed.validity).toBeUndefined()
+    expect(fixed.theme).toBe('terça e quarta verde')
+    expect(sanitizeThemeAndValidity({ action: 'update', validity: '07/10 a 08/10' } as any, '07/10 a 08/10').validity).toBe('07/10 a 08/10')
   })
 })
