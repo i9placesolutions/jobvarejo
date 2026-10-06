@@ -23,7 +23,7 @@ vi.mock('../../server/utils/whatsapp-creation/catalog', () => ({
 vi.mock('../../server/utils/whatsapp-creation/media', () => ({ ownedStorageBytes: mocks.storageBytes }))
 vi.mock('../../server/utils/whatsapp-creation/product-review', () => ({ createProductReviewBoards: mocks.productReview }))
 
-const { advanceConversation, interpretationRequest, isRegenerateRequest, newConversationState } = await import('../../server/utils/whatsapp-creation/conversation')
+const { advanceConversation, finalSendType, interpretationRequest, isRegenerateRequest, isResendRequest, newConversationState } = await import('../../server/utils/whatsapp-creation/conversation')
 
 const accountId = '11111111-1111-4111-8111-111111111111'
 const otherAccountId = '22222222-2222-4222-8222-222222222222'
@@ -905,12 +905,28 @@ describe('workflow da conversa de criação via WhatsApp', () => {
 
 describe('pedido para gerar a arte de novo', () => {
   it('entende pedidos naturais de nova prévia do encarte', () => {
-    for (const text of ['GERE OUTRA PREVIA', 'quero que gere outra previsa agora', 'Refazer prévia', 'refaz o encarte', 'manda uma nova arte', 'gera de novo', 'faz outra versão'])
+    for (const text of ['GERE OUTRA PREVIA', 'quero que gere outra previsa agora', 'GERE OUTRO ENCARTE', 'Refazer prévia', 'refaz o encarte', 'manda uma nova arte', 'gera de novo', 'faz outra versão'])
       expect(isRegenerateRequest(text), text).toBe(true)
   })
 
   it('não confunde correção, aprovação ou conversa com novo render', () => {
-    for (const text of ['gere outra prévia com o arroz a 5,99', 'a foto do coco está errada, refaz', 'pode enviar', 'ficou ótimo', 'quero outro encarte de açougue para amanhã com vários produtos e preços diferentes', 'faz outro encarte', 'cria um encarte novo'])
+    for (const text of ['gere outra prévia com o arroz a 5,99', 'a foto do coco está errada, refaz', 'pode enviar', 'ficou ótimo', 'quero outro encarte de açougue para amanhã com vários produtos e preços diferentes', 'quero fazer um novo pedido', 'cria outro vídeo'])
       expect(isRegenerateRequest(text), text).toBe(false)
+  })
+})
+
+describe('reenvio do arquivo final', () => {
+  it('entende pedido para mandar a imagem de novo sem confundir com nova versão', () => {
+    for (const text of ['MANDA A IMAGEM PNG', 'me manda o arquivo', 'reenvia o encarte'])
+      expect(isResendRequest(text), text).toBe(true)
+    for (const text of ['manda outra imagem', 'gera de novo', 'o preço está errado'])
+      expect(isResendRequest(text), text).toBe(false)
+  })
+
+  it('envia telas como imagem PNG e impressão como arquivo', () => {
+    expect(finalSendType({ mimeType: 'image/png', formatId: 'stories' })).toBe('image')
+    expect(finalSendType({ mimeType: 'image/png', formatId: 'print' })).toBe('document')
+    expect(finalSendType({ mimeType: 'application/pdf', formatId: 'A4' })).toBe('document')
+    expect(finalSendType({ mimeType: 'video/mp4', formatId: 'stories' })).toBe('video')
   })
 })

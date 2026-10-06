@@ -7,7 +7,7 @@ import { generateCreationArtifact } from './render'
 import { ownedStorageBytes } from './media'
 import { listCreationHeaders, type CreationHeader } from './catalog'
 import { prepareCreationHeader } from './header-preview'
-import { advanceConversation, rememberConversationTurns, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
+import { advanceConversation, finalSendType, rememberConversationTurns, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
 import { approvePreview, assertCanDeliver, assertCanRender, registerPreview, updateOrder } from '~/shared/whatsapp-creation'
 
 const failure = (code: number, text: string): never => { throw createError({ statusCode: code, statusMessage: text }) }
@@ -67,8 +67,7 @@ async function saveGeneration(row: any, state: ConversationState, artifacts: Con
       current.previewPresentedRevision = current.order!.revision
       const label = state.draft.kind === 'video' ? 'Seu vídeo' : state.draft.kind === 'cartaz' ? 'Seu cartaz' : state.draft.kind === 'studio' ? 'Sua arte' : 'Seu encarte'
       for (const artifact of artifacts) {
-        const printable = artifact.mimeType === 'application/pdf' || artifact.formatId === 'print'
-        send.push({ type: artifact.mimeType === 'video/mp4' ? 'video' : printable ? 'document' : 'image', key: artifact.key,
+        send.push({ type: finalSendType(artifact), key: artifact.key,
           text: `${label} — ${artifact.formatId}. Edite na sua conta: ${artifact.editUrl}`, artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
       }
       send.push({ type: 'text', text: `${label} está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.` })

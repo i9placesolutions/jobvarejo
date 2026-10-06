@@ -100,8 +100,8 @@ const isAffirmativeChoice = (text: string) => /^(?:sim|ok|t[aá] certo|est[aá] 
 export const isRegenerateRequest = (text: string): boolean => {
   const normalized = normalizedText(text)
   if (!normalized || normalized.length > 80 || /\d/.test(normalized) || correctionSignal(text)) return false
-  // “Outro encarte”/“novo pedido” é material novo, não uma nova versão do atual.
-  if (/\b(?:outro|novo)\s+(?:pedido|encarte|video|cartaz)\b|\b(?:pedido|encarte)\s+novo\b/.test(normalized)) return false
+  // “Novo pedido” é material novo; “outro encarte” com o pedido pronto é uma nova versão dele.
+  if (/\b(?:outro|novo)\s+(?:pedido|video|cartaz)\b|\bpedido\s+novo\b/.test(normalized)) return false
   if (/^(?:refazer|refaz|refaca|gerar de novo|gera de novo|gere de novo|de novo|novamente|outra|outra vez)[.!]?$/.test(normalized)) return true
   const verb = /\b(?:gera|gere|gerar|faz|faca|fazer|refaz|refaca|refazer|monta|monte|montar|cria|crie|criar|manda|mande|mandar|envia|envie|enviar)\b/.test(normalized)
   const again = /\b(?:outra|outro|nova|novo|de novo|novamente)\b/.test(normalized) || /\b(?:refaz|refaca|refazer)\b/.test(normalized)
@@ -109,6 +109,16 @@ export const isRegenerateRequest = (text: string): boolean => {
   return verb && again && target
 }
 /** Encarte gerado (entregue ou não) pode ganhar uma nova versão com os mesmos dados. */
+/** Pedido para receber de novo o arquivo já gerado (“manda a imagem”, “envia o png”). */
+export const isResendRequest = (text: string): boolean => {
+  const normalized = normalizedText(text)
+  if (!normalized || normalized.length > 60 || /\d/.test(normalized) || correctionSignal(text)) return false
+  return /\b(?:manda|mande|mandar|envia|envie|enviar|reenvia|reenvie|reenviar|me da|quero)\b/.test(normalized) &&
+    /\b(?:imagem|png|arquivo|encarte|arte|foto)\b/.test(normalized) && !/\b(?:outra|outro|nova|novo|de novo|novamente)\b/.test(normalized)
+}
+/** Envio final: telas vão como imagem PNG; impressão e PDF como arquivo para preservar a qualidade. */
+export const finalSendType = (artifact: Pick<ConversationArtifact, 'mimeType' | 'formatId'>): ConversationSend['type'] =>
+  artifact.mimeType === 'video/mp4' ? 'video' : artifact.mimeType === 'application/pdf' || artifact.formatId === 'print' ? 'document' : 'image'
 const canRegenerate = (state: ConversationState): boolean =>
   ['preview', 'approved', 'delivered'].includes(state.phase) && state.order?.kind === 'encarte' && Boolean(state.order.header)
 const referencesAnotherHeader = (text: string) => /\b(?:cabecalho|modelo|template)\b/.test(normalizedText(text))
@@ -140,6 +150,7 @@ const expectedQuestion = (state: ConversationState) => {
 export function normalizeConversationIntent(proposal: Proposal, text: string, state: ConversationState): Proposal {
   // Nova versão do encarte entregue continua no mesmo pedido, não abre outro.
   if (canRegenerate(state) && isRegenerateRequest(text)) return { ...proposal, action: 'status' }
+  if (['approved', 'delivered'].includes(state.phase) && state.artifacts.length && isResendRequest(text)) return { ...proposal, action: 'status' }
   const normalized = normalizedText(text)
   const startsAnother = /\b(?:outro|outra|novo|nova|recomecar|comecar outro|fazer outro|criar outro)\b/.test(normalized)
   const continuesCurrent = /\b(?:continuar|continua|continuando|esse mesmo|esta mesmo|seguir com esse|pode seguir|mantem esse)\b/.test(normalized)
@@ -460,6 +471,13 @@ export async function advanceConversation(input: {
   }
   if (canResume && /^(?:tentar novamente|tente novamente|repetir|retomar)[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'update', products: undefined }
   else if (p.action === 'status' && canResume && !asksStatus && !continuingPendingChoice) p = { ...p, action: 'update', products: undefined }
+  if (s.order && ['approved', 'delivered'].includes(s.phase) && s.artifacts.length && isResendRequest(input.text)) {
+    for (const artifact of s.artifacts) {
+      if (!s.order.previewApprovals.some(approval => approval.artifactId === artifact.artifactId && approval.formatId === artifact.formatId && approval.revision === s.order!.revision)) continue
+      send.push({ type: finalSendType(artifact), key: artifact.key, text: `Encarte — ${artifact.formatId}. Edite na sua conta: ${artifact.editUrl}`, artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
+    }
+    if (send.length) return { state: s, send, generate: false }
+  }
   if (s.order && canRegenerate(s) && isRegenerateRequest(input.text)) {
     // A new renderer can replace an obsolete preview without making the
     // customer approve unchanged product data and photos a second time.
@@ -481,6 +499,7 @@ export async function advanceConversation(input: {
           : s.phase === 'script' ? 'O roteiro está pronto para sua revisão. Se quiser mudar algo, me diga como prefere.'
             : s.phase === 'preview' ? 'A prévia está pronta. Se quiser algum ajuste, me conte; se estiver do jeito que você quer, pode me confirmar.'
               : s.phase === 'rendering' ? 'Estou montando a prévia e te aviso por aqui quando estiver pronta.'
+                : ['approved', 'delivered'].includes(s.phase) && s.artifacts.length ? 'Seu encarte já está pronto. Se quiser, eu reenvio a imagem, gero uma nova versão ou ajusto algum produto.'
                 : 'Me conte o que você quer criar e eu organizo os detalhes com você.'
     say(nextStep); return { state: s, send, generate: false }
   }
@@ -748,7 +767,7 @@ export async function advanceConversation(input: {
       if (s.order.previewApprovals.some(approval => approval.artifactId === artifact.artifactId && approval.formatId === artifact.formatId && approval.revision === s.order!.revision)) continue
       s.order = approvePreview(s.order, input.accountId, { artifactId: artifact.artifactId, revision: s.order.revision, formatId: artifact.formatId })
       assertCanDeliver(s.order, input.accountId, artifact.artifactId, [artifact.formatId])
-      send.push({ type: artifact.mimeType === 'video/mp4' ? 'video' : 'document', key: artifact.key, text: `Arquivo aprovado — ${artifact.formatId}. Edite na sua conta: ${artifact.editUrl}`, artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
+      send.push({ type: finalSendType(artifact), key: artifact.key, text: `Arquivo aprovado — ${artifact.formatId}. Edite na sua conta: ${artifact.editUrl}`, artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
     }
     if (s.artifacts.every(a => s.order!.previewApprovals.some(p => p.artifactId === a.artifactId && p.formatId === a.formatId && p.revision === s.order!.revision))) s.phase = 'approved'
     say(s.phase === 'approved' ? 'Combinado. Vou enviar os arquivos finais agora; eles também ficam salvos na sua conta do Job Varejo.' : 'Certo, esses formatos estão aprovados. Os outros ficam aguardando sua decisão.')
