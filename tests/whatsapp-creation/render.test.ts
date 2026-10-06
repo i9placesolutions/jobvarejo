@@ -17,6 +17,8 @@ import {
   flyerDivisionSupportsProductCount,
   assertFlyerProfileBindings,
   hydrateFlyerBusinessFields,
+  applyBusinessOverrides,
+  formatSimpleValidityText,
   parseLiteralValidityPeriod,
   renderEditableFlyerCanvas,
   applyFlyerAccountLabelTemplates,
@@ -502,4 +504,61 @@ it('aceita somente o fundo exato publicado na coleção de encartes', () => {
   expect(resolvePublishedFlyerCatalogKey('/api/storage/p?key=' + encodeURIComponent(key))).toBe(key)
   expect(resolvePublishedFlyerCatalogKey('/api/storage/p?key=video-studio/private/secret.png')).toBeNull()
   expect(resolvePublishedFlyerCatalogKey('/api/storage/p?key=' + encodeURIComponent(key.replace('0220', 'abcd')))).toBeNull()
+})
+
+describe('personalização do encarte no render', () => {
+  it('WhatsApp e endereço pedidos valem só na cópia do perfil usada no encarte', () => {
+    const copy = applyBusinessOverrides(profile, { whatsapp: '(11) 98888-7777', address: 'Av. Nova, 200' })
+    expect(copy).not.toBe(profile)
+    expect(copy).toMatchObject({ whatsapp: '(11) 98888-7777', address: 'Av. Nova, 200' })
+    expect(copy.whatsappNumbers).toEqual([{ id: 'main', label: '', value: '(11) 98888-7777' }])
+    expect(copy.addresses).toEqual([{ id: 'main', label: '', value: 'Av. Nova, 200' }])
+    expect(profile.whatsapp).toBe('+5511999999999')
+    expect(applyBusinessOverrides(profile, undefined)).toBe(profile)
+    const canvas = { objects: [
+      { type: 'textbox', businessProfileField: 'whatsapp', text: 'Número antigo', visible: true },
+      { type: 'textbox', businessProfileField: 'address', text: 'Endereço antigo', visible: true }
+    ] }
+    hydrateFlyerBusinessFields(canvas, copy, '')
+    expect(canvas.objects[0]).toMatchObject({ text: '(11) 98888-7777' })
+    expect(canvas.objects[1]).toMatchObject({ text: 'Av. Nova, 200' })
+  })
+
+  it('o telefone acompanha o WhatsApp só quando era o mesmo número', () => {
+    expect(applyBusinessOverrides({ ...profile, phone: '' }, { whatsapp: '(11) 98888-7777' }).phone).toBe('(11) 98888-7777')
+    expect(applyBusinessOverrides({ ...profile, phone: '1133334444' }, { whatsapp: '(11) 98888-7777' }).phone).toBe('1133334444')
+  })
+
+  it('data por extenso ou numérica no layout dividido e no texto simples', () => {
+    const split = () => ({ objects: [{ type: 'textbox', name: 'header-validity', quickDataField: 'validity', quickValidityLayout: 'inline-footer', quickValidityWhileStocks: true, quickValidityDateFormat: 'numeric', text: 'x', visible: true }] })
+    const validity = { validity: '06 e 07 de outubro de 2026', conditions: '' }
+    const long = hydrateFlyerBusinessFields(split(), profile, '', validity, { dateFormat: 'long' })
+    expect(long.objects[0]).toMatchObject({ text: 'OFERTA VÁLIDA DE 6 A 7 DE OUTUBRO OU ENQUANTO DURAREM OS ESTOQUES', quickValidityDateFormat: 'long' })
+    const numeric = hydrateFlyerBusinessFields(split(), profile, '', validity)
+    expect(numeric.objects[0]).toMatchObject({ text: 'OFERTA VÁLIDA DE 06/10/2026 A 07/10/2026 OU ENQUANTO DURAREM OS ESTOQUES' })
+    const simple = (format?: 'long' | 'numeric') => hydrateFlyerBusinessFields({ objects: [{ type: 'textbox', name: 'header-validity', text: 'x', visible: true }] }, profile, '', validity, { dateFormat: format }).objects[0].text
+    expect(simple('long')).toBe('Ofertas válidas de 6 a 7 de outubro')
+    expect(simple('numeric')).toBe('Ofertas válidas de 06/10/2026 a 07/10/2026')
+    expect(simple()).toBe('06 e 07 de outubro de 2026')
+  })
+
+  it('sem datas reconhecidas mantém o texto literal do cliente', () => {
+    expect(formatSimpleValidityText('esta semana', parseLiteralValidityPeriod('esta semana'), 'long')).toBe('esta semana')
+    expect(formatSimpleValidityText('sem validade', parseLiteralValidityPeriod('sem validade'), 'long')).toBe('sem validade')
+  })
+
+  it('o worker carrega as fontes das etiquetas escolhidas por produto', () => {
+    const python = [
+      'import importlib.util, sys, types',
+      'playwright = types.ModuleType("playwright"); sync_api = types.ModuleType("playwright.sync_api"); sync_api.sync_playwright = lambda: None',
+      'sys.modules["playwright"] = playwright; sys.modules["playwright.sync_api"] = sync_api',
+      'spec = importlib.util.spec_from_file_location("creation_renderer", sys.argv[1])',
+      'module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)',
+      'canvas = {"objects": [], "__labelTemplates": [{"id": "etq", "group": {"objects": [{"fontFamily": "Oswald"}]}}, {"id": "outra", "group": {"objects": [{"fontFamily": "Anton"}]}}]}',
+      'assert "oswald" not in module._requested_font_families(canvas)',
+      'assert "oswald" in module._requested_font_families(canvas, ["etq"])',
+      'assert "anton" not in module._requested_font_families(canvas, ["etq"])'
+    ].join('\n')
+    execFileSync('python3', ['-c', python, `${process.cwd()}/workers/whatsapp-creation/render.py`], { stdio: 'pipe' })
+  })
 })

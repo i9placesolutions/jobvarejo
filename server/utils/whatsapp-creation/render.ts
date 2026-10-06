@@ -13,9 +13,11 @@ import type { AuthenticatedUser } from '../auth'
 import {
   assertCanGeneratePaidVoice,
   assertCanRender,
+  normalizeFlyerCustomization,
   type CreationOrder,
   type CreationFormat,
-  type CreationProduct
+  type CreationProduct,
+  type FlyerCustomization
 } from '~/shared/whatsapp-creation'
 import { pgOneOrNull, pgQuery, pgTx } from '../postgres'
 import { getS3Client } from '../s3'
@@ -54,6 +56,10 @@ import { createDefaultProductCardConfiguration, normalizeProductCardConfiguratio
 import { BUILTIN_DEFAULT_LABEL_TEMPLATE_ID } from '~/utils/labelTemplateHelpers'
 import flyerCatalogKeys from '~/shared/whatsapp-creation/flyer-catalog-keys.json'
 import { parseLiteralValidityPeriod } from './validity-period'
+import { formatOfferDate, formatOfferValidity } from '~/utils/offerValidity'
+import {
+  applyFlyerZoneCustomization, customizationLabelIds, customizeFlyerItem, sanitizeFlyerLabelIds, scaleCardLayout, scaleFlyerLogo, scaleFlyerSeal
+} from './flyer-canvas-customization'
 
 const execute = promisify(execFile)
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -81,6 +87,8 @@ type CreationArtifactResult = {
   video?: { projectId: string; revision: number; phase: 'voice'; jobId: string }
   /** Aviso curto para o cliente junto da entrega (ex.: nova versão para preservar edição do painel). */
   notice?: string
+  /** Oferta que a conversa deve guardar para a próxima mensagem (ex.: mudar a cor de todos os cards). */
+  followUp?: { cardColorOffer: string }
 }
 
 const fail = (statusCode: number, statusMessage: string): never => {
@@ -719,8 +727,29 @@ export async function readFlyerPaymentIcon(src: string): Promise<Buffer | null> 
   return bytes
 }
 
-async function embedFlyerAssets(canvas: any, userId: string, templateOwnerId: string, logo: { bytes: Buffer; dataUrl: string } | null, profile: BusinessProfile, order: CreationOrder): Promise<any> {
-  hydrateFlyerBusinessFields(canvas, profile, logo?.dataUrl || '', order)
+/**
+ * Perfil usado só neste encarte: WhatsApp/endereço pedidos pelo cliente substituem os do cadastro
+ * na cópia; o cadastro da loja só muda por confirmação explícita (mergeBusinessProfile).
+ */
+export function applyBusinessOverrides(profile: BusinessProfile, business: FlyerCustomization['business'] | undefined): BusinessProfile {
+  if (!business?.whatsapp && !business?.address) return profile
+  const next: BusinessProfile = { ...profile }
+  const digitsOf = (value: string) => value.replace(/\D/g, '')
+  if (business.whatsapp) {
+    // O campo de telefone acompanha quando era o mesmo número do WhatsApp (ou estava vazio).
+    if (!profile.phone || digitsOf(profile.phone) === digitsOf(profile.whatsapp || '')) next.phone = business.whatsapp
+    next.whatsapp = business.whatsapp
+    next.whatsappNumbers = [{ id: profile.whatsappNumbers?.[0]?.id || 'whatsapp-1', label: profile.whatsappNumbers?.[0]?.label || '', value: business.whatsapp }]
+  }
+  if (business.address) {
+    next.address = business.address
+    next.addresses = [{ id: profile.addresses?.[0]?.id || 'address-1', label: profile.addresses?.[0]?.label || '', value: business.address }]
+  }
+  return next
+}
+
+async function embedFlyerAssets(canvas: any, userId: string, templateOwnerId: string, logo: { bytes: Buffer; dataUrl: string } | null, profile: BusinessProfile, order: CreationOrder, customization?: FlyerCustomization): Promise<any> {
+  hydrateFlyerBusinessFields(canvas, profile, logo?.dataUrl || '', order, { dateFormat: customization?.validityDateFormat })
   const visit = async (objects: any[]): Promise<void> => {
     for (const object of objects) {
       if (!object || typeof object !== 'object') continue
@@ -782,8 +811,8 @@ export const applyFlyerAccountLabelTemplates = (canvas: any, templates: Array<{ 
   return canvas
 }
 
-const loadFlyerAccountLabelTemplates = async (canvas: any, userId: string): Promise<any> => {
-  const ids = new Set<string>([BUILTIN_DEFAULT_LABEL_TEMPLATE_ID])
+const loadFlyerAccountLabelTemplates = async (canvas: any, userId: string, extraIds: readonly string[] = []): Promise<any> => {
+  const ids = new Set<string>([BUILTIN_DEFAULT_LABEL_TEMPLATE_ID, ...extraIds])
   const visit = (objects: any[]): void => {
     for (const object of objects || []) {
       if (object?.isProductZone === true || object?.isGridZone === true) {
@@ -808,15 +837,25 @@ const loadFlyerAccountLabelTemplates = async (canvas: any, userId: string): Prom
 
 export { parseLiteralValidityPeriod }
 
-export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile, logoDataUrl: string, order?: Pick<CreationOrder, 'validity' | 'conditions'>): any {
+/**
+ * Validade na frase dos layouts simples quando o cliente pede o formato da data (por extenso/numérico).
+ * Sem datas reconhecidas ou sem formato pedido, o texto literal do cliente continua valendo.
+ */
+export function formatSimpleValidityText(literal: string, period: ReturnType<typeof parseLiteralValidityPeriod>, dateFormat?: 'numeric' | 'long'): string {
+  if (!dateFormat || !period || !('startDate' in period)) return literal
+  return formatOfferValidity(formatOfferDate(period.startDate, dateFormat), formatOfferDate(period.endDate, dateFormat), undefined, period.mode) || literal
+}
+
+export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile, logoDataUrl: string, order?: Pick<CreationOrder, 'validity' | 'conditions'>, options: { dateFormat?: 'numeric' | 'long' } = {}): any {
   const literalValidity = String(order?.validity || '').trim()
   const validityPeriod = literalValidity ? parseLiteralValidityPeriod(literalValidity) : null
+  const simpleValidity = formatSimpleValidityText(literalValidity, validityPeriod, options.dateFormat)
   const values: Record<string, string> = {
     companyname: profile.companyName, name: profile.companyName, phone: profile.phone || profile.whatsapp,
     whatsapp: profile.whatsapp, address: profile.address, instagram: profile.instagram,
     facebook: profile.facebook, website: profile.website, slogan: profile.slogan,
     hours: profile.hours, paymentnotes: profile.paymentNotes,
-    validity: literalValidity, validitydate: literalValidity, condition: order?.conditions || '', conditions: order?.conditions || ''
+    validity: simpleValidity, validitydate: simpleValidity, condition: order?.conditions || '', conditions: order?.conditions || ''
   }
   const visit = (objects: any[]): void => {
     for (const object of objects || []) {
@@ -834,13 +873,14 @@ export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile
           if (matchedField === 'validity' && validityPeriod && isSplitFooterValidity(object)) {
             const dates = 'startDate' in validityPeriod ? validityPeriod : { startDate: '', endDate: '' }
             const state = { startDate: dates.startDate, endDate: dates.endDate, mode: validityPeriod.mode,
-              whileStocks: object.quickValidityWhileStocks !== false, dateFormat: object.quickValidityDateFormat || 'numeric' }
+              whileStocks: object.quickValidityWhileStocks !== false, dateFormat: options.dateFormat || object.quickValidityDateFormat || 'numeric' }
             object.text = resolveSplitFooterValidityText(object, objects, state)
             if (dates.startDate) {
               object.quickValidityStartDate = dates.startDate
               object.quickValidityEndDate = dates.endDate
             }
             object.quickValidityMode = validityPeriod.mode
+            if (options.dateFormat) object.quickValidityDateFormat = options.dateFormat
             object.visible = !!object.text
             const copy = splitFooterValidityText({ ...state, layout: object.quickValidityLayout, copyStyle: object.quickValidityCopyStyle })
             for (const sibling of objects) {
@@ -916,7 +956,8 @@ export async function externalizeInlineCanvasImages(canvas: any, userId: string,
   for (const key of ['backgroundImage', 'overlayImage']) if (canvas?.[key]) await visit(canvas[key])
 }
 
-type FlyerPayloadPage = { format: CreationFormat; page: { canvas: any; png: Buffer | null }; productIds: string[]; department: string | null }
+type FlyerRenderStats = { highlighted: number; nameFontSize: number | null }
+type FlyerPayloadPage = { format: CreationFormat; page: { canvas: any; png: Buffer | null }; productIds: string[]; department: string | null; stats?: FlyerRenderStats }
 type FlyerProjectStage = 'draft' | 'final'
 type FlyerImages = Map<string, { bytes: Buffer; dataUrl: string }>
 
@@ -925,12 +966,16 @@ type FlyerImages = Map<string, { bytes: Buffer; dataUrl: string }>
  * Sem produtos (cabeçalho recém-escolhido) devolve o modelo já com os dados da
  * loja, sem abrir o Chromium.
  */
-async function buildFlyerPages(order: CreationOrder, user: AuthenticatedUser, profile: BusinessProfile, formats: CreationFormat[], images: FlyerImages,
-  options: { allowMissingImages?: boolean; background?: boolean } = {}): Promise<{ projectTemplate: any; pages: FlyerPayloadPage[] }> {
+async function buildFlyerPages(order: CreationOrder, user: AuthenticatedUser, accountProfile: BusinessProfile, formats: CreationFormat[], images: FlyerImages,
+  options: { allowMissingImages?: boolean; background?: boolean } = {}): Promise<{ projectTemplate: any; pages: FlyerPayloadPage[]; notices: string[]; followUp?: CreationArtifactResult['followUp'] }> {
+  const customization = normalizeFlyerCustomization(order.customization)
+  // WhatsApp/endereço pedidos valem só nesta cópia do perfil; o cadastro não é alterado.
+  const profile = applyBusinessOverrides(accountProfile, customization?.business)
   const cardConfigRow = await pgOneOrNull<{ configuration: unknown }>(
     'select configuration from public.product_card_configurations where user_id=$1 limit 1', [user.id]
   )
-  const cardLayout = normalizeProductCardConfiguration(cardConfigRow?.configuration ?? createDefaultProductCardConfiguration())
+  // Escalas da etiqueta e do selo +18 valem só nesta cópia da receita; a configuração salva da conta não muda.
+  const cardLayout = scaleCardLayout(normalizeProductCardConfiguration(cardConfigRow?.configuration ?? createDefaultProductCardConfiguration()), customization)
   const projectTemplate = await pgOneOrNull<any>(
     `select id,user_id,name,canvas_data,template_config,updated_at,is_template
        from public.projects project
@@ -945,6 +990,7 @@ async function buildFlyerPages(order: CreationOrder, user: AuthenticatedUser, pr
   const sourceOwnerId = String(projectTemplate.user_id)
   const logo = await profileLogo(profile, user.id)
   const payloadPages: FlyerPayloadPage[] = []
+  const notices = new Set<string>()
   for (const format of formats) {
     const { page, canvas } = await getTemplateCanvasPage(projectTemplate, format, format.id, user.id)
     assertFlyerProfileBindings(canvas, profile, !!logo, order.validity)
@@ -952,9 +998,25 @@ async function buildFlyerPages(order: CreationOrder, user: AuthenticatedUser, pr
     const themeCandidates = [page.templateThemeId, page.templateThemeName, templateConfig.category,
       templateConfig.subcategory, templateConfig.theme, templateConfig.themeName].filter((candidate) => String(candidate || '').trim())
     if (themeCandidates.length && !flyerThemeMatchesOrder(order.theme, themeCandidates)) fail(422, `O modelo não é compatível com o tema ${order.theme}.`)
-    const preparedCanvas = await loadFlyerAccountLabelTemplates(
-      await embedFlyerAssets(canvas, user.id, sourceOwnerId, logo, profile, order), user.id
-    )
+    const bound = await embedFlyerAssets(canvas, user.id, sourceOwnerId, logo, profile, order, customization)
+    // Logo e selo do modelo mantêm o centro e não saem do frame; sem espaço, o cliente é avisado.
+    if (customization?.logoScale) {
+      const applied = scaleFlyerLogo(bound, customization.logoScale)
+      if (applied > 0 && applied < customization.logoScale - 0.02) notices.add('A logo está no maior tamanho que cabe nesse modelo.')
+    }
+    if (customization?.sealScale) {
+      const seal = scaleFlyerSeal(bound, customization.sealScale)
+      if (!seal.found) notices.add('Esse modelo não tem um selo decorativo para ajustar.')
+      else if (seal.applied < customization.sealScale - 0.02) notices.add('O selo do modelo está no maior tamanho que cabe.')
+    }
+    const preparedCanvas = await loadFlyerAccountLabelTemplates(bound, user.id, customizationLabelIds(customization))
+    let effective = customization
+    if (customization) {
+      const checked = sanitizeFlyerLabelIds(preparedCanvas, customization)
+      if (checked.dropped.length) notices.add('Uma etiqueta que você escolheu não está mais disponível; mantive a do modelo.')
+      effective = checked.customization
+      applyFlyerZoneCustomization(preparedCanvas, effective)
+    }
     if (!order.products.length) {
       payloadPages.push({ format, page: { canvas: preparedCanvas, png: null }, productIds: [], department: null })
       continue
@@ -962,14 +1024,20 @@ async function buildFlyerPages(order: CreationOrder, user: AuthenticatedUser, pr
     const items = order.products.map((product) => {
       const image = images.get(product.id)
       if (!image && !options.allowMissingImages) return fail(422, `A foto de “${product.name}” não está disponível.`)
-      return { ...product, imageDataUrl: image?.dataUrl || '', condition: product.condition || order.conditions, validity: order.validity }
+      return customizeFlyerItem({ ...product, imageDataUrl: image?.dataUrl || '', condition: product.condition || order.conditions, validity: order.validity }, effective)
     })
     if (!flyerDivisionSupportsProductCount(items.length, order.division, format)) fail(422, 'Story com mais de nove produtos precisa ser dividido em páginas.')
     const pages = await renderEditableFlyerCanvas({ canvas: preparedCanvas, products: items, division: order.division, ...(order.pageCount ? { pageCount: order.pageCount } : {}), formatId: format.id, cardLayout },
       { background: options.background })
-    for (const result of pages) payloadPages.push({ format, page: result, productIds: result.productIds, department: result.department || null })
+    for (const result of pages) payloadPages.push({ format, page: result, productIds: result.productIds, department: result.department || null, stats: result.stats })
   }
-  return { projectTemplate, pages: payloadPages }
+  // Cor do destaque pedida num modelo sem cards em destaque: oferece mudar a cor de todos os cards.
+  const highlightColor = customization?.palette?.highlightCardColor
+  const withStats = payloadPages.filter(page => page.stats)
+  const followUp = highlightColor && !customization?.palette?.cardColor && withStats.length && withStats.every(page => page.stats!.highlighted === 0)
+    ? { cardColorOffer: highlightColor } : undefined
+  if (followUp) notices.add('Esse modelo não tem cards em destaque, então a cor não aparece. Quer que eu mude a cor de todos os cards?')
+  return { projectTemplate, pages: payloadPages, notices: [...notices], ...(followUp ? { followUp } : {}) }
 }
 
 /** Projeto do painel por pedido (não por revisão): o rascunho e o final são o mesmo encarte. */
@@ -1109,7 +1177,7 @@ async function saveFlyerProject(order: CreationOrder, user: AuthenticatedUser, p
 const FORKED_PROJECT_NOTICE = 'Vi que você mexeu nesse encarte pelo painel. Para não apagar suas alterações, salvei esta versão do WhatsApp como um novo encarte na sua conta.'
 
 async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profile: BusinessProfile, formats: CreationFormat[], images: FlyerImages): Promise<CreationArtifactResult> {
-  const { projectTemplate, pages } = await buildFlyerPages(order, user, profile, formats, images)
+  const { projectTemplate, pages, notices, followUp } = await buildFlyerPages(order, user, profile, formats, images)
   const saved = await saveFlyerProject(order, user, projectTemplate, pages, 'final')
   const artifacts: CreationArtifact[] = []
   for (let index = 0; index < saved.pngs.length; index++) {
@@ -1119,7 +1187,8 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
     artifact.editUrl = `/editor/${saved.projectId}`
     artifacts.push(artifact)
   }
-  return { artifacts, ...(saved.forked ? { notice: FORKED_PROJECT_NOTICE } : {}) }
+  const notice = [...(saved.forked ? [FORKED_PROJECT_NOTICE] : []), ...notices].join(' ')
+  return { artifacts, ...(notice ? { notice } : {}), ...(followUp ? { followUp } : {}) }
 }
 
 /**
@@ -1196,7 +1265,7 @@ export async function applyFlyerLogoStickers(png: Buffer, canvas: any, region?: 
 }
 
 export async function renderEditableFlyerCanvas(input: { canvas: any; products: Array<CreationProduct & { imageDataUrl: string }>; division: CreationOrder['division']; pageCount?: number; formatId: string; cardLayout?: ReturnType<typeof createDefaultProductCardConfiguration> },
-  options: { background?: boolean } = {}): Promise<Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }>> {
+  options: { background?: boolean } = {}): Promise<Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null; stats?: FlyerRenderStats }>> {
   if (flyerRenders >= 1 && !options.background && backgroundFlyerRender) {
     // A geração pedida pelo cliente tem prioridade: interrompe o rascunho, que volta depois.
     backgroundFlyerRender.abort()
@@ -1219,14 +1288,16 @@ export async function renderEditableFlyerCanvas(input: { canvas: any; products: 
       PYTHONPATH: process.env.PYTHONPATH, WHATSAPP_CREATION_CHROMIUM_EXECUTABLE: process.env.WHATSAPP_CREATION_CHROMIUM_EXECUTABLE }, ...(controller ? { signal: controller.signal } : {}) })
     const manifest = JSON.parse(result.stdout)
     if (!Array.isArray(manifest.pages) || !manifest.pages.length || manifest.pages.length > 100) fail(502, 'O renderizador não retornou páginas válidas.')
-    const pages: Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }> = []
+    const pages: Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null; stats?: FlyerRenderStats }> = []
     for (const page of manifest.pages) {
       if (!/^page-\d+\.png$/.test(page.name) || !/^page-\d+\.json$/.test(page.canvas)) fail(502, 'O renderizador retornou caminhos inválidos.')
       const canvas = JSON.parse(await readFile(join(dir!, page.canvas), 'utf8'))
       canvas.width = Number(canvas.width || input.canvas.width)
       canvas.height = Number(canvas.height || input.canvas.height)
       const png = await applyFlyerLogoStickers(await readFile(join(dir!, page.name)), canvas)
-      pages.push({ png, canvas, productIds: page.productIds, department: page.department || null })
+      const highlighted = Number(page.stats?.highlighted), nameFontSize = Number(page.stats?.nameFontSize)
+      pages.push({ png, canvas, productIds: page.productIds, department: page.department || null,
+        ...(page.stats ? { stats: { highlighted: Number.isFinite(highlighted) ? highlighted : 0, nameFontSize: Number.isFinite(nameFontSize) && nameFontSize > 0 ? nameFontSize : null } } : {}) })
     }
     return pages
   } catch (error: any) {

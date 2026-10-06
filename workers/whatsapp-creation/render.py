@@ -90,7 +90,7 @@ def _font_family_key(value):
     return re.sub(r"[^a-z0-9]", "", str(value or "").strip().strip("'\"").lower())
 
 
-def _requested_font_families(canvas):
+def _requested_font_families(canvas, extra_label_ids=()):
     requested = {"barlow", "inter"}
 
     def visit(value):
@@ -109,7 +109,7 @@ def _requested_font_families(canvas):
     # will actually render may require a bundled font.
     visit(canvas.get("objects", []))
     templates = canvas.get("__labelTemplates", [])
-    selected_ids = set()
+    selected_ids = {str(item) for item in extra_label_ids if str(item or "").strip()}
     for obj in _visit_objects(canvas.get("objects", [])):
         if obj.get("isProductZone") or obj.get("isGridZone"):
             styles = obj.get("_zoneGlobalStyles") or {}
@@ -124,8 +124,8 @@ def _requested_font_families(canvas):
     return requested
 
 
-def _font_stylesheet(canvas, worker_file: Path = Path(__file__)):
-    requested = _requested_font_families(canvas)
+def _font_stylesheet(canvas, worker_file: Path = Path(__file__), extra_label_ids=()):
+    requested = _requested_font_families(canvas, extra_label_ids)
     css = []
     descriptors = []
     for key in sorted(requested):
@@ -308,7 +308,8 @@ def render(payload, output_dir: Path, fabric_path: Path):
       "width": page_size[0],
       "height": page_size[1],
     }
-    font_css, font_descriptors = _font_stylesheet(canvas)
+    item_label_ids = {str(item.get("labelTemplateId")) for item in products if str(item.get("labelTemplateId") or "").strip()}
+    font_css, font_descriptors = _font_stylesheet(canvas, extra_label_ids=item_label_ids)
     html = """<!doctype html><html><head><meta charset=\"utf-8\"><style>%s</style></head><body>
       <canvas id=\"canvas\"></canvas><script>window.__RENDER_INPUT__ = %s;</script>
       </body></html>""" % (font_css, json.dumps(browser_payload, ensure_ascii=False).replace("</", "<\\/"))
@@ -441,10 +442,13 @@ def render(payload, output_dir: Path, fabric_path: Path):
               const nameColor = highlighted ? (palette.highlightProdNameColor || styles.prodNameColor || '#111111')
                 : (palette.prodNameColor || styles.prodNameColor || '#111111');
               const titleText = [product.name, product.brand, product.variant, product.weight].filter(Boolean).join(' ');
-              const labelId = String(styles.splashTemplateId || zone._zoneTemplateSnapshotId || '').trim();
               const templates = input.canvas.__labelTemplates || [];
+              // Etiqueta escolhida para este produto vale mais que a da zona; se a biblioteca não a tem, segue a da zona.
+              const itemLabelId = String(product.labelTemplateId || '').trim();
+              const itemTemplate = itemLabelId ? templates.find(item => String(item.id) === itemLabelId) : null;
+              const labelId = String((itemTemplate ? itemLabelId : '') || styles.splashTemplateId || zone._zoneTemplateSnapshotId || '').trim();
               const template = labelId ? templates.find(item => String(item.id) === labelId) : null;
-              const savedLabel = template?.group || zone._zoneTemplateSnapshot || zone._zoneStateSnapshot?.labelTemplate?.snapshot;
+              const savedLabel = template?.group || (itemLabelId ? null : zone._zoneTemplateSnapshot || zone._zoneStateSnapshot?.labelTemplate?.snapshot);
               if (labelId && !savedLabel) throw new Error('A etiqueta escolhida no modelo não está disponível.');
               const zoneId = zone._customId || zone.id || zone.name;
               const card = await JobVarejoNative.createManualProductCard(fabric, {
@@ -453,7 +457,8 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 limit: product.condition || '',
                 // Igual ao editor manual (quantidade automática), mas sempre com ao
                 // menos o par de imagens; cards altos recebem mais cópias até preencher.
-                autoFillImages: true, imageFillMinimum: 2, zoneInstanceId: zoneId
+                // Com quantidade pedida pelo cliente (imageFillCount) vale exatamente ela, sem o par mínimo.
+                autoFillImages: true, ...(product.imageFillCount ? {} : {imageFillMinimum: 2}), zoneInstanceId: zoneId
               }, left + width / 2, top + height / 2, width, height, zoneId,
                 savedLabel ? { ...(template || {}), id: labelId, group: savedLabel } : undefined,
                 { ...styles, __refCellW: slot.refCellWidth, __refCellH: slot.refCellHeight,
@@ -461,11 +466,14 @@ def render(payload, output_dir: Path, fabric_path: Path):
                   productPalette: { ...palette, cardColor, prodNameColor: nameColor } });
               card.set({isProductCard: true, parentZoneId: zoneId, productZoneId: zoneId,
                 productItemId: product.id, _zoneOrder: i});
+              // Só marca como escolha explícita quando a etiqueta do produto foi mesmo usada (compatível com o preço).
+              if (itemTemplate && String(card.__cardLabelTemplateId || '') === labelId) card.__cardLabelTemplateOverride = true;
               c.add(card);
               zone.contentStatus = 'filled';
               if (zone._zoneStateSnapshot?.zone) zone._zoneStateSnapshot.zone.contentStatus = 'filled';
             }
-            JobVarejoNative.harmonizeProductCardTypography(c.getObjects().filter(o => o.isProductCard === true));
+            const cardsForStats = c.getObjects().filter(o => o.isProductCard === true);
+            JobVarejoNative.harmonizeProductCardTypography(cardsForStats);
             if (entry.department && sortedZones.length === 1) {
               const bounds = sortedZones[0].getBoundingRect();
               const labelHeight = Math.min(44, bounds.height * .06);
@@ -498,13 +506,17 @@ def render(payload, output_dir: Path, fabric_path: Path):
             const preservedKeys = new Set();
             const collect = node => { if (Array.isArray(node)) node.forEach(collect); else if (node && typeof node === 'object') { Object.keys(node).forEach(key => { if (!['group', 'canvas', 'objects', 'layoutManager', 'clipPath'].includes(key)) preservedKeys.add(key); }); Object.values(node).forEach(collect); } };
             collect(input.canvas);
-            ['isProductZone','isGridZone','isProductCard','isSmartObject','productItemId','productZoneId','parentZoneId','_zoneOrder','_cardWidth','_cardHeight','_productData','__cardLabelTemplateId','name','businessProfileField','quickLogoSlot','quickLogoBackdrop','excludeFromExport','isFrame','clipContent','parentFrameId','_customId','_zoneGlobalStyles','_productGridConfig','rows','columns','gridRows','gridColumns','productsPerRow','contentStatus'].forEach(key => preservedKeys.add(key));
+            ['isProductZone','isGridZone','isProductCard','isSmartObject','productItemId','productZoneId','parentZoneId','_zoneOrder','_cardWidth','_cardHeight','_productData','__cardLabelTemplateId','__cardLabelTemplateOverride','name','businessProfileField','quickLogoSlot','quickLogoBackdrop','excludeFromExport','isFrame','clipContent','parentFrameId','_customId','_zoneGlobalStyles','_productGridConfig','rows','columns','gridRows','gridColumns','productsPerRow','contentStatus'].forEach(key => preservedKeys.add(key));
             // toJSON() is Fabric's no-argument JSON.stringify alias; use toObject()
             // when serializing the editable custom metadata required by the editor.
             const data = JSON.parse(JSON.stringify(c.toObject([...preservedKeys])));
             data.__labelTemplates = input.canvas.__labelTemplates || [];
             await c.dispose();
-            return JSON.stringify({png, canvas: data, productIds: entry.products.map(p => p.id), department: entry.department});
+            const highlighted = zoneSlots.slice(0, entry.products.length).filter(slot => slot && slot.highlighted === true).length;
+            const nameSizes = cardsForStats.map(card => (card.getObjects?.() || []).find(o => o.name === 'smart_title')?.fontSize)
+              .filter(size => Number.isFinite(size)).sort((a, b) => a - b);
+            const stats = {highlighted, nameFontSize: nameSizes.length ? nameSizes[Math.floor(nameSizes.length / 2)] : null};
+            return JSON.stringify({png, canvas: data, productIds: entry.products.map(p => p.id), department: entry.department, stats});
           };
           const pages = [];
           for (let i = 0; i < input.groups.length; i++) pages.push(await renderOne(input.groups[i], i));
@@ -525,7 +537,10 @@ def render(payload, output_dir: Path, fabric_path: Path):
         canvas_name = f"page-{index}.json"
         (output_dir / name).write_bytes(png)
         (output_dir / canvas_name).write_text(json.dumps(page["canvas"], ensure_ascii=False), encoding="utf-8")
-        output.append({"name": name, "canvas": canvas_name, "productIds": page["productIds"], "department": page["department"]})
+        entry = {"name": name, "canvas": canvas_name, "productIds": page["productIds"], "department": page["department"]}
+        if isinstance(page.get("stats"), dict):
+            entry["stats"] = page["stats"]
+        output.append(entry)
     return {"pages": output}
 
 
