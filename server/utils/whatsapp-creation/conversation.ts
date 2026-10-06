@@ -508,7 +508,7 @@ export async function advanceConversation(input: {
         : s.phase === 'images' ? 'Ainda faltam algumas imagens para fechar a conferência. Pode mandar quando quiser.'
           : s.phase === 'script' ? 'O roteiro está pronto para sua revisão. Se quiser mudar algo, me diga como prefere.'
             : s.phase === 'preview' ? 'A prévia está pronta. Se quiser algum ajuste, me conte; se estiver do jeito que você quer, pode me confirmar.'
-              : s.phase === 'rendering' ? 'Estou montando a prévia e te aviso por aqui quando estiver pronta.'
+              : s.phase === 'rendering' ? (s.draft.kind === 'video' ? 'Estou gerando o vídeo em MP4. Em breve ele chega aqui no WhatsApp.' : 'Estou montando o material e envio aqui assim que ficar pronto.')
                 : ['approved', 'delivered'].includes(s.phase) && s.artifacts.length ? 'Seu encarte já está pronto. Se quiser, eu reenvio a imagem, gero uma nova versão ou ajusto algum produto.'
                 : 'Me conte o que você quer criar e eu organizo os detalhes com você.'
     say(nextStep); return { state: s, send, generate: false }
@@ -715,7 +715,7 @@ export async function advanceConversation(input: {
       s.phase = 'script'; say(`Roteiro da locução:\n${s.order.script}\nSe estiver bom para você, pode me confirmar; também posso ajustar o texto.`); return { state: s, send, generate: false }
     }
     assertCanRender(s.order, input.accountId); s.phase = 'rendering'
-    say('fotos confirmadas. Vou montar a prévia e enviar aqui.')
+    say(`Fotos confirmadas! Estou montando ${d.kind === 'cartaz' ? 'os cartazes' : d.kind === 'studio' ? 'a arte' : 'o encarte'} e já envio aqui.`)
     return { state: s, send, generate: true }
   }
   if (s.phase === 'script' && p.script && !s.order.script) {
@@ -725,6 +725,7 @@ export async function advanceConversation(input: {
   }
   if (s.phase === 'script' && p.action === 'approve_script' && approvalRequested(p, input.text, s) && s.order.script) {
     s.order = approveScript(s.order, input.accountId, s.order.script); assertCanRender(s.order, input.accountId); s.phase = 'rendering'
+    say('Locução confirmada! Estou gravando a narração e gerando o vídeo em MP4. Em breve ele chega aqui no WhatsApp.')
     return { state: s, send, generate: true }
   }
   if (s.phase === 'preview' && p.action === 'approve_preview') {
