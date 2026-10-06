@@ -24,10 +24,11 @@ describe('imagens do projeto gerado pelo WhatsApp', () => {
     }
     await externalizeInlineCanvasImages(canvas, 'user-1', 'project-1')
 
-    const puts = mocks.send.mock.calls.map(call => call[0]).filter(command => command instanceof PutObjectCommand)
+    const puts = mocks.send.mock.calls.map(call => call[0]).filter((command): command is PutObjectCommand => command instanceof PutObjectCommand)
     expect(puts).toHaveLength(1)
-    expect(puts[0].input.Key).toMatch(/^projects\/user-1\/project-1\/assets\/[0-9a-f]{32}\.png$/)
-    const ref = `/api/storage/p?key=${encodeURIComponent(puts[0].input.Key)}`
+    const key = String(puts[0]!.input.Key)
+    expect(key).toMatch(/^projects\/user-1\/project-1\/assets\/[0-9a-f]{32}\.png$/)
+    const ref = `/api/storage/p?key=${encodeURIComponent(key)}`
     expect(canvas.objects[0]!.src).toBe(ref)
     expect((canvas.objects[1] as any).objects[0].src).toBe(ref)
     expect((canvas.objects[1] as any).objects[0].__originalSrc).toBe(ref)
