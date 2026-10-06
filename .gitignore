@@ -92,3 +92,6 @@ coverage/
 /public/video-studio/**/*.mp3
 /public/video-studio/**/*.wav
 /public/video-studio/**/*.mp4
+
+# Worker das prévias do catálogo: gerado no build (Dockerfile) a partir de render-worker.ts
+workers/catalog-preview/render-worker.mjs

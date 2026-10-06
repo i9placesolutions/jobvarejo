@@ -1,13 +1,11 @@
 import { createHash } from 'node:crypto'
-import { readdir } from 'node:fs/promises'
-import { resolve } from 'node:path'
 import { assertFlyerGallerySourceKey } from '~/scripts/lib/flyer-gallery-source-policy.mjs'
-import { generateThumbnailFromCanvasJson } from '../../utils/editorThumbnail'
 import { prepareNeutralFlyerCanvas, removeFlyerAccountContacts } from '../../utils/flyerGalleryPreview'
 import { extractStorageKeyFromRef } from '../../utils/storageRef'
 import videoCatalogManifest from '../../shared/video-studio/catalog-assets.json'
 import { resolveVideoCatalogAsset, type VideoCatalogManifest } from './video-studio/catalog-assets'
 import { getS3Client } from './s3'
+import { drawCatalogPreviewIsolated } from './catalog-preview-pool'
 
 export type CatalogPreviewKind = 'flyer' | 'label'
 
@@ -80,44 +78,6 @@ export const runCatalogPreviewTask = <T>(cacheKey: string, task: () => Promise<T
   taskPromises.set(key, promise)
   return promise
 }
-
-const loadFontsOnce = (() => {
-  let loaded: Promise<void> | null = null
-  return () => {
-    if (loaded) return loaded
-    loaded = (async () => {
-      const candidates = [
-        resolve(process.cwd(), 'public/art-studio/fonts'),
-        resolve(process.cwd(), '.output/public/art-studio/fonts')
-      ]
-      let fontFiles: string[] = []
-      for (const directory of candidates) {
-        try {
-          fontFiles = (await readdir(directory)).filter(file => /\.ttf$/i.test(file))
-          if (fontFiles.length) {
-            const { registerFont } = await import('canvas')
-            for (const file of fontFiles) {
-              const stem = file.replace(/\.ttf$/i, '')
-              const parts = stem.split('-')
-              const variant = parts.pop() || ''
-              const family = parts.join('-') || stem
-              registerFont(resolve(directory, file), {
-                family,
-                weight: /ExtraBold/i.test(variant) ? '800' : /SemiBold/i.test(variant) ? '600' : /Bold/i.test(variant) ? '700' : /Light/i.test(variant) ? '300' : '400',
-                style: /Italic/i.test(variant) ? 'italic' : 'normal'
-              })
-            }
-            return
-          }
-        } catch {
-          // Try the next runtime asset location.
-        }
-      }
-      throw new Error('Fontes de catálogo indisponíveis no runtime.')
-    })()
-    return loaded
-  }
-})()
 
 export const resolveCatalogStorageKey = (source: string, sourceOwnerId: string | null, kind: CatalogPreviewKind, trustedTemplateAssets = false): string => {
   const raw = String(source || '').trim()
@@ -367,58 +327,8 @@ export const renderCatalogPreview = async (options: RenderCatalogPreviewOptions)
       : prepareNeutralFlyerCanvas(options.canvasJson)
     : JSON.parse(JSON.stringify(options.canvasJson || {}))
   await prepareCanvasImages(canvasJson, options.sourceOwnerId, options.kind, options.trustedTemplateAssets === true)
-  await loadFontsOnce()
-  const { StaticCanvas, getEnv } = await import('fabric/node')
-  const document = getEnv().document
-  let renderedBytes: Buffer
-  if (options.kind === 'label') {
-    const preview = new StaticCanvas(document.createElement('canvas'), {
-      width: 320,
-      height: 160,
-      backgroundColor: 'transparent',
-      enableRetinaScaling: false
-    })
-    try {
-      const [group] = await (await import('fabric/node')).util.enlivenObjects([canvasJson]) as any[]
-      if (!group || typeof group.getBoundingRect !== 'function') throw new Error('Grupo da etiqueta inválido.')
-      preview.add(group)
-      group.setCoords()
-      const bounds = group.getBoundingRect()
-      if (!bounds || bounds.width <= 0 || bounds.height <= 0) throw new Error('Grupo da etiqueta sem dimensões.')
-      const fit = Math.min(288 / bounds.width, 128 / bounds.height)
-      group.scaleX *= fit
-      group.scaleY *= fit
-      group.setCoords()
-      const fitted = group.getBoundingRect()
-      group.set({
-        left: Number(group.left || 0) + 160 - (fitted.left + fitted.width / 2),
-        top: Number(group.top || 0) + 80 - (fitted.top + fitted.height / 2)
-      })
-      group.setCoords()
-      preview.renderAll()
-      const dataUrl = preview.toDataURL({ format: 'png', multiplier: 1 })
-      const dataMatch = dataUrl.match(/^data:image\/png;base64,([a-z\d+/]+=*)$/i)
-      if (!dataMatch) throw new Error('O renderer nativo não produziu uma imagem válida.')
-      renderedBytes = Buffer.from(dataMatch[1]!, 'base64')
-    } finally {
-      await preview.dispose()
-    }
-  } else {
-    const dataUrl = await generateThumbnailFromCanvasJson({
-      sourceJson: canvasJson,
-      staticCanvasCtor: StaticCanvas,
-      document: document as unknown as Pick<Document, 'createElement'>,
-      pageWidth: width,
-      pageHeight: height
-    })
-    const dataMatch = dataUrl.match(/^data:image\/(?:png|webp);base64,([a-z\d+/]+=*)$/i)
-    if (!dataMatch) throw new Error('O renderer nativo não produziu uma imagem válida.')
-    renderedBytes = Buffer.from(dataMatch[1]!, 'base64')
-  }
-  const { default: sharp } = await import('sharp')
-  const result = await sharp(renderedBytes, { limitInputPixels: MAX_IMAGE_PIXELS }).webp({ quality: 76 }).toBuffer()
-  if (!result.length || result.length > 8 * 1024 * 1024) throw new Error('A prévia renderizada excede o limite permitido.')
-  return result
+  // Desenho nativo (CPU) fora do processo principal: login, páginas e healthcheck seguem respondendo.
+  return await drawCatalogPreviewIsolated({ kind: options.kind, canvasJson, width, height })
 }
 
 export const getCatalogPreviewRendererPolicy = (): string => RENDERER_POLICY
