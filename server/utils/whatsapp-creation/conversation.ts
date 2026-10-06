@@ -120,6 +120,15 @@ export const isResendRequest = (text: string): boolean => {
 export const finalSendType = (artifact: Pick<ConversationArtifact, 'mimeType' | 'formatId'>, kind?: CreationKind): ConversationSend['type'] =>
   artifact.mimeType === 'video/mp4' ? 'video'
     : kind === 'cartaz' || artifact.mimeType === 'application/pdf' || artifact.formatId === 'print' ? 'document' : 'image'
+/**
+ * Mensagens do arquivo final. Imagem vai como foto para ver na conversa e, em seguida,
+ * o mesmo PNG como arquivo: o WhatsApp recomprime fotos, o documento chega em qualidade original.
+ */
+export const finalSends = (artifact: ConversationArtifact, kind?: CreationKind): ConversationSend[] => {
+  const base = { key: artifact.key, text: '', artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' as const }
+  const type = finalSendType(artifact, kind)
+  return type === 'image' ? [{ ...base, type }, { ...base, type: 'document' }] : [{ ...base, type }]
+}
 const canRegenerate = (state: ConversationState): boolean =>
   ['preview', 'approved', 'delivered'].includes(state.phase) && state.order?.kind === 'encarte' && Boolean(state.order.header)
 const referencesAnotherHeader = (text: string) => /\b(?:cabecalho|modelo|template)\b/.test(normalizedText(text))
@@ -475,7 +484,7 @@ export async function advanceConversation(input: {
   if (s.order && ['approved', 'delivered'].includes(s.phase) && s.artifacts.length && isResendRequest(input.text)) {
     for (const artifact of s.artifacts) {
       if (!s.order.previewApprovals.some(approval => approval.artifactId === artifact.artifactId && approval.formatId === artifact.formatId && approval.revision === s.order!.revision)) continue
-      send.push({ type: finalSendType(artifact, s.order.kind), key: artifact.key, text: '', artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
+      send.push(...finalSends(artifact, s.order.kind))
     }
     if (send.length) return { state: s, send, generate: false }
   }
@@ -768,7 +777,7 @@ export async function advanceConversation(input: {
       if (s.order.previewApprovals.some(approval => approval.artifactId === artifact.artifactId && approval.formatId === artifact.formatId && approval.revision === s.order!.revision)) continue
       s.order = approvePreview(s.order, input.accountId, { artifactId: artifact.artifactId, revision: s.order.revision, formatId: artifact.formatId })
       assertCanDeliver(s.order, input.accountId, artifact.artifactId, [artifact.formatId])
-      send.push({ type: finalSendType(artifact, s.order.kind), key: artifact.key, text: '', artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
+      send.push(...finalSends(artifact, s.order.kind))
     }
     if (s.artifacts.every(a => s.order!.previewApprovals.some(p => p.artifactId === a.artifactId && p.formatId === a.formatId && p.revision === s.order!.revision))) s.phase = 'approved'
     say(s.phase === 'approved' ? 'Combinado. Vou enviar os arquivos finais agora; eles também ficam salvos na sua conta do Job Varejo.' : 'Certo, esses formatos estão aprovados. Os outros ficam aguardando sua decisão.')

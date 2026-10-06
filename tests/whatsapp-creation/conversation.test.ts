@@ -285,7 +285,8 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(noImplicitApproval.send.filter(message => message.purpose === 'final')).toHaveLength(0)
     const approved = await input(preview, { action: 'status', artifactNumbers: [99] }, `APROVAR ${revision}`)
     expect(approved.state.phase).toBe('approved')
-    expect(approved.send.filter(message => message.purpose === 'final')).toHaveLength(1)
+    // Imagem para ver na conversa + o mesmo PNG como arquivo em qualidade original.
+    expect(approved.send.filter(message => message.purpose === 'final').map(message => message.type)).toEqual(['image', 'document'])
   })
 
   it('agrupa quatro fotos de hortifruti em uma única imagem de conferência', async () => {
@@ -500,7 +501,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(stale.state.phase).toBe('preview')
 
     const oneApproved = await input(state, { action: 'approve_preview', approvalRevision: order.revision, artifactNumbers: [1, 2] }, `APROVAR ${order.revision} arquivo 1`)
-    expect(oneApproved.send.filter(message => message.purpose === 'final')).toHaveLength(1)
+    expect(oneApproved.send.filter(message => message.purpose === 'final').map(message => message.type)).toEqual(['image', 'document'])
     expect(oneApproved.send.find(message => message.purpose === 'final')).toMatchObject({ formatId: 'stories', key: 'whatsapp-creation/file-story.png' })
     expect(oneApproved.state.phase).toBe('preview')
     expect(oneApproved.state.order?.previewApprovals.map(approval => approval.formatId)).toEqual(['stories'])
@@ -659,13 +660,13 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const result = await input(preview, {
       action: 'approve_preview', confirmationIntent: 'approve', confirmationEvidence: 'Pode seguir', artifactNumbers: [1, 2]
     }, 'Pode seguir só com o Story')
-    expect(result.send.filter(message => message.purpose === 'final').map(message => message.formatId)).toEqual(['stories'])
+    expect([...new Set(result.send.filter(message => message.purpose === 'final').map(message => message.formatId))]).toEqual(['stories'])
     expect(result.state.phase).toBe('preview')
     for (const artifactNumbers of [[1], [1, 2]]) {
       const pendingFeed = await input(preview, {
         action: 'approve_preview', confirmationIntent: 'approve', confirmationEvidence: 'pode mandar', artifactNumbers
       }, 'Pode mandar a do Story, o Feed ainda vou revisar')
-      expect(pendingFeed.send.filter(message => message.purpose === 'final').map(message => message.formatId)).toEqual(['stories'])
+      expect([...new Set(pendingFeed.send.filter(message => message.purpose === 'final').map(message => message.formatId))]).toEqual(['stories'])
       expect(pendingFeed.state.phase).toBe('preview')
     }
     for (const text of ['Pode mandar, o Feed ainda vou revisar', 'Pode mandar o arquivo 2, o Feed ainda vou revisar']) {

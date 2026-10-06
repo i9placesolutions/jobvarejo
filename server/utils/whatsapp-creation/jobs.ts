@@ -7,7 +7,7 @@ import { generateCreationArtifact } from './render'
 import { ownedStorageBytes } from './media'
 import { listCreationHeaders, type CreationHeader } from './catalog'
 import { prepareCreationHeader } from './header-preview'
-import { advanceConversation, finalSendType, rememberConversationTurns, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
+import { advanceConversation, finalSends, rememberConversationTurns, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
 import { approvePreview, assertCanDeliver, assertCanRender, registerPreview, updateOrder } from '~/shared/whatsapp-creation'
 
 const failure = (code: number, text: string): never => { throw createError({ statusCode: code, statusMessage: text }) }
@@ -67,8 +67,8 @@ async function saveGeneration(row: any, state: ConversationState, artifacts: Con
       current.previewPresentedRevision = current.order!.revision
       const label = state.draft.kind === 'video' ? 'Seu vídeo' : state.draft.kind === 'cartaz' ? 'Seu cartaz' : state.draft.kind === 'studio' ? 'Sua arte' : 'Seu encarte'
       for (const artifact of artifacts) {
-        // Só o material: sem link na legenda; o projeto continua salvo na conta.
-        send.push({ type: finalSendType(artifact, state.draft.kind), key: artifact.key, text: '', artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
+        // Só o material, sem link: imagem para ver e PNG original como arquivo.
+        send.push(...finalSends(artifact, state.draft.kind))
       }
       send.push({ type: 'text', text: `${label} está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.` })
       rememberConversationTurns(current, send.map(item => ({ role: 'assistant', text: item.text })))

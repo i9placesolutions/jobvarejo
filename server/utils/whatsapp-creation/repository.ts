@@ -237,7 +237,7 @@ export async function claimCreationOutbound() {
   }
   return { ok: true, claimed: true, id: claim.id, token: claim.token, ingress: false,
     send: { endpoint: item.type === 'text' ? '/send/text' : '/send/media', body: {
-      number: row.sender_phone.replace(/^\+/, ''), text: item.text, ...(item.type !== 'text' ? { type: item.type, file, docName: item.type === 'document' ? `${item.formatId || 'JobVarejo'}.${String(item.key).endsWith('.pdf') ? 'pdf' : 'png'}` : undefined } : {}), track_source: 'jobvarejo', track_id: row.id
+      number: row.sender_phone.replace(/^\+/, ''), text: item.text, ...(item.type !== 'text' ? { type: item.type, file, docName: item.type === 'document' ? `${state.draft.kind || 'JobVarejo'}-${item.formatId || 'arquivo'}.${String(item.key).endsWith('.pdf') ? 'pdf' : 'png'}` : undefined } : {}), track_source: 'jobvarejo', track_id: row.id
     } }
   }
 }

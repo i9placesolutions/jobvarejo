@@ -241,6 +241,7 @@ describe('recuperação de jobs WhatsApp', () => {
     ])
     expect(mocks.queue.mock.calls[0]![5]).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'image', key: 'preview.png', artifactId: 'fresh-preview', formatId: 'stories', purpose: 'final' }),
+      expect.objectContaining({ type: 'document', key: 'preview.png', artifactId: 'fresh-preview', formatId: 'stories', purpose: 'final' }),
       expect.objectContaining({ type: 'text', text: 'Seu encarte está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.' })
     ]))
     expect(fixture.state.recentTurns?.at(-1)).toMatchObject({ role: 'assistant', text: 'Seu encarte está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.' })
