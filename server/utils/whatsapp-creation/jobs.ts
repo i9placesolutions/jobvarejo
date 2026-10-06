@@ -6,7 +6,7 @@ import { assertCreationAccess, queueCreationSend } from './repository'
 import { generateCreationArtifact } from './render'
 import { ownedStorageBytes } from './media'
 import { listCreationHeaders, type CreationHeader } from './catalog'
-import { cachedCreationHeader, prepareCreationHeader } from './header-preview'
+import { cachedCreationHeader, croppedCreationHeaderThumbnail, prepareCreationHeader } from './header-preview'
 import { syncWhatsAppDraftProjects } from './draft-project'
 import { deliverAccountProject } from './account-project-delivery'
 import { advanceConversation, finalSends, rememberConversationTurns, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
@@ -276,7 +276,8 @@ export async function followUpWhatsAppThemes() {
     } else {
       const next = await advanceConversation({ state, proposal: { action: 'update' }, text: '', accountId: ticket.owner_id, sender: ticket.sender_phone, orderId: ticket.order_id, name: account.user.user_metadata.name || 'Cliente',
         prepareHeader: (header, kind) => prepareCreationHeader(header, kind, account),
-        cachedHeader: header => cachedCreationHeader(header, account) })
+        cachedHeader: header => cachedCreationHeader(header, account),
+        headerThumbnail: header => croppedCreationHeaderThumbnail(header, account) })
       await client.query('UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,updated_at=now() WHERE id=$1 AND owner_id=$2', [ticket.order_id, ticket.owner_id, JSON.stringify(next.state)])
       await queueCreationSend(client, ticket.conversation_id, ticket.owner_id, ticket.order_id, next.state, next.send, `theme:${ticket.id}:available`)
       await client.query("UPDATE public.whatsapp_creation_theme_requests SET status='ready',updated_at=now() WHERE id=$1", [ticket.id])

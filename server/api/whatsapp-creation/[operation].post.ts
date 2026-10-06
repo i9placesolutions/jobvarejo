@@ -9,7 +9,7 @@ import { pollWhatsAppJobs, followUpWhatsAppThemes } from '~/server/utils/whatsap
 import { listCreationThemeNames } from '~/server/utils/whatsapp-creation/catalog'
 import { downloadProviderMedia } from '~/server/utils/whatsapp-creation/media'
 import { pgQuery } from '~/server/utils/postgres'
-import { cachedCreationHeader, prepareCreationHeader } from '~/server/utils/whatsapp-creation/header-preview'
+import { cachedCreationHeader, croppedCreationHeaderThumbnail, prepareCreationHeader } from '~/server/utils/whatsapp-creation/header-preview'
 import { hasBriefFields, shouldConsultJev, suggestJevRoute } from '~/server/utils/whatsapp-creation/jev'
 import { ensureProcessedWhatsAppPhoto, isRawWhatsAppPhoto } from '~/server/utils/whatsapp-creation/product-photo'
 import { buildLabelOptions } from '~/server/utils/whatsapp-creation/label-options'
@@ -113,6 +113,7 @@ export default defineEventHandler(async event => {
       sender: context.sender_phone, orderId: context.current_order_id, name: context.account.user.user_metadata.name || context.account.businessProfile.companyName || 'cliente', uploaded: context.payload.uploaded,
       prepareHeader: (header, selectedKind) => prepareCreationHeader(header, selectedKind, context.account),
       cachedHeader: header => cachedCreationHeader(header, context.account),
+      headerThumbnail: header => croppedCreationHeaderThumbnail(header, context.account),
       // Ajustes do encarte pedidos na conversa (etiquetas, contato do cadastro, edição do painel).
       labelOptions: labels => buildLabelOptions(labels),
       businessProfile: { whatsapp: context.account.businessProfile.whatsapp || context.account.businessProfile.phone, address: context.account.businessProfile.address },

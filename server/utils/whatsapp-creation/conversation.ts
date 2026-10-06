@@ -677,7 +677,7 @@ const FLYER_HEADERS_PER_PAGE = 20
 // Prepara com a logo da conta só o que cabe no tempo da resposta; o restante vai com a miniatura do modelo.
 const HEADER_PREPARE_BUDGET_MS = 20_000
 async function prepareHeaderPage(page: Header[], kind: CreationKind, prepare: (header: Header, kind: CreationKind) => Promise<Header>,
-  cached?: (header: Header) => Promise<Header | null>): Promise<Header[]> {
+  cached?: (header: Header) => Promise<Header | null>, thumbnail?: (header: Header) => Promise<Header | null>): Promise<Header[]> {
   if (kind !== 'encarte') {
     const prepared: Header[] = []
     for (const header of page) prepared.push(await prepare(header, kind))
@@ -691,8 +691,13 @@ async function prepareHeaderPage(page: Header[], kind: CreationKind, prepare: (h
     if (Date.now() - started < HEADER_PREPARE_BUDGET_MS) {
       try { result[index] = await prepare(header, kind); continue } catch { /* usa a miniatura abaixo */ }
     }
-    result[index] = header.listPreviewKey ? { ...header, headerKey: header.listPreviewKey } : header
   }
+  // Sem tempo para a prévia com a logo: recorta só o cabeçalho da miniatura salva do modelo.
+  await Promise.all(page.map(async (header, index) => {
+    if (result[index]) return
+    // A prévia pública é o encarte inteiro; sem recorte, a opção segue só em texto.
+    result[index] = (thumbnail ? await thumbnail(header).catch(() => null) : null) || { ...header, previewUrl: undefined }
+  }))
   return result as Header[]
 }
 /** Dependências injetáveis dos ajustes do encarte (banco/storage ficam fora da regra de conversa). */
@@ -919,6 +924,8 @@ export async function advanceConversation(input: {
   prepareHeader?: (header: Header, kind: CreationKind) => Promise<Header>
   /** Prévia de encarte com a logo já preparada antes (sem renderizar); null se não existir. */
   cachedHeader?: (header: Header) => Promise<Header | null>
+  /** Miniatura do modelo recortada no cabeçalho, para quando a prévia com a logo não fica pronta a tempo. */
+  headerThumbnail?: (header: Header) => Promise<Header | null>
   /** Lista os encartes do dono; injetável nos testes. Sempre filtrada por accountId. */
   listAccountProjects?: (accountId: string) => Promise<AccountProjectSummary[]>
 } & FlyerEditDeps): Promise<AdvanceResult> {
@@ -1314,7 +1321,7 @@ export async function advanceConversation(input: {
       return { state: s, send, generate: false }
     }
     let page = catalog.headers as Header[]
-    if (input.prepareHeader) page = await prepareHeaderPage(page, d.kind!, input.prepareHeader, input.cachedHeader)
+    if (input.prepareHeader) page = await prepareHeaderPage(page, d.kind!, input.prepareHeader, input.cachedHeader, input.headerThumbnail)
     s.choiceOffset = offset
     s.choices = [...(more ? s.choices : []), ...page]
     if (!s.choices.length) {

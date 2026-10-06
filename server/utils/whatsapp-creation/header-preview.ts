@@ -244,6 +244,39 @@ export async function cachedCreationHeader(header: CreationHeader, account: Reso
   return cached ? { ...header, headerKey: cacheKey } : null
 }
 
+/**
+ * Miniatura salva do modelo recortada só no cabeçalho, sem renderizar a logo da conta.
+ * Usada quando não há tempo de preparar a prévia completa; nunca envia o encarte inteiro.
+ */
+export async function croppedCreationHeaderThumbnail(header: CreationHeader, account: ResolvedWhatsAppAccount): Promise<CreationHeader | null> {
+  const { sourceOwnerId, sourceThumbnailKey, sourceCanvasKey, sourcePageHeight } = header
+  const prefix = `projects/${sourceOwnerId}/${header.id}/`
+  if (!sourceOwnerId || !sourceThumbnailKey || !sourceCanvasKey || !sourcePageHeight ||
+    !isValidStoragePath(sourceThumbnailKey) || !isValidStoragePath(sourceCanvasKey) ||
+    !sourceThumbnailKey.startsWith(prefix) || !sourceCanvasKey.startsWith(prefix)) return null
+  const hash = createHash('sha256').update(JSON.stringify([
+    HEADER_CACHE_VERSION, header.id, header.revision, sourceThumbnailKey, sourceCanvasKey, sourcePageHeight
+  ])).digest('hex')
+  const key = `whatsapp-creation/${account.user.id}/headers/thumb-${hash}.png`
+  const cached = await getS3Client().send(new HeadObjectCommand({ Bucket: videoBucket(), Key: key })).then(() => true, () => false)
+  if (cached) return { ...header, headerKey: key }
+  const [compressed, thumbnail] = await Promise.all([
+    sourceBytes(sourceCanvasKey, MAX_CANVAS_BYTES), sourceBytes(sourceThumbnailKey, MAX_THUMBNAIL_BYTES)
+  ])
+  let canvas: { objects?: any[] }
+  try { canvas = JSON.parse(gunzipSync(compressed, { maxOutputLength: MAX_CANVAS_BYTES }).toString('utf8')) }
+  catch { return null }
+  const metadata = await sharp(thumbnail, { limitInputPixels: 24_000_000 }).metadata()
+  if (!metadata.width || !metadata.height) return null
+  const height = flyerHeaderCropHeight(canvas, sourcePageHeight, metadata.height)
+  const png = await sharp(thumbnail, { limitInputPixels: 24_000_000 })
+    .extract({ left: 0, top: 0, width: metadata.width, height })
+    .resize({ width: Math.min(metadata.width, HEADER_WIDTH) })
+    .png().toBuffer()
+  await getS3Client().send(new PutObjectCommand({ Bucket: videoBucket(), Key: key, Body: png, ContentType: 'image/png' }))
+  return { ...header, headerKey: key }
+}
+
 /** Reusable preview in this customer's namespace; no project/job/paid call. */
 export async function prepareCreationHeader(header: CreationHeader, kind: CreationKind, account: ResolvedWhatsAppAccount): Promise<CreationHeader> {
   if (kind !== 'encarte' && (header.headerKey || header.previewUrl)) return header
