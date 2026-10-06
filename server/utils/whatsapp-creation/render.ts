@@ -835,8 +835,6 @@ const loadFlyerAccountLabelTemplates = async (canvas: any, userId: string, extra
   return applyFlyerAccountLabelTemplates(canvas, rows)
 }
 
-export { parseLiteralValidityPeriod }
-
 /**
  * Validade na frase dos layouts simples quando o cliente pede o formato da data (por extenso/numérico).
  * Sem datas reconhecidas ou sem formato pedido, o texto literal do cliente continua valendo.

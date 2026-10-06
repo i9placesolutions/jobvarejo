@@ -1330,8 +1330,9 @@ describe('ajustes do encarte pelo WhatsApp', () => {
   })
 
   it('aceitar a oferta de cor de todos os cards gera nova versão com a cor do destaque', async () => {
-    const state = { ...deliveredState(), pendingEdit: { kind: 'card_color_offer' as const, at: Date.now(), color: '#dc2626' } }
-    state.draft.customization = { palette: { highlightCardColor: '#dc2626', highlightProdNameColor: '#ffffff' } }
+    const delivered = deliveredState()
+    const state = { ...delivered, pendingEdit: { kind: 'card_color_offer' as const, at: Date.now(), color: '#dc2626' },
+      draft: { ...delivered.draft, customization: { palette: { highlightCardColor: '#dc2626', highlightProdNameColor: '#ffffff' } } } }
     const result = await run(state, { action: 'status' }, 'sim')
     expect(result.generate).toBe(true)
     expect(result.state.order?.customization?.palette).toEqual({ highlightCardColor: '#dc2626', highlightProdNameColor: '#ffffff', cardColor: '#dc2626', prodNameColor: '#ffffff' })
@@ -1350,8 +1351,8 @@ describe('ajustes do encarte pelo WhatsApp', () => {
   })
 
   it('a personalização do rascunho vai em novas versões', async () => {
-    const state = deliveredState()
-    state.draft.customization = { nameScale: 1.3 }
+    const delivered = deliveredState()
+    const state = { ...delivered, draft: { ...delivered.draft, customization: { nameScale: 1.3 } } }
     const regenerated = await run(state, { action: 'status' }, 'gera outra prévia')
     expect(regenerated.generate).toBe(true)
     expect(regenerated.state.order?.customization).toEqual({ nameScale: 1.3 })

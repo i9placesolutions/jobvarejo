@@ -12,11 +12,12 @@ const logo = (overrides: Record<string, unknown> = {}) => ({
   quickLogoBackdropId: 'backdrop-1', ...overrides
 })
 const backdrop = { type: 'Rect', quickLogoBackdrop: true, quickLogoBackdropOwnerId: 'logo-1', _customId: 'backdrop-1', left: 150, top: 75, width: 100, height: 50, scaleX: 1, scaleY: 1 }
+type Canvas = { width: number; height: number; objects: Array<Record<string, any>> }
 const center = (object: Record<string, any>) => { const box = objectBox(object); return [box.left + box.width / 2, box.top + box.height / 2] }
 
 describe('logo do encarte', () => {
   it('cresce em torno do centro, leva o fundo junto e atualiza os limites da logo', () => {
-    const canvas = { width: 400, height: 200, objects: [frame, backdrop, logo()] }
+    const canvas: Canvas = { width: 400, height: 200, objects: [frame, backdrop, logo()] }
     expect(scaleFlyerLogo(canvas, 1.2)).toBeCloseTo(1.2)
     const [image, bg] = [canvas.objects[2]!, canvas.objects[1]!]
     expect(objectBox(image).width).toBeCloseTo(120)

@@ -19,7 +19,6 @@ import {
   hydrateFlyerBusinessFields,
   applyBusinessOverrides,
   formatSimpleValidityText,
-  parseLiteralValidityPeriod,
   renderEditableFlyerCanvas,
   applyFlyerAccountLabelTemplates,
   applyFlyerLogoStickers,
@@ -30,6 +29,7 @@ import {
   renderCreationHeaderPreview,
   resolveVideoHeaderPreviewAsset
 } from '../../server/utils/whatsapp-creation/render'
+import { parseLiteralValidityPeriod } from '../../server/utils/whatsapp-creation/validity-period'
 import { flyerHeaderCropHeight, flyerHeaderLogoBox } from '../../server/utils/whatsapp-creation/header-preview'
 import type { BusinessProfile } from '../../utils/businessProfile'
 import { execFileSync } from 'node:child_process'
