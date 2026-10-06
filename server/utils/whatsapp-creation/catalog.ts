@@ -429,6 +429,30 @@ const studioHeaders = async (
   return { headers, themeExists }
 }
 
+const themeNamesCache = new Map<string, { until: number; names: string[] }>()
+/**
+ * Nomes de temas que existem no catálogo da conta (modelos de encarte da conta e dos admins
+ * + temas de vídeo). Vão para a IA mapear a fala do cliente pelo sentido, não pelo nome exato.
+ */
+export async function listCreationThemeNames(accountId: string): Promise<string[]> {
+  const cached = themeNamesCache.get(accountId)
+  if (cached && cached.until > Date.now()) return cached.names
+  const { rows } = await pgQuery<{ category: string | null; subcategory: string | null }>(
+    `select distinct project.template_config->>'category' as category, project.template_config->>'subcategory' as subcategory
+       from public.projects project
+       join public.profiles owner on owner.id = project.user_id
+      where coalesce(project.is_template, false) = true
+        and (project.user_id = $1::uuid or owner.role in ('admin', 'super_admin'))`,
+    [accountId]
+  )
+  const names = uniqueStrings([
+    ...(rows || []).flatMap(row => [row.category, row.subcategory]),
+    ...VIDEO_THEMES.map(theme => theme.title || theme.name)
+  ]).filter(name => name.length <= 60).slice(0, 200)
+  themeNamesCache.set(accountId, { until: Date.now() + 5 * 60_000, names })
+  return names
+}
+
 export async function listCreationHeaders(
   accountId: string,
   kind: 'encarte' | 'video' | 'cartaz' | 'studio',

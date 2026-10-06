@@ -6,12 +6,15 @@ import { ingestCreationEvent, claimCreationMessage, loadLeasedMessage, persistCo
   claimCreationOutbound, acknowledgeCreationOutbound, assertCreationAccess, beginCreationOrder } from '~/server/utils/whatsapp-creation/repository'
 import { interpretationRequest, transcriptionRequest, advanceConversation, normalizeConversationIntent, rememberConversationTurns, proposalSchema } from '~/server/utils/whatsapp-creation/conversation'
 import { pollWhatsAppJobs, followUpWhatsAppThemes } from '~/server/utils/whatsapp-creation/jobs'
+import { listCreationThemeNames } from '~/server/utils/whatsapp-creation/catalog'
 import { downloadProviderMedia } from '~/server/utils/whatsapp-creation/media'
 import { pgQuery } from '~/server/utils/postgres'
 import { prepareCreationHeader } from '~/server/utils/whatsapp-creation/header-preview'
 import { hasBriefFields, shouldConsultJev, suggestJevRoute } from '~/server/utils/whatsapp-creation/jev'
 import { ensureProcessedWhatsAppPhoto, isRawWhatsAppPhoto } from '~/server/utils/whatsapp-creation/product-photo'
 
+// Temas do catálogo para a IA mapear a fala do cliente; se a consulta falhar, segue sem a lista.
+const catalogThemesFor = (accountId: string) => listCreationThemeNames(accountId).catch(() => [] as string[])
 const leaseSchema = z.object({ eventId: z.string().uuid(), leaseToken: z.string().uuid() })
 export default defineEventHandler(async event => {
   authenticateWhatsAppService(event)
@@ -31,7 +34,7 @@ export default defineEventHandler(async event => {
         await pgQuery("UPDATE public.whatsapp_creation_events SET payload=jsonb_set(payload,'{uploaded}',$3::jsonb) WHERE id=$1 AND lease_token=$2 AND status='processing'", [claim.eventId, claim.leaseToken, JSON.stringify({ key: media.key, hash: media.hash })])
       }
       return { ok: true, claimed: true, eventId: claim.eventId, leaseToken: claim.leaseToken, isAudio: context.payload.type === 'audio',
-        request: context.payload.type === 'audio' ? transcriptionRequest(content) : interpretationRequest(context.state, context.payload.text || '', context.account.user.user_metadata.name || context.account.businessProfile.companyName || 'cliente', content) }
+        request: context.payload.type === 'audio' ? transcriptionRequest(content) : interpretationRequest(context.state, context.payload.text || '', context.account.user.user_metadata.name || context.account.businessProfile.companyName || 'cliente', content, await catalogThemesFor(context.owner_id)) }
     } catch (error) {
       await pgQuery("UPDATE public.whatsapp_creation_events SET status='failed',last_error='prepare_failed',lease_until=NULL WHERE id=$1 AND lease_token=$2", [claim.eventId, claim.leaseToken])
       await pgQuery('UPDATE public.whatsapp_creation_conversations SET lease_token=NULL,lease_until=NULL WHERE lease_token=$1', [claim.leaseToken])
@@ -47,7 +50,7 @@ export default defineEventHandler(async event => {
     const usage = body.result?.usage || {}
     const transcriptionUsage = { promptTokens: Math.max(0, Number(usage.prompt_tokens || 0)), completionTokens: Math.max(0, Number(usage.completion_tokens || 0)), cost: Math.max(0, Number(usage.cost || 0)) }
     await pgQuery("UPDATE public.whatsapp_creation_events SET payload=jsonb_set(jsonb_set(payload,'{transcript}',to_jsonb($3::text)),'{transcriptionUsage}',$4::jsonb) WHERE id=$1 AND lease_token=$2 AND status='processing'", [eventId, leaseToken, transcript, JSON.stringify(transcriptionUsage)])
-    return { request: interpretationRequest(context.state, transcript, context.account.user.user_metadata.name || 'Cliente') }
+    return { request: interpretationRequest(context.state, transcript, context.account.user.user_metadata.name || 'Cliente', undefined, await catalogThemesFor(context.owner_id)) }
   }
   if (operation === 'apply') {
     const { eventId, leaseToken } = leaseSchema.parse(body)
