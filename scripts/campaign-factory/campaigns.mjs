@@ -68,7 +68,7 @@ const SEXTOU_H = { seal: [60, 24, 560, 560], logo: [40, 596, 600, 250], validity
 const mirror = (L, W) => Object.fromEntries(Object.entries(L).map(([k, [x, y, w, h]]) => [k, [W - x - w, y, w, h]]));
 export function videoLayout(layout) {
   if (layout === 'right') return { vertical: mirror(SEXTOU_V, 1080), horizontal: mirror(SEXTOU_H, 1920) };
-  if (layout === 'top') return { vertical: { ...SEXTOU_V, seal: [120, 56, 840, 400], logo: [140, 464, 800, 220], validity: [220, 692, 640, 140], product: [60, 840, 960, 490] }, horizontal: SEXTOU_H };
+  if (layout === 'top') return { vertical: { ...SEXTOU_V, seal: [170, 56, 740, 340], logo: [90, 404, 900, 290], validity: [220, 704, 640, 136], product: [60, 850, 960, 480] }, horizontal: SEXTOU_H };
   return { vertical: SEXTOU_V, horizontal: SEXTOU_H };
 }
 // Transição e conjunto de movimentos próprios por campanha (vídeos diferentes entre si).
