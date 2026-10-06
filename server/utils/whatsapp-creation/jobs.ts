@@ -7,6 +7,7 @@ import { generateCreationArtifact } from './render'
 import { ownedStorageBytes } from './media'
 import { listCreationHeaders, type CreationHeader } from './catalog'
 import { prepareCreationHeader } from './header-preview'
+import { syncWhatsAppDraftProjects } from './draft-project'
 import { advanceConversation, finalSends, rememberConversationTurns, type ConversationArtifact, type ConversationState, type ConversationSend } from './conversation'
 import { approvePreview, assertCanDeliver, assertCanRender, registerPreview, updateOrder } from '~/shared/whatsapp-creation'
 
@@ -45,7 +46,7 @@ async function nativeJob(event: H3Event, row: any, projectId: string, revision: 
 }
 
 /** Commit only artifacts of the locked order/revision; late jobs cannot overwrite an edited draft. */
-async function saveGeneration(row: any, state: ConversationState, artifacts: ConversationArtifact[], native?: ConversationState['runtime']) {
+async function saveGeneration(row: any, state: ConversationState, artifacts: ConversationArtifact[], native?: ConversationState['runtime'], notice?: string) {
   return pgTx(async client => {
     const conversation = (await client.query('SELECT current_order_id FROM public.whatsapp_creation_conversations WHERE id=$1 AND owner_id=$2 FOR UPDATE', [row.conversation_id, row.owner_id])).rows[0]
     if (!conversation || conversation.current_order_id !== row.id) return { ok: true, stale: true }
@@ -70,6 +71,7 @@ async function saveGeneration(row: any, state: ConversationState, artifacts: Con
         // Só o material, sem link: imagem para ver e PNG original como arquivo.
         send.push(...finalSends(artifact, state.draft.kind))
       }
+      if (notice) send.push({ type: 'text', text: notice })
       send.push({ type: 'text', text: `${label} está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.` })
       rememberConversationTurns(current, send.map(item => ({ role: 'assistant', text: item.text })))
     }
@@ -177,7 +179,7 @@ export async function generateWhatsAppOrder(id: string, token: string, kind: str
   state.runtime.started = start
   try {
     const output = await generateCreationArtifact(state.order!, account.user, account.businessProfile, event)
-    return saveGeneration(row, state, output.artifacts, output.video ? { ...state.runtime, native: output.video } : undefined)
+    return saveGeneration(row, state, output.artifacts, output.video ? { ...state.runtime, native: output.video } : undefined, output.notice)
   } catch (error: any) {
     const statusCode = Number(error?.statusCode || 500)
     const code = String(error?.data?.code || error?.code || '')
@@ -233,7 +235,14 @@ export async function pollWhatsAppJobs(event: H3Event) {
       await saveGeneration(row, state, artifacts); completed++
     } catch { await failGeneration(row, state) }
   }
-  return { ok: true, checked: rows.length, completed }
+  // Encartes em andamento vão para o painel depois dos jobs: rascunho nunca atrasa uma entrega.
+  let drafts: { checked: number; synced: number } = { checked: 0, synced: 0 }
+  try {
+    drafts = await syncWhatsAppDraftProjects()
+  } catch (error: any) {
+    console.warn('[whatsapp-creation:draft-project] sincronização indisponível', String(error?.message || error).slice(0, 200))
+  }
+  return { ok: true, checked: rows.length, completed, drafts }
 }
 
 export async function followUpWhatsAppThemes() {

@@ -248,6 +248,19 @@ describe('recuperação de jobs WhatsApp', () => {
     expect(fixture.state.previewPresentedRevision).toBe(fixture.state.order!.revision)
   })
 
+  it('avisa na entrega quando preservou a edição do painel salvando outra versão', async () => {
+    const initialState = renderingState()
+    const fixture = installHeaderRecoveryMocks(initialState, new Error('unused'))
+    const notice = 'Vi que você mexeu nesse encarte pelo painel. Para não apagar suas alterações, salvei esta versão do WhatsApp como um novo encarte na sua conta.'
+    mocks.generate.mockResolvedValue({ notice, artifacts: [{ artifactId: 'fresh-preview', formatId: 'stories', key: 'preview.png', hash: 'hash', mimeType: 'image/png', projectId: 'project-v2', editUrl: '/editor/project-v2' }] })
+
+    await generateWhatsAppOrder(orderId, token, 'encarte', { context: {}, $fetch: vi.fn() } as any)
+
+    const texts = mocks.queue.mock.calls[0]![5].filter((item: any) => item.type === 'text').map((item: any) => item.text)
+    expect(texts).toEqual([notice, expect.stringMatching(/^Seu encarte está pronto/)])
+    expect(fixture.state.phase).toBe('approved')
+  })
+
   it.each([
     ['cancelled', (state: ConversationState) => { state.phase = 'cancelled' as any }, 'cancelled', 0, 2],
     ['token changed', (state: ConversationState) => { state.runtime!.token = 'new-token' }, 'rendering', 0, 2],
