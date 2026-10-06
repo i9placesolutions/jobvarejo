@@ -39,7 +39,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /** Structured commercial data already gives the server a deterministic route. */
 export const hasBriefFields = (proposal: Proposal): boolean =>
-  (['kind', 'theme', 'formats', 'division', 'products', 'validity', 'conditions', 'institutionalText', 'script', 'additionalKinds'] as const)
+  (['kind', 'theme', 'formats', 'division', 'pageCount', 'products', 'validity', 'conditions', 'institutionalText', 'script', 'additionalKinds'] as const)
     .some(field => proposal[field] !== undefined)
 
 export const shouldConsultJev = (proposal: Proposal, text: string): boolean =>

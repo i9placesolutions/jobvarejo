@@ -5,6 +5,7 @@ import {
   assertCanRender,
   createOrder,
   setImageCandidates,
+  splitPageSizes,
   updateOrder
 } from '../../shared/whatsapp-creation'
 import {
@@ -289,6 +290,48 @@ describe('adapter de render da criação WhatsApp', () => {
       'assert len(module._product_groups(items[:9], "single", len(slots))[0][1]) == 9'
     ].join('; ')
     execFileSync('python3', ['-c', python, workerPath], { stdio: 'pipe' })
+  })
+
+  it('divide os produtos em N páginas equilibradas na ordem da lista, respeitando o limite do Story', () => {
+    const workerPath = `${process.cwd()}/workers/whatsapp-creation/render.py`
+    const python = [
+      'import importlib.util, sys, types',
+      'playwright = types.ModuleType("playwright")',
+      'sync_api = types.ModuleType("playwright.sync_api")',
+      'sync_api.sync_playwright = lambda: None',
+      'playwright.sync_api = sync_api',
+      'sys.modules["playwright"] = playwright',
+      'sys.modules["playwright.sync_api"] = sync_api',
+      'spec = importlib.util.spec_from_file_location("creation_renderer", sys.argv[1])',
+      'module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)',
+      'items = [{"id":str(i)} for i in range(15)]',
+      'pages = module._product_groups(items, "pages", 16, 2)',
+      'assert [len(group) for _,group in pages] == [8,7], pages',
+      'assert [item["id"] for _,group in pages for item in group] == [str(i) for i in range(15)]',
+      'assert [len(group) for _,group in module._product_groups(items, "pages", 16, 3)] == [5,5,5]',
+      'story = [{"id":str(i)} for i in range(20)]',
+      'assert [len(group) for _,group in module._product_groups(story, "pages", 9, 2)] == [7,7,6]',
+      'assert [len(group) for _,group in module._product_groups(items[:3], "pages", 16, 5)] == [1,1,1]',
+      'assert [len(group) for _,group in module._product_groups(story, "pages", 9)] == [9,9,2]'
+    ].join('; ')
+    execFileSync('python3', ['-c', python, workerPath], { stdio: 'pipe' })
+    // A conversa usa a mesma conta do worker para avisar o cliente antes de gerar.
+    expect(splitPageSizes(15, 2, 16)).toEqual([8, 7])
+    expect(splitPageSizes(20, 2, 9)).toEqual([7, 7, 6])
+    expect(splitPageSizes(3, 5, 16)).toEqual([1, 1, 1])
+  })
+
+  it('aceita a quantidade de partes só com divisão em páginas e com ao menos um produto por parte', () => {
+    const accountId = '11111111-1111-4111-8111-111111111111'
+    const base = createOrder({
+      id: '33333333-3333-4333-8333-333333333333', identity: { accountId, normalizedSender: '+5511999999999' }, kind: 'encarte', theme: 'Fecha Mês',
+      formats: [{ id: 'feed', width: 1080, height: 1350 }], division: 'pages', pageCount: 2,
+      products: [1, 2, 3].map(index => ({ id: `item-${index}`, name: `Produto ${index}`, brand: '', variant: '', weight: '', price: 'R$ 1,99' }))
+    })
+    expect(base.pageCount).toBe(2)
+    expect(() => updateOrder(base, accountId, { division: 'single' })).toThrow(/divisão por páginas/)
+    expect(updateOrder(base, accountId, { division: 'single', pageCount: null }).pageCount).toBeNull()
+    expect(() => updateOrder(base, accountId, { pageCount: 1 })).toThrow(/entre 2 e/)
   })
 
   it.skipIf(!pythonWithPlaywright)('carrega Barlow, Inter e Fira Sans originais no Chromium antes do render', () => {

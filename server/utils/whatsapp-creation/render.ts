@@ -994,7 +994,7 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
       return { ...product, imageDataUrl: image.dataUrl, condition: product.condition || order.conditions, validity: order.validity }
     })
     if (!flyerDivisionSupportsProductCount(items.length, order.division, format)) fail(422, 'Story com mais de nove produtos precisa ser dividido em páginas.')
-    const pages = await renderEditableFlyerCanvas({ canvas: preparedCanvas, products: items, division: order.division, formatId: format.id, cardLayout })
+    const pages = await renderEditableFlyerCanvas({ canvas: preparedCanvas, products: items, division: order.division, ...(order.pageCount ? { pageCount: order.pageCount } : {}), formatId: format.id, cardLayout })
     for (const result of pages) payloadPages.push({ format, page: result, productIds: result.productIds, department: result.department || null })
   }
   const projectId = deterministicUuid(`${user.id}:${order.id}:${order.revision}:encarte`)
@@ -1083,7 +1083,7 @@ export async function applyFlyerLogoStickers(png: Buffer, canvas: any): Promise<
   }
 }
 
-export async function renderEditableFlyerCanvas(input: { canvas: any; products: Array<CreationProduct & { imageDataUrl: string }>; division: CreationOrder['division']; formatId: string; cardLayout?: ReturnType<typeof createDefaultProductCardConfiguration> }): Promise<Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }>> {
+export async function renderEditableFlyerCanvas(input: { canvas: any; products: Array<CreationProduct & { imageDataUrl: string }>; division: CreationOrder['division']; pageCount?: number; formatId: string; cardLayout?: ReturnType<typeof createDefaultProductCardConfiguration> }): Promise<Array<{ png: Buffer; canvas: any; productIds: string[]; department: string | null }>> {
   if (flyerRenders >= 1) fail(503, 'O renderizador de encartes está ocupado. Tente novamente em instantes.')
   flyerRenders++
   let dir: string | undefined

@@ -81,6 +81,8 @@ export interface CreationOrder {
   readonly themeTicket: MissingThemeTicket | null
   readonly formats: readonly CreationFormat[]
   readonly division: ProductDivision
+  /** Quantidade de encartes/páginas pedida pelo cliente ("divide em 2"); só vale com division='pages'. */
+  readonly pageCount?: number | null
   readonly products: readonly CreationProduct[]
   readonly validity: string
   readonly conditions: string
@@ -101,6 +103,7 @@ export interface CreateOrderInput {
   theme: string | null
   formats: CreationFormat[]
   division?: ProductDivision
+  pageCount?: number | null
   products?: CreationProduct[]
   validity?: string
   conditions?: string
@@ -110,7 +113,7 @@ export interface CreateOrderInput {
 
 export type EditableOrderFields = Pick<
   CreationOrder,
-  'kind' | 'theme' | 'formats' | 'division' | 'products' | 'validity' | 'conditions' | 'institutionalText' | 'header' | 'script'
+  'kind' | 'theme' | 'formats' | 'division' | 'pageCount' | 'products' | 'validity' | 'conditions' | 'institutionalText' | 'header' | 'script'
 >
 export type OrderPatch = Partial<EditableOrderFields> & Record<string, unknown>
 type MutableOrder = { -readonly [Key in keyof CreationOrder]: CreationOrder[Key] }
@@ -166,6 +169,31 @@ function assertFormats(formats: readonly CreationFormat[]): void {
   }
 }
 
+/** Maior quantidade de partes aceita num pedido; cada parte vira uma página do mesmo projeto. */
+export const MAX_PAGE_COUNT = 20
+
+function assertPageCount(pageCount: number | null | undefined, division: ProductDivision): void {
+  if (pageCount === undefined || pageCount === null) return
+  if (!Number.isSafeInteger(pageCount) || pageCount < 2 || pageCount > MAX_PAGE_COUNT) {
+    fail('INVALID_PAGE_COUNT', `A divisão precisa ter entre 2 e ${MAX_PAGE_COUNT} partes.`, { pageCount })
+  }
+  if (division !== 'pages') fail('PAGE_COUNT_REQUIRES_PAGES', 'Dividir em partes exige a divisão por páginas.', { pageCount })
+}
+
+/**
+ * Tamanho de cada página ao dividir `count` produtos em `parts` partes equilibradas,
+ * na ordem da lista. Se uma parte não couber em `capacity`, aumenta as partes até caber
+ * (mesma regra do renderizador), sem nunca criar página vazia.
+ */
+export function splitPageSizes(count: number, parts: number, capacity: number): number[] {
+  if (count <= 0) return []
+  const safeCapacity = Math.max(1, Math.floor(capacity))
+  const total = Math.min(count, Math.max(1, Math.floor(parts), Math.ceil(count / safeCapacity)))
+  const base = Math.floor(count / total)
+  const extra = count % total
+  return Array.from({ length: total }, (_, index) => base + (index < extra ? 1 : 0))
+}
+
 function validateProducts(products: readonly CreationProduct[]): void {
   const ids = new Set<string>()
   for (const product of products) {
@@ -208,6 +236,7 @@ export function createOrder(input: CreateOrderInput): CreationOrder {
   }
   if (!['encarte', 'video', 'cartaz', 'studio'].includes(input.kind)) fail('INVALID_KIND', 'Tipo de material inválido.')
   assertFormats(input.formats)
+  assertPageCount(input.pageCount, input.division ?? null)
   const products = clone(input.products ?? [])
   validateProducts(products)
   const theme = input.theme?.trim() || null
@@ -221,6 +250,7 @@ export function createOrder(input: CreateOrderInput): CreationOrder {
     themeTicket: theme ? null : { status: 'pending', ...(input.themeTicket?.scheduledEta ? { scheduledEta: input.themeTicket.scheduledEta } : {}) },
     formats: clone(input.formats),
     division: input.division ?? null,
+    ...(input.pageCount ? { pageCount: input.pageCount } : {}),
     products,
     validity: input.validity ?? '',
     conditions: input.conditions ?? '',
@@ -240,12 +270,13 @@ export function updateOrder(order: CreationOrder, accountId: string, patch: Orde
   assertAccount(order, accountId)
   const forbidden = ['accountId', 'ownerId', 'sender', 'id', 'revision'].filter((key) => key in patch)
   if (forbidden.length) fail('IMMUTABLE_ORDER_FIELD', 'Identidade e propriedade do pedido não podem ser alteradas.', { fields: forbidden })
-  const allowed = new Set(['kind', 'theme', 'formats', 'division', 'products', 'validity', 'conditions', 'institutionalText', 'header', 'script'])
+  const allowed = new Set(['kind', 'theme', 'formats', 'division', 'pageCount', 'products', 'validity', 'conditions', 'institutionalText', 'header', 'script'])
   const unknown = Object.keys(patch).filter((key) => !allowed.has(key))
   if (unknown.length) fail('UNKNOWN_ORDER_FIELD', 'O pedido contém campos que não podem ser editados.', { fields: unknown })
   const next = { ...clone(order), ...clone(patch), revision: order.revision + 1 } as MutableOrder
   if (next.kind !== 'encarte' && next.kind !== 'video' && next.kind !== 'cartaz' && next.kind !== 'studio') fail('INVALID_KIND', 'Tipo de material inválido.')
   assertFormats(next.formats)
+  assertPageCount(next.pageCount, next.division)
   validateProducts(next.products)
   if (next.kind === 'studio' && next.products.length === 0) assertDataComplete(next)
   next.theme = next.theme?.trim() || null
@@ -399,6 +430,9 @@ export function assertCanRender(
   }
   if (order.dataApprovedRevision !== order.revision) fail('DATA_NOT_APPROVED', 'Os dados precisam ser aprovados nesta revisão.')
   if (order.products.length && order.division === null) fail('DIVISION_REQUIRED', 'Escolha como dividir os produtos antes de renderizar.')
+  if (order.pageCount && (order.division !== 'pages' || order.pageCount > order.products.length)) {
+    fail('INVALID_PAGE_COUNT', 'Cada parte do encarte precisa ter ao menos um produto.', { pageCount: order.pageCount, count: order.products.length })
+  }
   const productIds = options.productIds ?? order.products.map((product) => product.id)
   if (order.kind === 'video' && order.products.length > 6 && order.division !== 'pages') {
     fail('VIDEO_DIVISION_REQUIRED', 'Pedidos de vídeo com mais de seis produtos precisam ser divididos em páginas.')

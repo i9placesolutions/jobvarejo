@@ -3,8 +3,10 @@ import { createHash } from 'node:crypto'
 import {
   approveData,
   approveImage,
+  approvePreview,
   createOrder,
   registerPreview,
+  setImageCandidates,
   updateOrder,
   type CreationProduct
 } from '../../shared/whatsapp-creation'
@@ -23,7 +25,7 @@ vi.mock('../../server/utils/whatsapp-creation/catalog', () => ({
 vi.mock('../../server/utils/whatsapp-creation/media', () => ({ ownedStorageBytes: mocks.storageBytes }))
 vi.mock('../../server/utils/whatsapp-creation/product-review', () => ({ createProductReviewBoards: mocks.productReview }))
 
-const { advanceConversation, finalSendType, interpretationRequest, isRegenerateRequest, isResendRequest, newConversationState } = await import('../../server/utils/whatsapp-creation/conversation')
+const { advanceConversation, finalSendType, interpretationRequest, isRegenerateRequest, isResendRequest, mentionedFlyerFormats, newConversationState, normalizeConversationIntent, requestedPageCount } = await import('../../server/utils/whatsapp-creation/conversation')
 
 const accountId = '11111111-1111-4111-8111-111111111111'
 const otherAccountId = '22222222-2222-4222-8222-222222222222'
@@ -930,5 +932,187 @@ describe('reenvio do arquivo final', () => {
     expect(finalSendType({ mimeType: 'application/pdf', formatId: 'A4' })).toBe('document')
     expect(finalSendType({ mimeType: 'video/mp4', formatId: 'stories' })).toBe('video')
     expect(finalSendType({ mimeType: 'image/png', formatId: 'A4' }, 'cartaz')).toBe('document')
+  })
+})
+
+const FORMAT_SIZES: Record<string, { width: number; height: number }> = {
+  stories: { width: 1080, height: 1920 }, feed: { width: 1080, height: 1350 }, tv: { width: 1920, height: 1080 },
+  print: { width: 794, height: 1123 }, square: { width: 1080, height: 1080 }
+}
+
+/** Encarte já entregue: dados e fotos aprovados na revisão atual, como sai do fluxo real. */
+function deliveredState(options: { products?: CreationProduct[]; formats?: string[]; headerFormats?: string[] } = {}) {
+  const products = options.products || [product()]
+  const formats = options.formats || ['stories']
+  const headerFormats = options.headerFormats || header.formats
+  const capacity = formats.includes('stories') ? 9 : 16
+  const division = products.length > capacity ? 'pages' as const : 'single' as const
+  let order = createOrder({
+    id: orderId, identity: { accountId, normalizedSender: sender }, kind: 'encarte', theme: 'Fecha Mês',
+    formats: formats.map(id => ({ id, ...FORMAT_SIZES[id]! })), division, products, validity: 'sem validade'
+  })
+  order = updateOrder(order, accountId, { header: { id: header.id, revision: header.revision, theme: header.theme, formats: headerFormats } })
+  const candidates = products.map(item => ({ itemId: item.id, key: `imagens/${item.id}.png`, hash: `hash-${item.id}` }))
+  order = setImageCandidates(order, accountId, candidates)
+  for (const candidate of candidates) order = approveImage(order, accountId, candidate)
+  order = approveData(order, accountId)
+  for (const formatId of formats) {
+    order = registerPreview(order, accountId, { artifactId: `final-${formatId}`, revision: order.revision, formatIds: [formatId] })
+    order = approvePreview(order, accountId, { artifactId: `final-${formatId}`, revision: order.revision, formatId })
+  }
+  return {
+    ...newConversationState(),
+    phase: 'delivered' as const,
+    header: { ...header, formats: headerFormats },
+    draft: { kind: 'encarte' as const, theme: 'Fecha Mês', formats, division, products, validity: 'sem validade' },
+    order,
+    candidates,
+    artifacts: formats.map(formatId => ({ artifactId: `final-${formatId}`, formatId, key: `whatsapp-creation/${formatId}.png`, hash: 'h', mimeType: 'image/png', projectId: 'project', editUrl: '/editor/project' }))
+  }
+}
+
+const manyProducts = (count: number) => Array.from({ length: count }, (_, index) => product(`item-${index + 1}`, { name: `Produto ${index + 1}`, price: `R$ ${index + 1},99` }))
+
+describe('mesmo encarte em outro formato', () => {
+  it('reconhece formatos pedidos e os que saem na troca', () => {
+    expect(mentionedFlyerFormats('manda em feed também')).toEqual({ added: ['feed'], removed: [] })
+    expect(mentionedFlyerFormats('em vez do story manda só em feed')).toEqual({ added: ['feed'], removed: ['stories'] })
+    expect(mentionedFlyerFormats('faz pra impressão e TV')).toEqual({ added: ['print', 'tv'], removed: [] })
+    expect(mentionedFlyerFormats('troca o story pelo quadrado')).toEqual({ added: ['square'], removed: ['stories'] })
+  })
+
+  it('soma o formato novo sem reconfirmar dados e fotos quando o cabeçalho já tem esse formato', async () => {
+    const state = deliveredState()
+    const result = await input(state, { action: 'new_order', formats: ['tv'] }, 'quero no formato TV também')
+    expect(result.generate).toBe(true)
+    expect(result.state.phase).toBe('rendering')
+    expect(result.state.order?.formats.map(format => format.id)).toEqual(['stories', 'tv'])
+    expect(result.state.order?.revision).toBe(state.order.revision + 1)
+    expect(result.state.order?.dataApprovedRevision).toBe(result.state.order?.revision)
+    expect(result.state.order?.images.every(image => image.approvedRevision === result.state.order?.revision)).toBe(true)
+    expect(result.state.order?.header?.id).toBe(header.id)
+    expect(result.state.draft.formats).toEqual(['stories', 'tv'])
+    expect(result.state.artifacts).toEqual([])
+    expect(mocks.headers).not.toHaveBeenCalled()
+    expect(mocks.productReview).not.toHaveBeenCalled()
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/Story e TV/)
+  })
+
+  it('substitui o formato quando o cliente pede troca e mantém soma com “também”', async () => {
+    const swapped = await input(deliveredState(), { action: 'update' }, 'troca pra TV')
+    expect(swapped.state.order?.formats.map(format => format.id)).toEqual(['tv'])
+    const instead = await input(deliveredState({ headerFormats: ['stories', 'feed'] }), { action: 'update' }, 'em vez do story manda só em feed')
+    expect(instead.state.order?.formats.map(format => format.id)).toEqual(['feed'])
+    expect(instead.generate).toBe(true)
+  })
+
+  it('confere no catálogo se o mesmo cabeçalho tem o formato novo antes de gerar', async () => {
+    mocks.headers.mockResolvedValue({ headers: [{ ...header, formats: ['stories', 'feed'] }], hasMore: false, missingTheme: false })
+    const state = deliveredState()
+    expect(normalizeConversationIntent({ action: 'new_order' }, 'manda em feed também', state).action).toBe('status')
+    const result = await input(state, { action: 'new_order' }, 'manda em feed também')
+    expect(mocks.headers).toHaveBeenCalledWith(accountId, 'encarte', 'Fecha Mês', ['stories', 'feed'], 0, header.id)
+    expect(result.generate).toBe(true)
+    expect(result.state.order?.formats.map(format => format.id)).toEqual(['stories', 'feed'])
+    expect(result.state.order?.header).toMatchObject({ id: header.id, revision: header.revision })
+    expect(result.state.order?.header?.formats).toEqual(expect.arrayContaining(['stories', 'feed']))
+  })
+
+  it('oferece cabeçalhos compatíveis do mesmo tema e gera direto após a escolha', async () => {
+    const compatible = { ...header, id: 'header-print', name: 'Fecha Mês impressão', formats: ['stories', 'print'], headerKey: 'headers/print.png' }
+    mocks.headers.mockResolvedValue({ headers: [compatible], hasMore: false, missingTheme: false })
+    const state = deliveredState()
+    const offer = await input(state, { action: 'update' }, 'faz pra impressão também')
+    expect(offer.generate).toBe(false)
+    expect(offer.state.phase).toBe('header')
+    expect(offer.state.pendingRerender).toMatchObject({ formats: ['stories', 'print'] })
+    expect(offer.send.find(message => message.type === 'image')).toMatchObject({ key: 'headers/print.png', text: '1' })
+    expect(offer.send.map(message => message.text).join(' ')).toMatch(/não tem impressão/)
+
+    const chosen = await input(offer.state, { action: 'choose_header', choice: 1 }, '1')
+    expect(chosen.generate).toBe(true)
+    expect(chosen.state.phase).toBe('rendering')
+    expect(chosen.state.order?.header?.id).toBe('header-print')
+    expect(chosen.state.order?.formats.map(format => format.id)).toEqual(['stories', 'print'])
+    expect(chosen.state.order?.dataApprovedRevision).toBe(chosen.state.order?.revision)
+    expect(chosen.state.pendingRerender).toBeUndefined()
+    expect(mocks.productReview).not.toHaveBeenCalled()
+  })
+
+  it('avisa quando nenhum cabeçalho do tema tem o formato e mantém o encarte pronto', async () => {
+    mocks.headers.mockResolvedValue({ headers: [], hasMore: false, missingTheme: false })
+    const state = deliveredState()
+    const result = await input(state, { action: 'update' }, 'manda no quadrado também')
+    expect(result.generate).toBe(false)
+    expect(result.state.phase).toBe('delivered')
+    expect(result.state.order?.revision).toBe(state.order.revision)
+  })
+
+  it('não confunde aprovação de arquivo da prévia nem reenvio com outro formato', async () => {
+    const state = { ...deliveredState({ formats: ['stories', 'tv'] }), phase: 'preview' as const }
+    expect(normalizeConversationIntent({ action: 'approve_preview' }, 'pode enviar o story', state).action).toBe('approve_preview')
+    const resend = await input(deliveredState(), { action: 'status' }, 'manda a imagem do story')
+    expect(resend.generate).toBe(false)
+    expect(resend.send.filter(message => message.purpose === 'final').map(message => message.key)).toEqual(['whatsapp-creation/stories.png', 'whatsapp-creation/stories.png'])
+  })
+})
+
+describe('dividir os produtos em mais encartes', () => {
+  it('entende a quantidade de partes em frases reais', () => {
+    const cases: Array<[string, number | undefined]> = [
+      ['divide em 2 encartes', 2], ['separa em 3 partes', 3], ['metade em cada', 2], ['quero dividir em duas partes', 2],
+      ['faz em 2 encartes', 2], ['dá pra quebrar em três?', 3], ['junta tudo num só encarte', 1],
+      ['divide por departamento', undefined], ['não precisa dividir', undefined], ['o arroz é 2,99', undefined], ['manda em feed também', undefined]
+    ]
+    for (const [text, expected] of cases) expect(requestedPageCount(text), text).toBe(expected)
+  })
+
+  it('instrui a IA com exemplos de formato e de divisão em partes', () => {
+    const prompt = String(interpretationRequest(newConversationState(), 'divide em 2', 'Rafa').messages[0]?.content)
+    expect(prompt).toMatch(/“divide em 2 encartes” => pageCount=2/)
+    expect(prompt).toMatch(/“manda em feed também” => action=status, formats=\[feed\]/)
+  })
+
+  it('antes da geração guarda as partes no pedido e segue para a conferência', async () => {
+    const state = {
+      ...newConversationState(), header: { ...header },
+      draft: { kind: 'encarte' as const, theme: 'Fecha Mês', formats: ['tv'], products: manyProducts(5), validity: 'sem validade' }
+    }
+    const result = await input(state, { action: 'status' }, 'divide em 2 encartes')
+    expect(result.state.draft).toMatchObject({ pageCount: 2, division: 'pages' })
+    expect(result.state.order).toMatchObject({ pageCount: 2, division: 'pages' })
+    expect(result.state.phase).toBe('data')
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/dividir os produtos em 2 encartes/)
+  })
+
+  it('com o encarte pronto divide em partes equilibradas sem reconfirmar', async () => {
+    const state = deliveredState({ products: manyProducts(5), formats: ['tv'] })
+    const result = await input(state, { action: 'new_order', pageCount: 2 }, 'separa em 2 encartes, metade em cada')
+    expect(result.generate).toBe(true)
+    expect(result.state.order).toMatchObject({ division: 'pages', pageCount: 2 })
+    expect(result.state.order?.dataApprovedRevision).toBe(result.state.order?.revision)
+    expect(result.state.draft.pageCount).toBe(2)
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/2 encartes \(3 e 2 produtos\)/)
+    expect(mocks.productReview).not.toHaveBeenCalled()
+  })
+
+  it('respeita o limite de nove produtos por página no Story', async () => {
+    const state = deliveredState({ products: manyProducts(20), formats: ['stories'] })
+    const result = await input(state, { action: 'update' }, 'divide em 2')
+    expect(result.state.order?.pageCount).toBe(3)
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/até 9 produtos por página.*3 encartes \(7, 7 e 6 produtos\)/)
+  })
+
+  it('não divide mais do que a quantidade de produtos', async () => {
+    const result = await input(deliveredState({ products: manyProducts(3), formats: ['feed'], headerFormats: ['feed'] }), { action: 'update' }, 'separa em 5 partes')
+    expect(result.state.order?.pageCount).toBe(3)
+    expect(result.send.map(message => message.text).join(' ')).toMatch(/até 3 encartes/)
+  })
+
+  it('divide e muda o formato no mesmo pedido', async () => {
+    const result = await input(deliveredState({ products: manyProducts(6) }), { action: 'update' }, 'manda em TV também e divide em 2')
+    expect(result.generate).toBe(true)
+    expect(result.state.order?.formats.map(format => format.id)).toEqual(['stories', 'tv'])
+    expect(result.state.order?.pageCount).toBe(2)
   })
 })

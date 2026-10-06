@@ -183,7 +183,20 @@ def _promote_logo_slots(canvas):
         canvas["objects"] = other_objects + logo_slots
 
 
-def _product_groups(products, division, max_slots):
+def _balanced_pages(group, page_count, max_slots):
+    """Divide em `page_count` páginas equilibradas na ordem da lista, como páginas manuais do editor.
+    Se alguma parte passar do limite do modelo, cria mais páginas até caber; nunca gera página vazia."""
+    total = min(len(group), max(int(page_count), -(-len(group) // max_slots), 1))
+    base, extra = divmod(len(group), total)
+    pages, start = [], 0
+    for index in range(total):
+        size = base + (1 if index < extra else 0)
+        pages.append(group[start:start + size])
+        start += size
+    return pages
+
+
+def _product_groups(products, division, max_slots, page_count=None):
     if division == "department":
         groups = {}
         for product in products:
@@ -198,7 +211,10 @@ def _product_groups(products, division, max_slots):
     for label, group in groups.items():
         if division == "single" and len(group) > max_slots:
             fail(f"O modelo comporta {max_slots} produtos por página; escolha divisão em páginas.")
-        if division in ("pages", "department"):
+        if division == "pages" and page_count and int(page_count) >= 2:
+            for page in _balanced_pages(group, page_count, max_slots):
+                result.append((label, page))
+        elif division in ("pages", "department"):
             for index in range(0, len(group), max_slots):
                 result.append((label, group[index:index + max_slots]))
         else:
@@ -257,7 +273,10 @@ def render(payload, output_dir: Path, fabric_path: Path):
         fail("O modelo não possui área de produtos editável.")
     page_capacity = 9 if story else 16
     max_slots = min(len(zones), page_capacity) if len(zones) > 1 else page_capacity
-    groups = _product_groups(products, division, max_slots)
+    page_count = payload.get("pageCount")
+    if page_count is not None and (not isinstance(page_count, int) or isinstance(page_count, bool) or page_count < 2 or page_count > 100):
+        fail("Quantidade de partes inválida para a divisão do encarte.")
+    groups = _product_groups(products, division, max_slots, page_count)
     browser_payload = {
       "canvas": canvas,
       "groups": [{"department": label, "products": group} for label, group in groups],
