@@ -104,12 +104,14 @@ describe('catálogo de criação pelo WhatsApp', () => {
     expect(family.missingTheme).toBe(false)
     mocks.query.mockResolvedValueOnce({ rows })
     const remainingFamily = await listCreationHeaders(accountId, 'encarte', 'TERÇA E QUARTA', ['stories'], 4)
-    expect(remainingFamily.headers.map(header => header.id)).toEqual(['ab7f7789-7298-4b34-b4c7-6d8f583d870a'])
-    expect([...family.headers, ...remainingFamily.headers].map(header => header.id)).toHaveLength(5)
+    // Busca ampla: depois dos modelos do tema, vêm os relacionados (aqui, outros “verde”).
+    expect(remainingFamily.headers[0]?.id).toBe('ab7f7789-7298-4b34-b4c7-6d8f583d870a')
+    expect(new Set([...family.headers, ...remainingFamily.headers].map(header => header.id)).size).toBe(family.headers.length + remainingFamily.headers.length)
 
     mocks.query.mockResolvedValueOnce({ rows })
     const specific = await listCreationHeaders(accountId, 'encarte', 'Terça e quarta mais verde', ['stories'])
-    expect(specific.headers.map(header => header.id)).toEqual([
+    // Os do tema exato vêm primeiro; os relacionados continuam disponíveis depois.
+    expect(specific.headers.map(header => header.id).slice(0, 2)).toEqual([
       '66aaabb8-33ef-43f3-a3f4-f8cb406f8862',
       '2db9ae75-936e-4f95-815c-636a3c5bb0c4'
     ])

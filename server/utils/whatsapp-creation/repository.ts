@@ -250,10 +250,17 @@ export async function claimCreationOutbound() {
   if (item.key) {
     let authorized: ReadonlySet<string> | undefined
     if (item.purpose === 'review' && state.draft.kind && state.draft.theme) {
-      const current = await listCreationHeaders(row.owner_id, state.draft.kind, state.draft.theme, state.draft.formats, state.choiceOffset)
-      // Only authorize the exact asset belonging to a template offered in this conversation.
+      // Only authorize the exact asset belonging to a template offered in this conversation:
+      // o arquivo do cabeçalho ou a miniatura salva do próprio modelo, pelo tema dito ou pelo tema do catálogo.
       const selected = [...state.choices, ...(state.header ? [state.header] : [])].find(h => h.headerKey === item.key)
-      if (selected && current.headers.some(h => h.id === selected.id && h.headerKey === item.key && h.revision === selected.revision)) authorized = new Set([item.key])
+      if (selected) {
+        for (const theme of [...new Set([state.draft.theme, state.draft.catalogTheme].filter((value): value is string => Boolean(value)))]) {
+          const current = await listCreationHeaders(row.owner_id, state.draft.kind, theme, state.draft.formats, 0, undefined, 500)
+          if (current.headers.some(h => h.id === selected.id && h.revision === selected.revision && (h.headerKey === item.key || h.listPreviewKey === item.key))) {
+            authorized = new Set([item.key]); break
+          }
+        }
+      }
     }
     file = await signOwnedArtifact(item.key, row.owner_id, authorized)
   }

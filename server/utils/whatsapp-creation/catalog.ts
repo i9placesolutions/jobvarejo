@@ -27,6 +27,8 @@ export type CreationHeader = {
   sourcePageHeight?: number
   /** Modelo de tema parecido, oferecido porque não há modelo com o tema exato pedido. */
   related?: boolean
+  /** Miniatura salva do modelo, usada na lista quando a prévia com a logo da conta ainda não existe. */
+  listPreviewKey?: string
 }
 
 export type CreationHeaderPage = {
@@ -159,12 +161,20 @@ const expandThemeTokens = (terms: string[]): Set<string> => {
   return expanded
 }
 /** Afinidade entre o tema pedido e o tema de um modelo (0 = nada em comum). Dia da semana pesa pouco. */
-export const encarteThemeAffinity = (requested: string, category: unknown, subcategory: unknown): number => {
-  const wanted = expandThemeTokens(themeTokens(requested))
+// Radical curto para plural/singular (“carnes”/“carne”, “promoções”/“promoção”).
+const themeStem = (term: string): string => term.length >= 5 ? term.slice(0, 5) : term
+export const encarteThemeAffinity = (requested: string, category: unknown, subcategory: unknown, name: unknown = ''): number => {
+  // Só palavras genéricas (“promoção”, “ofertas”) também valem quando é tudo que a pessoa disse.
+  const requestedTokens = themeTokens(requested)
+  const tokens = requestedTokens.length ? requestedTokens : normalizeCreationTheme(requested).split(' ').filter(term => term && !ENCARTE_THEME_STOPWORDS.has(term))
+  const wanted = new Set([...expandThemeTokens(tokens)].map(themeStem))
   if (!wanted.size) return 0
-  const score = (value: unknown, weight: number) => [...expandThemeTokens(themeTokens(value))]
-    .reduce((sum, term) => sum + (wanted.has(term) ? (WEEKDAY_WORDS.has(term) ? 0.5 : weight) : 0), 0)
-  return score(subcategory, 2) + score(category, 1)
+  const valueTokens = (value: unknown) => requestedTokens.length ? themeTokens(value)
+    : normalizeCreationTheme(value).split(' ').filter(term => term && !ENCARTE_THEME_STOPWORDS.has(term))
+  const score = (value: unknown, weight: number) => [...new Set([...expandThemeTokens(valueTokens(value))].map(themeStem))]
+    .reduce((sum, term) => sum + (wanted.has(term) ? (WEEKDAY_WORDS.has(term) || WEEKDAY_WORDS.has(term + 'a') ? 0.5 : weight) : 0), 0)
+  // O nome do modelo também diz o tema (“Saldão do Açougue” cadastrado como “ofertas”).
+  return score(subcategory, 2) + score(category, 1) + score(name, 1.5)
 }
 
 const projectPages = (value: unknown): Record<string, any>[] => {
@@ -215,7 +225,7 @@ const encarteHeaders = async (
     const label = text(config.subcategory || config.category || config.theme)
     if (label) suggestions.set(label, (suggestions.get(label) || 0) + 1)
     const exact = encarteThemeMatches(requestedTheme, themeValues)
-    const affinity = exact ? 0 : encarteThemeAffinity(requestedTheme, config.category, config.subcategory || config.theme)
+    const affinity = exact ? 0 : encarteThemeAffinity(requestedTheme, config.category, config.subcategory || config.theme, row.name)
     if (!exact && affinity < 1) continue
     if (exact) themeExists = true
     const availableFormats = uniqueStrings([
@@ -243,6 +253,7 @@ const encarteHeaders = async (
       name: text(row.name),
       ...(headerKey ? { headerKey } : {}),
       ...(publicPreview ? { previewUrl: publicPreview } : {}),
+      ...(extractStorageKey(row.preview_url) ? { listPreviewKey: extractStorageKey(row.preview_url) } : {}),
       sourceOwnerId: row.owner_id,
       ...(previewPage && sourceThumbnailKey && sourceCanvasKey && Number(previewPage.height) > 0 ? {
         sourceThumbnailKey, sourceCanvasKey, sourcePageHeight: Number(previewPage.height)
@@ -252,13 +263,16 @@ const encarteHeaders = async (
     if (exact) matches.push(header)
     else related.push({ header: { ...header, theme: label || header.theme, related: true }, score: affinity, label, category: text(config.category) || label })
   }
-  if (matches.length || themeExists) return { headers: matches, themeExists }
-  // Sem modelo do tema exato: oferece os de tema mais parecido em vez de travar a conversa.
+  // Busca ampla: primeiro os do tema exato, depois os relacionados (seção inteira e modelos
+  // cujo nome fala do tema), com os mais parecidos primeiro.
   related.sort((a, b) => b.score - a.score)
   const topScore = related[0]?.score || 0
-  // Mantém a seção inteira (ex.: todos os modelos de Açougue), com os mais parecidos primeiro.
   const closest = related.filter(item => item.score >= Math.max(1, topScore / 3))
   const suggestedThemes = [...suggestions.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name).slice(0, 8)
+  if (matches.length || themeExists) {
+    const seen = new Set(matches.map(header => header.id))
+    return { headers: [...matches, ...closest.map(item => ({ ...item.header, related: undefined, theme: item.header.theme })).filter(header => !seen.has(header.id))], themeExists }
+  }
   return { headers: closest.map(item => item.header), themeExists: false, relatedThemes: [...new Set(closest.map(item => item.category).filter(Boolean))].slice(0, 3), suggestedThemes }
 }
 
@@ -459,7 +473,8 @@ export async function listCreationHeaders(
   theme: string,
   formats: string[],
   offset = 0,
-  preferredHeaderId?: string
+  preferredHeaderId?: string,
+  pageSize = PAGE_SIZE
 ): Promise<CreationHeaderPage> {
   const normalizedAccountId = text(accountId)
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedAccountId)) {
@@ -479,9 +494,10 @@ export async function listCreationHeaders(
   const orderedHeaders = [...catalog.headers]
   const preferredIndex = preferredHeaderId ? orderedHeaders.findIndex(header => header.id === text(preferredHeaderId)) : -1
   if (safeOffset === 0 && preferredIndex > 0) orderedHeaders.unshift(...orderedHeaders.splice(preferredIndex, 1))
-  const headers = orderedHeaders.slice(safeOffset, safeOffset + PAGE_SIZE)
+  const size = Number.isSafeInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, 500) : PAGE_SIZE
+  const headers = orderedHeaders.slice(safeOffset, safeOffset + size)
   const extra = catalog as { relatedThemes?: string[]; suggestedThemes?: string[] }
-  return { headers, hasMore: catalog.headers.length > safeOffset + PAGE_SIZE, missingTheme: !catalog.themeExists,
+  return { headers, hasMore: catalog.headers.length > safeOffset + size, missingTheme: !catalog.themeExists,
     ...(extra.relatedThemes?.length ? { relatedThemes: extra.relatedThemes } : {}),
     ...(extra.suggestedThemes?.length ? { suggestedThemes: extra.suggestedThemes } : {}) }
 }
@@ -503,10 +519,15 @@ export type ProductCandidate = { id: string; name: string; brand: string; varian
 
 const normalizeProductText = (value: unknown): string => String(value ?? '')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
+  // “s/ osso” e “c/ osso” são produtos diferentes: a barra não pode apagar sem/com.
+  .replace(/(^|[^a-z])s\s*\//g, '$1sem ').replace(/(^|[^a-z])c\s*\//g, '$1com ')
   .replace(/(\d)[,](\d)/g, '$1.$2').replace(/[^a-z0-9.]+/g, ' ').trim().replace(/\s+/g, ' ')
 
 const normalizeWeight = (value: unknown): string => normalizeProductText(value).replace(/\s+/g, '')
 const PRODUCT_NAME_UNIT_TOKENS = new Set(['kg', 'g', 'mg', 'ml', 'l', 'un', 'pct', 'cx', 'fardo', 'fd'])
+
+/** Radical para comparar gênero/plural: “suino”/“suina”/“suinos” → “suin”. */
+const productStem = (token: string): string => token.length > 4 ? token.replace(/(?:as|os|es|a|o|s)$/, '') : token
 
 const escapeLike = (value: string): string => value.replace(/[\\%_]/g, '\\$&')
 
@@ -519,19 +540,32 @@ export async function listProductCandidates(
   }
   const requestedName = normalizeProductText(product?.name)
   if (!requestedName) return []
-  const { rows } = await pgQuery<ProductImageRow>(
-    `select id, search_term, product_name, brand, flavor, weight, image_url, s3_key, usage_count
-       from public.product_image_cache
-      where image_url is not null
-        and s3_key like 'imagens/%'
-        and (product_name ilike $1 escape '\\' or search_term ilike $1 escape '\\')
-      order by (lower(btrim(product_name)) = lower(btrim($2))) desc,
-               (lower(btrim(brand)) = lower(btrim($3))) desc,
-               (lower(btrim(flavor)) = lower(btrim($4))) desc,
-               (lower(btrim(weight)) = lower(btrim($5))) desc,
+  // Busca ampla: ignora acento, ordem das palavras, gênero e plural (“suan suíno” acha “kg suan suina”).
+  const nameStems = [...new Set(requestedName.split(' ').filter(token => token.length > 1 &&
+    !PRODUCT_NAME_UNIT_TOKENS.has(token) && !['sem', 'com'].includes(token) && !/^\d+(?:\.\d+)?$/.test(token)).map(productStem))]
+  if (!nameStems.length) return []
+  // Procura no cache de imagens e também no cadastro aprovado (fotos que nunca passaram pelo cache).
+  const plain = (column: string) => `translate(lower(${column}), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc')`
+  const { rows } = await pgQuery<ProductImageRow & { own: boolean }>(
+    `select * from (
+       select id::text as id, search_term, product_name, brand, flavor, weight, image_url, s3_key, usage_count, (user_id = $3::uuid) as own
+         from public.product_image_cache
+        where image_url is not null
+          and s3_key like 'imagens/%'
+          and ${plain("coalesce(product_name, '') || ' ' || coalesce(search_term, '')")} like all ($1::text[])
+       union all
+       select 'registry-' || registry.id::text, null, registry.canonical_name, registry.brand, registry.flavor, registry.weight, registry.s3_key, registry.s3_key, 0, (registry.validated_by::text = $3::text)
+         from public.product_image_registry registry
+        where registry.status = 'approved'
+          and registry.s3_key like 'imagens/%'
+          and ${plain("coalesce(registry.canonical_name, '')")} like all ($1::text[])
+          and not exists (select 1 from public.product_image_cache cache where cache.s3_key = registry.s3_key)
+     ) candidate
+      order by own desc nulls last,
+               (lower(btrim(product_name)) = lower(btrim($2))) desc,
                usage_count desc nulls last, id desc
-      limit 250`,
-    [`%${escapeLike(text(product.name))}%`, text(product.name), text(product.brand), text(product.variant), text(product.weight)]
+      limit 300`,
+    [nameStems.map(stem => `%${escapeLike(stem)}%`), text(product.name), text(accountId)]
   )
   const requestedBrand = normalizeProductText(product.brand)
   const requestedVariant = normalizeProductText(product.variant)
@@ -551,9 +585,9 @@ export async function listProductCandidates(
       // For a one-word request, require that word to identify the product name
       // itself. Keep multi-word matching across searchable metadata so brand and
       // package details stored in separate columns continue to match.
-      const simpleNameIsProductIdentity = nameTokens.length !== 1 || productNameTokens[0] === nameTokens[0]
+      const simpleNameIsProductIdentity = nameTokens.length !== 1 || productStem(productNameTokens[0] || '') === productStem(nameTokens[0]!)
       if (!key.startsWith('imagens/') || !simpleNameIsProductIdentity ||
-        nameTokens.some(token => !searchable.includes(token))) return null
+        nameTokens.some(token => !searchable.includes(productStem(token)))) return null
       const brand = text(row.brand)
       const weight = text(row.weight)
       if (requestedBrand && normalizeProductText(brand) !== requestedBrand) return null
@@ -567,7 +601,9 @@ export async function listProductCandidates(
           id: String(row.id), name, brand, variant, weight, key,
           previewUrl: getPublicUrl(key)
         },
-        score: exactName * 100 + Number(Boolean(exactVariant)) * 10 + Number(Boolean(exactWeight)) * 5,
+        // Nome exato primeiro, depois foto da própria conta; nomes com muitas palavras a mais perdem pontos.
+        score: exactName * 100 + (row.own ? 60 : 0) + Number(Boolean(exactVariant)) * 10 + Number(Boolean(exactWeight)) * 5 -
+          Math.max(0, productNameTokens.filter(token => !PRODUCT_NAME_UNIT_TOKENS.has(token)).length - nameTokens.length) * 4,
         popularity: Number(row.usage_count || 0)
       }
     })

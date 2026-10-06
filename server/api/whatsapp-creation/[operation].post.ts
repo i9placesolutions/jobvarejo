@@ -9,7 +9,7 @@ import { pollWhatsAppJobs, followUpWhatsAppThemes } from '~/server/utils/whatsap
 import { listCreationThemeNames } from '~/server/utils/whatsapp-creation/catalog'
 import { downloadProviderMedia } from '~/server/utils/whatsapp-creation/media'
 import { pgQuery } from '~/server/utils/postgres'
-import { prepareCreationHeader } from '~/server/utils/whatsapp-creation/header-preview'
+import { cachedCreationHeader, prepareCreationHeader } from '~/server/utils/whatsapp-creation/header-preview'
 import { hasBriefFields, shouldConsultJev, suggestJevRoute } from '~/server/utils/whatsapp-creation/jev'
 import { ensureProcessedWhatsAppPhoto, isRawWhatsAppPhoto } from '~/server/utils/whatsapp-creation/product-photo'
 
@@ -108,7 +108,8 @@ export default defineEventHandler(async event => {
     if (proposal.action === 'account_project' || context.state.accountProject?.awaitingChoice) assertCreationAccess(context.account.user, 'encarte')
     const result = await advanceConversation({ state: context.state, proposal, text: messageText, accountId: context.owner_id,
       sender: context.sender_phone, orderId: context.current_order_id, name: context.account.user.user_metadata.name || context.account.businessProfile.companyName || 'cliente', uploaded: context.payload.uploaded,
-      prepareHeader: (header, selectedKind) => prepareCreationHeader(header, selectedKind, context.account) })
+      prepareHeader: (header, selectedKind) => prepareCreationHeader(header, selectedKind, context.account),
+      cachedHeader: header => cachedCreationHeader(header, context.account) })
     const usage = response.usage || {}, prior = result.state.usage, audio = context.payload.transcriptionUsage
     result.state.usage = { promptTokens: Number(prior?.promptTokens || 0) + Number(audio?.promptTokens || 0) + Math.max(0, Number(usage.prompt_tokens || 0)), completionTokens: Number(prior?.completionTokens || 0) + Number(audio?.completionTokens || 0) + Math.max(0, Number(usage.completion_tokens || 0)), cost: Number(prior?.cost || 0) + Number(audio?.cost || 0) + Math.max(0, Number(usage.cost || 0)) }
     rememberConversationTurns(result.state, [

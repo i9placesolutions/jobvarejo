@@ -25,7 +25,7 @@ vi.mock('../../server/utils/whatsapp-creation/catalog', () => ({
 vi.mock('../../server/utils/whatsapp-creation/media', () => ({ ownedStorageBytes: mocks.storageBytes }))
 vi.mock('../../server/utils/whatsapp-creation/product-review', () => ({ createProductReviewBoards: mocks.productReview }))
 
-const { advanceConversation, isAmbiguousNewFlyerRequest, isNewMaterialRequest, regenerateChoiceAnswer, sanitizeThemeAndValidity, finalSendType, interpretationRequest, isRegenerateRequest, isResendRequest, mentionedFlyerFormats, newConversationState, normalizeConversationIntent, requestedPageCount } = await import('../../server/utils/whatsapp-creation/conversation')
+const { advanceConversation, isOnePerProductRequest, isAmbiguousNewFlyerRequest, isNewMaterialRequest, regenerateChoiceAnswer, sanitizeThemeAndValidity, finalSendType, interpretationRequest, isRegenerateRequest, isResendRequest, mentionedFlyerFormats, newConversationState, normalizeConversationIntent, requestedPageCount } = await import('../../server/utils/whatsapp-creation/conversation')
 
 const accountId = '11111111-1111-4111-8111-111111111111'
 const otherAccountId = '22222222-2222-4222-8222-222222222222'
@@ -102,8 +102,32 @@ describe('workflow da conversa de criação via WhatsApp', () => {
         return { ...selected, headerKey: `headers/${selected.id}.png` }
       }
     })
-    expect(prepared.send.map(message => message.text)).toEqual(['1', '2', '3', '4'])
-    expect(prepared.send.map(message => message.key)).toEqual(headers.map(selected => `headers/${selected.id}.png`))
+    const images = prepared.send.filter(message => message.type === 'image')
+    expect(images.map(message => message.text)).toEqual(['1', '2', '3', '4'])
+    expect(images.map(message => message.key)).toEqual(headers.map(selected => `headers/${selected.id}.png`))
+  })
+
+  it('ao cumprimentar pergunta o que criar e a resposta com o tipo começa um pedido novo', () => {
+    const state = { ...newConversationState(), phase: 'approved' as const, pendingOrderChoice: true }
+    expect(normalizeConversationIntent({ action: 'status' } as any, 'quero um vídeo', state)).toMatchObject({ action: 'new_order', kind: 'video' })
+    expect(normalizeConversationIntent({ action: 'status' } as any, 'cartaz', state)).toMatchObject({ action: 'new_order', kind: 'cartaz' })
+    expect(normalizeConversationIntent({ action: 'status' } as any, 'encarte', { ...state, phase: 'data' as const })).toMatchObject({ action: 'cancel_and_start_new', kind: 'encarte' })
+  })
+
+  it('mostra 20 modelos por vez em sequência e aceita escolher um número de uma página anterior', async () => {
+    const all = Array.from({ length: 45 }, (_, index) => ({ ...header, id: `modelo-${index + 1}`, name: `Modelo ${index + 1}`, headerKey: `headers/${index + 1}.png` }))
+    mocks.headers.mockImplementation(async (_account: string, _kind: string, _theme: string, _formats: string[], offset = 0, _preferred?: string, size = 4) =>
+      ({ headers: all.slice(offset, offset + size), hasMore: all.length > offset + size, missingTheme: false }))
+    const first = await input(newConversationState(), { action: 'update', kind: 'encarte', theme: 'Açougue' }, 'açougue')
+    expect(first.send.filter(message => message.type === 'image').map(message => message.text)).toEqual(Array.from({ length: 20 }, (_, i) => String(i + 1)))
+    const second = await input(first.state, { action: 'more_headers' }, 'mais opções')
+    expect(second.send.filter(message => message.type === 'image').map(message => message.text)).toEqual(Array.from({ length: 20 }, (_, i) => String(i + 21)))
+    const third = await input(second.state, { action: 'more_headers' }, 'mais opções')
+    expect(third.send.filter(message => message.type === 'image').map(message => message.text)).toEqual(['41', '42', '43', '44', '45'])
+    const end = await input(third.state, { action: 'more_headers' }, 'mais opções')
+    expect(end.send.map(message => message.text).join(' ')).toMatch(/todos os 45 modelos/)
+    const chosen = await input(end.state, { action: 'choose_header', choice: 15 }, 'quero o número 15 mesmo')
+    expect(chosen.state.header?.id).toBe('modelo-15')
   })
 
   it('pergunta naturalmente qual modelo prefere e oferece mais opções quando há outras', async () => {
@@ -120,7 +144,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const visualHeader = { ...header, theme: 'Hortifruti', headerKey: 'whatsapp-creation/owner/headers/preview.png' }
     mocks.headers.mockResolvedValue({ headers: [visualHeader], hasMore: false, missingTheme: false })
     const first = await input(newConversationState(), { action: 'update', kind: 'encarte', theme: 'Hortifruti' }, 'Hortifruti')
-    expect(mocks.headers).toHaveBeenCalledWith(accountId, 'encarte', 'Hortifruti', [], 0)
+    expect(mocks.headers).toHaveBeenCalledWith(accountId, 'encarte', 'Hortifruti', [], 0, undefined, 20)
     expect(first.state.phase).toBe('header')
     expect(first.send).toContainEqual(expect.objectContaining({ type: 'image', key: visualHeader.headerKey }))
     const chosen = await input(first.state, { action: 'choose_header', choice: 1 }, '1')
@@ -136,7 +160,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const paged = await input(first.state, { action: 'more_headers' }, 'ver mais')
     expect(paged.state.choiceOffset).toBe(1)
     await input(paged.state, { action: 'update', theme: 'Aniversário' }, 'mude para aniversário')
-    expect(mocks.headers).toHaveBeenLastCalledWith(accountId, 'encarte', 'Aniversário', ['stories', 'tv'], 0)
+    expect(mocks.headers).toHaveBeenLastCalledWith(accountId, 'encarte', 'Aniversário', ['stories', 'tv'], 0, undefined, 20)
   })
 
   it('pergunta o tema antes do catálogo e mantém todos os produtos nos dois formatos sem inventar divisão', async () => {
@@ -151,7 +175,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     const needsHeader = await input(noTheme.state, {
       action: 'update', theme: 'Fecha Mês', formats: ['stories', 'tv']
     }, 'tema fim de semana')
-    expect(mocks.headers).toHaveBeenCalledWith(accountId, 'encarte', 'Fecha Mês', ['stories', 'tv'], 0)
+    expect(mocks.headers).toHaveBeenCalledWith(accountId, 'encarte', 'Fecha Mês', ['stories', 'tv'], 0, undefined, 20)
     expect(needsHeader.state.phase).toBe('header')
     const productIds = noTheme.state.draft.products.map(item => item.id)
     expect(needsHeader.state.draft.products.map(item => item.id)).toEqual(productIds)
@@ -175,7 +199,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
     expect(first.state.phase).toBe('header')
     expect(first.state.draft).toMatchObject({ theme: 'Hortifruti', formats: ['stories'], validity: '05/10/2026' })
     expect(first.state.draft.products).toHaveLength(2)
-    expect(first.send).toHaveLength(1)
+    expect(first.send.filter(message => /^1\b/.test(message.text))).toHaveLength(1)
 
     const chosen = await input(first.state, { action: 'status' }, '1')
     expect(chosen.state.phase).toBe('data')
@@ -683,7 +707,7 @@ describe('workflow da conversa de criação via WhatsApp', () => {
   it('não confunde outro cabeçalho com outro encarte e entende a resposta ao escolher continuar ou recomeçar', async () => {
     const first = await beginOrder({ products: [product()], division: 'single' })
     const greeting = await input(first.state, { action: 'status' }, 'Oi')
-    expect(greeting.send[0]?.text).toBe('Oi! Quer continuar esse encarte ou começar outro?')
+    expect(greeting.send[0]?.text).toMatch(/^Oi, Rafa! O que vamos criar hoje: encarte, vídeo, cartaz ou arte do Estúdio\? Se quiser continuar o encarte de .+, é só dizer “continuar”\.$/)
     const anotherHeader = await input(first.state, { action: 'cancel_and_start_new' }, 'Quero outro cabeçalho')
     expect(anotherHeader.state.phase).toBe('header')
     expect(anotherHeader.state.draft.theme).toBe('Fecha Mês')
@@ -1132,5 +1156,17 @@ describe('encarte novo ou nova versão depois da entrega', () => {
     expect(fixed.validity).toBeUndefined()
     expect(fixed.theme).toBe('terça e quarta verde')
     expect(sanitizeThemeAndValidity({ action: 'update', validity: '07/10 a 08/10' } as any, '07/10 a 08/10').validity).toBe('07/10 a 08/10')
+  })
+})
+
+describe('um encarte por produto', () => {
+  it('entende pedidos de cada produto separado', () => {
+    for (const text of ['agora me manda cada produto separado no formato stories', 'um produto por encarte', 'quero os produtos individuais em story', 'cada produto em um encarte'])
+      expect(isOnePerProductRequest(text), text).toBe(true)
+    expect(requestedPageCount('cada produto separado', 7)).toBe(7)
+    expect(requestedPageCount('cada produto separado', 30)).toBe(20)
+    expect(isOnePerProductRequest('divide em 2')).toBe(false)
+    expect(requestedPageCount('quero 4 produtos por página no stories', 9)).toBe(3)
+    expect(requestedPageCount('coloca três produtos em cada encarte', 9)).toBe(3)
   })
 })

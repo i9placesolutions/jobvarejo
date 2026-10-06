@@ -236,6 +236,14 @@ async function flyerHeaderCacheKey(header: CreationHeader, account: ResolvedWhat
   return `whatsapp-creation/${account.user.id}/headers/cache-${hash}.png`
 }
 
+/** Prévia de encarte com a logo da conta que já foi preparada antes; null se ainda não existe. */
+export async function cachedCreationHeader(header: CreationHeader, account: ResolvedWhatsAppAccount): Promise<CreationHeader | null> {
+  const cacheKey = await flyerHeaderCacheKey(header, account)
+  if (!cacheKey) return null
+  const cached = await getS3Client().send(new HeadObjectCommand({ Bucket: videoBucket(), Key: cacheKey })).then(() => true, () => false)
+  return cached ? { ...header, headerKey: cacheKey } : null
+}
+
 /** Reusable preview in this customer's namespace; no project/job/paid call. */
 export async function prepareCreationHeader(header: CreationHeader, kind: CreationKind, account: ResolvedWhatsAppAccount): Promise<CreationHeader> {
   if (kind !== 'encarte' && (header.headerKey || header.previewUrl)) return header

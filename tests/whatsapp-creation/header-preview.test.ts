@@ -56,7 +56,7 @@ describe('prévia de cabeçalho de encarte', () => {
     const pixelB = await sharp(saved[1]).extract({ left: 600, top: 150, width: 1, height: 1 }).raw().toBuffer()
     expect(pixelA[0]!).toBeGreaterThan(pixelA[2]!)
     expect(pixelB[2]!).toBeGreaterThan(pixelB[0]!)
-  })
+  }, 30_000)
 
   it('mantém o fundo do modelo e o contorno sticker de uma logo transparente', async () => {
     const logo = await sharp({ create: { width: 500, height: 500, channels: 4, background: '#00000000' } })

@@ -53,7 +53,7 @@ export const proposalSchema = z.object({
 }).strict()
 export type Proposal = z.infer<typeof proposalSchema>
 export type ConversationArtifact = { artifactId: string; formatId: string; key: string; previewKey?: string; hash: string; mimeType: string; projectId: string; editUrl: string }
-type Header = { id: string; revision: number; theme: string; nativeThemeId?: string; formats: string[]; name: string; headerKey?: string; previewUrl?: string; related?: boolean }
+type Header = { id: string; revision: number; theme: string; nativeThemeId?: string; formats: string[]; name: string; headerKey?: string; previewUrl?: string; related?: boolean; listPreviewKey?: string }
 export interface ConversationState {
   phase: 'collecting' | 'header' | 'data' | 'images' | 'script' | 'rendering' | 'preview' | 'approved' | 'delivered' | 'cancelled' | 'theme_pending'
   draft: {
@@ -229,9 +229,19 @@ const splitUnits = '(?:encartes|partes|paginas|imagens|artes|pedacos|folhas|lami
  * Quantidade de encartes pedida para dividir os produtos (“divide em 2 encartes”, “separa em 3 partes”,
  * “metade em cada” = 2, “junta tudo num só” = 1). Retorna undefined quando a mensagem não pede divisão.
  */
-export const requestedPageCount = (text: string): number | undefined => {
+/** “Cada produto separado”, “um produto por encarte/story”, “individual”: um encarte por produto. */
+export const isOnePerProductRequest = (text: string): boolean =>
+  /\b(?:cada produto|cada item|cada oferta)\b.{0,40}\b(?:separad[oa]s?|individual|sozinh[oa]|proprio|propria|seu proprio|em um|num|em uma|numa)\b|\bum (?:produto|item) (?:por|em cada) (?:encarte|pagina|imagem|story|stories|post|arte)\b|\b(?:produtos?|itens) (?:individuais|separados|um por um)\b|\bseparado por produto\b/.test(normalizedText(text))
+export const requestedPageCount = (text: string, productCount?: number): number | undefined => {
   const normalized = normalizedText(text)
   if (!normalized || normalized.length > 240) return undefined
+  if (productCount && isOnePerProductRequest(text)) return Math.min(productCount, MAX_PAGE_COUNT)
+  // “4 produtos por página/encarte/story”: quantidade de encartes vem do total de produtos.
+  const perPage = normalized.match(new RegExp(`\\b${splitNumber}\\s+(?:produtos?|itens?|ofertas?)\\s+(?:por|em cada|cada)\\s+(?:pagina|encarte|imagem|story|stories|arte|post|pagina)`))
+  if (productCount && perPage) {
+    const size = /^\d+$/.test(perPage[1]!) ? Number(perPage[1]) : NUMBER_WORDS[perPage[1]!]
+    if (size && size >= 1) return Math.min(Math.max(1, Math.ceil(productCount / size)), MAX_PAGE_COUNT)
+  }
   if (new RegExp(`\\bnao\\s+(?:precisa\\s+|quero\\s+|vou\\s+)?${splitVerb}`).test(normalized)) return undefined
   if (/\b(?:junta|junte|juntar|une|unir|coloca|coloque|bota)\b.{0,30}\b(?:tudo|todos)\b.{0,30}\b(?:um so|uma so|num so|numa so|um unico|uma unica|um encarte|uma pagina|uma imagem|mesmo encarte|mesma pagina|mesma imagem)\b|\btudo (?:em|num|numa) (?:um|uma)?\s*(?:so|unic[oa])?\s*(?:encarte|pagina|imagem|arte)(?: so)?\b|\bsem dividir\b/.test(normalized)) return 1
   if (/\bmetade\b.{0,40}\b(?:em cada|cada|no outro|noutro|em outro|outra metade|em um e|num e)\b|\bmeio a meio\b/.test(normalized)) return 2
@@ -270,7 +280,7 @@ export function requestedRerender(text: string, proposal: Pick<Proposal, 'format
     const replaces = /\b(?:troca|troque|trocar|muda|mude|mudar|somente|apenas|converte|transforma|so (?:em|no|na|o|a|pra|para|de|do|da))\b/.test(normalized)
     formats = [...new Set(strongReplace || (!adds && replaces) ? requested : [...current, ...requested])]
   }
-  const textPages = requestedPageCount(text)
+  const textPages = requestedPageCount(text, state.order.products.length)
   const modelPages = /\b(?:divid|separ|metade|partes|junta)/.test(normalized) ? sanitizePageCount(proposal.pageCount) : undefined
   const pages = textPages ?? modelPages
   const currentPages = state.order.pageCount ?? 1
@@ -325,6 +335,16 @@ const expectedQuestion = (state: ConversationState) => {
   const missingField = !state.draft.kind ? 'kind' : !state.draft.theme ? 'theme' : state.draft.kind !== 'encarte' && !state.draft.formats.length ? 'formats' : !state.draft.products.length && state.draft.kind !== 'studio' ? 'products' : state.draft.validity === undefined ? 'validity' : undefined
   return { lastAssistantQuestion: lastAssistant, expectedControl: state.pendingOrderChoice ? 'continue_or_start_new' : undefined, expectedMissingField: missingField }
 }
+/** “Encarte”, “quero um vídeo”, “cartaz”… como resposta à pergunta do que criar. */
+export const requestedKindReply = (text: string): CreationKind | undefined => {
+  const normalized = normalizedText(text)
+  if (normalized.length > 60) return undefined
+  if (/\b(?:video|videos|reels|mp4)\b/.test(normalized)) return 'video'
+  if (/\b(?:cartaz|cartazes|plaquinha|placa)\b/.test(normalized)) return 'cartaz'
+  if (/\b(?:estudio|post|arte)\b/.test(normalized) && !/\bencarte\b/.test(normalized)) return 'studio'
+  if (/\b(?:encarte|encartes|tabloide|panfleto|folheto)\b/.test(normalized)) return 'encarte'
+  return undefined
+}
 const deliveredFlyer = (state: ConversationState): boolean => ['approved', 'delivered'].includes(state.phase) && state.order?.kind === 'encarte' && Boolean(state.artifacts.length)
 /** Resposta à pergunta “gerar de novo este encarte ou começar um novo?”. */
 export const regenerateChoiceAnswer = (text: string): 'same' | 'new' | undefined => {
@@ -350,6 +370,11 @@ export function sanitizeThemeAndValidity(proposal: Proposal, text: string): Prop
   return next
 }
 export function normalizeConversationIntent(proposal: Proposal, text: string, state: ConversationState): Proposal {
+  // Depois do “o que vamos criar?”, citar o tipo de material começa um pedido novo desse tipo.
+  const kindReply = requestedKindReply(text)
+  if (state.pendingOrderChoice && kindReply && !/\b(?:continuar|continua|esse mesmo|este mesmo)\b/.test(normalizedText(text))) {
+    return { ...proposal, action: ['approved', 'delivered', 'cancelled'].includes(state.phase) ? 'new_order' : 'cancel_and_start_new', kind: kindReply }
+  }
   if (state.pendingRegenerateChoice && deliveredFlyer(state)) {
     const answer = regenerateChoiceAnswer(text)
     if (answer === 'new') return { ...proposal, action: 'new_order', kind: proposal.kind || 'encarte' }
@@ -606,22 +631,51 @@ export function transcriptionRequest(mediaContent: unknown) {
  * Busca modelos pelo tema dito; se não houver o exato, usa o tema do catálogo que a IA
  * associou pelo sentido e, por último, a busca por palavras parecidas do catálogo.
  */
-async function findCreationHeaders(accountId: string, d: ConversationState['draft'], offset: number) {
-  const literal = await listCreationHeaders(accountId, d.kind!, d.theme!, d.formats, offset)
+async function findCreationHeaders(accountId: string, d: ConversationState['draft'], offset: number, pageSize?: number) {
+  const literal = await listCreationHeaders(accountId, d.kind!, d.theme!, d.formats, offset, undefined, pageSize)
   if (!literal.missingTheme || !d.catalogTheme || normalizedText(d.catalogTheme) === normalizedText(d.theme || '')) return literal
-  const mapped = await listCreationHeaders(accountId, d.kind!, d.catalogTheme, d.formats, offset)
+  const mapped = await listCreationHeaders(accountId, d.kind!, d.catalogTheme, d.formats, offset, undefined, pageSize)
   if (!mapped.headers.length) return literal
   return { ...mapped, missingTheme: true, headers: mapped.headers.map(header => ({ ...header, related: true, theme: header.theme || d.catalogTheme! })),
     relatedThemes: mapped.relatedThemes?.length ? mapped.relatedThemes : [d.catalogTheme] }
+}
+const FLYER_HEADERS_PER_PAGE = 20
+// Prepara com a logo da conta só o que cabe no tempo da resposta; o restante vai com a miniatura do modelo.
+const HEADER_PREPARE_BUDGET_MS = 20_000
+async function prepareHeaderPage(page: Header[], kind: CreationKind, prepare: (header: Header, kind: CreationKind) => Promise<Header>,
+  cached?: (header: Header) => Promise<Header | null>): Promise<Header[]> {
+  if (kind !== 'encarte') {
+    const prepared: Header[] = []
+    for (const header of page) prepared.push(await prepare(header, kind))
+    return prepared
+  }
+  const started = Date.now()
+  const result: Array<Header | null> = await Promise.all(page.map(header => cached ? cached(header).catch(() => null) : Promise.resolve(null)))
+  for (let index = 0; index < page.length; index++) {
+    if (result[index]) continue
+    const header = page[index]!
+    if (Date.now() - started < HEADER_PREPARE_BUDGET_MS) {
+      try { result[index] = await prepare(header, kind); continue } catch { /* usa a miniatura abaixo */ }
+    }
+    result[index] = header.listPreviewKey ? { ...header, headerKey: header.listPreviewKey } : header
+  }
+  return result as Header[]
 }
 export async function advanceConversation(input: {
   state: ConversationState; proposal: Proposal; text: string; accountId: string; sender: string; orderId: string; name: string;
   uploaded?: { key: string; hash: string }
   prepareHeader?: (header: Header, kind: CreationKind) => Promise<Header>
+  /** Prévia de encarte com a logo já preparada antes (sem renderizar); null se não existir. */
+  cachedHeader?: (header: Header) => Promise<Header | null>
   /** Lista os encartes do dono; injetável nos testes. Sempre filtrada por accountId. */
   listAccountProjects?: (accountId: string) => Promise<AccountProjectSummary[]>
 }): Promise<{ state: ConversationState; send: ConversationSend[]; generate: boolean; missingTheme?: boolean; accountProjectJob?: { token: string; projectId: string } }> {
   let s = structuredClone(input.state), p = sanitizeThemeAndValidity(proposalSchema.parse(input.proposal), input.text)
+  // Esperando o tema (nenhum modelo achado): resposta curta como “Açougue” é o novo tema, mesmo se a IA não extrair.
+  if (s.phase === 'theme_pending' && !p.theme && !p.products?.length && input.text.trim().length <= 40 && !/\d/.test(input.text) &&
+    !/^(?:oi|ol[aá]|bom dia|boa tarde|boa noite|sim|n[aã]o|ok|obrigad[oa]|cancela(?:r)?)\b/i.test(input.text.trim())) {
+    p = { ...p, action: 'update', theme: input.text.trim() }
+  }
   const send: ConversationSend[] = [], say = (text: string) => send.push({ type: 'text', text })
   if (s.order && s.order.accountId !== input.accountId) throw new Error('ACCOUNT_MISMATCH')
   const preserveHeaderCandidates = Boolean(s.headerRefreshPending && s.phase === 'header' && s.order)
@@ -695,7 +749,7 @@ export async function advanceConversation(input: {
   const requestedKind = p.kind || s.draft.kind
   if (requestedKind && requestedKind !== 'encarte') p = { ...p, pageCount: undefined }
   else if (!['rendering', 'preview', 'approved', 'delivered', 'cancelled'].includes(s.phase)) {
-    const pages = requestedPageCount(input.text) ?? sanitizePageCount(p.pageCount)
+    const pages = requestedPageCount(input.text, s.draft.products.length) ?? sanitizePageCount(p.pageCount)
     const currentPages = s.draft.pageCount ?? 1
     p = pages !== undefined && pages !== currentPages ? { ...p, action: 'update', pageCount: pages } : { ...p, pageCount: undefined }
   }
@@ -779,17 +833,20 @@ export async function advanceConversation(input: {
   if (greeting && isEmptyCreationDraft(s)) {
     s.pendingOrderChoice = false
     p = { ...p, action: 'update' }
-  } else if (greeting && (s.order || s.draft.kind) && !['approved', 'delivered', 'cancelled'].includes(s.phase)) {
-      s.pendingOrderChoice = true
-      say(`Oi! ${continueOrNewQuestion(s.draft.kind)}`)
-      return { state: s, send, generate: false }
+  } else if (greeting && (s.order || s.draft.kind) && s.phase !== 'cancelled') {
+    // Cumprimento sempre pergunta o que criar; o pedido atual continua disponível se a pessoa quiser.
+    s.pendingOrderChoice = true
+    const current = s.draft.theme ? `${materialReference(s.draft.kind).replace(/^ess[ea] /, 'o ').replace(/^o arte/, 'a arte')} de ${s.draft.theme}` : materialReference(s.draft.kind).replace(/^ess[ea] /, 'o ')
+    const status = ['approved', 'delivered'].includes(s.phase) ? `Seu último ${current.replace(/^[oa] /, '')} continua salvo na sua conta.` : `Se quiser continuar ${current}, é só dizer “continuar”.`
+    say(`Oi, ${input.name.split(' ')[0]}! O que vamos criar hoje: encarte, vídeo, cartaz ou arte do Estúdio? ${status}`)
+    return { state: s, send, generate: false }
   }
   if (canResume && /^(?:tentar novamente|tente novamente|repetir|retomar)[.!]?$/i.test(input.text.trim())) p = { ...p, action: 'update', products: undefined }
   else if (p.action === 'status' && canResume && !asksStatus && !continuingPendingChoice) p = { ...p, action: 'update', products: undefined }
   // Encarte pronto aguardando cabeçalho compatível: a escolha gera direto, sem reconferir dados e fotos.
   if (s.order && s.phase === 'header' && s.pendingRerender && p.action === 'choose_header' && p.choice) {
     const chosen = s.choices[p.choice - 1]
-    if (!chosen) { say('escolha um dos números do último lote de cabeçalhos.'); return { state: s, send, generate: false } }
+    if (!chosen) { say(`Me diga um número de 1 a ${s.choices.length}.`); return { state: s, send, generate: false } }
     const pending = s.pendingRerender
     if (s.order.dataApprovedRevision === s.order.revision && pending.formats.every(id => chosen.formats.includes(id))) {
       const theme = s.order.theme || s.draft.theme || chosen.theme
@@ -989,20 +1046,20 @@ export async function advanceConversation(input: {
   }
   if (!s.header || p.action === 'more_headers') {
     if (p.action === 'more_headers' && s.pendingOrderChoice) s.pendingOrderChoice = false
-    if (p.action === 'more_headers') s.choiceOffset += s.choices.length
-    const catalog = await findCreationHeaders(input.accountId, d, s.choiceOffset)
-    s.choices = catalog.headers as Header[]
-    if (input.prepareHeader) {
-      const prepared: Header[] = []
-      if (d.kind === 'encarte') {
-        for (let index = 0; index < s.choices.length; index += 2) {
-          prepared.push(...await Promise.all(s.choices.slice(index, index + 2).map(header => input.prepareHeader!(header, d.kind!))))
-        }
-      } else {
-        for (const header of s.choices) prepared.push(await input.prepareHeader(header, d.kind!))
-      }
-      s.choices = prepared
+    const more = p.action === 'more_headers' && s.choices.length > 0
+    // Encarte mostra até 20 modelos por vez, numerados em sequência entre as páginas.
+    const pageSize = d.kind === 'encarte' ? FLYER_HEADERS_PER_PAGE : undefined
+    const offset = more ? s.choices.length : 0
+    const catalog = await findCreationHeaders(input.accountId, d, offset, pageSize)
+    if (more && !catalog.headers.length) {
+      s.phase = 'header'
+      say(`Esses são todos os ${s.choices.length} modelos que tenho para “${d.theme}”. Me diga o número do que você prefere ou outro tema.`)
+      return { state: s, send, generate: false }
     }
+    let page = catalog.headers as Header[]
+    if (input.prepareHeader) page = await prepareHeaderPage(page, d.kind!, input.prepareHeader, input.cachedHeader)
+    s.choiceOffset = offset
+    s.choices = [...(more ? s.choices : []), ...page]
     if (!s.choices.length) {
       const suggestions = (catalog.suggestedThemes || []).slice(0, 6)
       s.phase = 'theme_pending'; say(suggestions.length
@@ -1011,10 +1068,15 @@ export async function advanceConversation(input: {
       return { state: s, send, generate: false, missingTheme: true }
     }
     s.phase = 'header'
-    s.choices.forEach((h, i) => send.push(h.headerKey || h.previewUrl ? { type: 'image', text: d.kind === 'encarte' ? String(i + 1) : `${i + 1} — ${h.name}. Tema ${d.theme}; formatos ${h.formats.join(', ')}.`, key: h.headerKey, url: h.previewUrl, purpose: 'review' } : { type: 'text', text: `${i + 1} — ${h.name}. A imagem deste modelo precisa ser preparada antes da escolha.` }))
-    if (catalog.relatedThemes?.length && s.choiceOffset === 0) {
-      say(`Para “${d.theme}”, separei estes modelos de ${catalog.relatedThemes.join(' e ')}. Qual você prefere?${catalog.hasMore ? ' Se quiser, mostro mais opções.' : ''}`)
-    } else if (d.kind !== 'encarte') say(catalog.hasMore ? 'Qual desses modelos você prefere? Quer ver mais opções?' : 'Qual desses modelos você prefere?')
+    s.choices.slice(offset).forEach((h, index) => {
+      const i = offset + index
+      send.push(h.headerKey || h.previewUrl ? { type: 'image', text: d.kind === 'encarte' ? String(i + 1) : `${i + 1} — ${h.name}. Tema ${d.theme}; formatos ${h.formats.join(', ')}.`, key: h.headerKey, url: h.previewUrl, purpose: 'review' } : { type: 'text', text: `${i + 1} — ${h.name}. A imagem deste modelo precisa ser preparada antes da escolha.` })
+    })
+    const moreHint = catalog.hasMore ? ' Se quiser ver mais, é só pedir.' : ''
+    if (catalog.relatedThemes?.length && offset === 0) {
+      say(`Para “${d.theme}”, separei estes modelos de ${catalog.relatedThemes.join(' e ')}. Me diga o número do que você prefere.${moreHint}`)
+    } else if (d.kind === 'encarte') say(`${offset ? 'Mais modelos' : 'Modelos'} de ${d.theme}. Me diga o número do que você prefere.${moreHint}`)
+    else say(catalog.hasMore ? 'Qual desses modelos você prefere? Quer ver mais opções?' : 'Qual desses modelos você prefere?')
     return { state: s, send, generate: false }
   }
   if (!formats.length) {
