@@ -921,6 +921,43 @@ export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile
   return canvas
 }
 
+const INLINE_IMAGE_RE = /^data:(image\/(?:png|jpeg|webp|gif|svg\+xml));base64,([a-zA-Z0-9+/=]+)$/
+
+/**
+ * O editor descarta data URLs grandes ao salvar (vira um pixel transparente). Por isso
+ * as imagens embutidas pelo render vão para a pasta do projeto do cliente e o canvas
+ * passa a referenciá-las pelo storage, como um projeto criado no próprio editor.
+ */
+export async function externalizeInlineCanvasImages(canvas: any, userId: string, projectId: string): Promise<void> {
+  const uploaded = new Map<string, string>()
+  const { PutObjectCommand } = await import('@aws-sdk/client-s3')
+  const persist = async (src: string): Promise<string | null> => {
+    const match = src.length > 2048 ? src.match(INLINE_IMAGE_RE) : null
+    if (!match) return null
+    const bytes = Buffer.from(match[2]!, 'base64')
+    const hash = sha256(bytes)
+    const cached = uploaded.get(hash)
+    if (cached) return cached
+    const extension = match[1] === 'image/jpeg' ? 'jpg' : match[1] === 'image/svg+xml' ? 'svg' : match[1]!.slice(6)
+    const key = `projects/${userId}/${projectId}/assets/${hash.slice(0, 32)}.${extension}`
+    await getS3Client().send(new PutObjectCommand({ Bucket: videoBucket(), Key: key, Body: bytes, ContentType: match[1] }))
+    const ref = `/api/storage/p?key=${encodeURIComponent(key)}`
+    uploaded.set(hash, ref)
+    return ref
+  }
+  const visit = async (node: any): Promise<void> => {
+    if (!node || typeof node !== 'object') return
+    if (typeof node.src === 'string') {
+      const ref = await persist(node.src)
+      if (ref) { node.src = ref; if (typeof node.__originalSrc === 'string' && node.__originalSrc.startsWith('data:')) node.__originalSrc = ref }
+    }
+    for (const child of Array.isArray(node.objects) ? node.objects : []) await visit(child)
+    if (node.clipPath) await visit(node.clipPath)
+  }
+  for (const object of canvas?.objects || []) await visit(object)
+  for (const key of ['backgroundImage', 'overlayImage']) if (canvas?.[key]) await visit(canvas[key])
+}
+
 async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profile: BusinessProfile, formats: CreationFormat[], images: Map<string, { bytes: Buffer; dataUrl: string }>): Promise<CreationArtifactResult> {
   const cardConfigRow = await pgOneOrNull<{ configuration: unknown }>(
     'select configuration from public.product_card_configurations where user_id=$1 limit 1', [user.id]
@@ -968,6 +1005,7 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
     const pageId = deterministicUuid(`${projectId}:page:${output.format.id}:${index}`)
     const pageKey = `projects/${user.id}/${projectId}/page_${pageId}.json`
     const now = Date.now()
+    await externalizeInlineCanvasImages(output.page.canvas, user.id, projectId)
     const canvasBuffer = Buffer.from(JSON.stringify(output.page.canvas), 'utf8')
     await getS3Client().send(new (await import('@aws-sdk/client-s3')).PutObjectCommand({
       Bucket: videoBucket(), Key: pageKey, Body: gzipSync(canvasBuffer), ContentType: 'application/octet-stream', CacheControl: 'no-store'

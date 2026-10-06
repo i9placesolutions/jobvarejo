@@ -67,8 +67,8 @@ async function saveGeneration(row: any, state: ConversationState, artifacts: Con
       current.previewPresentedRevision = current.order!.revision
       const label = state.draft.kind === 'video' ? 'Seu vídeo' : state.draft.kind === 'cartaz' ? 'Seu cartaz' : state.draft.kind === 'studio' ? 'Sua arte' : 'Seu encarte'
       for (const artifact of artifacts) {
-        send.push({ type: finalSendType(artifact), key: artifact.key,
-          text: `${label} — ${artifact.formatId}. Edite na sua conta: ${artifact.editUrl}`, artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
+        // Só o material: sem link na legenda; o projeto continua salvo na conta.
+        send.push({ type: finalSendType(artifact, state.draft.kind), key: artifact.key, text: '', artifactId: artifact.artifactId, formatId: artifact.formatId, purpose: 'final' })
       }
       send.push({ type: 'text', text: `${label} está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.` })
       rememberConversationTurns(current, send.map(item => ({ role: 'assistant', text: item.text })))

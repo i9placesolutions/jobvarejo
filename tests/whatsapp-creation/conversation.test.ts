@@ -928,5 +928,6 @@ describe('reenvio do arquivo final', () => {
     expect(finalSendType({ mimeType: 'image/png', formatId: 'print' })).toBe('document')
     expect(finalSendType({ mimeType: 'application/pdf', formatId: 'A4' })).toBe('document')
     expect(finalSendType({ mimeType: 'video/mp4', formatId: 'stories' })).toBe('video')
+    expect(finalSendType({ mimeType: 'image/png', formatId: 'A4' }, 'cartaz')).toBe('document')
   })
 })
