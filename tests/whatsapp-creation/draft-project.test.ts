@@ -167,4 +167,9 @@ describe('encarte em andamento salvo no painel', () => {
     expect(order.formats).toEqual([{ id: 'stories', width: 1080, height: 1920 }])
     expect(draftOrderFor({ ...state, header: undefined }, orderId, ownerId, '5511999999999')).toBeNull()
   })
+
+  it('leva a personalização do rascunho para o pedido sintético do painel', () => {
+    const state: ConversationState = { ...newConversationState(), phase: 'collecting', header, draft: { kind: 'encarte', theme: 'Fecha Mês', formats: ['stories'], products: [], customization: { logoScale: 1.2 } } }
+    expect(draftOrderFor(state, orderId, ownerId, '5511999999999')!.customization).toEqual({ logoScale: 1.2 })
+  })
 })

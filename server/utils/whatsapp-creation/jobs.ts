@@ -47,7 +47,7 @@ async function nativeJob(event: H3Event, row: any, projectId: string, revision: 
 }
 
 /** Commit only artifacts of the locked order/revision; late jobs cannot overwrite an edited draft. */
-async function saveGeneration(row: any, state: ConversationState, artifacts: ConversationArtifact[], native?: ConversationState['runtime'], notice?: string) {
+async function saveGeneration(row: any, state: ConversationState, artifacts: ConversationArtifact[], native?: ConversationState['runtime'], notice?: string, followUp?: { cardColorOffer: string }) {
   return pgTx(async client => {
     const conversation = (await client.query('SELECT current_order_id FROM public.whatsapp_creation_conversations WHERE id=$1 AND owner_id=$2 FOR UPDATE', [row.conversation_id, row.owner_id])).rows[0]
     if (!conversation || conversation.current_order_id !== row.id) return { ok: true, stale: true }
@@ -72,8 +72,11 @@ async function saveGeneration(row: any, state: ConversationState, artifacts: Con
         // Só o material, sem link: imagem para ver e PNG original como arquivo.
         send.push(...finalSends(artifact, state.draft.kind))
       }
-      if (notice) send.push({ type: 'text', text: notice })
+      // Aviso comum vem antes; a pergunta de seguimento (ex.: cor de todos os cards) fica por último.
+      if (notice && !followUp) send.push({ type: 'text', text: notice })
       send.push({ type: 'text', text: `${label} está pronto e salvo na sua conta do Job Varejo. Se quiser algum ajuste, é só me falar que eu gero uma nova versão.` })
+      if (notice && followUp) send.push({ type: 'text', text: notice })
+      current.pendingEdit = followUp ? { kind: 'card_color_offer', at: Date.now(), color: followUp.cardColorOffer } : undefined
       rememberConversationTurns(current, send.map(item => ({ role: 'assistant', text: item.text })))
     }
     await client.query('UPDATE public.whatsapp_creation_orders SET state=$3::jsonb,status=$4,updated_at=now() WHERE id=$1 AND owner_id=$2', [row.id, row.owner_id, JSON.stringify(current), current.phase === 'approved' ? 'approved' : 'rendering'])
@@ -188,7 +191,7 @@ export async function generateWhatsAppOrder(id: string, token: string, kind: str
   state.runtime.started = start
   try {
     const output = await generateCreationArtifact(state.order!, account.user, account.businessProfile, event)
-    return saveGeneration(row, state, output.artifacts, output.video ? { ...state.runtime, native: output.video } : undefined, output.notice)
+    return saveGeneration(row, state, output.artifacts, output.video ? { ...state.runtime, native: output.video } : undefined, output.notice, output.followUp)
   } catch (error: any) {
     const statusCode = Number(error?.statusCode || 500)
     const code = String(error?.data?.code || error?.code || '')

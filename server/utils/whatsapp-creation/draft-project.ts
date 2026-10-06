@@ -24,7 +24,7 @@ export function draftOrderFor(state: ConversationState, orderId: string, ownerId
   const validity = state.draft.validity === 'sem validade' ? '' : state.draft.validity || ''
   const base = createOrder({ id: orderId, identity: { accountId: ownerId, normalizedSender: '+' + String(senderPhone).replace(/^\+/, '') },
     kind: 'encarte', theme: state.draft.theme || state.header.theme, formats: formats as CreationFormat[], division: null, products: [],
-    validity, conditions: state.draft.conditions || '' })
+    validity, conditions: state.draft.conditions || '', customization: state.draft.customization })
   const withHeader = updateOrder(base, ownerId, { header: { id: state.header.id, revision: state.header.revision, theme: state.draft.theme || state.header.theme,
     formats: state.header.formats, ...(state.header.nativeThemeId ? { nativeThemeId: state.header.nativeThemeId } : {}) } })
   return { ...withHeader, revision: 0 }

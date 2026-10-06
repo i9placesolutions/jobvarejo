@@ -1329,6 +1329,26 @@ describe('ajustes do encarte pelo WhatsApp', () => {
     expect(result.state.order?.customization).toEqual({ logoScale: 1.2 })
   })
 
+  it('aceitar a oferta de cor de todos os cards gera nova versão com a cor do destaque', async () => {
+    const state = { ...deliveredState(), pendingEdit: { kind: 'card_color_offer' as const, at: Date.now(), color: '#dc2626' } }
+    state.draft.customization = { palette: { highlightCardColor: '#dc2626', highlightProdNameColor: '#ffffff' } }
+    const result = await run(state, { action: 'status' }, 'sim')
+    expect(result.generate).toBe(true)
+    expect(result.state.order?.customization?.palette).toEqual({ highlightCardColor: '#dc2626', highlightProdNameColor: '#ffffff', cardColor: '#dc2626', prodNameColor: '#ffffff' })
+    const declined = await run(state, { action: 'status' }, 'não')
+    expect(declined.generate).toBe(false)
+    expect(declined.state.pendingEdit).toBeUndefined()
+  })
+
+  it('pedido de criação já com ajuste guarda o visual e segue a coleta normal', async () => {
+    mocks.headers.mockResolvedValue({ headers: [header], hasMore: false, missingTheme: false })
+    const first = await run(newConversationState(), { action: 'update', kind: 'encarte', theme: 'Fecha Mês', formats: ['stories'], edits: [{ target: 'product_names', operation: 'increase', amount: 'lot', evidence: 'nomes bem maiores' }] }, 'quero um encarte de fecha mês em story com os nomes bem maiores')
+    expect(first.state.draft.customization).toEqual({ nameScale: 1.35 })
+    expect(first.state.phase).toBe('header')
+    const next = await run(first.state, { action: 'choose_header', choice: 1 }, '1')
+    expect(next.state.draft.customization).toEqual({ nameScale: 1.35 })
+  })
+
   it('a personalização do rascunho vai em novas versões', async () => {
     const state = deliveredState()
     state.draft.customization = { nameScale: 1.3 }

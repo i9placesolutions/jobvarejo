@@ -1090,6 +1090,20 @@ async function resolveFlyerProjectTarget(input: { userId: string; orderId: strin
   return fail(409, 'Este pedido já tem versões demais editadas no painel.')
 }
 
+/**
+ * O encarte deste pedido já foi editado no painel? Se sim (e não há versão do WhatsApp mais nova),
+ * a próxima geração é salva como outro encarte e a conversa pede confirmação antes.
+ */
+export async function flyerProjectEditedInPanel(order: Pick<CreationOrder, 'id' | 'revision'>, userId: string): Promise<boolean> {
+  for (let version = 1; version <= MAX_FLYER_PROJECT_VERSIONS; version++) {
+    const row = await pgOneOrNull<any>('select id,user_id,canvas_data,template_config from public.projects where id=$1', [whatsappFlyerProjectId(userId, order.id, version)])
+    const slot = classifyFlyerProjectSlot(row, { userId, orderId: order.id, revision: order.revision + 1, stage: 'final' })
+    if (slot === 'absent') return version > 1
+    if (slot === 'ours' || slot === 'newer') return false
+  }
+  return true
+}
+
 export type FlyerProjectResult = { projectId: string; version: number; created: boolean; stale: boolean; forked: boolean; pngs: Array<{ format: CreationFormat; png: Buffer | null }> }
 
 /**

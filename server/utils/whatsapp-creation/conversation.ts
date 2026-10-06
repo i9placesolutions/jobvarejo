@@ -865,6 +865,13 @@ async function handleFlyerEdits(a: FlyerEditArgs): Promise<AdvanceResult | null>
   const edits = validFlyerEdits(p.edits, text)
   if (!edits.length) return null
   const kind = s.order?.kind ?? s.draft.kind
+  if (!kind && p.kind === 'encarte') {
+    // Pedido de encarte já com ajustes (“encarte de carnes com a logo maior”): guarda o visual e segue a coleta normal.
+    const early = resolveFlyerEdits(edits, { text, customization: s.draft.customization, validity: p.validity,
+      products: (p.products || []).map((item, index) => ({ id: item.id || `novo-${index + 1}`, name: item.name })), profile: a.deps.businessProfile })
+    if (early.changed) s.draft.customization = early.customization
+    return null
+  }
   if (!kind || s.phase === 'cancelled') return null
   s.turns++
   if (kind !== 'encarte') {
@@ -1233,7 +1240,7 @@ export async function advanceConversation(input: {
           : s.phase === 'script' ? 'O roteiro está pronto para sua revisão. Se quiser mudar algo, me diga como prefere.'
             : s.phase === 'preview' ? 'A prévia está pronta. Se quiser algum ajuste, me conte; se estiver do jeito que você quer, pode me confirmar.'
               : s.phase === 'rendering' ? (s.draft.kind === 'video' ? 'Estou gerando o vídeo em MP4. Em breve ele chega aqui no WhatsApp.' : 'Estou montando o material e envio aqui assim que ficar pronto.')
-                : ['approved', 'delivered'].includes(s.phase) && s.artifacts.length ? 'Seu encarte já está pronto. Se quiser, eu reenvio a imagem, gero uma nova versão, mando em outro formato, divido os produtos em mais encartes ou ajusto algum produto.'
+                : ['approved', 'delivered'].includes(s.phase) && s.artifacts.length ? 'Seu encarte já está pronto. Se quiser, eu reenvio a imagem, gero uma nova versão, mando em outro formato, divido os produtos em mais encartes, ajusto algum produto ou mudo o visual (logo, etiqueta, cores, contato).'
                 : resumableFlyer(s) ? `Seu encarte de ${s.draft.theme} está salvo com ${s.draft.products.length} produto${s.draft.products.length > 1 ? 's' : ''}. Quer que eu gere agora? Se quiser mudar algo antes, é só me dizer.`
                 : s.phase === 'theme_pending' ? 'Me diga o tema da campanha para eu mostrar os modelos.'
                 : 'Me conte o que você quer criar e eu organizo os detalhes com você.'

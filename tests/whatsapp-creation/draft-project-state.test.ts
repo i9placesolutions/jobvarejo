@@ -40,6 +40,16 @@ describe('assinatura do encarte em andamento no painel', () => {
     expect(draftProjectSignature(otherPhoto)).not.toBe(draftProjectSignature(base))
   })
 
+  it('muda quando o cliente personaliza o encarte e não muda sem personalização', () => {
+    const base = reviewState()
+    const customized = { ...reviewState(), order: { ...base.order!, customization: { logoScale: 1.2 } } }
+    expect(draftProjectSignature(customized)).not.toBe(draftProjectSignature(base))
+    expect(draftProjectSignature({ ...customized, order: { ...base.order!, customization: { logoScale: 1.4 } } })).not.toBe(draftProjectSignature(customized))
+    const headerBase = headerOnlyState()
+    const headerCustomized = { ...headerOnlyState(), draft: { ...headerBase.draft, customization: { nameScale: 1.3 } } }
+    expect(draftProjectSignature(headerCustomized)).not.toBe(draftProjectSignature(headerBase))
+  })
+
   it('não grava rascunho durante a geração/entrega nem com pedido incompleto em collecting', () => {
     for (const phase of ['rendering', 'approved', 'delivered', 'cancelled', 'preview'] as const) {
       expect(draftProjectSignature({ ...reviewState(), phase })).toBeNull()

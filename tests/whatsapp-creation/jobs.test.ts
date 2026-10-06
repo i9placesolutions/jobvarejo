@@ -261,6 +261,19 @@ describe('recuperação de jobs WhatsApp', () => {
     expect(fixture.state.phase).toBe('approved')
   })
 
+  it('com cor de destaque sem cards em destaque pergunta por último e guarda a oferta na conversa', async () => {
+    const initialState = renderingState()
+    const fixture = installHeaderRecoveryMocks(initialState, new Error('unused'))
+    const notice = 'Esse modelo não tem cards em destaque, então a cor não aparece. Quer que eu mude a cor de todos os cards?'
+    mocks.generate.mockResolvedValue({ notice, followUp: { cardColorOffer: '#dc2626' }, artifacts: [{ artifactId: 'fresh-preview', formatId: 'stories', key: 'preview.png', hash: 'hash', mimeType: 'image/png', projectId: 'project', editUrl: '/editor' }] })
+
+    await generateWhatsAppOrder(orderId, token, 'encarte', { context: {}, $fetch: vi.fn() } as any)
+
+    const texts = mocks.queue.mock.calls[0]![5].filter((item: any) => item.type === 'text').map((item: any) => item.text)
+    expect(texts).toEqual([expect.stringMatching(/^Seu encarte está pronto/), notice])
+    expect(fixture.state.pendingEdit).toMatchObject({ kind: 'card_color_offer', color: '#dc2626' })
+  })
+
   it.each([
     ['cancelled', (state: ConversationState) => { state.phase = 'cancelled' as any }, 'cancelled', 0, 2],
     ['token changed', (state: ConversationState) => { state.runtime!.token = 'new-token' }, 'rendering', 0, 2],

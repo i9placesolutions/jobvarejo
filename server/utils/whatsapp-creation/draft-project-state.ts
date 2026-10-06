@@ -49,6 +49,8 @@ export function draftProjectSignature(state: ConversationState): string | null {
       division: order.division,
       validity: order.validity,
       conditions: order.conditions,
+      // Só entra quando existe, para não refazer o projeto de pedidos que nunca foram personalizados.
+      ...(order.customization ? { customization: order.customization } : {}),
       products: order.products.map(product => ({
         id: product.id, name: product.name, brand: product.brand, variant: product.variant, weight: product.weight,
         price: product.price, department: product.department || '', condition: product.condition || ''
@@ -67,7 +69,8 @@ export function draftProjectSignature(state: ConversationState): string | null {
     theme: state.draft.theme || '',
     formats: [...state.draft.formats],
     validity: state.draft.validity || '',
-    conditions: state.draft.conditions || ''
+    conditions: state.draft.conditions || '',
+    ...(state.draft.customization ? { customization: state.draft.customization } : {})
   })
 }
 

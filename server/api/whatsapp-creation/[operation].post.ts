@@ -12,6 +12,9 @@ import { pgQuery } from '~/server/utils/postgres'
 import { cachedCreationHeader, prepareCreationHeader } from '~/server/utils/whatsapp-creation/header-preview'
 import { hasBriefFields, shouldConsultJev, suggestJevRoute } from '~/server/utils/whatsapp-creation/jev'
 import { ensureProcessedWhatsAppPhoto, isRawWhatsAppPhoto } from '~/server/utils/whatsapp-creation/product-photo'
+import { buildLabelOptions } from '~/server/utils/whatsapp-creation/label-options'
+import { updateBusinessContact } from '~/server/utils/whatsapp-creation/business-profile-update'
+import { flyerProjectEditedInPanel } from '~/server/utils/whatsapp-creation/render'
 
 // Temas do catálogo para a IA mapear a fala do cliente; se a consulta falhar, segue sem a lista.
 const catalogThemesFor = (accountId: string) => listCreationThemeNames(accountId).catch(() => [] as string[])
@@ -109,7 +112,12 @@ export default defineEventHandler(async event => {
     const result = await advanceConversation({ state: context.state, proposal, text: messageText, accountId: context.owner_id,
       sender: context.sender_phone, orderId: context.current_order_id, name: context.account.user.user_metadata.name || context.account.businessProfile.companyName || 'cliente', uploaded: context.payload.uploaded,
       prepareHeader: (header, selectedKind) => prepareCreationHeader(header, selectedKind, context.account),
-      cachedHeader: header => cachedCreationHeader(header, context.account) })
+      cachedHeader: header => cachedCreationHeader(header, context.account),
+      // Ajustes do encarte pedidos na conversa (etiquetas, contato do cadastro, edição do painel).
+      labelOptions: labels => buildLabelOptions(labels),
+      businessProfile: { whatsapp: context.account.businessProfile.whatsapp || context.account.businessProfile.phone, address: context.account.businessProfile.address },
+      saveBusinessProfile: patch => updateBusinessContact(context.owner_id, patch),
+      flyerProjectEdited: flyer => flyerProjectEditedInPanel(flyer, context.owner_id) })
     const usage = response.usage || {}, prior = result.state.usage, audio = context.payload.transcriptionUsage
     result.state.usage = { promptTokens: Number(prior?.promptTokens || 0) + Number(audio?.promptTokens || 0) + Math.max(0, Number(usage.prompt_tokens || 0)), completionTokens: Number(prior?.completionTokens || 0) + Number(audio?.completionTokens || 0) + Math.max(0, Number(usage.completion_tokens || 0)), cost: Number(prior?.cost || 0) + Number(audio?.cost || 0) + Math.max(0, Number(usage.cost || 0)) }
     rememberConversationTurns(result.state, [
