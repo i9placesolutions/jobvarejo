@@ -1,7 +1,21 @@
-export const planAutomaticProductImageFill = (width: number, height: number, imageWidth: number, imageHeight: number, requestedCount?: number, direction: 'auto' | 'horizontal' | 'vertical' = 'auto') => {
+/**
+ * `minimumCount` vale só no modo automático: garante ao menos essa quantidade de
+ * cópias, mas ainda permite mais quando elas preenchem melhor a área (ex.: imagem
+ * larga em card alto). Uma quantidade explícita em `requestedCount` continua exata.
+ */
+export const planAutomaticProductImageFill = (width: number, height: number, imageWidth: number, imageHeight: number, requestedCount?: number, direction: 'auto' | 'horizontal' | 'vertical' = 'auto', minimumCount = 1): Array<{ left: number; top: number; scale: number }> => {
   const iw = Math.max(1, imageWidth), ih = Math.max(1, imageHeight)
   const aw = Math.max(1, width), ah = Math.max(1, height)
   const single = Math.min(aw / iw, ah / ih)
+  const minimum = Math.max(1, Math.min(4, Math.round(minimumCount)))
+  if (requestedCount == null && minimum > 1) {
+    // A quantidade mínima usa o cálculo exato (o par tem regra própria de
+    // deslocamento). Mais cópias só entram quando preenchem a área sem
+    // diminuir a imagem, como numa imagem larga dentro de um card alto.
+    const base = planAutomaticProductImageFill(width, height, imageWidth, imageHeight, minimum, direction)
+    const automatic = planAutomaticProductImageFill(width, height, imageWidth, imageHeight, undefined, direction)
+    return automatic.length > base.length && automatic[0]!.scale >= base[0]!.scale * 0.98 ? automatic : base
+  }
   if (requestedCount === 2) {
     // Duas cópias preservam o contain individual sempre que já houver espaço
     // livre em um eixo. Esse espaço vira deslocamento entre centros, expondo

@@ -10,6 +10,7 @@ import { downloadProviderMedia } from '~/server/utils/whatsapp-creation/media'
 import { pgQuery } from '~/server/utils/postgres'
 import { prepareCreationHeader } from '~/server/utils/whatsapp-creation/header-preview'
 import { hasBriefFields, shouldConsultJev, suggestJevRoute } from '~/server/utils/whatsapp-creation/jev'
+import { ensureProcessedWhatsAppPhoto, isRawWhatsAppPhoto } from '~/server/utils/whatsapp-creation/product-photo'
 
 const leaseSchema = z.object({ eventId: z.string().uuid(), leaseToken: z.string().uuid() })
 export default defineEventHandler(async event => {
@@ -116,6 +117,14 @@ export default defineEventHandler(async event => {
       generation = { orderId: context.current_order_id, token, kind: result.state.draft.kind! }
     }
     await persistConversationResult(eventId, leaseToken, result.state, result.send, true, result.missingTheme)
+    // Adianta a remoção de fundo das fotos enviadas; a geração reaproveita o arquivo já salvo.
+    for (const candidate of result.state.candidates) {
+      const product = result.state.order?.products.find(item => item.id === candidate.itemId)
+      if (product && isRawWhatsAppPhoto(candidate.key)) {
+        void ensureProcessedWhatsAppPhoto({ userId: context.owner_id, product, rawKey: candidate.key, rawHash: candidate.hash.toLowerCase() })
+          .catch(error => console.warn('[whatsapp-creation:photo] pré-processamento falhou', String(error?.message || error).slice(0, 200)))
+      }
+    }
     console.info('whatsapp_creation_decision', {
       eventId,
       orderId: context.current_order_id,

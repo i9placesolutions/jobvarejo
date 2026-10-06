@@ -32,6 +32,8 @@ import { isValidStoragePath, isPublicStorageKey, isStorageKeyAllowedForUser } fr
 import { normalizeStoredStorageRef } from '../project-storage-refs'
 import { extractStorageKeyFromRef } from '~/utils/storageRef'
 import { ownedStorageBytes } from './media'
+import { ensureProcessedWhatsAppPhoto, isRawWhatsAppPhoto } from './product-photo'
+import { bakeLogoCrops } from './logo-crop'
 import { CARTAZISTA_FORMATS, CARTAZISTA_THEMES, type CartazistaModelKey, type CartazistaDocument, type CartazistaProduct } from '~/types/cartazista'
 import { createCartazistaDocument, applyCartazistaProduct } from '~/utils/cartazista/composition'
 import { hydrateCartazistaBusiness } from '~/utils/cartazista/business-bindings'
@@ -156,6 +158,14 @@ export async function approvedProductImages(order: CreationOrder, userId: string
     const bytes = await readOwnedBytes(key, userId)
     if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) return fail(413, 'A foto aprovada excede o limite permitido.')
     if (sha256(bytes) !== image.hash.toLowerCase()) return fail(409, `A foto aprovada de “${product.name}” mudou desde a confirmação.`)
+    // Foto enviada pelo cliente recebe a mesma remoção de fundo do upload manual.
+    const processed = isRawWhatsAppPhoto(key)
+      ? await ensureProcessedWhatsAppPhoto({ userId, product, rawKey: key, rawHash: image.hash.toLowerCase(), rawBytes: bytes })
+      : null
+    if (processed) {
+      output.set(product.id, { bytes: processed, dataUrl: dataUri(processed, 'image/webp') })
+      continue
+    }
     const mimeType = mimeFrom('', key)
     output.set(product.id, { bytes, dataUrl: dataUri(bytes, mimeType) })
   }
@@ -788,17 +798,61 @@ const loadFlyerAccountLabelTemplates = async (canvas: any, userId: string): Prom
   return applyFlyerAccountLabelTemplates(canvas, rows)
 }
 
+const VALIDITY_MONTHS = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+
+/**
+ * Converte a validade escrita pelo cliente ("06 e 07 de outubro", "06/10 a 07/10",
+ * "05/10/2026", "sem validade") no mesmo estado de datas do Editor Rápido.
+ * Texto ambíguo retorna null e continua literal.
+ */
+export function parseLiteralValidityPeriod(literal: string, today = new Date()): { startDate: string; endDate: string; mode: 'single_day' | 'date_range' } | { mode: 'while_stocks' } | null {
+  const text = literal.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+    .replace(/^(?:ofertas?\s+validas?\s*)?(?:(?:de|do|no|nos|dia|dias|valid[ao]s?)\s+)*/, '').replace(/[.!]$/, '').trim()
+  if (!text) return null
+  if (/^(?:sem validade|enquanto durarem os estoques)$/.test(text)) return { mode: 'while_stocks' }
+  const sp = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(today)
+  const [currentYear, currentMonth, currentDay] = sp.split('-').map(Number) as [number, number, number]
+  const toIso = (day: number, month: number, year?: number): string | null => {
+    let resolvedYear = year === undefined ? currentYear : year < 100 ? 2000 + year : year
+    // Sem ano informado, uma data muito no passado se refere ao próximo ano (ex.: em dezembro, "05/01").
+    if (year === undefined && Date.UTC(resolvedYear, month - 1, day) < Date.UTC(currentYear, currentMonth - 1, currentDay) - 60 * 86_400_000) resolvedYear++
+    const date = new Date(Date.UTC(resolvedYear, month - 1, day))
+    if (date.getUTCFullYear() !== resolvedYear || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
+    return date.toISOString().slice(0, 10)
+  }
+  const period = (start: string | null, end: string | null) => {
+    if (!start || !end || end < start) return null
+    return start === end ? { startDate: start, endDate: end, mode: 'single_day' as const } : { startDate: start, endDate: end, mode: 'date_range' as const }
+  }
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text)
+  if (iso) { const date = toIso(Number(iso[3]), Number(iso[2]), Number(iso[1])); return period(date, date) }
+  const connector = '\\s*(?:a|ate|e|-|–)\\s*'
+  const numeric = '(\\d{1,2})[/.](\\d{1,2})(?:[/.](\\d{2}|\\d{4}))?'
+  const numericRange = new RegExp(`^${numeric}(?:${connector}${numeric})?$`).exec(text)
+  if (numericRange) {
+    const endYear = numericRange[6] ? Number(numericRange[6]) : undefined
+    const start = toIso(Number(numericRange[1]), Number(numericRange[2]), numericRange[3] ? Number(numericRange[3]) : endYear)
+    const end = numericRange[4] ? toIso(Number(numericRange[4]), Number(numericRange[5]), endYear) : start
+    return period(start, end)
+  }
+  const month = `(${VALIDITY_MONTHS.join('|')})`
+  const textual = new RegExp(`^(\\d{1,2})(?:\\s+de\\s+${month}(?:\\s+de\\s+(\\d{4}))?)?(?:${connector}(\\d{1,2}))?\\s+de\\s+${month}(?:\\s+de\\s+(\\d{4}))?$`).exec(text)
+  if (textual) {
+    const endMonth = VALIDITY_MONTHS.indexOf(textual[5]!) + 1
+    const endYear = textual[6] ? Number(textual[6]) : undefined
+    const startMonth = textual[2] ? VALIDITY_MONTHS.indexOf(textual[2]) + 1 : endMonth
+    // Um único dia ("6 de outubro") ou intervalo ("06 e 07 de outubro", "30 de setembro a 2 de outubro").
+    if (!textual[4] && textual[2]) return null
+    const start = toIso(Number(textual[1]), startMonth, textual[3] ? Number(textual[3]) : endYear)
+    const end = textual[4] ? toIso(Number(textual[4]), endMonth, endYear) : start
+    return period(start, end)
+  }
+  return null
+}
+
 export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile, logoDataUrl: string, order?: Pick<CreationOrder, 'validity' | 'conditions'>): any {
   const literalValidity = String(order?.validity || '').trim()
-  const normalizedDate = (literal: string): string | null => {
-    const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(literal) || /^(\d{4})-(\d{2})-(\d{2})$/.exec(literal)
-    if (!match) return null
-    const iso = literal.includes('-') ? literal : `${match[3]}-${match[2]}-${match[1]}`
-    const [year, month, day] = iso.split('-').map(Number)
-    const date = new Date(Date.UTC(year!, month! - 1, day!))
-    return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day ? iso : null
-  }
-  const date = normalizedDate(literalValidity)
+  const validityPeriod = literalValidity ? parseLiteralValidityPeriod(literalValidity) : null
   const values: Record<string, string> = {
     companyname: profile.companyName, name: profile.companyName, phone: profile.phone || profile.whatsapp,
     whatsapp: profile.whatsapp, address: profile.address, instagram: profile.instagram,
@@ -819,13 +873,16 @@ export function hydrateFlyerBusinessFields(canvas: any, profile: BusinessProfile
       const semanticField = field || (name === 'headervalidity' ? 'validity' : '')
       const matchedField = semanticField in values ? semanticField : Object.keys(values).find((candidate) => name === candidate || name.endsWith(`dynamic${candidate}`))
         if (matchedField && typeof object.text === 'string') {
-          if (matchedField === 'validity' && date && isSplitFooterValidity(object)) {
-            const state = { startDate: date, endDate: date, mode: 'single_day',
+          if (matchedField === 'validity' && validityPeriod && isSplitFooterValidity(object)) {
+            const dates = 'startDate' in validityPeriod ? validityPeriod : { startDate: '', endDate: '' }
+            const state = { startDate: dates.startDate, endDate: dates.endDate, mode: validityPeriod.mode,
               whileStocks: object.quickValidityWhileStocks !== false, dateFormat: object.quickValidityDateFormat || 'numeric' }
             object.text = resolveSplitFooterValidityText(object, objects, state)
-            object.quickValidityStartDate = date
-            object.quickValidityEndDate = date
-            object.quickValidityMode = 'single_day'
+            if (dates.startDate) {
+              object.quickValidityStartDate = dates.startDate
+              object.quickValidityEndDate = dates.endDate
+            }
+            object.quickValidityMode = validityPeriod.mode
             object.visible = !!object.text
             const copy = splitFooterValidityText({ ...state, layout: object.quickValidityLayout, copyStyle: object.quickValidityCopyStyle })
             for (const sibling of objects) {
@@ -977,6 +1034,7 @@ export async function applyFlyerLogoStickers(png: Buffer, canvas: any): Promise<
   })
   try {
     await overlay.loadFromJSON({ version: canvas.version, objects: logos })
+    bakeLogoCrops(overlay.getObjects(), () => document.createElement('canvas') as HTMLCanvasElement)
     restoreCanvasStickerOutlines(overlay, () => document.createElement('canvas') as HTMLCanvasElement)
     overlay.renderAll()
     const stickerPng = Buffer.from(overlay.toDataURL({ format: 'png', multiplier: 1 }).split(',')[1]!, 'base64')

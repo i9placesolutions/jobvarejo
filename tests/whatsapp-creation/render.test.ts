@@ -16,6 +16,7 @@ import {
   flyerDivisionSupportsProductCount,
   assertFlyerProfileBindings,
   hydrateFlyerBusinessFields,
+  parseLiteralValidityPeriod,
   renderEditableFlyerCanvas,
   applyFlyerAccountLabelTemplates,
   applyFlyerLogoStickers,
@@ -163,6 +164,32 @@ describe('adapter de render da criação WhatsApp', () => {
       quickValidityStartDate: '2026-10-05', quickValidityEndDate: '2026-10-05',
       quickValidityMode: 'single_day', visible: true
     })
+  })
+
+  it('formata intervalo escrito por extenso no mesmo padrão do Editor Rápido', () => {
+    const canvas = { objects: [{ type: 'textbox', name: 'header-validity',
+      quickDataField: 'validity', quickValidityLayout: 'inline-footer',
+      quickValidityWhileStocks: true, quickValidityDateFormat: 'numeric',
+      text: 'OFERTAS VÁLIDAS ENQUANTO DURAREM OS ESTOQUES', visible: true }] }
+    hydrateFlyerBusinessFields(canvas, profile, '', { validity: '06 e 07 de outubro de 2026', conditions: '' })
+    expect(canvas.objects[0]).toMatchObject({
+      text: 'OFERTA VÁLIDA DE 06/10/2026 A 07/10/2026 OU ENQUANTO DURAREM OS ESTOQUES',
+      quickValidityStartDate: '2026-10-06', quickValidityEndDate: '2026-10-07',
+      quickValidityMode: 'date_range', visible: true
+    })
+  })
+
+  it('interpreta as validades escritas pelo cliente sem inventar datas ambíguas', () => {
+    const today = new Date('2026-10-06T12:00:00-03:00')
+    expect(parseLiteralValidityPeriod('06 e 07 de outubro', today)).toEqual({ startDate: '2026-10-06', endDate: '2026-10-07', mode: 'date_range' })
+    expect(parseLiteralValidityPeriod('Ofertas válidas de 06/10 a 12/10', today)).toEqual({ startDate: '2026-10-06', endDate: '2026-10-12', mode: 'date_range' })
+    expect(parseLiteralValidityPeriod('30 de setembro a 2 de outubro', today)).toEqual({ startDate: '2026-09-30', endDate: '2026-10-02', mode: 'date_range' })
+    expect(parseLiteralValidityPeriod('6 de outubro', today)).toEqual({ startDate: '2026-10-06', endDate: '2026-10-06', mode: 'single_day' })
+    expect(parseLiteralValidityPeriod('05/01', new Date('2026-12-20T12:00:00-03:00'))).toEqual({ startDate: '2027-01-05', endDate: '2027-01-05', mode: 'single_day' })
+    expect(parseLiteralValidityPeriod('sem validade', today)).toEqual({ mode: 'while_stocks' })
+    expect(parseLiteralValidityPeriod('06, 08 e 10 de outubro', today)).toBeNull()
+    expect(parseLiteralValidityPeriod('07/10 a 06/10', today)).toBeNull()
+    expect(parseLiteralValidityPeriod('31/02', today)).toBeNull()
   })
 
   it('recusa cabeçalho que não consegue mostrar logo ou contatos do perfil', () => {
@@ -390,13 +417,14 @@ describe('adapter de render da criação WhatsApp', () => {
     expect(rich.styles.find((span: any) => span.start === 1)).toMatchObject({ end: 4, style: { fontSize: 19 } })
     expect(manualCards.map((item: any) => item.productItemId)).toEqual(['one', 'two', 'three', 'four'])
     expect(manualCards.every((item: any) => item.__cardLabelTemplateId === 'tpl_default')).toBe(true)
-    expect(manualCards.every((item: any) => item.objects.filter((child: any) => /^(smart_image|extra_image_)/.test(child.name)).length === 2)).toBe(true)
+    expect(manualCards.every((item: any) => item.objects.filter((child: any) => /^(smart_image|extra_image_)/.test(child.name)).length >= 2)).toBe(true)
     for (const card of manualCards) {
-      expect(card._productData.imageFillCount).toBe(2)
+      expect(card._productData.imageFillCount).toBeUndefined()
+      expect(card._productData.imageFillMinimum).toBe(2)
       const recipe = resolveProductCardConfigurationProfile(accountCardLayout, card._cardWidth, card._cardHeight).elements
       const images = card.objects.filter((item: any) => /^(smart_image|extra_image_)/.test(item.name))
-      expect((images[0].left + images[1].left) / 2).toBeCloseTo((recipe.image.x / 100 - 0.5) * card._cardWidth, 2)
-      expect((images[0].top + images[1].top) / 2).toBeCloseTo((recipe.image.y / 100 - 0.5) * card._cardHeight, 2)
+      expect((images[0].left + images.at(-1).left) / 2).toBeCloseTo((recipe.image.x / 100 - 0.5) * card._cardWidth, 2)
+      expect((images[0].top + images.at(-1).top) / 2).toBeCloseTo((recipe.image.y / 100 - 0.5) * card._cardHeight, 2)
       expect(card.objects.find((item: any) => item.name === 'smart_title').left)
         .toBeCloseTo((recipe.name.x / 100 - 0.5) * card._cardWidth, 2)
 

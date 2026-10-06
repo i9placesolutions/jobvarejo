@@ -533,7 +533,8 @@ export const createProductCardConfigurationLayout = (deps: ProductCardConfigurat
       const source = images[0]
       const layout = cardElements.image
       const plan = planAutomaticProductImageFill(w * Math.min(layout.width, 2 * Math.min(layout.x, 100 - layout.x)) / 100, h * Math.min(layout.height, 2 * Math.min(layout.y, 100 - layout.y)) / 100,
-        Number(source.width), Number(source.height), group._productData.imageFillCount, group._productData.imageFillDirection)
+        Number(source.width), Number(source.height), group._productData.imageFillCount, group._productData.imageFillDirection,
+        group._productData.imageFillMinimum)
       const fabric = deps.fabric()
       while (images.length < plan.length && fabric?.Image) {
         const copy = new fabric.Image(source.getElement(), {

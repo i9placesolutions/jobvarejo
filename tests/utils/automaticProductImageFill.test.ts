@@ -98,3 +98,15 @@ it('abandona duas cópias quando o novo espaço pede uma imagem', () => {
   expect(after[0]).toEqual({ left: 0, top: 0, scale: 2 })
   expect(new Set(before.map(image => image.scale)).size).toBe(1)
 })
+
+it('mínimo automático mantém o par e acrescenta cópias quando a imagem larga deixa o card alto vazio', () => {
+  const tall = planAutomaticProductImageFill(260, 380, 800, 520, undefined, 'auto', 2)
+  expect(tall.length).toBe(3)
+  // As cópias extremas encostam nas bordas da área, sem faixa vazia no topo.
+  expect(tall[0]!.top - 520 * tall[0]!.scale / 2).toBeCloseTo(-190, 0)
+  expect(tall.at(-1)!.top + 520 * tall.at(-1)!.scale / 2).toBeCloseTo(190, 0)
+
+  // Onde o automático escolheria uma única imagem, o mínimo preserva o par.
+  const wide = planAutomaticProductImageFill(400, 300, 800, 520, undefined, 'auto', 2)
+  expect(wide).toEqual(planAutomaticProductImageFill(400, 300, 800, 520, 2, 'auto'))
+})

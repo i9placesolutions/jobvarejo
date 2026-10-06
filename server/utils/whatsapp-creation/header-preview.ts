@@ -9,6 +9,7 @@ import type { CreationKind } from '~/shared/whatsapp-creation'
 import type { ResolvedWhatsAppAccount } from './access'
 import type { CreationHeader } from './catalog'
 import { hydrateFlyerBusinessFields, renderCreationHeaderPreview } from './render'
+import { bakeLogoCrops } from './logo-crop'
 import { getS3Client } from '../s3'
 import { videoBucket } from '../video-studio/service'
 import { isPublicStorageKey, isStorageKeyAllowedForUser, isValidStoragePath } from '../storage-scope'
@@ -20,7 +21,7 @@ const MAX_THUMBNAIL_BYTES = 8 * 1024 * 1024
 const MAX_CANVAS_BYTES = 32 * 1024 * 1024
 const HEADER_WIDTH = 800
 // Incrementar quando a renderização do cabeçalho mudar, para invalidar o cache.
-const HEADER_CACHE_VERSION = 1
+const HEADER_CACHE_VERSION = 2
 let headerFontsReady = false
 
 export function flyerHeaderCropHeight(canvas: { objects?: any[] }, pageHeight: number, imageHeight: number): number {
@@ -184,6 +185,8 @@ async function renderHeaderCanvas(canvas: any, sourceOwnerId: string, account: R
   try {
     await output.loadFromJSON(prepared)
     attachDecodedImages(output.getObjects(), decoded)
+    // Evita a sombra fantasma da logo recortada, igual ao encarte final.
+    bakeLogoCrops(output.getObjects(), () => document.createElement('canvas') as HTMLCanvasElement)
     output.setDimensions({ width: HEADER_WIDTH, height })
     output.viewportTransform = [scale, 0, 0, scale, 0, 0]
     restoreCanvasStickerOutlines(output, () => document.createElement('canvas') as HTMLCanvasElement)

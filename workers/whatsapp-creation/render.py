@@ -427,7 +427,9 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 ...product,
                 name: styles.prodNameTransform === 'upper' ? titleText.toLocaleUpperCase('pt-BR') : titleText,
                 limit: product.condition || '',
-                autoFillImages: true, imageFillCount: 2, zoneInstanceId: zoneId
+                // Igual ao editor manual (quantidade automática), mas sempre com ao
+                // menos o par de imagens; cards altos recebem mais cópias até preencher.
+                autoFillImages: true, imageFillMinimum: 2, zoneInstanceId: zoneId
               }, left + width / 2, top + height / 2, width, height, zoneId,
                 savedLabel ? { ...(template || {}), id: labelId, group: savedLabel } : undefined,
                 { ...styles, __refCellW: slot.refCellWidth, __refCellH: slot.refCellHeight,
@@ -449,8 +451,22 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 fontSize: Math.min(24, labelHeight * .58), fontWeight: 'bold', textAlign: 'left',
                 fill: styles.prodNameColor || '#222222', selectable: true, evented: true, name: `department-${pageIndex + 1}`}));
             }
+            // Logos com contorno (sticker) são desenhados uma única vez pelo
+            // applyFlyerLogoStickers no servidor; aqui ficariam com sombra duplicada.
+            const stickerLogos = [];
+            const collectStickerLogos = objects => objects.forEach(o => {
+              if (String(o.type || '').toLowerCase() === 'image' && o.quickLogoSource && o.__stickerOutlineEnabled && o.visible !== false) stickerLogos.push(o);
+              if (typeof o.getObjects === 'function') collectStickerLogos(o.getObjects());
+            });
+            collectStickerLogos(c.getObjects());
+            const setStickerLogosVisible = visible => stickerLogos.forEach(o => {
+              o.visible = visible;
+              for (let parent = o.group; parent; parent = parent.group) parent.dirty = true;
+            });
+            setStickerLogosVisible(false);
             c.renderAll();
             const png = c.toDataURL({format: 'png', multiplier: 1, enableRetinaScaling: false});
+            setStickerLogosVisible(true);
             sortedZones.forEach((zone, index) => {
               zone.visible = zoneState[index].visible;
               zone.excludeFromExport = zoneState[index].excludeFromExport;
