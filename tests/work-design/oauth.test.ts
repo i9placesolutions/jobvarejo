@@ -111,6 +111,9 @@ describe('OAuth Work isolado por conta, recurso e PKCE', () => {
     const auth = { 'x-test-user': owner, Authorization: 'Bearer test-session-a' }
     const response = await nativeFetch(url, { headers: auth })
     expect(response.headers.get('referrer-policy')).toBe('same-origin')
+    const callbackOrigin = new URL(input.redirect_uri).origin
+    expect(response.headers.get('content-security-policy')).toBe(
+      `default-src 'none'; form-action 'self' ${callbackOrigin}; frame-ancestors 'none'; base-uri 'none'`)
     expect(response.headers.get('set-cookie')).toBeNull()
     const html = await response.text(), nonce = html.match(/name="nonce" value="([^"]+)"/)![1]!
     const post = (origin: string, value: string) => nativeFetch(base + '/authorize', { method: 'POST', redirect: 'manual',
@@ -125,6 +128,7 @@ describe('OAuth Work isolado por conta, recurso e PKCE', () => {
     const granted = await post('https://jobvarejo.com.br', nonce)
     expect(granted.status).toBe(303)
     expect(granted.headers.get('referrer-policy')).toBe('no-referrer')
+    expect(granted.headers.get('content-security-policy')).toBe(response.headers.get('content-security-policy'))
     const callback = new URL(granted.headers.get('location')!)
     expect(callback.origin + callback.pathname).toBe(input.redirect_uri)
     expect(callback.searchParams.get('state')).toBe('test-state'); expect(callback.searchParams.get('iss')).toBe('https://jobvarejo.com.br')
