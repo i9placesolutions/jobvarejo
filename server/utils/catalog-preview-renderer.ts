@@ -35,7 +35,8 @@ const MAX_PAGE_DIMENSION = 8000
 const MAX_S3_SOURCE_READ_MS = 12_000
 const MAX_SOURCE_PREPARATION_MS = 30_000
 const MAX_ALLOWED_IMAGE_FORMATS = new Set(['png', 'jpeg', 'webp', 'avif', 'gif'])
-const RENDERER_POLICY = 'catalog-preview-v1'
+// Mudar a versão invalida as prévias em cache (todas são redesenhadas). v2: contorno de adesivo no servidor.
+const RENDERER_POLICY = 'catalog-preview-v2'
 const typedVideoCatalogManifest = videoCatalogManifest as VideoCatalogManifest
 
 let activeTasks = 0

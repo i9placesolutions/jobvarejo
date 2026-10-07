@@ -35,7 +35,7 @@ const projectRow = (projectId: string): any => ({
   owner_role: 'admin'
 })
 const sourceRevisionHash = (row: ReturnType<typeof projectRow>) => createHash('sha256')
-  .update(`${new Date(row.updated_at).toISOString()}\ncatalog-preview-v1`)
+  .update(`${new Date(row.updated_at).toISOString()}\ncatalog-preview-v2`)
   .digest('hex')
 const cacheHeadFor = (row: ReturnType<typeof projectRow>) => ({
   ContentLength: 12,
