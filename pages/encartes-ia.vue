@@ -22,6 +22,18 @@ const pageEstimate = computed(() => request.value.formats.map(format => ({
   label: WORK_FORMATS[format].label,
   count: request.value.productsPerPage ? Math.ceil(request.value.products.length / Math.min(format === 'stories' ? 9 : 16, request.value.productsPerPage)) : null
 })))
+const workHandoff = ref<{ id: string; revision: number } | null>(null)
+const workCopied = ref(false)
+const workPluginUrl = 'https://chatgpt.com/plugins/plugin_asdk_app_6ac6b6a133b88191b3b34bcf53e0a242'
+const workPrompt = computed(() => workHandoff.value ? `Use a conexão JobVarejo — Conexão Work para processar somente o pedido ${workHandoff.value.id}, revisão ${workHandoff.value.revision}. Consulte list_pending_design_jobs e confirme que o pedido e a revisão ainda estão pendentes antes de reservar com claim_design_job. Se já estiver em criação ou concluído, apenas informe o estado; não duplique. Leia get_design_job_context e siga o contrato retornado. Preserve produtos, preços, fotos, selo e dados confirmados. Consulte referências internas e elementos compatíveis, crie composição própria para cada formato solicitado e respeite productsPerPage. Forneça slots[].design e mantenha preços legíveis e proporcionais, sem sobreposições. Envie submit_design_draft e confira todas as páginas com get_design_result_preview antes de complete_design_job. Se houver impedimento, use fail_design_job com motivo objetivo. Não use API paga nem altere outros pedidos. Informe o projeto editável salvo no JobVarejo. Não crie agendamentos nem envie mensagens externas.` : '')
+function prepareWork(job: { id: string; revision: number; status: string }) {
+  if (job.status !== 'pending') return
+  workHandoff.value = { id: job.id, revision: job.revision }; workCopied.value = false
+}
+async function copyWorkPrompt() {
+  try { await navigator.clipboard.writeText(workPrompt.value); workCopied.value = true }
+  catch { workCopied.value = false; notice.value = 'Selecione e copie o comando abaixo; o navegador não permitiu a cópia automática.' }
+}
 const photoProductId = ref(''), photoQuery = ref(''), photoLoading = ref(false)
 const photoCandidates = ref<Array<{ key: string; name: string }>>([])
 async function searchPhotos() {
@@ -88,21 +100,24 @@ function addMessage() {
   request.value.brief = [request.value.brief, message.value.trim()].filter(Boolean).join('\n\n')
   message.value = ''; idempotency = ''; notice.value = 'Orientação adicionada ao pedido. Envie para a fila quando os dados estiverem conferidos.'
 }
-async function save() {
+async function save(openWork = false) {
   error.value = ''; notice.value = ''
   const parsed = workRequestSchema.safeParse(request.value)
   if (!parsed.success) { error.value = parsed.error.issues.map(i => i.message).join('; '); return }
   saving.value = true
   try {
     if (editingId.value) {
-      await $fetch(`/api/work-design/jobs/${editingId.value}`, { method: 'PATCH', headers: await getApiAuthHeaders(), body: { revision: editingRevision.value, request: parsed.data } })
+      const job = await $fetch<typeof jobs.value[number]>(`/api/work-design/jobs/${editingId.value}`, { method: 'PATCH', headers: await getApiAuthHeaders(), body: { revision: editingRevision.value, request: parsed.data } })
+      selectedId.value = job.id
+      if (openWork) prepareWork(job)
     } else {
       if (!idempotency) idempotency = crypto.randomUUID()
-      const job = await $fetch<{ id: string }>('/api/work-design/jobs', { method: 'POST', headers: await getApiAuthHeaders(), body: { idempotencyKey: idempotency, request: parsed.data } })
+      const job = await $fetch<typeof jobs.value[number]>('/api/work-design/jobs', { method: 'POST', headers: await getApiAuthHeaders(), body: { idempotencyKey: idempotency, request: parsed.data } })
       selectedId.value = job.id
+      if (openWork) prepareWork(job)
     }
     await refresh(); editingId.value = ''; editingRevision.value = 0
-    notice.value = 'Pedido salvo na fila. O consumidor conectado poderá processar a criação.'
+    notice.value = openWork ? 'Pedido salvo. Copie o comando e confirme o envio no Work para iniciar agora.' : 'Pedido salvo na fila para processamento agendado.'
   } catch (e) { error.value = problem(e) } finally { saving.value = false }
 }
 async function cancel(job: typeof jobs.value[number]) {
@@ -141,7 +156,7 @@ onUnmounted(() => { if (poll) clearInterval(poll) })
     <template v-else>
       <p v-if="!session.databaseReady" class="callout">A área está preparada. A fila ainda aguarda ativação no banco.</p>
       <p v-else-if="!session.consumerConfigured" class="callout">A fila está disponível. Configure e conecte o consumidor Work para processar os pedidos.</p>
-      <p class="batch-note">Criação por lotes. Os resultados ficam salvos como novos projetos, com textos e preços editáveis.</p>
+      <p class="batch-note">Inicie pelo Work após salvar o pedido ou aguarde o processamento agendado. Os resultados ficam salvos como projetos editáveis.</p>
       <div class="workspace">
         <section class="brief-panel">
           <div class="section-title"><span>01</span><h2>{{ editingId ? 'Revisar pedido' : 'Prepare sua campanha' }}</h2></div>
@@ -173,20 +188,31 @@ onUnmounted(() => { if (poll) clearInterval(poll) })
           <div class="message"><input v-model="message" placeholder="Acrescente uma orientação visual" @keydown.enter.prevent="addMessage" /><button type="button" aria-label="Adicionar orientação" @click="addMessage"><Send :size="17" /></button></div>
           <small>As orientações acompanham o pedido. Para mudar produto, preço ou foto, use a lista acima.</small>
           <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="notice" role="status">{{ notice }}</p>
-          <button type="button" class="primary-button" :disabled="!canQueue || saving" @click="save"><Sparkles :size="17" /> {{ saving ? 'Salvando…' : editingId ? 'Salvar revisão na fila' : 'Enviar para criação' }}</button>
+          <button type="button" class="primary-button" :disabled="!canQueue || saving" @click="save(true)"><Sparkles :size="17" /> {{ saving ? 'Salvando…' : editingId ? 'Salvar revisão e iniciar no Work' : 'Salvar e iniciar no Work' }}</button>
+          <button type="button" class="text-button" :disabled="!canQueue || saving" @click="save(false)">Salvar somente na fila</button>
+          <small>Para iniciar agora, você cola o comando e confirma o envio no chat do Work.</small>
         </section>
         <aside class="results-panel">
           <div class="section-title"><h2>Pedidos e versões</h2><button type="button" aria-label="Atualizar pedidos" class="text-button" @click="refresh().catch(e => error = problem(e))"><RefreshCw :size="16" /></button></div>
           <p v-if="!jobs.length" class="empty-copy">Suas campanhas aparecerão aqui. Você poderá conferir, abrir o projeto e reutilizar a lista.</p>
           <button v-for="job in jobs" :key="job.id" type="button" class="job" :class="{ selected: selectedId === job.id }" @click="selectJob(job)"><strong>{{ job.request.name }}</strong><span>{{ statuses[job.status] }} · revisão {{ job.revision }}</span><small>{{ job.request.products.length }} produtos · {{ job.request.formats.map(f => WORK_FORMATS[f].label).join(', ') }}</small></button>
           <section v-if="selected" class="selected-job"><h3>{{ selected.request.theme }}</h3><p v-if="selected.error" class="error">{{ selected.error }}</p>
-            <div class="job-actions"><button type="button" class="light-button" @click="reuse(selected)">Reutilizar</button><button v-if="['pending','processing','draft','failed'].includes(selected.status)" type="button" class="light-button" @click="reuse(selected, true)">Revisar pedido</button><button v-if="['pending','processing','draft','failed'].includes(selected.status)" type="button" class="text-button" @click="cancel(selected)">Cancelar</button></div>
+            <div class="job-actions"><button v-if="selected.status === 'pending'" type="button" class="light-button" @click="prepareWork(selected)">Iniciar agora no Work <ArrowUpRight :size="15" /></button><button type="button" class="light-button" @click="reuse(selected)">Reutilizar</button><button v-if="['pending','processing','draft','failed'].includes(selected.status)" type="button" class="light-button" @click="reuse(selected, true)">Revisar pedido</button><button v-if="['pending','processing','draft','failed'].includes(selected.status)" type="button" class="text-button" @click="cancel(selected)">Cancelar</button></div>
             <template v-if="selected.result"><div v-for="page in selected.result.pages" :key="page.id" class="art-preview"><img :src="previewUrl(page.previewKey)" :alt="'Prévia ' + WORK_FORMATS[page.format].label" /><span>{{ WORK_FORMATS[page.format].label }}</span></div>
               <NuxtLink :to="'/editor/' + selected.result.projectId" class="primary-button">Abrir projeto editável <ArrowUpRight :size="17" /></NuxtLink><small>O piloto abre no editor completo. A edição rápida depende de validação adicional de compatibilidade.</small></template>
           </section>
         </aside>
       </div>
     </template>
+    <div v-if="workHandoff" class="photo-modal" role="dialog" aria-modal="true" aria-labelledby="work-handoff-title" @click.self="workHandoff = null" @keydown.esc="workHandoff = null">
+      <section><div class="section-title"><h2 id="work-handoff-title">Iniciar no Work</h2><button type="button" aria-label="Fechar instruções do Work" @click="workHandoff = null"><X :size="20" /></button></div>
+        <p class="empty-copy">Seu pedido está salvo. Copie o comando, abra o Work, clique em “Testar no chat”, cole e envie. A criação começa após sua confirmação no Work.</p>
+        <label>Comando para o Work<textarea :value="workPrompt" readonly rows="7" @focus="($event.target as HTMLTextAreaElement).select()" /></label>
+        <button type="button" class="light-button" @click="copyWorkPrompt">{{ workCopied ? 'Comando copiado' : 'Copiar comando' }}</button>
+        <a :href="workPluginUrl" rel="noreferrer" class="primary-button" @click="copyWorkPrompt">{{ workCopied ? 'Abrir Work' : 'Copiar pedido e abrir Work' }} <ArrowUpRight :size="17" /></a>
+        <small>O painel não envia a mensagem por você. Se o navegador impedir a cópia, copie o texto acima. O resultado aparecerá em Pedidos e versões.</small>
+      </section>
+    </div>
     <div v-if="photoProductId" class="photo-modal" role="dialog" aria-modal="true" aria-labelledby="photo-title" @click.self="photoProductId = ''">
       <section><div class="section-title"><h2 id="photo-title">Confira a foto do produto</h2><button type="button" aria-label="Fechar seleção" @click="photoProductId = ''"><X :size="20" /></button></div>
         <div class="message"><input v-model="photoQuery" aria-label="Buscar foto por nome" @keydown.enter.prevent="searchPhotos" /><button type="button" aria-label="Buscar fotos" @click="searchPhotos"><RefreshCw :size="17" /></button></div>

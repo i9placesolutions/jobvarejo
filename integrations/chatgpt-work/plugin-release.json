@@ -1,13 +1,20 @@
 {
   "pluginId": "plugins_6ac6609d3a8c819196c289a4c6fb1a53",
-  "releaseId": "pluginrel_6ac6609ecfd88191acce6ea828d074dd",
+  "releaseId": "pluginrel_6ac6b6200e708191bb6da5235e20bd0c",
   "pluginUrl": "https://chatgpt.com/plugins/plugins_6ac6609d3a8c819196c289a4c6fb1a53",
   "scope": "USER",
   "discoverability": "PRIVATE",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "createdAt": "2026-10-07",
   "accountConnectionVerified": true,
-  "verifiedConsumer": "Codex",
-  "workExecutionVerified": false,
-  "preparedVersion": "0.2.0"
+  "verifiedConsumer": "ChatGPT Work web",
+  "workExecutionVerified": true,
+  "backendCommit": "b88d063a0bb293ce3c719ed3076d46fc1c7f725a",
+  "backendDeployment": "myrmzroxmt7kz4ddufj3zzr8",
+  "workWebConnectionState": "connected_execution_verified",
+  "workWebProbeConversationId": "6ac6b8a1-204c-83e8-a39f-f92971d32d24",
+  "workWebConnectionPluginId": "plugin_asdk_app_6ac6b6a133b88191b3b34bcf53e0a242",
+  "workResultProjectId": "7f7bcdc9-9287-4a46-97b7-742101115515",
+  "workScheduleState": "enabled_hourly_first_scheduled_run_unverified",
+  "immediateProTriggerState": "unsupported_official_route"
 }
