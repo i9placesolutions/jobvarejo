@@ -1,10 +1,13 @@
-import { readdir } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { generateThumbnailFromCanvasJson } from '../../utils/editorThumbnail'
 
 // Desenho nativo (fabric + node-canvas) da prévia do catálogo. É trabalho síncrono de CPU:
-// em produção roda numa worker thread (workers/catalog-preview/render-worker) para não travar
-// o processo que atende login, páginas e o healthcheck. Este módulo não acessa rede nem banco.
+// em produção roda num processo filho (workers/catalog-preview/render-worker) para não travar
+// o processo que atende login, páginas e o healthcheck. Este módulo não acessa rede nem banco;
+// só grava as imagens embutidas em arquivos temporários durante o desenho.
 
 export type CatalogPreviewDrawKind = 'flyer' | 'label'
 
@@ -57,8 +60,52 @@ const loadFontsOnce = (() => {
   }
 })()
 
+/**
+ * Troca as imagens embutidas (data URLs) por arquivos temporários (file://). O jsdom do fabric/node
+ * interpreta uma data URL de vários MB caractere por caractere: num modelo real eram 13 s de CPU
+ * só nisso (o desenho em si leva < 1 s) e, no servidor de produção, passava do tempo limite.
+ * Com file:// o jsdom lê o arquivo direto; a imagem final é idêntica.
+ */
+const externalizeDataImages = async (canvasJson: any, directory: string): Promise<void> => {
+  const files = new Map<string, string>()
+  const seen = new WeakSet<object>()
+  const pending: unknown[] = [canvasJson]
+  while (pending.length) {
+    const node = pending.pop()
+    if (!node || typeof node !== 'object' || seen.has(node)) continue
+    seen.add(node)
+    const record = node as Record<string, unknown>
+    for (const property of ['src', 'source'] as const) {
+      const value = record[property]
+      if (typeof value !== 'string' || !value.startsWith('data:')) continue
+      const comma = value.indexOf(',')
+      if (comma < 0 || !/;base64$/i.test(value.slice(0, comma))) continue
+      let url = files.get(value)
+      if (!url) {
+        const extension = value.slice(5, comma).match(/^image\/(png|jpe?g|webp|gif|svg\+xml)/i)?.[1]?.replace('svg+xml', 'svg') || 'png'
+        const file = join(directory, `${files.size}.${extension}`)
+        await writeFile(file, Buffer.from(value.slice(comma + 1), 'base64'))
+        url = pathToFileURL(file).href
+        files.set(value, url)
+      }
+      record[property] = url
+    }
+    for (const child of Object.values(record)) if (child && typeof child === 'object') pending.push(child)
+  }
+}
+
 /** Desenha a prévia e devolve WebP otimizado. */
 export const drawCatalogPreview = async (input: CatalogPreviewDrawInput): Promise<Buffer> => {
+  const directory = await mkdtemp(join(tmpdir(), 'catalog-preview-'))
+  try {
+    await externalizeDataImages(input.canvasJson, directory)
+    return await drawPreparedCatalogPreview(input)
+  } finally {
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+const drawPreparedCatalogPreview = async (input: CatalogPreviewDrawInput): Promise<Buffer> => {
   const { kind, canvasJson, width, height } = input
   await loadFontsOnce()
   const fabric = await import('fabric/node')

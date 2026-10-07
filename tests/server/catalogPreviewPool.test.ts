@@ -2,7 +2,10 @@
 import { describe, expect, it, beforeAll } from 'vitest'
 import { build } from 'esbuild'
 import sharp from 'sharp'
+import { readdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { drawCatalogPreviewIsolated, catalogPreviewWorkerEnabled } from '../../server/utils/catalog-preview-pool'
+import { drawCatalogPreview } from '../../server/utils/catalog-preview-draw'
 
 // O desenho das prévias roda em processo filho: o processo principal (login, páginas, healthcheck)
 // não pode ficar travado enquanto a biblioteca é redesenhada.
@@ -39,5 +42,20 @@ describe('pool de desenho das prévias do catálogo', () => {
     await expect(drawCatalogPreviewIsolated({ kind: 'label', canvasJson: {}, width: 10, height: 10 })).rejects.toThrow(/fabric|etiqueta/)
     const ok = await drawCatalogPreviewIsolated({ kind: 'flyer', canvasJson: { version: '7.1.0', objects: [] }, width: 200, height: 200 })
     expect(ok.length).toBeGreaterThan(0)
+  }, 60_000)
+
+  it('imagem grande embutida desenha rápido (via arquivo temporário) e não deixa sobra', async () => {
+    // Data URL de vários MB passava segundos no parser de URL do jsdom; o arquivo temporário evita isso.
+    const noise = Buffer.alloc(1600 * 1600 * 3).map((_, i) => (i * 2654435761) >>> 24)
+    const big = 'data:image/png;base64,' + (await sharp(noise, { raw: { width: 1600, height: 1600, channels: 3 } }).png({ compressionLevel: 0 }).toBuffer()).toString('base64')
+    expect(big.length).toBeGreaterThan(5_000_000)
+    const before = (await readdir(tmpdir())).filter(name => name.startsWith('catalog-preview-')).length
+    const started = Date.now()
+    const bytes = await drawCatalogPreview({ kind: 'flyer', width: 1080, height: 1350, canvasJson: { version: '7.1.0', objects: [
+      { type: 'Image', version: '7.1.0', left: 0, top: 0, width: 1600, height: 1600, scaleX: 0.675, scaleY: 0.84375, src: big, originX: 'left', originY: 'top' }
+    ] } })
+    expect(Date.now() - started).toBeLessThan(4_000)
+    expect((await sharp(bytes).metadata()).format).toBe('webp')
+    expect((await readdir(tmpdir())).filter(name => name.startsWith('catalog-preview-')).length).toBe(before)
   }, 60_000)
 })
