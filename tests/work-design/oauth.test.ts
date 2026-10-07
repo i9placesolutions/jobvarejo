@@ -9,7 +9,7 @@ vi.mock('../../server/utils/redis', () => ({ getRedis: () => ({
   get: async (key: string) => { const entry = store.get(key); return entry && entry.until > Date.now() ? entry.value : null },
   getdel: async (key: string) => { const entry = store.get(key); store.delete(key); return entry && entry.until > Date.now() ? entry.value : null }
 }) }))
-vi.mock('../../server/utils/auth', () => ({ requireAuthenticatedUser: async (event: h3.H3Event) => {
+vi.mock('../../server/utils/auth', async importOriginal => ({ ...(await importOriginal<typeof import('../../server/utils/auth')>()), requireAuthenticatedUser: async (event: h3.H3Event) => {
   const id = h3.getHeader(event, 'x-test-user')
   if (!id) throw h3.createError({ statusCode: 401 })
   return { id, actorId: id }
@@ -108,19 +108,20 @@ describe('OAuth Work isolado por conta, recurso e PKCE', () => {
     const url = base + '/authorize?' + new URLSearchParams(input).toString()
     expect(await (await nativeFetch(url)).text()).toContain('Entrar no JobVarejo')
     expect((await nativeFetch(url, { headers: { 'x-test-user': other } })).status).toBe(403)
-    const response = await nativeFetch(url, { headers: { 'x-test-user': owner } })
+    const auth = { 'x-test-user': owner, Authorization: 'Bearer test-session-a' }
+    const response = await nativeFetch(url, { headers: auth })
     expect(response.headers.get('referrer-policy')).toBe('same-origin')
-    const cookie = response.headers.get('set-cookie')!.split(';')[0]!
+    expect(response.headers.get('set-cookie')).toBeNull()
     const html = await response.text(), nonce = html.match(/name="nonce" value="([^"]+)"/)![1]!
     const post = (origin: string, value: string) => nativeFetch(base + '/authorize', { method: 'POST', redirect: 'manual',
-      headers: { 'x-test-user': owner, Origin: origin, Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { ...auth, Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ nonce: value, decision: 'allow' }) })
     expect((await post('https://attacker.invalid', nonce)).status).toBe(403)
     expect((await post('null', nonce)).status).toBe(403)
     expect((await nativeFetch(base + '/authorize', { method: 'POST', redirect: 'manual',
-      headers: { 'x-test-user': owner, Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { ...auth, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ nonce, decision: 'allow' }) })).status).toBe(403)
-    expect((await post('https://jobvarejo.com.br', 'wrong')).status).toBe(403)
+    expect((await post('https://jobvarejo.com.br', 'q'.repeat(43))).status).toBe(400)
     const granted = await post('https://jobvarejo.com.br', nonce)
     expect(granted.status).toBe(303)
     expect(granted.headers.get('referrer-policy')).toBe('no-referrer')
@@ -132,5 +133,33 @@ describe('OAuth Work isolado por conta, recurso e PKCE', () => {
       body: new URLSearchParams({ grant_type: 'authorization_code', client_id: input.client_id, resource: input.resource,
         redirect_uri: input.redirect_uri, code: callback.searchParams.get('code')!, code_verifier: verifier }) })
     expect(token.status).toBe(200); expect((await token.json() as any).token_type).toBe('Bearer')
+  })
+  it('vincula confirmação ao cookie de login existente, sem cookie adicional e sem conflito entre abas', async () => {
+    const url = base + '/authorize?' + new URLSearchParams(request()).toString()
+    const auth = { 'x-test-user': owner, Cookie: 'access-token=test-session-cookie' }
+    const nonceFor = async (headers = auth) => {
+      const response = await nativeFetch(url, { headers })
+      expect(response.status).toBe(200)
+      return (await response.text()).match(/name="nonce" value="([^"]+)"/)![1]!
+    }
+    const first = await nonceFor(), second = await nonceFor()
+    const deny = (nonce: string, headers = auth) => nativeFetch(base + '/authorize', { method: 'POST', redirect: 'manual',
+      headers: { ...headers, Origin: 'https://jobvarejo.com.br', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ nonce, decision: 'deny' }) })
+    for (const nonce of [first, second]) {
+      const response = await deny(nonce)
+      expect(response.status).toBe(303)
+      expect(new URL(response.headers.get('location')!).searchParams.get('error')).toBe('access_denied')
+      expect((await deny(nonce)).status).toBe(400)
+    }
+    const swapped = await nonceFor()
+    expect((await deny(swapped, { ...auth, Cookie: 'access-token=another-session' })).status).toBe(403)
+    expect((await deny(swapped)).status).toBe(400)
+    const expired = await nonceFor()
+    const key = 'work-design:oauth:consent:' + createHash('sha256').update(expired).digest('hex')
+    expect(store.get(key)!.value).not.toContain('test-session-cookie')
+    store.get(key)!.until = Date.now() - 1
+    expect((await deny(expired)).status).toBe(400)
+    expect((await nativeFetch(url, { headers: { 'x-test-user': owner } })).status).toBe(401)
   })
 })

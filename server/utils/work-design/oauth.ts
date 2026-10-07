@@ -76,7 +76,11 @@ export async function validateWorkOAuthClient(request: OAuthAuthorization) {
       !(metadata.token_endpoint_auth_methods_supported || [metadata.token_endpoint_auth_method]).includes('none'))
     throw createError({ statusCode: 400, statusMessage: 'Metadados do cliente OAuth incompatíveis.' })
 }
-export const storeWorkOAuthConsent = (request: OAuthAuthorization, owner: string) => put('consent', { request, owner }, 600)
+// Synchronizer token vinculado à sessão autenticada: somente o hash fica no Redis.
+export const storeWorkOAuthConsent = (request: OAuthAuthorization, owner: string, sessionToken: string) =>
+  put('consent', { request, owner, sessionHash: hash(sessionToken) }, 600)
+export const workOAuthConsentMatchesSession = (consent: { sessionHash?: string }, sessionToken: string) =>
+  Boolean(consent.sessionHash && sessionToken && oauthEqual(consent.sessionHash, hash(sessionToken)))
 export const consumeWorkOAuthConsent = (nonce: string) => read('consent', nonce, true)
 export const issueWorkOAuthCode = (request: OAuthAuthorization, owner: string) => put('code', { request, owner }, 300)
 export async function issueWorkOAuthTokens(grant: { owner: string; clientId: string; resource: string; scope: string }) {

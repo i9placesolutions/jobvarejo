@@ -24,7 +24,7 @@ export interface AuthenticatedUser {
   }
 }
 
-const getBearerToken = (event: H3Event): string | null => {
+export const getBearerToken = (event: H3Event): string | null => {
   const authHeader = getHeader(event, 'authorization')
   if (authHeader) {
     const prefix = 'Bearer '
