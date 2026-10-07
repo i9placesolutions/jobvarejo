@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "jobvarejo-work",
+  "version": "0.1.0",
+  "description": "Compõe encartes editáveis a partir da fila privada experimental do JobVarejo.",
+  "author": { "name": "JobVarejo" },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "JobVarejo — Encartes",
+        "shortDescription": "Composição de encartes",
+        "longDescription": "Processa lotes autorizados com fotos confirmadas, dados da loja, elementos reutilizáveis e formatos próprios. Salva novos projetos editáveis.",
+        "developerName": "JobVarejo",
+        "category": "Productivity",
+        "defaultPrompt": "Processe um pedido pendente do piloto JobVarejo e confira todas as prévias antes de concluir."
+      }
+    }
+  }
+}

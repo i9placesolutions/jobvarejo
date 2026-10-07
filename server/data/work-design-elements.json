@@ -1,0 +1,22 @@
+[
+  {
+    "id": "economia-offers-seal",
+    "ownerId": "eb847e8e-7c19-4bee-8042-376528ce6192",
+    "name": "Semana de Ofertas — selo azul e amarelo",
+    "role": "seal",
+    "theme": "Semana de Ofertas",
+    "palette": ["#083A9D", "#FFD215"],
+    "formats": ["stories", "feed", "square", "tv", "print"],
+    "key": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/5f8098bc-d7dc-4f60-b8b4-c985e15eac86/assets/selo.png"
+  },
+  {
+    "id": "economia-offers-background",
+    "ownerId": "eb847e8e-7c19-4bee-8042-376528ce6192",
+    "name": "Semana de Ofertas — fundo vertical azul e amarelo",
+    "role": "background",
+    "theme": "Semana de Ofertas",
+    "palette": ["#083A9D", "#FFD215"],
+    "formats": ["stories"],
+    "key": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/5f8098bc-d7dc-4f60-b8b4-c985e15eac86/assets/fundo.png"
+  }
+]

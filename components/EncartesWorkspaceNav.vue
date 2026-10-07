@@ -4,6 +4,15 @@ import type { Component } from 'vue'
 
 const route = useRoute()
 const auth = useAuth()
+const workPilotAvailable = ref(false)
+onMounted(async () => {
+  if (auth.user.value?.role !== 'super_admin') return
+  try {
+    const { getApiAuthHeaders } = useApiAuth()
+    const session = await $fetch<{ allowed: boolean }>('/api/work-design/session', { headers: await getApiAuthHeaders() })
+    workPilotAvailable.value = session.allowed
+  } catch { /* Área experimental oculta quando indisponível. */ }
+})
 
 type WorkspaceTool = {
   id: 'models' | 'quick' | 'labels' | 'zones' | 'cards'
@@ -85,6 +94,10 @@ const isActive = (tool: WorkspaceTool) => route.path === (tool.activePath || too
         <ArrowUpRight class="encarte-workspace-nav__arrow" :size="15" aria-hidden="true" />
       </NuxtLink>
     </nav>
+    <NuxtLink v-if="workPilotAvailable" to="/encartes-ia" class="encarte-workspace-nav__item" prefetch-on="interaction">
+      <span class="encarte-workspace-nav__copy"><strong>Encartes com IA · experimental</strong><small>Prepare pedidos e confira as composições do Work.</small></span>
+      <ArrowUpRight :size="15" />
+    </NuxtLink>
   </section>
 </template>
 

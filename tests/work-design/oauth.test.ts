@@ -1,0 +1,100 @@
+import { createServer, type Server } from 'node:http'
+import { createHash } from 'node:crypto'
+import * as h3 from 'h3'
+import { beforeAll, afterAll, describe, expect, it, vi } from 'vitest'
+import { owner, other } from './fixtures'
+const store = vi.hoisted(() => new Map<string, { value: string; until: number }>())
+vi.mock('../../server/utils/redis', () => ({ getRedis: () => ({
+  setex: async (key: string, ttl: number, value: string) => { store.set(key, { value, until: Date.now() + ttl * 1000 }); return 'OK' },
+  get: async (key: string) => { const entry = store.get(key); return entry && entry.until > Date.now() ? entry.value : null },
+  getdel: async (key: string) => { const entry = store.get(key); store.delete(key); return entry && entry.until > Date.now() ? entry.value : null }
+}) }))
+vi.mock('../../server/utils/auth', () => ({ requireAuthenticatedUser: async (event: h3.H3Event) => {
+  const id = h3.getHeader(event, 'x-test-user')
+  if (!id) throw h3.createError({ statusCode: 401 })
+  return { id, actorId: id }
+} }))
+vi.mock('../../server/utils/auth-db', () => ({ getProfileById: async () => ({ id: owner, is_active: true }) }))
+vi.mock('../../server/utils/rate-limit', () => ({ enforceRateLimit: async () => {} }))
+import { exchangeWorkOAuthCode, issueWorkOAuthCode, oauthAuthorizationSchema, refreshWorkOAuthTokens,
+  validateWorkOAuthClient, verifyWorkOAuthAccess, WORK_OAUTH_SCOPE } from '../../server/utils/work-design/oauth'
+let server: Server, base: string
+const nativeFetch = globalThis.fetch
+const verifier = 'a'.repeat(64)
+const request = () => oauthAuthorizationSchema.parse({ response_type: 'code', client_id: 'https://chatgpt.com/oauth/client.json',
+  redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect', state: 'test-state',
+  resource: 'https://jobvarejo.com.br/api/work-design/mcp', scope: WORK_OAUTH_SCOPE,
+  code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' })
+beforeAll(async () => {
+  for (const name of ['defineEventHandler', 'setResponseHeader', 'setResponseStatus', 'getHeader', 'readBody', 'createError',
+    'getQuery', 'setCookie', 'getCookie', 'deleteCookie', 'sendRedirect'] as const) vi.stubGlobal(name, h3[name])
+  vi.stubEnv('WORK_DESIGN_ENABLED', 'true'); vi.stubEnv('WORK_DESIGN_OAUTH_ENABLED', 'true')
+  vi.stubEnv('WORK_DESIGN_PILOT_IDS', owner); vi.stubEnv('WORK_DESIGN_WORKER_OWNER_ID', owner)
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options: any) => url === 'https://chatgpt.com/oauth/client.json'
+    ? new Response(JSON.stringify({ client_id: url, redirect_uris: [request().redirect_uri], token_endpoint_auth_methods_supported: ['none'] }))
+    : nativeFetch(url, options)))
+  const app = h3.createApp().use('/authorize', (await import('../../server/api/work-design/oauth/authorize')).default)
+    .use('/token', (await import('../../server/api/work-design/oauth/token.post')).default)
+  server = createServer(h3.toNodeListener(app)); await new Promise<void>(done => server.listen(0, '127.0.0.1', done))
+  base = `http://127.0.0.1:${(server.address() as any).port}`
+})
+afterAll(async () => { await new Promise<void>(done => server.close(() => done())); vi.unstubAllGlobals(); vi.unstubAllEnvs() })
+describe('OAuth Work isolado por conta, recurso e PKCE', () => {
+  it('aceita apenas CIMD e retorno oficial correspondente; não busca URL arbitrária', async () => {
+    await expect(validateWorkOAuthClient(request())).resolves.toBeUndefined()
+    await expect(validateWorkOAuthClient({ ...request(), client_id: 'https://127.0.0.1/client.json' })).rejects.toThrow(/autorizado/)
+    await expect(validateWorkOAuthClient({ ...request(), redirect_uri: 'https://attacker.invalid' })).rejects.toThrow(/autorizado/)
+    await expect(validateWorkOAuthClient({ ...request(), resource: 'https://another.invalid' })).rejects.toThrow(/Recurso/)
+  })
+  it('troca código uma única vez e emite acesso restrito e refresh rotativo', async () => {
+    const code = await issueWorkOAuthCode(request(), owner)
+    const input = { ...request(), code, code_verifier: verifier }
+    const tokens = await exchangeWorkOAuthCode(input)
+    expect(await verifyWorkOAuthAccess(tokens.access_token)).toBe(owner)
+    await expect(exchangeWorkOAuthCode(input)).rejects.toThrow(/inválido/)
+    const refresh = { refresh_token: tokens.refresh_token, client_id: input.client_id, resource: input.resource }
+    const renewed = await refreshWorkOAuthTokens(refresh)
+    expect(await verifyWorkOAuthAccess(renewed.access_token)).toBe(owner)
+    await expect(refreshWorkOAuthTokens(refresh)).rejects.toThrow(/inválida/)
+    expect([...store.keys()].some(key => key.includes(tokens.access_token))).toBe(false)
+  })
+  it.each(['verifier', 'resource', 'client', 'redirect'])('recusa troca com %s diferente', async field => {
+    const input = { ...request(), code: await issueWorkOAuthCode(request(), owner), code_verifier: verifier }
+    if (field === 'verifier') input.code_verifier = 'b'.repeat(64)
+    if (field === 'resource') input.resource = 'https://wrong.invalid'
+    if (field === 'client') input.client_id = 'https://wrong.invalid'
+    if (field === 'redirect') input.redirect_uri = 'https://wrong.invalid'
+    await expect(exchangeWorkOAuthCode(input)).rejects.toThrow(/inválido/)
+  })
+  it('não permite tokens expirados, de outro recurso ou OAuth desativado', async () => {
+    const code = await issueWorkOAuthCode(request(), owner)
+    const tokens = await exchangeWorkOAuthCode({ ...request(), code, code_verifier: verifier })
+    const key = [...store.keys()].find(k => k.endsWith(createHash('sha256').update(tokens.access_token).digest('hex')))!
+    store.get(key)!.until = Date.now() - 1
+    expect(await verifyWorkOAuthAccess(tokens.access_token)).toBeNull()
+    vi.stubEnv('WORK_DESIGN_OAUTH_ENABLED', 'false'); expect(await verifyWorkOAuthAccess(tokens.access_token)).toBeNull()
+    vi.stubEnv('WORK_DESIGN_OAUTH_ENABLED', 'true')
+  })
+  it('exige sessão da conta piloto, origem e nonce antes da confirmação', async () => {
+    const url = base + '/authorize?' + new URLSearchParams(request()).toString()
+    expect(await (await nativeFetch(url)).text()).toContain('Entrar no JobVarejo')
+    expect((await nativeFetch(url, { headers: { 'x-test-user': other } })).status).toBe(403)
+    const response = await nativeFetch(url, { headers: { 'x-test-user': owner } })
+    const cookie = response.headers.get('set-cookie')!.split(';')[0]!
+    const html = await response.text(), nonce = html.match(/name="nonce" value="([^"]+)"/)![1]!
+    const post = (origin: string, value: string) => nativeFetch(base + '/authorize', { method: 'POST', redirect: 'manual',
+      headers: { 'x-test-user': owner, Origin: origin, Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ nonce: value, decision: 'allow' }) })
+    expect((await post('https://attacker.invalid', nonce)).status).toBe(403)
+    expect((await post('https://jobvarejo.com.br', 'wrong')).status).toBe(403)
+    const granted = await post('https://jobvarejo.com.br', nonce)
+    expect(granted.status).toBe(303)
+    const callback = new URL(granted.headers.get('location')!)
+    expect(callback.searchParams.get('state')).toBe('test-state'); expect(callback.searchParams.get('iss')).toBe('https://jobvarejo.com.br')
+    expect((await post('https://jobvarejo.com.br', nonce)).status).toBe(400)
+    const token = await nativeFetch(base + '/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: request().client_id, resource: request().resource,
+        redirect_uri: request().redirect_uri, code: callback.searchParams.get('code')!, code_verifier: verifier }) })
+    expect(token.status).toBe(200); expect((await token.json() as any).token_type).toBe('Bearer')
+  })
+})

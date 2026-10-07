@@ -1,0 +1,126 @@
+{
+  "name": "JobVarejo | Consultar encarte Work",
+  "description": "Piloto privado por lotes. Entrada: jobId UUID; saída id, revision, status, result e error. Não publica nem envia mensagens.",
+  "active": false,
+  "nodes": [
+    {
+      "id": "ab86c7bc-f5f4-409b-a297-00bc48fedcbd",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "jobId",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2df0cc80-464b-4c8c-9fe9-bf579998a8ca",
+      "name": "JobVarejo piloto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://jobvarejo.com.br/api/work-design/n8n/jobs/' + encodeURIComponent($json.jobId) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "JobVarejo | Work n8n piloto"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput",
+      "notes": "Credencial exclusiva n8n: Authorization: Bearer WORK_DESIGN_N8N_TOKEN. Não usar token do Work. Piloto inativo até release, migração e configuração."
+    },
+    {
+      "id": "3b70ec61-92ec-4bec-bb35-c2e568980b26",
+      "name": "Retornar resultado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "96f6aa13-404e-45ab-b9f3-c363f00ba5b2",
+      "name": "Falha visível",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        520,
+        180
+      ],
+      "parameters": {
+        "errorMessage": "JobVarejo Work: operação falhou após retentativas. Conferir credencial, ativação, revisão e entrada do pedido. Não declarar sucesso."
+      }
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "JobVarejo piloto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JobVarejo piloto": {
+      "main": [
+        [
+          {
+            "node": "Retornar resultado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha visível",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  }
+}
