@@ -107,9 +107,9 @@ COPY --from=builder /app/.output ./.output
 COPY workers/ ./workers/
 COPY --from=builder /app/workers/whatsapp-creation/fabric.min.js ./workers/whatsapp-creation/fabric.min.js
 COPY --from=builder /app/workers/whatsapp-creation/native-layout.js ./workers/whatsapp-creation/native-layout.js
-# Desenho das prévias do catálogo em worker thread: não trava login, páginas nem o healthcheck.
+# Desenho das prévias do catálogo em processo filho: não trava login, páginas nem o healthcheck.
 COPY --from=builder /app/workers/catalog-preview/render-worker.mjs ./workers/catalog-preview/render-worker.mjs
-RUN node --input-type=module -e "import('fabric/node').then(()=>import('/app/workers/catalog-preview/render-worker.mjs')).catch(e=>{ if(!String(e.message).includes('worker thread')) throw e })"
+RUN node --input-type=module -e "import('fabric/node').then(()=>import('/app/workers/catalog-preview/render-worker.mjs')).catch(e=>{ if(!String(e.message).includes('processo filho')) throw e })"
 # Confirma que a API tem o mesmo normalizador de fala que o worker de vídeo.
 RUN printf '%s' '{"scripts":[{"id":"intro","text":"Oferta R$ 19,90 em 24/09/2026"}],"pronunciations":[]}' \
     | /opt/video-python/bin/python workers/video-studio/normalize.py \

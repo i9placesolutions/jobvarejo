@@ -1,19 +1,18 @@
-// Worker thread do desenho das prévias do catálogo (ver server/utils/catalog-preview-pool.ts).
+// Processo filho do desenho das prévias do catálogo (ver server/utils/catalog-preview-pool.ts).
 // Empacotado no build com esbuild em render-worker.mjs; fabric, canvas, jsdom e sharp ficam externos
-// e vêm do node_modules do runtime.
-import { parentPort } from 'node:worker_threads'
+// e vêm do node_modules do runtime. Um desenho por vez: o canvas nativo nunca é usado em paralelo.
 import { drawCatalogPreview, type CatalogPreviewDrawInput } from '../../server/utils/catalog-preview-draw'
 
-if (!parentPort) throw new Error('render-worker precisa rodar como worker thread.')
-const port = parentPort
+if (typeof process.send !== 'function') throw new Error('render-worker precisa rodar como processo filho (fork).')
+const send = process.send.bind(process)
 
-port.on('message', async (message: { id: number; input: CatalogPreviewDrawInput }) => {
+process.on('message', async (message: { id: number; input: CatalogPreviewDrawInput }) => {
   try {
     const bytes = await drawCatalogPreview(message.input)
-    const copy = new Uint8Array(bytes.byteLength)
-    copy.set(bytes)
-    port.postMessage({ id: message.id, ok: true, bytes: copy }, [copy.buffer])
+    send({ id: message.id, ok: true, bytes: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) })
   } catch (error: any) {
-    port.postMessage({ id: message.id, ok: false, error: String(error?.message || error) })
+    send({ id: message.id, ok: false, error: String(error?.message || error) })
   }
 })
+// Servidor saiu (deploy, reinício): o processo filho sai junto.
+process.on('disconnect', () => process.exit(0))

@@ -4,7 +4,7 @@ import { build } from 'esbuild'
 import sharp from 'sharp'
 import { drawCatalogPreviewIsolated, catalogPreviewWorkerEnabled } from '../../server/utils/catalog-preview-pool'
 
-// O desenho das prévias roda em worker thread: o processo principal (login, páginas, healthcheck)
+// O desenho das prévias roda em processo filho: o processo principal (login, páginas, healthcheck)
 // não pode ficar travado enquanto a biblioteca é redesenhada.
 describe('pool de desenho das prévias do catálogo', () => {
   beforeAll(async () => {
