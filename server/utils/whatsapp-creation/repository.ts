@@ -11,7 +11,7 @@ import { assertCanDeliver, updateOrder, type CreationKind } from '~/shared/whats
 import { listCreationHeaders } from './catalog'
 import { reconcileDraftProjectState } from './draft-project-state'
 import { hasEditorPermission, REGULAR_USER_AREAS, type AccessArea } from '~/shared/access-control'
-import { accountProjectArtifactPrefix, findOwnedAccountProject } from './account-projects'
+import { findOwnedAccountProject, isAccountProjectArtifactKey } from './account-projects'
 
 export function assertCreationAccess(user: AuthenticatedUser, kind: string): void {
   const areas: Record<string, AccessArea> = { encarte: 'encartes', video: 'videos', cartaz: 'cartazes', studio: 'artes' }
@@ -111,7 +111,7 @@ export async function loadLeasedMessage(eventId: string, token: string, client?:
 export function assertAccountProjectSend(state: ConversationState, ownerId: string, item: Pick<ConversationSend, 'type' | 'key' | 'accountProjectId'>): void {
   const projectId = item.accountProjectId
   if (!projectId || state.accountProject?.projectId !== projectId || !['image', 'document'].includes(item.type) ||
-    !item.key || !item.key.startsWith(accountProjectArtifactPrefix(ownerId, projectId)) || !/\.png$/.test(item.key) || item.key.includes('..')) {
+    !item.key || !isAccountProjectArtifactKey(item.key, ownerId, projectId) || !/\.png$/.test(item.key) || item.key.includes('..')) {
     throw createError({ statusCode: 409, statusMessage: 'Encarte da conta sem escolha válida.' })
   }
 }

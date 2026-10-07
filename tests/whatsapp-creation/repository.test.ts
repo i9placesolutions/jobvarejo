@@ -249,7 +249,7 @@ describe('persistência e propriedade da criação WhatsApp', () => {
 
 describe('envio de encarte já salvo na conta', () => {
   const projectId = 'aaaaaaaa-0000-4000-8000-000000000001'
-  const key = `whatsapp-creation/${ownerId}/account-projects/${projectId}/${'a'.repeat(40)}.png`
+  const key = `projects/${ownerId}/${projectId}/whatsapp/${'a'.repeat(40)}.png`
   const chosenState = () => ({ ...newConversationState(), accountProject: { projectId, projectName: 'Açougue' } })
   const item = (overrides: Record<string, unknown> = {}) => ({ type: 'image' as const, text: '', key, purpose: 'account_project' as const, accountProjectId: projectId, scope: 'account_project' as const, formatId: 'pagina-1', ...overrides })
 

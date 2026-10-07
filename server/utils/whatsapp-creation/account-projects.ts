@@ -288,6 +288,9 @@ export async function findOwnedAccountProject(ownerId: string, projectId: string
   return row ? { id: String(row.id), name: String(row.name || 'Encarte') } : null
 }
 
-/** Prefixo exclusivo dos PNGs entregues de um encarte da conta. */
+/** Prefixo exclusivo dos PNGs entregues de um encarte da conta (dentro da pasta do projeto). */
 export const accountProjectArtifactPrefix = (ownerId: string, projectId: string): string =>
-  `whatsapp-creation/${ownerId}/account-projects/${projectId}/`
+  `projects/${ownerId}/${projectId}/whatsapp/`
+/** Arquivo entregue deste encarte; aceita também a pasta antiga (envios na fila antes da mudança). */
+export const isAccountProjectArtifactKey = (key: string, ownerId: string, projectId: string): boolean =>
+  key.startsWith(accountProjectArtifactPrefix(ownerId, projectId)) || key.startsWith(`whatsapp-creation/${ownerId}/account-projects/${projectId}/`)

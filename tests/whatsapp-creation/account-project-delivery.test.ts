@@ -106,7 +106,7 @@ describe('entrega do encarte da conta', () => {
     expect(result).toMatchObject({ ok: true, count: 2 })
     expect(mocks.assertAccess).toHaveBeenCalledWith(expect.objectContaining({ id: ownerId }), 'encarte')
     const put = mocks.send.mock.calls[0]![0].input
-    expect(put.Key).toMatch(new RegExp(`^whatsapp-creation/${ownerId}/account-projects/${projectId}/[0-9a-f]{40}\\.png$`))
+    expect(put.Key).toMatch(new RegExp(`^projects/${ownerId}/${projectId}/whatsapp/[0-9a-f]{40}\\.png$`))
     const [, conversation, owner, order, state, send, correlation] = mocks.queue.mock.calls[0]!
     expect([conversation, owner, order, correlation]).toEqual([conversationId, ownerId, orderId, `account-project:${orderId}:${token}`])
     expect(state.accountProject).toMatchObject({ projectId, projectName: 'Açougue' })

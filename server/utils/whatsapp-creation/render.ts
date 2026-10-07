@@ -197,9 +197,12 @@ async function profileLogo(profile: BusinessProfile, userId: string): Promise<{ 
   return { bytes: result.bytes, dataUrl: dataUri(result.bytes, result.mimeType), mimeType: result.mimeType }
 }
 
-async function putArtifact(userId: string, order: CreationOrder, projectId: string, formatId: string, bytes: Buffer, mimeType: string, suffix: string): Promise<CreationArtifact> {
+async function putArtifact(userId: string, order: CreationOrder, projectId: string, formatId: string, bytes: Buffer, mimeType: string, suffix: string, options: { inProject?: boolean } = {}): Promise<CreationArtifact> {
   const artifactId = deterministicUuid(`${order.accountId}:${order.id}:${order.revision}:${projectId}:${formatId}:${suffix}`)
-  const key = `whatsapp-creation/${userId}/${order.id}/r${order.revision}/${artifactId}.${suffix}`
+  // Encarte salvo no painel: os arquivos ficam na pasta do projeto, junto das páginas e miniaturas.
+  const key = options.inProject
+    ? `projects/${userId}/${projectId}/whatsapp/r${order.revision}/${artifactId}.${suffix}`
+    : `whatsapp-creation/${userId}/${order.id}/r${order.revision}/${artifactId}.${suffix}`
   await getS3Client().send(new (await import('@aws-sdk/client-s3')).PutObjectCommand({
     Bucket: videoBucket(), Key: key, Body: bytes, ContentType: mimeType, CacheControl: 'private, no-store',
     Metadata: { orderid: order.id, revision: String(order.revision), artifactid: artifactId }
@@ -1128,6 +1131,14 @@ async function saveFlyerProject(order: CreationOrder, user: AuthenticatedUser, p
       await getS3Client().send(new (await import('@aws-sdk/client-s3')).PutObjectCommand({
         Bucket: videoBucket(), Key: pageKey, Body: gzipSync(Buffer.from(JSON.stringify(canvas), 'utf8')), ContentType: 'application/octet-stream', CacheControl: 'no-store'
       }))
+      // Miniatura no mesmo lugar das do editor: o painel só lê prévias de projects/<dono>/.
+      let thumbnailKey: string | undefined
+      if (output.page.png) {
+        thumbnailKey = `projects/${user.id}/${projectId}/thumb_${pageId}_${Date.now()}.png`
+        await getS3Client().send(new (await import('@aws-sdk/client-s3')).PutObjectCommand({
+          Bucket: videoBucket(), Key: thumbnailKey, Body: output.page.png, ContentType: 'image/png', CacheControl: 'private, max-age=31536000, immutable'
+        }))
+      }
       savedPages.push({
         id: pageId,
         name: output.department ? `${output.department} · ${output.format.id}` : `Página ${index + 1} · ${output.format.id}`,
@@ -1140,20 +1151,19 @@ async function saveFlyerProject(order: CreationOrder, user: AuthenticatedUser, p
         templateFormatLabel: output.format.id,
         templateThemeId: order.theme,
         canvasDataPath: pageKey,
+        ...(thumbnailKey ? { thumbnailUrl: thumbnailKey } : {}),
         canvasSavedAt: Date.now(),
         whatsappCreation: { orderId: order.id, revision: order.revision, productIds: output.productIds }
       })
     }
     const canvasJson = parseAndStringifyJsonbParam({ pages: savedPages, activePageIndex: 0 }, 'canvas_data')
-    const stablePages = savedPages.map(({ canvasSavedAt: _savedAt, ...page }) => page)
+    // Data e nome da miniatura mudam a cada gravação; não entram no hash de conteúdo.
+    const stablePages = savedPages.map(({ canvasSavedAt: _savedAt, thumbnailUrl: _thumbnail, ...page }) => page)
     const metadata = {
       orderId: order.id, revision: order.revision, stage, version, templateId: projectTemplate.id,
       contentHash: sha256(Buffer.from(stableJson(stablePages))), canvasHash: projectCanvasHash(JSON.parse(canvasJson))
     }
-    const firstPng = pngs.find(item => item.png)
-    const preview = firstPng?.png
-      ? (await putArtifact(user.id, order, projectId, firstPng.format.id, firstPng.png, 'image/png', `${stage}-cover.png`)).key
-      : null
+    const preview: string | null = savedPages.find(page => page.thumbnailUrl)?.thumbnailUrl ?? null
     const committed = await pgTx(async client => {
       const row = (await client.query('select id,user_id,canvas_data,template_config from public.projects where id=$1 for update', [projectId])).rows[0]
       const slot = classifyFlyerProjectSlot(row, key)
@@ -1196,7 +1206,7 @@ async function renderFlyer(order: CreationOrder, user: AuthenticatedUser, profil
   for (let index = 0; index < saved.pngs.length; index++) {
     const output = saved.pngs[index]!
     if (!output.png) return fail(502, 'O renderizador não retornou a imagem do encarte.')
-    const artifact = await putArtifact(user.id, order, saved.projectId, output.format.id, Buffer.from(output.png), 'image/png', `page-${index + 1}.png`)
+    const artifact = await putArtifact(user.id, order, saved.projectId, output.format.id, Buffer.from(output.png), 'image/png', `page-${index + 1}.png`, { inProject: true })
     artifact.editUrl = `/editor/${saved.projectId}`
     artifacts.push(artifact)
   }
