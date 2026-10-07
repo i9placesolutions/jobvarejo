@@ -18,5 +18,15 @@
     "palette": ["#083A9D", "#FFD215"],
     "formats": ["stories"],
     "key": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/5f8098bc-d7dc-4f60-b8b4-c985e15eac86/assets/fundo.png"
+  },
+  {
+    "id": "economia-offers-reference",
+    "ownerId": "eb847e8e-7c19-4bee-8042-376528ce6192",
+    "name": "Acabamento de campanha — referência de proporções e hierarquia",
+    "role": "reference",
+    "theme": "Semana de Ofertas",
+    "palette": ["#083A9D", "#FFD215"],
+    "formats": ["stories", "feed", "square", "tv", "print"],
+    "key": "projects/eb847e8e-7c19-4bee-8042-376528ce6192/5f8098bc-d7dc-4f60-b8b4-c985e15eac86/thumb_25096b1c-2b21-4b22-85cd-2bee38e59be6_1791376045395.png"
   }
 ]

@@ -6,5 +6,8 @@
   "discoverability": "PRIVATE",
   "version": "0.1.0",
   "createdAt": "2026-10-07",
-  "accountConnectionVerified": false
+  "accountConnectionVerified": true,
+  "verifiedConsumer": "Codex",
+  "workExecutionVerified": false,
+  "preparedVersion": "0.2.0"
 }

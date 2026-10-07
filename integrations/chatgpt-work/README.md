@@ -1,6 +1,19 @@
 # Piloto JobVarejo → ChatGPT Work
 
-**Estado:** piloto publicado em produção em 07/10/2026 (be8c677f), migração/configuração restrita aplicadas. MCP com dez ferramentas e discovery OAuth conferidos por HTTPS. Plugin privado salvo na conta pessoal: [JobVarejo — Encartes](https://chatgpt.com/plugins/plugins_6ac6609d3a8c819196c289a4c6fb1a53), referência em `plugin-release.json`. Autorização OAuth da conta ainda pendente; nenhuma geração pelo Work ou tarefa agendada foi comprovada. A pasta `jobvarejo-work` contém manifesto, skill e `mcp.json`; o pacote não contém credenciais.
+**Estado:** piloto publicado em produção em 07/10/2026; correção OAuth/CSP publicada em 29155ec7. MCP com dez ferramentas e discovery OAuth conferidos por HTTPS. Plugin privado 0.1.0 salvo na conta pessoal: [JobVarejo — Encartes](https://chatgpt.com/plugins/plugins_6ac6609d3a8c819196c289a4c6fb1a53), referência em `plugin-release.json`. Autorização OAuth concluída no Codex e dois testes persistidos pelo conector nesta conversa. Isso não comprova execução em um chat separado do ChatGPT Work nem agendamento. Nenhum modelo de geração de imagens foi chamado nesses dois testes. A pasta `jobvarejo-work` contém manifesto, skill e `mcp.json`; o pacote não contém credenciais.
+
+## Composição livre 0.2 — preparada no preview, ainda não publicada
+
+- O cliente escolhe somente o selo; logo e dados vêm do cadastro. O consumidor cria cabeçalho, rodapé, distribuição e etiquetas para os produtos, sem selecionar um layout pronto. Cores podem ser ajustadas no briefing.
+- Cada slot recebe um `design` próprio, com áreas locais para foto/nome/preço, fonte, proporção dos centavos, fundo opcional e decorações vetoriais ou imagens. Ausência de `design` mantém compatibilidade com consumidores antigos. O renderer usa objetos Fabric editáveis, preserva a foto e os valores comerciais, e não aplica a receita fixa do editor rápido.
+- O pedido aceita os cinco formatos e `productsPerPage` opcional. Todas as ofertas aparecem uma vez em cada formato; páginas extras são obrigatórias quando excedem o limite. Os dados comerciais continuam em blocos editáveis separados.
+- Referências são cadastradas internamente, por função `reference`, e consultadas pelo contexto e pela busca de elementos. Servem à direção visual; não devem ser coladas como fundo nem fornecer dados comerciais. A referência inicial é a miniatura do teste anterior, com existência e dimensões conferidas no storage. O contrato aceita várias referências, mas o catálogo inicial contém somente uma.
+- A IA examina fundos e decorações compatíveis, reutiliza o que combina e cria o que faltar. `stage_generated_asset` recebe `metadata` com nome/função/tema/paleta/formatos e registra a peça raster na biblioteca privada da conta. As próximas buscas a encontram. Imagens são identificadas pelo conteúdo; cada peça possui um registro independente, sem reescrever uma lista central nem perder outras peças em gravações simultâneas.
+- Catálogo interno em `projects/<owner>/work-elements/...json`, imagem em `projects/<owner>/work-assets/library/...png`. Metadados são gerenciados pelo servidor; APIs genéricas não permitem alterá-los nem lê-los diretamente. Não há nova tabela ou migração. Nenhuma peça é compartilhada automaticamente entre clientes.
+- Geração raster depende da ferramenta de imagens e transferência base64 disponíveis no ambiente do consumidor. O conector armazena/consulta imagens, mas não escolhe um modelo de IA e não faz chamadas OpenAI/Magnific como fallback. Peças vetoriais permanecem editáveis no projeto; o catálogo de geração desta versão registra arquivos raster.
+- Validação local: 77 testes selecionados aprovados, 18 páginas offline com os cinco formatos e paginação, leitura dos preços/fotos/nomes e roundtrip Fabric. Conferência visual em Story, Feed e TV. Pedidos que exigem mais de 30 páginas são recusados antes de entrar na fila. Build e limite de chunk passaram (459 KB / 500 KB). Typecheck global continua falhando em arquivos preexistentes; a execução final não apontou erros nos arquivos desta mudança.
+
+Publicar servidor e pacote 0.2 juntos após validar o preview. O pacote salvo na conta e seu endpoint de produção continuam na versão anterior. Nenhuma nova execução real do Work nem gravação de peça gerada em produção foi realizada com esta versão. Fixtures locais não são saídas do Work.
 
 ## Escopo da versão 0.1
 
@@ -9,7 +22,7 @@
 - Fila SQL dedicada, reserva de 15 minutos, revisão e idempotência. Sem escrita no modelo/projeto de origem. Resultados são novos projetos privados.
 - Composição declarativa com dados resolvidos no servidor, endereços separados, slots variados, formas/imagens e cards nativos pelo worker existente. Conferência de arquivos por leitura após gravação.
 - Conector MCP com credencial exclusiva por uma conta piloto, e entrada/consulta n8n com outra credencial. Nenhuma chamada OpenAI/Magnific é feita por esses módulos.
-- Dois elementos reais do teste Economia estão no catálogo `server/data/work-design-elements.json`, restritos ao proprietário. Novos kits entram por cadastro desse manifesto; busca ampla/classificação automática de toda a biblioteca não foi implementada.
+- Elementos reais do teste Economia estão no catálogo `server/data/work-design-elements.json`, restritos ao proprietário. O código preparado também cadastra peças raster geradas e referências internas. Busca ampla/classificação automática de toda a biblioteca geral não foi implementada.
 - Resultado abre no editor completo. O contrato do rápido e sincronização automática entre formatos ainda dependem do piloto visual. Reutilização mantém o briefing/lista; a composição anterior é uma referência, não uma atualização instantânea da arte.
 
 ## Ativação revisável

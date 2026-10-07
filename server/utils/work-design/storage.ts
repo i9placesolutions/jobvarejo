@@ -41,7 +41,7 @@ export async function stageWorkAsset(owner: string, job: string, base64: string)
   if (!['png', 'jpeg', 'webp'].includes(String(meta.format))) throw createError({ statusCode: 422, statusMessage: 'Tipo de imagem não permitido.' })
   const png = await image.png().toBuffer()
   if (png.length > 10 * 1024 * 1024) throw createError({ statusCode: 413, statusMessage: 'Imagem muito grande.' })
-  const key = `projects/${owner}/work-assets/${job}/${createHash('sha256').update(png).digest('hex')}.png`
+  const key = `projects/${owner}/work-assets/library/${createHash('sha256').update(png).digest('hex')}.png`
   await writeWorkBytes(key, png, 'image/png')
   return { key, width: meta.width, height: meta.height }
 }

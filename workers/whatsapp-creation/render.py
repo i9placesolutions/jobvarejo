@@ -451,7 +451,9 @@ def render(payload, output_dir: Path, fabric_path: Path):
               const savedLabel = template?.group || (itemLabelId ? null : zone._zoneTemplateSnapshot || zone._zoneStateSnapshot?.labelTemplate?.snapshot);
               if (labelId && !savedLabel) throw new Error('A etiqueta escolhida no modelo não está disponível.');
               const zoneId = zone._customId || zone.id || zone.name;
-              const card = await JobVarejoNative.createManualProductCard(fabric, {
+              const card = styles.workProductDesign
+                ? await JobVarejoNative.createWorkProductCard(fabric, product, {left, top, width, height}, styles.workProductDesign, styles, zoneId)
+                : await JobVarejoNative.createManualProductCard(fabric, {
                 ...product,
                 name: styles.prodNameTransform === 'upper' ? titleText.toLocaleUpperCase('pt-BR') : titleText,
                 limit: product.condition || '',
@@ -473,7 +475,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
               if (zone._zoneStateSnapshot?.zone) zone._zoneStateSnapshot.zone.contentStatus = 'filled';
             }
             const cardsForStats = c.getObjects().filter(o => o.isProductCard === true);
-            JobVarejoNative.harmonizeProductCardTypography(cardsForStats);
+            JobVarejoNative.harmonizeProductCardTypography(cardsForStats.filter(card => !card.getObjects?.().some(o => o.__manualTypography)));
             if (entry.department && sortedZones.length === 1) {
               const bounds = sortedZones[0].getBoundingRect();
               const labelHeight = Math.min(44, bounds.height * .06);
@@ -506,6 +508,7 @@ def render(payload, output_dir: Path, fabric_path: Path):
             const preservedKeys = new Set();
             const collect = node => { if (Array.isArray(node)) node.forEach(collect); else if (node && typeof node === 'object') { Object.keys(node).forEach(key => { if (!['group', 'canvas', 'objects', 'layoutManager', 'clipPath'].includes(key)) preservedKeys.add(key); }); Object.values(node).forEach(collect); } };
             collect(input.canvas);
+            ['__manualTransform', '__manualTypography', '__priceRichText', '__priceRichIntegerStyle', '__priceRichDecimalStyle'].forEach(key => preservedKeys.add(key));
             ['isProductZone','isGridZone','isProductCard','isSmartObject','productItemId','productZoneId','parentZoneId','_zoneOrder','_cardWidth','_cardHeight','_productData','__cardLabelTemplateId','__cardLabelTemplateOverride','name','businessProfileField','quickLogoSlot','quickLogoBackdrop','excludeFromExport','isFrame','clipContent','parentFrameId','_customId','_zoneGlobalStyles','_productGridConfig','rows','columns','gridRows','gridColumns','productsPerRow','contentStatus'].forEach(key => preservedKeys.add(key));
             // toJSON() is Fabric's no-argument JSON.stringify alias; use toObject()
             // when serializing the editable custom metadata required by the editor.

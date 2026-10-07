@@ -21,6 +21,8 @@ export const workRequestSchema = z.object({
   brief: z.string().trim().max(6000).default(''), validity: z.string().trim().max(200),
   conditions: z.string().trim().max(400).default(''),
   palette: z.array(colorSchema).min(2).max(5), formats: z.array(formatSchema).min(1).max(5),
+  sealKey: keySchema.optional(),
+  productsPerPage: z.number().int().min(1).max(16).optional(),
   products: z.array(workProductSchema).min(1).max(100),
   sourceProjectId: z.string().uuid().optional()
 }).strict().superRefine((value, ctx) => {
@@ -28,26 +30,58 @@ export const workRequestSchema = z.object({
     ctx.addIssue({ code: 'custom', message: 'Produtos com identificadores repetidos' })
   if (new Set(value.formats).size !== value.formats.length)
     ctx.addIssue({ code: 'custom', message: 'Formatos repetidos' })
+  const minimumPages = value.formats.reduce((sum, format) => sum + Math.ceil(value.products.length /
+    Math.min(format === 'stories' ? 9 : 16, value.productsPerPage || 16)), 0)
+  if (minimumPages > 30)
+    ctx.addIssue({ code: 'custom', message: 'Essa seleção exige mais de 30 páginas. Reduza os formatos ou divida os produtos em outros pedidos.' })
 })
 export type WorkRequest = z.infer<typeof workRequestSchema>
 export type WorkProduct = z.infer<typeof workProductSchema>
 export type WorkFormat = z.infer<typeof formatSchema>
+export const workElementRoleSchema = z.enum(['seal', 'background', 'decoration', 'reference'])
+export const workElementMetadataSchema = z.object({
+  name: z.string().trim().min(1).max(120), theme: z.string().trim().min(1).max(120),
+  role: workElementRoleSchema, palette: z.array(colorSchema).min(2).max(5),
+  formats: z.array(formatSchema).min(1).max(5)
+}).strict()
+export type WorkElementMetadata = z.infer<typeof workElementMetadataSchema>
 export const boxSchema = z.object({ x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(),
   width: z.number().finite().positive(), height: z.number().finite().positive() })
 export const textStyleSchema = z.object({ fontSize: z.number().min(16).max(240),
   fontFamily: z.enum(['Barlow', 'Barlow Condensed', 'Anton', 'Oswald']).default('Barlow'),
   color: colorSchema, align: z.enum(['left', 'center', 'right']).default('left'),
   bold: z.boolean().default(true) })
+export const decorationSchema = z.object({ box: boxSchema,
+  kind: z.enum(['rect', 'ellipse', 'polygon', 'image']), color: colorSchema.optional(), assetKey: keySchema.optional(),
+  radius: z.number().min(0).max(100).default(0),
+  opacity: z.number().min(0.1).max(1).optional(),
+  stroke: colorSchema.optional(), strokeWidth: z.number().min(0).max(12).optional(),
+  points: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict()).min(3).max(24).optional(),
+  gradient: z.object({ colors: z.array(colorSchema).min(2).max(4), direction: z.enum(['horizontal', 'vertical']) }).strict().optional()
+}).strict()
+// Coordenadas locais em pixels. A IA desenha o card; os valores comerciais
+// continuam vinculados ao produto confirmado e nunca vêm do layout.
+export const productDesignSchema = z.object({
+  surface: z.object({ color: colorSchema, radius: z.number().min(0).max(100).default(0) }).strict().optional(),
+  image: boxSchema,
+  name: z.object({ box: boxSchema, style: textStyleSchema }).strict(),
+  price: z.object({ box: boxSchema, style: textStyleSchema,
+    decimalScale: z.number().min(0.35).max(0.75).default(0.55),
+    currencyScale: z.number().min(0.16).max(0.4).default(0.25),
+    background: colorSchema.optional(), radius: z.number().min(0).max(100).default(16)
+  }).strict(),
+  decorations: z.array(decorationSchema).max(12).default([])
+}).strict()
+export type WorkProductDesign = z.infer<typeof productDesignSchema>
+export type WorkDecoration = z.infer<typeof decorationSchema>
 export const layoutSchema = z.object({ pages: z.array(z.object({
   format: formatSchema, background: colorSchema,
-  decorations: z.array(z.object({ box: boxSchema,
-    kind: z.enum(['rect', 'image']), color: colorSchema.optional(), assetKey: keySchema.optional(),
-    radius: z.number().min(0).max(100).default(0)
-  }).strict()).max(40).default([]),
+  decorations: z.array(decorationSchema).max(40).default([]),
   heading: z.object({ text: z.string().trim().min(1).max(150), box: boxSchema, style: textStyleSchema }).strict().optional(),
   // Valores comerciais são resolvidos pelo servidor. O agente não pode mudar preços/endereço.
   fields: z.array(z.object({ binding: z.string().min(1).max(160), box: boxSchema, style: textStyleSchema }).strict()).max(40),
-  slots: z.array(z.object({ productId: z.string().uuid(), box: boxSchema }).strict()).min(1).max(16),
+  slots: z.array(z.object({ productId: z.string().uuid(), box: boxSchema,
+    design: productDesignSchema.optional() }).strict()).min(1).max(16),
   cardStyle: z.object({ background: colorSchema, nameColor: colorSchema,
     priceBackground: colorSchema, priceColor: colorSchema }).strict()
 }).strict()).min(1).max(30) }).strict()

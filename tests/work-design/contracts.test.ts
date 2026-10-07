@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { parseWorkProductList, layoutSchema } from '../../shared/work-design'
+import { parseWorkProductList, layoutSchema, workRequestSchema } from '../../shared/work-design'
 import { compileWorkPage, validateWorkLayout } from '../../server/utils/work-design/composition'
 import { assertWorkImageKey } from '../../server/utils/work-design/storage'
 import { pilotIdentityAllowed, workerTokenMatches } from '../../server/utils/work-design/access'
 import { fixtureJob, fixtureLayout, owner, other } from './fixtures'
+import { defaultWorkProductDesign } from '../../utils/workDesignGeometry'
+import { assertWorkSeal } from '../../server/utils/work-design/elements'
 
 describe('contrato experimental Work', () => {
   it.each([1, 5, 12])('preserva %i produtos em dois formatos e dois endereços', count => {
@@ -27,6 +29,52 @@ describe('contrato experimental Work', () => {
     expect(() => validateWorkLayout(job, layout)).toThrow(/sobrepostos/)
     layout.pages[0]!.slots[0]!.box.x = 1080
     expect(() => validateWorkLayout(job, layout)).toThrow(/fora/)
+  })
+  it('aceita desenho próprio por produto sem aceitar valores comerciais no layout', () => {
+    const job = fixtureJob(), layout = fixtureLayout(job), page = layout.pages[0]!
+    page.slots[0]!.design = defaultWorkProductDesign(page, 0)
+    expect(() => validateWorkLayout(job, layoutSchema.parse(layout))).not.toThrow()
+    const altered: any = structuredClone(layout)
+    altered.pages[0].slots[0].design.price.value = '0,01'
+    expect(layoutSchema.safeParse(altered).success).toBe(false)
+    delete altered.pages[0].slots[0].design.price.value
+    altered.pages[0].slots[0].design.name.text = 'Oferta inventada'
+    expect(layoutSchema.safeParse(altered).success).toBe(false)
+  })
+  it('não permite etiqueta sobre foto nem desenho sair do card', () => {
+    const job = fixtureJob(), layout = fixtureLayout(job), page = layout.pages[0]!
+    const design = defaultWorkProductDesign(page, 0); page.slots[0]!.design = design
+    design.price.box = { ...design.image }
+    expect(() => validateWorkLayout(job, layout)).toThrow(/áreas separadas/)
+    design.price.box.x = page.slots[0]!.box.width
+    expect(() => validateWorkLayout(job, layout)).toThrow(/fora do card/)
+  })
+  it('respeita páginas solicitadas e selo da própria conta', async () => {
+    const job = fixtureJob(), layout = fixtureLayout(job)
+    job.request.productsPerPage = 2
+    expect(() => validateWorkLayout(job, layout)).toThrow(/mais páginas/)
+    delete job.request.productsPerPage
+    job.request.sealKey = 'imagens/selo-escolhido.png'
+    expect(() => validateWorkLayout(job, layout)).toThrow(/selo escolhido/)
+    await expect(assertWorkSeal(other, `projects/${owner}/work-assets/library/selo.png`)).rejects.toThrow(/escopo/)
+    expect(workRequestSchema.safeParse({ ...job.request, productsPerPage: 0 }).success).toBe(false)
+  })
+  it('preço mantém dimensão comparável em cards altos e horizontais', () => {
+    const page = fixtureLayout(fixtureJob()).pages[0]!
+    page.slots[0]!.box = { x: 0, y: 0, width: 460, height: 385 }
+    page.slots[1]!.box = { x: 0, y: 0, width: 940, height: 270 }
+    const first = defaultWorkProductDesign(page, 0), second = defaultWorkProductDesign(page, 1)
+    expect(first.price.box.width).toBe(second.price.box.width)
+    expect(first.price.box.height).toBe(second.price.box.height)
+    expect(second.price.box.y + second.price.box.height).toBeLessThanOrEqual(270)
+  })
+  it('recusa pedidos que não cabem no limite de páginas antes de entrarem na fila', () => {
+    const job = fixtureJob(100)
+    expect(workRequestSchema.safeParse(job.request).success).toBe(true)
+    job.request.formats = ['stories', 'feed', 'square', 'tv', 'print']
+    expect(workRequestSchema.safeParse(job.request).success).toBe(false)
+    job.request = { ...job.request, products: job.request.products.slice(0, 5), productsPerPage: 3 }
+    expect(workRequestSchema.safeParse(job.request).success).toBe(true)
   })
   it('gera dados comerciais como Textbox separados e zonas nativas, sem alterar o pedido', async () => {
     const job = fixtureJob(), snapshot = JSON.stringify(job), page = fixtureLayout(job).pages[0]!

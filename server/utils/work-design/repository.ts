@@ -4,6 +4,7 @@ import { pgOneOrNull, pgQuery, pgTx } from '../postgres'
 import { normalizeBusinessProfile } from '../../../utils/businessProfile'
 import type { WorkJob, WorkRequest } from '../../../shared/work-design'
 import { assertWorkImageKey } from './storage'
+import { assertWorkSeal } from './elements'
 
 export const publicWorkJob = (job: WorkJob) => {
   const { lease_token, lease_until, owner_id, source_snapshot, ...publicJob } = job
@@ -13,6 +14,7 @@ export async function workDatabaseReady() {
   return Boolean((await pgOneOrNull<{ ready: string | null }>("select to_regclass('public.work_design_jobs') as ready"))?.ready)
 }
 export async function createWorkJob(owner: string, request: WorkRequest, key: string) {
+  await assertWorkSeal(owner, request.sealKey)
   for (const product of request.products) if (product.imageKey) assertWorkImageKey(product.imageKey, owner)
   const profile = await pgOneOrNull<{ business_profile: unknown }>('select business_profile from public.profiles where id=$1', [owner])
   const business = normalizeBusinessProfile(profile?.business_profile)
@@ -64,6 +66,7 @@ export function assertWorkLease(job: WorkJob, revision: number, token: string, n
     throw createError({ statusCode: 409, statusMessage: 'Reserva expirada ou revisão desatualizada.' })
 }
 export async function reviseWorkJob(owner: string, id: string, revision: number, request: WorkRequest | null) {
+  if (request) await assertWorkSeal(owner, request.sealKey)
   if (request) for (const p of request.products) if (p.imageKey) assertWorkImageKey(p.imageKey, owner)
   const profile = request ? await pgOneOrNull<{ business_profile: unknown }>('select business_profile from public.profiles where id=$1', [owner]) : null
   const job = (await pgQuery<WorkJob>(`update public.work_design_jobs set revision=revision+1,

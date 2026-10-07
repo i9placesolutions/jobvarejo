@@ -5,6 +5,7 @@ import { WORK_FORMATS, type WorkLayout, type WorkResult } from '../../../shared/
 import { extractStorageKeyFromRef } from '../../../utils/storageRef'
 import { assertWorkLease, getWorkJob } from './repository'
 import { compileWorkPage, validateWorkLayout } from './composition'
+import { defaultWorkProductDesign } from '../../../utils/workDesignGeometry'
 import { assertWorkImageKey, readWorkImage, writeWorkBytes } from './storage'
 import { renderWorkCanvas } from './render'
 import { pgTx } from '../postgres'
@@ -72,6 +73,12 @@ export async function submitWorkDraft(owner: string, id: string, revision: numbe
       }
     }
     await visit(rendered.canvas.objects)
+    // O render usa data URI só em memória. A receita reeditável mantém referências duráveis.
+    const zones = rendered.canvas.objects.filter((o: any) => o.isProductZone)
+    zones.forEach((zone: any, i: number) => {
+      if (zone._zoneGlobalStyles?.workProductDesign)
+        zone._zoneGlobalStyles.workProductDesign = structuredClone(page.slots[i]!.design || defaultWorkProductDesign(page, i))
+    })
     // O worker usa data URI enquanto monta a foto. O fallback de reedição deve
     // apontar para a foto confirmada durável, nunca incorporar base64 no metadata.
     cards.forEach((card: any, i: number) => {

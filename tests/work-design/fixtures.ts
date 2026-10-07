@@ -19,7 +19,8 @@ export function fixtureJob(count = 5): WorkJob {
 export function fixtureLayout(job: WorkJob): WorkLayout {
   const bindings = workBindings(job), pages: WorkLayout['pages'] = []
   for (const format of job.request.formats) {
-    const size = WORK_FORMATS[format], scale = size.width / 1080, capacity = format === 'stories' ? 9 : 12
+    const size = WORK_FORMATS[format], scale = Math.min(size.width / 1080, size.height / 1350),
+      capacity = Math.min(format === 'stories' ? 9 : 12, job.request.productsPerPage || 16)
     for (let start = 0; start < job.request.products.length; start += capacity) {
       const products = job.request.products.slice(start, start + capacity), cols = products.length === 1 ? 1 : products.length <= 6 ? 2 : 3,
         rows = Math.ceil(products.length / cols), gap = 14 * scale, left = 40 * scale, top = 375 * scale,

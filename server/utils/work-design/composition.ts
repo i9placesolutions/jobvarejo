@@ -2,6 +2,7 @@ import { createError } from 'h3'
 import { WORK_FORMATS, type WorkJob, type WorkLayout } from '../../../shared/work-design'
 import { normalizeBusinessProfile } from '../../../utils/businessProfile'
 import { createEditableLabelTemplateGroup } from '../../../utils/labelTemplateFactory'
+import { defaultWorkProductDesign, workDecorationObject } from '../../../utils/workDesignGeometry'
 
 export type WorkBinding = { id: string; value: string; kind: 'text' | 'image' }
 export function workBindings(job: Pick<WorkJob, 'business' | 'request'>): WorkBinding[] {
@@ -20,6 +21,12 @@ export function workBindings(job: Pick<WorkJob, 'business' | 'request'>): WorkBi
 }
 const intersects = (a: any, b: any) => a.x < b.x + b.width - 1 && b.x < a.x + a.width - 1 &&
   a.y < b.y + b.height - 1 && b.y < a.y + a.height - 1
+const validateDecoration = (decoration: any) => {
+  if ((decoration.kind === 'image' && !decoration.assetKey) ||
+    (decoration.kind !== 'image' && !decoration.color && !decoration.gradient) ||
+    (decoration.kind === 'polygon' && !decoration.points?.length))
+    throw createError({ statusCode: 422, statusMessage: 'Decoração sem recurso, cor ou pontos.' })
+}
 
 export function validateWorkLayout(job: Pick<WorkJob, 'business' | 'request'>, layout: WorkLayout) {
   const bindings = workBindings(job)
@@ -38,14 +45,24 @@ export function validateWorkLayout(job: Pick<WorkJob, 'business' | 'request'>, l
     const fieldIds = page.fields.map(f => f.binding)
     if (new Set(fieldIds).size !== fieldIds.length || bindings.some(b => !fieldIds.includes(b.id)) || fieldIds.some(id => !bindings.some(b => b.id === id)))
       throw createError({ statusCode: 422, statusMessage: 'Todos os dados da loja devem estar presentes em blocos separados.' })
-    for (const decoration of page.decorations)
-      if ((decoration.kind === 'image' && !decoration.assetKey) || (decoration.kind === 'rect' && !decoration.color))
-        throw createError({ statusCode: 422, statusMessage: 'Decoração sem recurso ou cor.' })
+    for (const decoration of page.decorations) validateDecoration(decoration)
+    if (job.request.sealKey && !page.decorations.some(d => d.kind === 'image' && d.assetKey === job.request.sealKey))
+      throw createError({ statusCode: 422, statusMessage: 'Preserve o selo escolhido em todas as páginas.' })
+    for (const slot of page.slots) {
+      if (!slot.design) continue
+      const areas = [slot.design.image, slot.design.name.box, slot.design.price.box]
+      for (const box of [...areas, ...slot.design.decorations.map(d => d.box)])
+        if (box.x + box.width > slot.box.width || box.y + box.height > slot.box.height)
+          throw createError({ statusCode: 422, statusMessage: 'Elemento fora do card de produto.' })
+      for (let i = 0; i < areas.length; i++) for (let j = i + 1; j < areas.length; j++)
+        if (intersects(areas[i], areas[j])) throw createError({ statusCode: 422, statusMessage: 'Foto, nome e preço precisam de áreas separadas.' })
+      for (const decoration of slot.design.decorations) validateDecoration(decoration)
+    }
     // O motor nativo ordena as zonas por posição. Exigir a mesma ordem evita trocar produtos.
     const ordered = [...page.slots].sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x)
     if (ordered.some((slot, i) => slot.productId !== page.slots[i]?.productId))
       throw createError({ statusCode: 422, statusMessage: 'Organize os produtos na ordem da leitura.' })
-    const limit = page.format === 'stories' ? 9 : 16
+    const limit = Math.min(page.format === 'stories' ? 9 : 16, job.request.productsPerPage || 16)
     if (page.slots.length > limit) throw createError({ statusCode: 422, statusMessage: 'Divida os produtos em mais páginas.' })
   }
   for (const format of formats) {
@@ -91,7 +108,7 @@ export async function compileWorkPage(job: Pick<WorkJob, 'id' | 'business' | 're
     fill: style.color, textAlign: style.align, lineHeight: 1.08, name: `work-${id}`, data: { workBinding: id } })
   for (const [index, d] of page.decorations.entries()) {
     if (d.kind === 'image') await addImage(d.box, d.assetKey!, `decoration-${index}`)
-    else objects.push({ ...base(d.box, `decoration-${index}`), type: 'Rect', fill: d.color, rx: d.radius, ry: d.radius })
+    else objects.push({ ...base(d.box, `decoration-${index}`), ...workDecorationObject(d) })
   }
   if (page.heading) addText(page.heading.box, page.heading.style, page.heading.text, 'heading')
   const bindings = workBindings(job)
@@ -100,14 +117,19 @@ export async function compileWorkPage(job: Pick<WorkJob, 'id' | 'business' | 're
     if (binding.kind === 'image') await addImage(field.box, binding.value, binding.id)
     else addText(field.box, field.style, binding.value, binding.id)
   }
-  for (const [index, slot] of page.slots.entries()) objects.push({ ...base(slot.box, `zone-${index}`),
+  for (const [index, slot] of page.slots.entries()) {
+    const design = structuredClone(slot.design || defaultWorkProductDesign(page, index))
+    for (const decoration of design.decorations)
+      if (decoration.kind === 'image') decoration.assetKey = (await image(decoration.assetKey!)).dataUrl
+    objects.push({ ...base(slot.box, `zone-${index}`),
     type: 'Rect', name: 'productZoneContainer', fill: 'transparent', isProductZone: true, isGridZone: true,
     _zoneWidth: slot.box.width, _zoneHeight: slot.box.height, _zonePadding: 0, contentStatus: 'empty',
-    _zoneGlobalStyles: { isProdBgTransparent: false, cardColorMode: 'manual', cardColor: page.cardStyle.background,
+    _zoneGlobalStyles: { workProductDesign: design, isProdBgTransparent: false, cardColorMode: 'manual', cardColor: page.cardStyle.background,
       splashTemplateId: priceTemplateId,
       prodNameColor: page.cardStyle.nameColor, prodNameFont: 'Barlow', splashColor: page.cardStyle.priceBackground,
       splashFill: page.cardStyle.priceBackground, splashTextColor: page.cardStyle.priceColor, priceTextColor: page.cardStyle.priceColor,
       productPalette: { cardColor: page.cardStyle.background, prodNameColor: page.cardStyle.nameColor } } })
+  }
   return { version: '7.1.0', width: size.width, height: size.height, objects,
     __labelTemplates: [{ id: priceTemplateId, name: 'Preço da campanha', group: priceTemplate }] }
 }

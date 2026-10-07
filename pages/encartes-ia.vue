@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowLeft, ArrowUpRight, Plus, Sparkles, RefreshCw, Send, X } from 'lucide-vue-next'
+import { $fetch } from 'ofetch'
 import { WORK_FORMATS, parseWorkProductList, workRequestSchema, type WorkRequest, type WorkJob, type WorkFormat } from '~/shared/work-design'
 import { normalizeBusinessProfile } from '~/utils/businessProfile'
 definePageMeta({ middleware: 'auth', layout: false, ssr: false })
@@ -7,12 +8,20 @@ const { getApiAuthHeaders } = useApiAuth()
 const session = ref<{ allowed: boolean; databaseReady: boolean; consumerConfigured: boolean } | null>(null)
 const jobs = ref<Array<Omit<WorkJob, 'lease_token' | 'lease_until' | 'owner_id' | 'source_snapshot'>>>([])
 const business = ref(normalizeBusinessProfile(null))
+const seals = ref<Array<{ id: string; name: string; theme: string; key: string; palette: string[] }>>([])
 const selectedId = ref(''), editingId = ref(''), editingRevision = ref(0)
 const selected = computed(() => jobs.value.find(j => j.id === selectedId.value))
 const loading = ref(true), saving = ref(false), error = ref(''), notice = ref(''), pasted = ref(''), message = ref('')
 const newRequest = (): WorkRequest => ({ name: 'Nova campanha', theme: 'Semana de Ofertas', brief: '', validity: '', conditions: '',
   palette: ['#083A9D', '#FFD215'], formats: ['stories'], products: [] })
 const request = ref(newRequest())
+function chooseSeal(seal: typeof seals.value[number]) {
+  request.value.sealKey = seal.key; request.value.theme = seal.theme; request.value.palette = [...seal.palette]
+}
+const pageEstimate = computed(() => request.value.formats.map(format => ({
+  label: WORK_FORMATS[format].label,
+  count: request.value.productsPerPage ? Math.ceil(request.value.products.length / Math.min(format === 'stories' ? 9 : 16, request.value.productsPerPage)) : null
+})))
 const photoProductId = ref(''), photoQuery = ref(''), photoLoading = ref(false)
 const photoCandidates = ref<Array<{ key: string; name: string }>>([])
 async function searchPhotos() {
@@ -45,6 +54,7 @@ async function refresh() {
 }
 function reset() {
   request.value = newRequest(); editingId.value = ''; editingRevision.value = 0; idempotency = ''; selectedId.value = ''; notice.value = ''; error.value = ''
+  if (seals.value[0]) chooseSeal(seals.value[0])
 }
 function addProduct() {
   request.value.products.push({ id: crypto.randomUUID(), name: '', price: '', unit: '' })
@@ -92,7 +102,7 @@ async function save() {
       selectedId.value = job.id
     }
     await refresh(); editingId.value = ''; editingRevision.value = 0
-    notice.value = 'Pedido salvo na fila. A criação depende do próximo lote do Work.'
+    notice.value = 'Pedido salvo na fila. O consumidor conectado poderá processar a criação.'
   } catch (e) { error.value = problem(e) } finally { saving.value = false }
 }
 async function cancel(job: typeof jobs.value[number]) {
@@ -106,6 +116,9 @@ onMounted(async () => {
     if (session.value?.allowed) {
       const profile = await $fetch<{ business_profile: unknown }>('/api/profile', { headers: await getApiAuthHeaders() })
       business.value = normalizeBusinessProfile(profile.business_profile)
+      const catalog = await $fetch<{ seals: typeof seals.value }>('/api/work-design/elements', { headers: await getApiAuthHeaders() })
+      seals.value = catalog.seals
+      if (seals.value[0]) chooseSeal(seals.value[0])
       await refresh()
       poll = setInterval(() => { if (!document.hidden) refresh().catch(e => { error.value = problem(e) }) }, 15_000)
     }
@@ -132,11 +145,16 @@ onUnmounted(() => { if (poll) clearInterval(poll) })
       <div class="workspace">
         <section class="brief-panel">
           <div class="section-title"><span>01</span><h2>{{ editingId ? 'Revisar pedido' : 'Prepare sua campanha' }}</h2></div>
-          <div class="two-col"><label>Nome da campanha<input v-model="request.name" maxlength="110" /></label><label>Tema<input v-model="request.theme" maxlength="120" /></label></div>
+          <label>Nome da campanha<input v-model="request.name" maxlength="110" /></label>
+          <div class="field-label">Escolha o selo da campanha</div>
+          <div class="seal-options"><button v-for="seal in seals" :key="seal.id" type="button" :class="{ chosen: request.sealKey === seal.key }" :aria-pressed="request.sealKey === seal.key" @click="chooseSeal(seal)"><img :src="previewUrl(seal.key)" :alt="seal.name" /><span>{{ seal.theme }}</span></button></div>
+          <p class="empty-copy">O selo define o tema. Fundo, cabeçalho, etiquetas e disposição dos produtos serão compostos para este pedido, com a logo e os dados do cadastro.</p>
           <label>Validade das ofertas<input v-model="request.validity" placeholder="07 de outubro" maxlength="200" /></label>
           <label>Condições<textarea v-model="request.conditions" rows="2" placeholder="Informações fornecidas pela loja" maxlength="400" /></label>
           <div class="field-label">Formatos</div><div class="formats"><button v-for="(size, id) in WORK_FORMATS" :key="id" type="button" :class="{ chosen: request.formats.includes(id) }" @click="toggleFormat(id)">{{ size.label }}</button></div>
-          <div class="colors"><label v-for="(_, index) in request.palette" :key="index">Cor {{ index + 1 }}<input v-model="request.palette[index]" type="color" /></label></div>
+          <label>Produtos por página<select v-model="request.productsPerPage"><option :value="undefined">A IA decide a distribuição</option><option v-for="count in 16" :key="count" :value="count">{{ count }} {{ count === 1 ? 'produto' : 'produtos' }}</option></select></label>
+          <p class="pagination-copy">{{ pageEstimate.map(p => p.count === null ? `${p.label}: páginas conforme a composição` : `${p.label}: ${p.count} página(s)`).join(' · ') }}. Story comporta até 9 produtos por página.</p>
+          <details><summary>Ajustar cores da campanha</summary><div class="colors"><label v-for="(_, index) in request.palette" :key="index">Cor {{ index + 1 }}<input v-model="request.palette[index]" type="color" /></label></div></details>
           <div class="store-context"><strong>{{ business.companyName || 'Dados da loja' }}</strong><p v-for="address in business.addresses" :key="address.id">{{ address.label ? address.label + ' — ' : '' }}{{ address.value }}</p>
             <p v-for="contact in business.whatsappNumbers" :key="contact.id">{{ contact.value }}</p><NuxtLink to="/business-profile">Atualizar cadastro <ArrowUpRight :size="12" /></NuxtLink></div>
           <div class="section-title"><span>02</span><h2>Produtos conferidos</h2><button type="button" class="text-button" @click="addProduct"><Plus :size="15" /> Adicionar</button></div>
@@ -151,6 +169,7 @@ onUnmounted(() => { if (poll) clearInterval(poll) })
           <p v-if="!request.products.length" class="empty-copy">Cole a lista ou acrescente seus produtos. A foto deve ser conferida antes da montagem.</p>
           <div class="section-title"><span>03</span><h2>Oriente a criação</h2></div>
           <label>Como você quer o encarte?<textarea v-model="request.brief" rows="4" maxlength="6000" placeholder="Cabeçalho elaborado, selo 3D em destaque, dois endereços bem distribuídos…" /></label>
+          <p class="empty-copy">A IA consulta as referências internas e escolhe elementos que combinem com a campanha. Quando precisar criar uma peça nova, ela será salva na biblioteca para reutilização.</p>
           <div class="message"><input v-model="message" placeholder="Acrescente uma orientação visual" @keydown.enter.prevent="addMessage" /><button type="button" aria-label="Adicionar orientação" @click="addMessage"><Send :size="17" /></button></div>
           <small>As orientações acompanham o pedido. Para mudar produto, preço ou foto, use a lista acima.</small>
           <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="notice" role="status">{{ notice }}</p>
@@ -179,6 +198,7 @@ onUnmounted(() => { if (poll) clearInterval(poll) })
 </template>
 
 <style scoped>
+.seal-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin:12px 0}.seal-options button{border:2px solid #dce5f2;border-radius:14px;padding:12px;background:#f4f7fd;text-align:center;transition:border-color .15s}.seal-options .chosen{border-color:#234ee2;background:#eef3ff}.seal-options img{width:100%;height:110px;object-fit:contain}.seal-options span{display:block;font-size:12px;font-weight:700;margin-top:8px}.seal-options button:focus-visible{outline:2px solid #234ee2;outline-offset:3px}select{background:#f9fbfe;border:1px solid #dbe3ef;border-radius:10px;padding:11px;color:#183553;font-size:13px}.pagination-copy{font-size:11px;color:#6b7b94;margin:0 0 18px}details{margin-bottom:18px}summary{font-size:12px;color:#50627e;cursor:pointer;margin-bottom:12px}
 .work-page{min-height:100vh;background:#f2f5fa;color:#172c4d;font-family:'Plus Jakarta Sans',sans-serif;padding:32px clamp(16px,4vw,64px)}
 .work-header{max-width:1450px;margin:auto;display:flex;align-items:center;gap:18px;flex-wrap:wrap}.back{display:flex;align-items:center;gap:8px;color:#315075;text-decoration:none}.pilot{font-size:10px;letter-spacing:.12em;font-weight:800;background:#ffdf56;padding:6px 10px;border-radius:8px}.work-header>div{flex:1;min-width:270px}.eyebrow{font-size:11px;text-transform:uppercase;color:#5576a5;letter-spacing:.16em;margin:0}.work-header h1{display:flex;align-items:center;gap:12px;font-size:34px;font-weight:800;letter-spacing:-.04em;margin:5px 0}.work-header p:last-child{color:#6b7b94;font-size:13px}.batch-note,.callout{max-width:1450px;margin:22px auto;font-size:13px;color:#5a6f8f}.callout{padding:16px 20px;border:1px solid #f1d479;background:#fff9dc;border-radius:14px}.workspace{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:24px;max-width:1450px;margin:auto;align-items:start}.brief-panel,.results-panel{background:#fff;border:1px solid #dce4ef;border-radius:24px;padding:26px;box-shadow:0 12px 32px #233c6110}.section-title{display:flex;align-items:center;gap:10px;margin:10px 0 18px}.section-title h2{font-size:17px;letter-spacing:-.025em;font-weight:800;flex:1}.section-title>span{font-size:11px;font-weight:800;color:#305cd8;background:#edf2ff;border-radius:9px;padding:8px}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:700;color:#50627e;margin-bottom:14px}input:not([type=color]),textarea{width:100%;background:#f9fbfe;border:1px solid #dbe3ef;border-radius:10px;padding:11px;color:#183553;font-size:13px;font-weight:500}input:focus,textarea:focus{outline:2px solid #98b5ff;outline-offset:1px}textarea{resize:vertical}.field-label{font-size:12px;font-weight:700;color:#50627e}.formats{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 20px}.formats button{font-size:12px;border:1px solid #d7e1ee;padding:9px 15px;border-radius:10px}.formats .chosen{background:#183e9a;border-color:#183e9a;color:#fff}.colors{display:flex;gap:20px}.colors input{height:32px;width:64px;cursor:pointer}.store-context{padding:17px;background:#f0f5ff;border-radius:13px;margin-bottom:24px;font-size:12px}.store-context p{margin:7px 0;color:#536c8b}.store-context a{display:flex;gap:6px;align-items:center;color:#315cb1;margin-top:10px}.primary-button,.light-button,.text-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:12px;font-weight:700;border-radius:11px;text-decoration:none}.primary-button{background:#234ee2;color:#fff;padding:13px 20px;width:100%;margin-top:20px}.light-button{background:#eef3fb;color:#35577d;padding:10px 14px}.text-button{color:#355eb5;padding:6px}button:disabled{opacity:.5;cursor:default}.product-row{display:grid;grid-template-columns:24px minmax(0,1fr) 100px 26px;gap:10px;align-items:center;padding:15px 0;border-bottom:1px solid #e7edf5}.product-row>span{font-size:11px;font-weight:800;color:#90a2b9}.product-row label{margin-bottom:0}.product-row .photo-field{grid-column:2/4;font-size:10px;font-weight:500}.product-preview{grid-column:2;max-height:65px;max-width:100px;object-fit:contain}.remove{color:#96a5ba}.message{display:flex;gap:8px}.message button{background:#edf2ff;color:#234ee2;width:42px;border-radius:10px}small,.empty-copy{display:block;color:#7b8ba1;font-size:11px;line-height:1.6;margin-top:10px}.empty-copy{padding:15px 0}.job{width:100%;display:flex;text-align:left;flex-direction:column;gap:6px;border:1px solid #dce5f2;border-radius:13px;padding:17px;margin:10px 0;background:#fbfcfe}.job.selected{background:#edf3ff;border-color:#86a5f2}.job strong{font-size:14px}.job span{font-size:11px;color:#486795}.job small{margin:0}.selected-job{margin-top:24px;padding-top:18px;border-top:1px solid #dce5f2}.selected-job h3{font-size:17px;font-weight:800}.job-actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.art-preview{position:relative;margin:18px 0;border-radius:14px;overflow:hidden;background:#e9eff9}.art-preview img{max-height:640px;width:100%;object-fit:contain}.art-preview span{position:absolute;left:12px;top:12px;padding:6px 9px;background:white;border-radius:8px;font-size:11px}.error{color:#a32137;background:#fff0f3;padding:12px;border-radius:10px;font-size:12px}.notice{color:#1b7067;background:#ecfaf6;padding:12px;border-radius:10px;font-size:12px}@media(max-width:950px){.workspace{grid-template-columns:1fr}.results-panel{order:-1}.work-header h1{font-size:28px}}@media(max-width:500px){.brief-panel,.results-panel{padding:18px}.two-col{grid-template-columns:1fr}.product-row{grid-template-columns:20px minmax(0,1fr) 80px 20px}.work-page{padding:20px 12px}}
 </style>

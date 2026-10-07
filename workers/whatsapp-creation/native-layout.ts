@@ -1,4 +1,5 @@
 export { createManualProductCard } from './native-card'
+export { createWorkProductCard } from '../work-design/product-card'
 export { calculateManualProductSlots } from './native-grid'
 export { layoutManualFlyerComposition } from './native-composition'
 // Shared layout rules used by the Quick Editor. This entry is bundled for the

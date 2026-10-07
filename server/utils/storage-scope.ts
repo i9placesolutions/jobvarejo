@@ -17,6 +17,7 @@ export const normalizeStoragePath = (value: unknown): string =>
 export const isServerManagedStorageKey = (key: string): boolean => {
   const normalized = normalizeStoragePath(key)
   return normalized.startsWith(FLYER_GALLERY_STORAGE_PREFIX) || PRIVATE_CATALOG_PREVIEW_PREFIX_RE.test(normalized) || /^projects\/[^/]+\/enhancement-ledger\.json(?:\/|$)/.test(normalized) ||
+    /^projects\/[^/]+\/work-elements(?:\/|$)/.test(normalized) ||
     /^projects\/[^/]+\/[^/]+\/enhancements(?:\/|$)/.test(normalized)
 }
 
