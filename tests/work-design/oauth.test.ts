@@ -109,15 +109,21 @@ describe('OAuth Work isolado por conta, recurso e PKCE', () => {
     expect(await (await nativeFetch(url)).text()).toContain('Entrar no JobVarejo')
     expect((await nativeFetch(url, { headers: { 'x-test-user': other } })).status).toBe(403)
     const response = await nativeFetch(url, { headers: { 'x-test-user': owner } })
+    expect(response.headers.get('referrer-policy')).toBe('same-origin')
     const cookie = response.headers.get('set-cookie')!.split(';')[0]!
     const html = await response.text(), nonce = html.match(/name="nonce" value="([^"]+)"/)![1]!
     const post = (origin: string, value: string) => nativeFetch(base + '/authorize', { method: 'POST', redirect: 'manual',
       headers: { 'x-test-user': owner, Origin: origin, Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ nonce: value, decision: 'allow' }) })
     expect((await post('https://attacker.invalid', nonce)).status).toBe(403)
+    expect((await post('null', nonce)).status).toBe(403)
+    expect((await nativeFetch(base + '/authorize', { method: 'POST', redirect: 'manual',
+      headers: { 'x-test-user': owner, Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ nonce, decision: 'allow' }) })).status).toBe(403)
     expect((await post('https://jobvarejo.com.br', 'wrong')).status).toBe(403)
     const granted = await post('https://jobvarejo.com.br', nonce)
     expect(granted.status).toBe(303)
+    expect(granted.headers.get('referrer-policy')).toBe('no-referrer')
     const callback = new URL(granted.headers.get('location')!)
     expect(callback.origin + callback.pathname).toBe(input.redirect_uri)
     expect(callback.searchParams.get('state')).toBe('test-state'); expect(callback.searchParams.get('iss')).toBe('https://jobvarejo.com.br')

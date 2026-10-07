@@ -10,7 +10,8 @@ export default defineEventHandler(async (event: H3Event) => {
   assertWorkOAuthEnabled()
   await enforceRateLimit(event, 'work-oauth-authorize', 30, 60_000)
   setResponseHeader(event, 'Cache-Control', 'no-store')
-  setResponseHeader(event, 'Referrer-Policy', 'no-referrer')
+  // Formulários POST precisam preservar Origin; o retorno externo continua sem Referer.
+  setResponseHeader(event, 'Referrer-Policy', event.method === 'GET' ? 'same-origin' : 'no-referrer')
   setResponseHeader(event, 'Content-Security-Policy', "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
   const e = workOAuthEndpoints()
   let user
