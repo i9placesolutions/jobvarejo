@@ -1,6 +1,6 @@
 # Piloto JobVarejo → ChatGPT Work
 
-**Estado:** migração e configuração restrita do piloto aplicadas em 07/10/2026; publicação e conexão da conta em validação. Plugin ainda não conectado e agendamento não criado. A pasta `jobvarejo-work` contém manifesto e skill; o `mcp.example.json` é um exemplo deliberadamente não instalável até substituir o host e configurar autenticação pelo fluxo de conexão. Não contém credenciais.
+**Estado:** piloto publicado em produção em 07/10/2026 (be8c677f), migração/configuração restrita aplicadas. MCP com dez ferramentas e discovery OAuth conferidos por HTTPS. Plugin privado salvo na conta pessoal: [JobVarejo — Encartes](https://chatgpt.com/plugins/plugins_6ac6609d3a8c819196c289a4c6fb1a53), referência em `plugin-release.json`. Autorização OAuth da conta ainda pendente; nenhuma geração pelo Work ou tarefa agendada foi comprovada. A pasta `jobvarejo-work` contém manifesto, skill e `mcp.json`; o pacote não contém credenciais.
 
 ## Escopo da versão 0.1
 
@@ -23,9 +23,13 @@
 7. Só depois criar tarefa **no Work da conta**, usando plugin e skill. Não substituir por heartbeat local do Codex. Prompt sugerido: “Processe até dois pedidos pendentes do piloto JobVarejo usando compose-flyers, confira todas as prévias, conclua somente resultados válidos; sem pedidos, não crie nada; registre impedimentos na fila.” Definir a frequência conforme tempo medido e uso disponível do Pro.
 8. Importar os fluxos n8n de `integrations/n8n/work-design` com credencial separada e testar criação/consulta. O n8n não usa um trigger imediato de Workspace Agents neste caminho Pro.
 
+## Validação de ativação
+
+Produção: deploy be8c677f concluído e aplicação saudável; discovery OAuth HTTP 200; MCP initialize e tools/list HTTP 200 com dez ferramentas. Credenciais Work/n8n não são intercambiáveis (401 nos dois sentidos); token OAuth inexistente foi recusado (401), depois da conexão inicial do Redis. Pedido de cinco produtos/Story/data 07 de outubro criado e consultado pelo n8n (200), idempotência e leitura do banco confirmadas. Tela autenticada da conta piloto abriu no Safari e exibiu o pedido, cinco preços e fotos selecionadas; formulário de revisão carregou esses dados. O teste usa os dados atuais do cadastro Job Varejo, sem mudar o perfil global para Economia. Não houve composição pelo Work, revisão salva pelo navegador, abertura de resultado, exportação ou certificação do editor rápido.
+
 ## Verificação local
 
-Em 07/10/2026, passaram 95 testes selecionados (31 do piloto, incluindo oito OAuth, e 64 de contratos existentes), build de produção e limite de chunk client (459 KB / 500 KB). O render offline passou em sete páginas, com 1/5/12 produtos, dois formatos e dois endereços; conferência visual feita em Story de cinco produtos e feed de doze. A checagem completa de tipos **não passou**: há erros espalhados de tipagem global de `$fetch` e imports `.ts` no script de benchmark; os arquivos existentes relacionados não foram alterados. Uma tentativa com heap padrão também esgotou memória. Não há certificação completa de tipos nem teste de navegador/editor conectado nesta etapa.
+Em 07/10/2026, passaram 95 testes selecionados (31 do piloto, incluindo oito OAuth, e 64 de contratos existentes), build de produção e limite de chunk client (459 KB / 500 KB). O render offline passou em sete páginas, com 1/5/12 produtos, dois formatos e dois endereços; conferência visual feita em Story de cinco produtos e feed de doze. A checagem completa de tipos **não passou**: há erros espalhados de tipagem global de `$fetch` e imports `.ts` no script de benchmark; os arquivos existentes relacionados não foram alterados. Uma tentativa com heap padrão também esgotou memória. Não há certificação completa de tipos nem certificação de edição/exportação no editor conectado nesta etapa.
 
 `npm test -- --run tests/work-design` usa PostgreSQL embarcado PGlite em memória, sem conexão com produção. Verifica SQL/revisões/escopo/idempotência. PGlite não prova concorrência entre processos/instâncias reais.
 
