@@ -24,7 +24,10 @@ const MAX_CANVAS_JSON_BYTES = 12 * 1024 * 1024
 const MAX_SOURCE_IMAGE_BYTES = 8 * 1024 * 1024
 const MAX_TOTAL_SOURCE_IMAGE_BYTES = 32 * 1024 * 1024
 const MAX_SOURCE_IMAGES = 64
-const MAX_FABRIC_NODES = 3000
+// Objetos do desenho (nós com `type`) e nós JSON em geral: textos guardam um estilo por letra e
+// sombras/gradientes têm sub-objetos, então um modelo real de ~500 objetos passa de 6 mil nós.
+const MAX_FABRIC_OBJECTS = 3000
+const MAX_JSON_NODES = 40_000
 const MAX_FABRIC_DEPTH = 32
 const MAX_IMAGE_PIXELS = 24_000_000
 const MAX_TOTAL_SOURCE_PIXELS = 48_000_000
@@ -222,13 +225,16 @@ const prepareCanvasImages = async (canvas: any, sourceOwnerId: string | null, ki
   const sources: Array<{ node: any; property: 'src' | 'source'; source: string }> = []
   const preparationDeadlineAt = Date.now() + MAX_SOURCE_PREPARATION_MS
   const pending: Array<{ node: any; depth: number }> = [{ node: canvas, depth: 0 }]
+  let nodeCount = 0
   let objectCount = 0
   while (pending.length) {
     const { node, depth } = pending.pop()!
     if (!node || typeof node !== 'object' || seen.has(node)) continue
-    if (depth > MAX_FABRIC_DEPTH || ++objectCount > MAX_FABRIC_NODES) throw new Error('O canvas excede o limite de objetos da prévia.')
-    seen.add(node)
     const type = String(node.type || '').toLowerCase()
+    if (depth > MAX_FABRIC_DEPTH || ++nodeCount > MAX_JSON_NODES || (type && ++objectCount > MAX_FABRIC_OBJECTS)) {
+      throw new Error('O canvas excede o limite de objetos da prévia.')
+    }
+    seen.add(node)
     if (type === 'image' && typeof node.src === 'string' && node.src.trim()) sources.push({ node, property: 'src', source: node.src.trim() })
     if (type === 'pattern' && node.source != null) {
       if (typeof node.source !== 'string') throw new Error('Fonte de padrão não suportada para a prévia.')

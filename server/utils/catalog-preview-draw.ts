@@ -66,7 +66,7 @@ const loadFontsOnce = (() => {
  * só nisso (o desenho em si leva < 1 s) e, no servidor de produção, passava do tempo limite.
  * Com file:// o jsdom lê o arquivo direto; a imagem final é idêntica.
  */
-const externalizeDataImages = async (canvasJson: any, directory: string): Promise<void> => {
+export const externalizeDataImages = async (canvasJson: any, directory: string): Promise<void> => {
   const files = new Map<string, string>()
   const seen = new WeakSet<object>()
   const pending: unknown[] = [canvasJson]

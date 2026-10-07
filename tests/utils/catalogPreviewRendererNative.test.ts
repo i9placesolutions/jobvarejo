@@ -15,6 +15,14 @@ describe('native catalog preview renderer', () => {
       .rejects.toThrow('limite de objetos')
   })
 
+  it('conta objetos do desenho, não cada estilo de letra dos textos', async () => {
+    // ~500 textos com estilo por letra: milhares de nós JSON, mas poucos objetos (modelo real).
+    const styles = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, { fill: '#000000', fontWeight: 'bold' }]))
+    const objects = Array.from({ length: 500 }, (_, i) => ({ type: 'IText', text: `OFERTA ${i}`, left: (i % 20) * 50, top: Math.floor(i / 20) * 50, fontSize: 12, styles: [{ start: 0, end: 12, style: styles[0] }, ...Object.values(styles).map((style, index) => ({ start: index, end: index + 1, style: { ...style } }))] }))
+    const bytes = await renderCatalogPreview({ canvasJson: { version: '7.1.0', objects }, width: 1080, height: 1350, sourceOwnerId: 'owner-a', kind: 'flyer' })
+    expect(bytes.length).toBeGreaterThan(0)
+  }, 60_000)
+
   it('omits images beyond the decoded pixel budget before Fabric retains them', async () => {
     const largeRaster = await sharp({ create: { width: 4000, height: 4000, channels: 4, background: '#ffffff' } })
       .png({ compressionLevel: 9 }).toBuffer()

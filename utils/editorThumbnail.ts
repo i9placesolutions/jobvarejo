@@ -257,7 +257,8 @@ const renderThumbnailFromCanvasJson = async (
       -bounds.left * fitScale,
       -bounds.top * fitScale
     ]
-    restoreCanvasStickerOutlines(sc)
+    // Mesmo documento do canvas: no servidor (fabric/node) não existe `document` global.
+    restoreCanvasStickerOutlines(sc, () => canvasDocument.createElement('canvas') as HTMLCanvasElement)
     sc.renderAll()
     return sc.toDataURL({
       // A miniatura aparece em cards e no navegador de páginas, não na
