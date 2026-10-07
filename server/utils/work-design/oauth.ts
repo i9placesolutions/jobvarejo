@@ -50,8 +50,14 @@ export async function validateWorkOAuthClient(request: OAuthAuthorization) {
   const stable = client.pathname === '/oauth/client.json' && callback.pathname === '/connector_platform_oauth_redirect'
   const match = client.pathname.match(/^\/oauth\/([A-Za-z0-9_-]+)\/client\.json$/)
   const legacy = match && callback.pathname === `/connector/oauth/${match[1]}`
-  if (client.origin !== 'https://chatgpt.com' || callback.origin !== client.origin || client.search || client.hash ||
-      client.username || client.password || callback.search || callback.hash || callback.username || callback.password || (!stable && !legacy))
+  const nativeMatch = client.pathname.match(/^\/oauth\/codex\/([A-Za-z0-9_-]+)\/client\.json$/)
+  const nativePath = client.pathname === '/oauth/codex/client.json' && callback.pathname === '/callback'
+    || nativeMatch && callback.pathname === `/callback/${nativeMatch[1]}`
+  const native = Boolean(nativePath && callback.protocol === 'http:' &&
+    ['127.0.0.1', 'localhost'].includes(callback.hostname) && callback.port)
+  const web = callback.origin === client.origin && (stable || legacy)
+  if (client.origin !== 'https://chatgpt.com' || client.search || client.hash ||
+      client.username || client.password || callback.search || callback.hash || callback.username || callback.password || (!web && !native))
     throw createError({ statusCode: 400, statusMessage: 'Cliente ou retorno OAuth não autorizado.' })
   if (request.resource !== workOAuthEndpoints().resource)
     throw createError({ statusCode: 400, statusMessage: 'Recurso OAuth inválido.' })
@@ -63,7 +69,10 @@ export async function validateWorkOAuthClient(request: OAuthAuthorization) {
     if (body.length > 20_000) throw new Error('metadata')
     metadata = JSON.parse(body)
   } catch { throw createError({ statusCode: 503, statusMessage: 'Não foi possível verificar o cliente ChatGPT.' }) }
-  if (metadata.client_id !== request.client_id || !metadata.redirect_uris?.includes(request.redirect_uri) ||
+  // RFC 8252: o aplicativo escolhe a porta; host/caminho continuam vinculados ao CIMD oficial.
+  const registeredCallback = new URL(callback.href)
+  if (native) registeredCallback.port = ''
+  if (metadata.client_id !== request.client_id || !metadata.redirect_uris?.includes(registeredCallback.href) ||
       !(metadata.token_endpoint_auth_methods_supported || [metadata.token_endpoint_auth_method]).includes('none'))
     throw createError({ statusCode: 400, statusMessage: 'Metadados do cliente OAuth incompatíveis.' })
 }

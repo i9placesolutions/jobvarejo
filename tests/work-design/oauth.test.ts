@@ -30,9 +30,16 @@ beforeAll(async () => {
     'getQuery', 'setCookie', 'getCookie', 'deleteCookie', 'sendRedirect'] as const) vi.stubGlobal(name, h3[name])
   vi.stubEnv('WORK_DESIGN_ENABLED', 'true'); vi.stubEnv('WORK_DESIGN_OAUTH_ENABLED', 'true')
   vi.stubEnv('WORK_DESIGN_PILOT_IDS', owner); vi.stubEnv('WORK_DESIGN_WORKER_OWNER_ID', owner)
-  vi.stubGlobal('fetch', vi.fn(async (url: string, options: any) => url === 'https://chatgpt.com/oauth/client.json'
-    ? new Response(JSON.stringify({ client_id: url, redirect_uris: [request().redirect_uri], token_endpoint_auth_methods_supported: ['none'] }))
-    : nativeFetch(url, options)))
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options: any) => {
+    if (url === 'https://chatgpt.com/oauth/client.json') return new Response(JSON.stringify({ client_id: url,
+      redirect_uris: [request().redirect_uri], token_endpoint_auth_methods_supported: ['none'] }))
+    if (url === 'https://chatgpt.com/oauth/codex/client.json' || url === 'https://chatgpt.com/oauth/codex/server123/client.json')
+      return new Response(JSON.stringify({ client_id: url, redirect_uris: [
+        `http://127.0.0.1/callback${url.includes('/server123/') ? '/server123' : ''}`,
+        `http://localhost/callback${url.includes('/server123/') ? '/server123' : ''}`
+      ], token_endpoint_auth_methods_supported: ['none'] }))
+    return nativeFetch(url, options)
+  }))
   const app = h3.createApp().use('/authorize', (await import('../../server/api/work-design/oauth/authorize')).default)
     .use('/token', (await import('../../server/api/work-design/oauth/token.post')).default)
   server = createServer(h3.toNodeListener(app)); await new Promise<void>(done => server.listen(0, '127.0.0.1', done))
@@ -45,6 +52,26 @@ describe('OAuth Work isolado por conta, recurso e PKCE', () => {
     await expect(validateWorkOAuthClient({ ...request(), client_id: 'https://127.0.0.1/client.json' })).rejects.toThrow(/autorizado/)
     await expect(validateWorkOAuthClient({ ...request(), redirect_uri: 'https://attacker.invalid' })).rejects.toThrow(/autorizado/)
     await expect(validateWorkOAuthClient({ ...request(), resource: 'https://another.invalid' })).rejects.toThrow(/Recurso/)
+  })
+  it('aceita CIMD nativo publicado com porta variável, mantendo host e caminho exatos', async () => {
+    const input = { ...request(), client_id: 'https://chatgpt.com/oauth/codex/client.json', redirect_uri: 'http://127.0.0.1:62123/callback' }
+    await expect(validateWorkOAuthClient(input)).resolves.toBeUndefined()
+    await expect(validateWorkOAuthClient({ ...input, redirect_uri: 'http://localhost:54433/callback' })).resolves.toBeUndefined()
+    await expect(validateWorkOAuthClient({ ...input, client_id: 'https://chatgpt.com/oauth/codex/server123/client.json',
+      redirect_uri: 'http://127.0.0.1:54433/callback/server123' })).resolves.toBeUndefined()
+    for (const redirect_uri of ['http://127.0.0.2:62123/callback', 'https://127.0.0.1:62123/callback',
+      'http://attacker.invalid:62123/callback', 'http://127.0.0.1:62123/callback/wrong',
+      'http://127.0.0.1:62123/callback?extra=1', 'http://127.0.0.1:62123/callback#extra',
+      'http://user@127.0.0.1:62123/callback', 'http://127.0.0.1/callback'])
+      await expect(validateWorkOAuthClient({ ...input, redirect_uri })).rejects.toThrow(/autorizado/)
+  })
+  it('vincula a troca nativa à porta original, ao cliente e ao PKCE', async () => {
+    const input = { ...request(), client_id: 'https://chatgpt.com/oauth/codex/client.json', redirect_uri: 'http://127.0.0.1:62123/callback' }
+    await validateWorkOAuthClient(input)
+    await expect(exchangeWorkOAuthCode({ ...input, code: await issueWorkOAuthCode(input, owner),
+      code_verifier: verifier, redirect_uri: 'http://127.0.0.1:54433/callback' })).rejects.toThrow(/inválido/)
+    const tokens = await exchangeWorkOAuthCode({ ...input, code: await issueWorkOAuthCode(input, owner), code_verifier: verifier })
+    expect(await verifyWorkOAuthAccess(tokens.access_token)).toBe(owner)
   })
   it('troca código uma única vez e emite acesso restrito e refresh rotativo', async () => {
     const code = await issueWorkOAuthCode(request(), owner)
@@ -75,8 +102,10 @@ describe('OAuth Work isolado por conta, recurso e PKCE', () => {
     vi.stubEnv('WORK_DESIGN_OAUTH_ENABLED', 'false'); expect(await verifyWorkOAuthAccess(tokens.access_token)).toBeNull()
     vi.stubEnv('WORK_DESIGN_OAUTH_ENABLED', 'true')
   })
-  it('exige sessão da conta piloto, origem e nonce antes da confirmação', async () => {
-    const url = base + '/authorize?' + new URLSearchParams(request()).toString()
+  it.each(['web', 'native'])('%s: exige sessão da conta piloto, origem e nonce antes da confirmação', async mode => {
+    const input = mode === 'native' ? { ...request(), client_id: 'https://chatgpt.com/oauth/codex/client.json',
+      redirect_uri: 'http://127.0.0.1:62123/callback' } : request()
+    const url = base + '/authorize?' + new URLSearchParams(input).toString()
     expect(await (await nativeFetch(url)).text()).toContain('Entrar no JobVarejo')
     expect((await nativeFetch(url, { headers: { 'x-test-user': other } })).status).toBe(403)
     const response = await nativeFetch(url, { headers: { 'x-test-user': owner } })
@@ -90,11 +119,12 @@ describe('OAuth Work isolado por conta, recurso e PKCE', () => {
     const granted = await post('https://jobvarejo.com.br', nonce)
     expect(granted.status).toBe(303)
     const callback = new URL(granted.headers.get('location')!)
+    expect(callback.origin + callback.pathname).toBe(input.redirect_uri)
     expect(callback.searchParams.get('state')).toBe('test-state'); expect(callback.searchParams.get('iss')).toBe('https://jobvarejo.com.br')
     expect((await post('https://jobvarejo.com.br', nonce)).status).toBe(400)
     const token = await nativeFetch(base + '/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: request().client_id, resource: request().resource,
-        redirect_uri: request().redirect_uri, code: callback.searchParams.get('code')!, code_verifier: verifier }) })
+      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: input.client_id, resource: input.resource,
+        redirect_uri: input.redirect_uri, code: callback.searchParams.get('code')!, code_verifier: verifier }) })
     expect(token.status).toBe(200); expect((await token.json() as any).token_type).toBe('Bearer')
   })
 })
