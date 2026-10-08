@@ -21,6 +21,29 @@ export type CatalogPreviewDrawInput = {
 
 const MAX_IMAGE_PIXELS = 24_000_000
 
+const FONT_WEIGHTS: Array<[RegExp, string]> = [
+  [/ExtraBold|UltraBold/i, '800'], [/SemiBold|DemiBold/i, '600'], [/Bold/i, '700'], [/Black|Heavy/i, '900'],
+  [/ExtraLight|UltraLight/i, '200'], [/Light/i, '300'], [/Thin/i, '100'], [/Medium/i, '500']
+]
+
+/**
+ * Família, peso e estilo de um arquivo de fonte (ex.: BarlowCondensed-ExtraBold.ttf). Os modelos usam o
+ * nome com espaço ("Barlow Condensed"); sem ele o desenho caía numa fonte reserva larga e a validade
+ * quebrava em duas linhas. Registra também o nome colado, que é o do arquivo.
+ */
+export const catalogFontFaceFromFile = (file: string): { families: string[]; weight: string; style: string } => {
+  const stem = file.replace(/\.ttf$/i, '')
+  const dash = stem.lastIndexOf('-')
+  const rawFamily = (dash > 0 ? stem.slice(0, dash) : stem).replace(/\[[^\]]*\]/g, '').trim()
+  const variant = dash > 0 ? stem.slice(dash + 1) : ''
+  const spaced = rawFamily.replace(/([a-z])([A-Z])/g, '$1 $2')
+  return {
+    families: [...new Set([spaced, rawFamily])],
+    weight: FONT_WEIGHTS.find(([pattern]) => pattern.test(variant))?.[1] || '400',
+    style: /Italic/i.test(variant) ? 'italic' : 'normal'
+  }
+}
+
 const loadFontsOnce = (() => {
   let loaded: Promise<void> | null = null
   return () => {
@@ -36,15 +59,10 @@ const loadFontsOnce = (() => {
           if (fontFiles.length) {
             const { registerFont } = await import('canvas')
             for (const file of fontFiles) {
-              const stem = file.replace(/\.ttf$/i, '')
-              const parts = stem.split('-')
-              const variant = parts.pop() || ''
-              const family = parts.join('-') || stem
-              registerFont(resolve(directory, file), {
-                family,
-                weight: /ExtraBold/i.test(variant) ? '800' : /SemiBold/i.test(variant) ? '600' : /Bold/i.test(variant) ? '700' : /Light/i.test(variant) ? '300' : '400',
-                style: /Italic/i.test(variant) ? 'italic' : 'normal'
-              })
+              const face = catalogFontFaceFromFile(file)
+              for (const family of face.families) {
+                registerFont(resolve(directory, file), { family, weight: face.weight, style: face.style })
+              }
             }
             return
           }
