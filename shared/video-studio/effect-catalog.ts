@@ -7,6 +7,7 @@ import sfxLibrary from './sfx-library.json'
 const librarySounds = sfxLibrary as unknown as readonly {id:`lib-${string}`;name:string;seconds:number;category?:string}[]
 const libraryMusic = (musicLibrary as unknown as {id:string;name:string;bpm:number;category?:string}[]).map(t=>({id:t.id,name:`${t.name} · ${t.bpm} BPM`}))
 import generatedFlyers from './generated-flyer-recipes.json'
+import type {DrawnFxSettings} from './drawn-fx-catalog'
 // Origem dos áudios registrada em catalog-provenance.json.
 // Supplemental IDs são validados em runtime pelo schema, sem alargar o tipo estático do catálogo.
 const supplementalSounds = supplementalAudio.sounds as unknown as readonly {id:`cc0-${string}`;name:string;seconds:number}[]
@@ -121,6 +122,8 @@ export interface VideoMotionSettings {
   product: ProductEntrance; text: TextEntrance; price: ProductEntrance; camera: CameraMovement
   atmosphere: AtmosphereEffect[]; speed: 'fast'|'balanced'; transitionSound: SoundEffect; accentSound: SoundEffect
   finish?: typeof PRODUCT_FINISHES[number]['id']
+  /** Efeitos desenhados à mão por momento (preço, produto, troca de cena, ambiente) — drawn-fx.ts. */
+  drawnFx?: DrawnFxSettings
 }
 export const DEFAULT_MOTION: VideoMotionSettings = {product:'slam',text:'word-pop',price:'elastic',camera:'impact',atmosphere:['speed-lines','shockwave','dust'],speed:'fast',transitionSound:'air-swipe',accentSound:'bass-hit',finish:'shine'}
 export const MOTION_PRESETS: {id:string;name:string;description:string;color:string;transition:SceneTransition;motion:VideoMotionSettings}[] = [
@@ -136,11 +139,19 @@ export const MOTION_PRESETS: {id:string;name:string;description:string;color:str
   {id:'festival',name:'Festival no céu',description:'Rastros salgueiro e uma fonte de luz em cascata.',color:'#f3b5ff',transition:'spin',motion:{...DEFAULT_MOTION,atmosphere:['fireworks-willow','fireworks-fountain'],accentSound:'sparkle'}},
   {id:'cosmic',name:'Portal cósmico',description:'Anéis de energia e meteoros cruzando o cenário.',color:'#9caaff',transition:'iris',motion:{...DEFAULT_MOTION,atmosphere:['energy-portal','energy-meteor'],transitionSound:'suction'}},
   {id:'impact-burst',name:'Impacto explosivo',description:'Ondas de choque e explosão gráfica no início da oferta.',color:'#ffc45c',transition:'diamond-wipe',motion:{...DEFAULT_MOTION,atmosphere:['explosion-shockrings','explosion-comic'],accentSound:'bass-hit'}},
+  // Efeitos desenhados à mão (estilo RTFX), acervo Magnific — drawn-fx.ts.
+  {id:'cartoon-boom',name:'Explosão cartoon',description:'Explosão desenhada em cada preço e transição desenhada entre ofertas.',color:'#ff8a3d',transition:'fade',motion:{...DEFAULT_MOTION,atmosphere:['shockwave'],accentSound:'boom',transitionSound:'air-swipe',drawnFx:{price:'explosao',product:'fumaca',transition:'transicao',ambient:'linhas'}}},
+  {id:'cartoon-fire',name:'Fogo nas ofertas',description:'Chamas desenhadas nas bordas, explosão no preço e corte com fogo.',color:'#ff5a1f',transition:'fade',motion:{...DEFAULT_MOTION,camera:'earthquake',atmosphere:['embers'],accentSound:'boom',drawnFx:{price:'explosao',transition:'fogo',ambient:'fogo'}}},
+  {id:'manga',name:'Mangá de ofertas',description:'Linhas de velocidade, estouros de quadrinhos e fumaça na chegada.',color:'#f2f2f2',transition:'fade',motion:{...DEFAULT_MOTION,text:'stomp',accentSound:'snap',drawnFx:{price:'comic',product:'fumaca',transition:'explosao',ambient:'linhas'}}},
+  {id:'cartoon-electric',name:'Choque de preços',description:'Raios desenhados no preço e no cenário, transição de energia.',color:'#5ee7ff',transition:'fade',motion:{...DEFAULT_MOTION,accentSound:'glitch',drawnFx:{price:'eletricidade',product:'energia',transition:'transicao',ambient:'eletricidade'}}},
+  {id:'cartoon-splash',name:'Respingo de ofertas',description:'Respingos e brilhos desenhados com corte em fumaça.',color:'#4fc3ff',transition:'fade',motion:{...DEFAULT_MOTION,product:'elastic',accentSound:'pop',drawnFx:{price:'liquido',product:'faiscas',transition:'fumaca'}}},
 ]
 export const motionSettings = (motion?: VideoMotionSettings): VideoMotionSettings => motion || DEFAULT_MOTION
 export function identifyMotionPreset(motion:VideoMotionSettings|undefined,transition:SceneTransition) {
   if(!motion)return undefined
-  return MOTION_PRESETS.find(p=>p.transition===transition&&Object.entries(p.motion).every(([key,value])=>{
+  const fx=(v:unknown)=>JSON.stringify(Object.entries((v||{}) as Record<string,string>).filter(([,c])=>c&&c!=='none').sort())
+  return MOTION_PRESETS.find(p=>p.transition===transition&&fx(p.motion.drawnFx)===fx(motion.drawnFx)&&Object.entries(p.motion).every(([key,value])=>{
+    if(key==='drawnFx')return true
     const current=motion[key as keyof VideoMotionSettings]
     return Array.isArray(value)&&Array.isArray(current)?[...value].sort().join('|')===[...current].sort().join('|'):value===current
   }))?.id

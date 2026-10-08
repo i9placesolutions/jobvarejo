@@ -12,6 +12,7 @@ import {Logo,Ending,RetailCamera,SocialIcon} from './showcase'
 import {displayPrice,type VideoRenderProps,type VideoScene} from './model'
 import {elementMotion} from './catalog-motion'
 import {CatalogTransition,CatalogAtmosphere,AnimatedRetailText} from './catalog-effects'
+import {DrawnFxLayer,DrawnFxOffer} from './drawn-fx'
 import {motionSettings,soundAsset,SOUND_EFFECTS} from './effect-catalog'
 import {musicGain,flyerSoundCues} from './sound-design'
 import {VideoPriceLabel} from './label-renderer'
@@ -124,7 +125,8 @@ function Offer({props,r,scene,index}:{props:VideoRenderProps;r:FlyerRecipe;scene
  const exit=mix(f,scene.frames-5,scene.frames,1,0),float=f>18&&d.effects.includes('pulse')?Math.sin(f/19)*5:0
  const layers=productLayers(l.product,p,d.duplicateProducts!==false,o.imageAspectRatio||1,o.copies)
  const images=layers.map(layer=>{const entrance=layer.motionIndex===2?'whip-right':st.product,a=elementMotion(f,entrance,layer.motionIndex,m.speed);return h(EditableElement,{props,scene:scene.id,id:'product-'+layer.motionIndex,key:layer.motionIndex,style:{...box(layer.box),translate:`${a.x}px ${a.y+float}px`,rotate:`${a.rotation+layer.rotation}deg`,scale:a.scale,opacity:a.opacity}},src?h(Img,{src,style:{width:'100%',height:'100%',objectFit:'contain',filter:productFinishFilter(st.finish,r.accent,a.progress)}}):div({...font,fontSize:45,paddingTop:80},'ADICIONE A FOTO'))})
- return h(AbsoluteFill,{style:{opacity:exit}},...images,
+ const fxBox=([left,top,width,height]:LayoutBox)=>({left,top,width,height})
+ return h(AbsoluteFill,{style:{opacity:exit}},...images,h(DrawnFxOffer,{props,index,price:fxBox(l.price),product:fxBox(l.product)}),
  h(EditableElement,{props,scene:scene.id,id:'name',style:{...box(l.name),...font,color:'var(--video-name-color, var(--video-text-color, white))',display:'flex',justifyContent:'center',alignItems:'center',fontSize:fit(o.name.toUpperCase(),p?42:48,p?30:38),padding:'8px 12px',boxSizing:'border-box',borderRadius:18,background:'linear-gradient(90deg,transparent,#000b 15%,#000b 85%,transparent)',textShadow:'0 3px 0 #0008,0 5px 12px #0009'}},h(AnimatedRetailText,{text:o.name.toUpperCase(),mode:st.text,speed:m.speed})),
  h(EditableElement,{props,scene:scene.id,id:'price',style:{...box(l.price),translate:`${price.x}px ${price.y}px`,scale:price.scale*priceAccentScale(st.priceAccent,f),rotate:`${price.rotation}deg`,opacity:price.opacity}},h(PriceAccentLayer,{kind:st.priceAccent,frame:f,width:l.price[2],height:l.price[3],accent:r.accent,layer:'back'}),div({position:'relative',width:'100%',height:'100%'},h(Price,{props,r,price:o.price,unit:o.unit})),h(PriceAccentLayer,{kind:st.priceAccent,frame:f,width:l.price[2],height:l.price[3],accent:r.accent,layer:'front'})),
  h(EditableElement,{props,scene:scene.id,id:'validity',style:{...box(l.validity),opacity:mix(f,4,8,0,1)}},r.validityStyle==='ribbon'?h(ValidityRibbon,{props,width:l.validity[2],height:l.validity[3],colors:r.ribbonColors}):h(DateLine,{props})),
@@ -139,6 +141,7 @@ export function FlyerComposition(props:VideoRenderProps){
 
  h(RetailCamera,{props},h(Backdrop,{props,r}),h(Identity,{props,r}),...props.scenes.filter(s=>s.id!=='intro').map(s=>h(Sequence,{key:s.id,from:s.from,durationInFrames:s.frames},s.id==='outro'?h(Ending,{props:endingProps}):h(Offer,{props,r,scene:s,index:d.offers.findIndex(o=>o.id===s.id)})))),
  h(CatalogTransition,{props}),
+ h(DrawnFxLayer,{props}),
  ...props.scenes.map(s=>s.audio&&d.voice.enabled?h(Sequence,{key:'voice'+s.id,from:s.from,durationInFrames:s.frames},h(Audio,{src:s.audio,playbackRate:s.playbackRate||1,volume:d.audio.voiceVolume})):null),
  ...flyerSoundCues(d,props.scenes,props.format).filter(c=>c.frame<durationInFrames).map(c=>cue(c.sound,c.frame,c.gain,c.key)),
  props.music&&d.audio.music!=='none'?h(Audio,{src:props.music,loop:true,loopVolumeCurveBehavior:'extend',startFrom:musicStartFrame(d.audio.music,d.beatSync),volume:(frame:number)=>musicGain(frame,durationInFrames,d,props.scenes)}):null)

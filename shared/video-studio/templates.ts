@@ -1,6 +1,7 @@
 import {flyerRecipe} from './flyer-recipes'
 import {newVideoDocument, VIDEO_THEMES, type VideoDocument} from './model'
 import {MOTION_PRESETS} from './effect-catalog'
+import {drawnFxForTheme} from './drawn-fx-catalog'
 
 // O catálogo compartilha somente o estilo. Dados e mídias pertencem ao novo projeto.
 export function applyVideoTemplate(doc: VideoDocument, id: VideoDocument['theme']) {
@@ -10,7 +11,7 @@ export function applyVideoTemplate(doc: VideoDocument, id: VideoDocument['theme'
   const recipe=flyerRecipe(id)
   if(recipe?.preferSingleProduct) doc.duplicateProducts=false
   if(recipe){
-    doc.templateRevision=recipe.revision||1;doc.layoutVersion=2;doc.intensity=.85;doc.effects=['shake','zoom','glow','rays','pulse'];doc.transition=recipe.transition;doc.motion=structuredClone(recipe.motion);doc.priceLabel='';doc.audio.music=recipe.music
+    doc.templateRevision=recipe.revision||1;doc.layoutVersion=2;doc.intensity=.85;doc.effects=['shake','zoom','glow','rays','pulse'];doc.transition=recipe.transition;doc.motion={...structuredClone(recipe.motion),drawnFx:recipe.motion.drawnFx?structuredClone(recipe.motion.drawnFx):drawnFxForTheme(`${recipe.name} ${recipe.campaign}`,recipe.seed||0)};doc.priceLabel='';doc.audio.music=recipe.music
     if(recipe.appearanceDefaults)doc.appearance={...recipe.appearanceDefaults,...doc.appearance}
     return
   }

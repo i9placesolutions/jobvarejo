@@ -2,8 +2,9 @@ import {VIDEO_BACKGROUNDS} from '../../../shared/video-studio/backgrounds'
 import {VIDEO_THEMES} from '../../../shared/video-studio/model'
 import { z } from 'zod'
 import { PRODUCT_ENTRANCES, TEXT_ENTRANCES, CAMERA_MOVEMENTS, SCENE_TRANSITIONS, ATMOSPHERE_EFFECTS, SOUND_EFFECTS, PRODUCT_FINISHES } from '../../../shared/video-studio/effect-catalog'
+import { DRAWN_FX_CATEGORIES } from '../../../shared/video-studio/drawn-fx-catalog'
 const ids=<T extends readonly {id:string}[]>(items:T)=>items.map(i=>i.id) as [T[number]['id'],...T[number]['id'][]]
-const motionSchema=z.object({product:z.enum(ids(PRODUCT_ENTRANCES)),text:z.enum(ids(TEXT_ENTRANCES)),price:z.enum(ids(PRODUCT_ENTRANCES)),camera:z.enum(ids(CAMERA_MOVEMENTS)),atmosphere:z.array(z.enum(ids(ATMOSPHERE_EFFECTS))).max(8).refine(v=>new Set(v).size===v.length),speed:z.enum(['fast','balanced']),transitionSound:z.enum(ids(SOUND_EFFECTS)),accentSound:z.enum(ids(SOUND_EFFECTS)),finish:z.enum(ids(PRODUCT_FINISHES)).optional()})
+const motionSchema=z.object({product:z.enum(ids(PRODUCT_ENTRANCES)),text:z.enum(ids(TEXT_ENTRANCES)),price:z.enum(ids(PRODUCT_ENTRANCES)),camera:z.enum(ids(CAMERA_MOVEMENTS)),atmosphere:z.array(z.enum(ids(ATMOSPHERE_EFFECTS))).max(8).refine(v=>new Set(v).size===v.length),speed:z.enum(['fast','balanced']),transitionSound:z.enum(ids(SOUND_EFFECTS)),accentSound:z.enum(ids(SOUND_EFFECTS)),finish:z.enum(ids(PRODUCT_FINISHES)).optional(),drawnFx:z.object({price:z.enum(ids(DRAWN_FX_CATEGORIES)).optional(),product:z.enum(ids(DRAWN_FX_CATEGORIES)).optional(),transition:z.enum(ids(DRAWN_FX_CATEGORIES)).optional(),ambient:z.enum(ids(DRAWN_FX_CATEGORIES)).optional()}).strict().optional()})
 const text=(max:number,min=0)=>z.string().min(min).max(max).refine(s=>!/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(s),'Texto inválido')
 const narration=z.string().refine(s=>!/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(s),'Texto inválido')
 const asset=z.union([z.literal(''),z.string().uuid()])

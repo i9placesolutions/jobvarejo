@@ -17,6 +17,7 @@ import {sceneStyle,offerIndexOf} from './scene-variation'
 import {motionSettings,soundAsset,SOUND_EFFECTS} from './effect-catalog'
 import {CatalogAtmosphere,CatalogTransition,AnimatedRetailText} from './catalog-effects'
 import {flyerRecipe} from './flyer-recipes'
+import {DrawnFxLayer} from './drawn-fx'
 
 const div=(style:React.CSSProperties,...children:React.ReactNode[])=>h('div',{style},...children)
 const box=(left:number,top:number,width:number,height?:number):React.CSSProperties=>({position:'absolute',left,top,width,height})
@@ -67,7 +68,7 @@ function Environment({props}:{props:VideoRenderProps}){
  }
  // Moedas em planos próximos às bordas, sem competir com a descrição.
  for(let i=0;i<4;i++){const x=(i%2?w*.98:-w*.005)+Math.sin(f/20+i)*26,y=ht*(.16+i*.24)+Math.sin(f/26+i)*52;items.push(div({...box(x-55,y,110,110),borderRadius:'50%',border:'5px solid #d7e280',background:'radial-gradient(circle at 35% 25%,#95c76d,#197052 60%,#074935)',boxShadow:'inset 0 0 0 5px #114a2e,0 8px 0 #062e20',...type,fontSize:70,color:'#f8df69',display:'grid',placeItems:'center',rotate:`${i*23-15+Math.sin(f/23)*18}deg`,filter:i===3?'blur(2px)':'none',opacity:.8},i%2?'%':'$'))}
- return h(AbsoluteFill,{style:{background:'radial-gradient(ellipse at 49% 58%,#83ad20 0%,#396624 40%,#173b25 76%,#0b271e 100%)',overflow:'hidden'}},h(VideoBackgroundImage,{props}),...items,props.document.motion?h(CatalogAtmosphere,{props}):null,div({position:'absolute',inset:0,background:'radial-gradient(ellipse,transparent 38%,#02180c77 100%)'}))
+ return h(AbsoluteFill,{style:{background:'radial-gradient(ellipse at 49% 58%,#83ad20 0%,#396624 40%,#173b25 76%,#0b271e 100%)',overflow:'hidden'}},h(VideoBackgroundImage,{props}),...items,props.document.motion?h(CatalogAtmosphere,{props}):null,h(DrawnFxLayer,{props,offers:true}),div({position:'absolute',inset:0,background:'radial-gradient(ellipse,transparent 38%,#02180c77 100%)'}))
 }
 
 function Validity({props,opening=false,compact=false}:{props:VideoRenderProps;opening?:boolean;compact?:boolean}){

@@ -13,6 +13,7 @@ import { BroadcastComposition } from './broadcast'
 import React, { createElement as h } from 'react'
 import { AbsoluteFill, Audio, Img, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion'
 import { VIDEO_THEMES, displayPrice, type VideoRenderProps, type VideoScene } from './model'
+import {DrawnFxLayer} from './drawn-fx'
 const ease=(x:number)=>1-Math.pow(1-Math.max(0,Math.min(1,x)),3)
 const random=(i:number)=>{const n=Math.sin(i*127.1+311.7)*43758.5453;return n-Math.floor(n)}
 const div=(style:React.CSSProperties,...children:React.ReactNode[])=>h('div',{style},...children)
@@ -67,7 +68,7 @@ function ClassicComposition(props:VideoRenderProps){
  return h(AbsoluteFill,{style:{background:`radial-gradient(ellipse at 50% 10%,${theme.accent}22,transparent 55%),linear-gradient(145deg,${theme.base},#080b12)`,fontFamily:'VideoBarlow, sans-serif',overflow:'hidden'}},h(VideoBackgroundImage,{props}),
   h('style',null,`@font-face{font-family:VideoBarlow;src:url('${fonts}/Barlow-Bold.ttf')}@font-face{font-family:VideoCondensed;src:url('${fonts}/BarlowCondensed-ExtraBold.ttf')}`),
   d.theme==='impact'?h(Img,{src:(props.templateBase||'/video-studio/templates')+'/fecha-mes-stage-v1.png',style:{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:.88}}):null,
-  h(Atmosphere,{doc:d}),h(SpectacleAtmosphere,{props}),
+  h(Atmosphere,{doc:d}),h(SpectacleAtmosphere,{props}),h(DrawnFxLayer,{props,offers:true}),
   ...props.scenes.map(s=>h(Sequence,{key:s.id,from:s.from,durationInFrames:s.frames},h(Scene,{scene:s,props}),s.audio&&d.voice.enabled?h(Audio,{src:s.audio,playbackRate:s.playbackRate||1,volume:d.audio.voiceVolume}):null,d.audio.sounds&&props.whoosh?h(Audio,{src:props.whoosh,volume:d.audio.effectsVolume*.55}):null,d.audio.sounds&&props.impact&&s.id!=='outro'?h(Sequence,{from:8},h(Audio,{src:props.impact,volume:d.audio.effectsVolume})):null)),
   props.music&&d.audio.music!=='none'?h(Audio,{src:props.music,loop:true,volume:musicVolume}):null)
 }

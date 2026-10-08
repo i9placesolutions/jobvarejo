@@ -90,3 +90,14 @@ Sons originais sintetizados, sem amostras externas ou cobrança de provedor. Dur
 ## Nome junto à etiqueta — revisão 18
 
 Em todas as 102 receitas, Reels e TV, o nome do produto fica centralizado na coluna da etiqueta, imediatamente acima dela. Faixa escura discreta protege a leitura sobre produto e efeitos. O nome continua editável. A validade permanece abaixo do preço. As seis montagens e as direções temáticas da revisão 17 são preservadas.
+
+## Efeitos desenhados à mão (08/10/2026)
+
+Camada no estilo do pacote RTFX (referência de categorias; nenhum arquivo dele): clipes desenhados do acervo Magnific, fundo sólido removido e convertido para WebM VP9 com alfa.
+
+- Catálogo leve: `shared/video-studio/drawn-fx-catalog.ts` (categorias, momentos, escolha por tema). Composição: `drawn-fx.ts` (`DrawnFxOffer` com as caixas de preço/produto do encarte e `DrawnFxLayer` com transição cobrindo o corte e ambiente em laço). Sorteio determinístico compartilhado com o worker: `drawn-fx-pick.mjs`.
+- Configuração: `document.motion.drawnFx = { price, product, transition, ambient }` (validada no schema). Cada oferta recebe um clipe diferente da categoria.
+- Interface: seção "Efeitos desenhados à mão" na biblioteca de movimentos; combinações prontas `cartoon-boom`, `cartoon-fire`, `manga`, `cartoon-electric`, `cartoon-splash`.
+- Modelos prontos: ao criar um vídeo a partir de uma receita, `drawnFxForTheme` define os efeitos pelo tema (vídeos já criados não mudam).
+- Acervo: `scripts/video-studio/drawn-fx/` (harvest → select → process → publish → `migrate-catalog-to-wasabi.mjs --upload --archive`). Procedência: `docs/video-studio/drawn-fx-provenance.json`. Teste visual: `node --env-file=.env workers/video-studio/drawn-fx-fixture.mjs <pasta> <modelo> <combinação> <formato> <imagens...>`.
+- Downloads de vídeo pela chave de API consomem créditos e esbarram em limite; preferir o conector Magnific da conta Premium, respeitando o intervalo entre downloads.

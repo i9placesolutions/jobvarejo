@@ -6,6 +6,8 @@ import {dirname, join, resolve, sep} from 'node:path'
 import {Transform} from 'node:stream'
 import {pipeline} from 'node:stream/promises'
 import {GetObjectCommand,S3Client} from '@aws-sdk/client-s3'
+import drawnFxLibrary from '../../shared/video-studio/drawn-fx-library.json' with {type:'json'}
+import {drawnFxFiles} from '../../shared/video-studio/drawn-fx-pick.mjs'
 
 const SHA256=/^[a-f0-9]{64}$/
 const safeRelativePath=(value)=>typeof value==='string'&&value.length>0&&!value.includes('\\')&&!value.split('/').some(part=>!part||part==='.'||part==='..')
@@ -108,6 +110,8 @@ export function selectCatalogTemplateAssets(document,format,{recipe,backgroundAs
   const sprite=spriteAssets[effect]
   if(sprite)assets.add(`templates/effects/kenney-${sprite}.png`)
  }
+ // Efeitos desenhados: só os clipes que o sorteio da composição vai usar neste documento.
+ for(const file of drawnFxFiles(document,drawnFxLibrary.clips,(document?.offers?.length||0)+2))assets.add(`templates/${file}`)
  if(recipe){
   const chosen=document?.background
   const energy=chosen&&backgroundAsset?backgroundAsset(chosen,format):format==='vertical'?(recipe.energyBackgroundVertical||recipe.energyBackground):recipe.energyBackground

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {MOTION_VARIATIONS,PRICE_ACCENTS,MOTION_PRESETS,PRODUCT_ENTRANCES,TEXT_ENTRANCES,CAMERA_MOVEMENTS,SCENE_TRANSITIONS,ATMOSPHERE_EFFECTS,SOUND_EFFECTS,PRODUCT_FINISHES,motionSettings,identifyMotionPreset,soundAsset,type VideoMotionSettings} from '~/shared/video-studio/effect-catalog'
 import type {VideoDocument} from '~/shared/video-studio/model'
+import {DRAWN_FX_CATEGORIES,DRAWN_FX_MOMENTS,DRAWN_FX_FOR_MOMENT,type DrawnFxMoment,type DrawnFxCategory} from '~/shared/video-studio/drawn-fx-catalog'
 const doc=defineModel<VideoDocument>({required:true})
 const m=computed(()=>motionSettings(doc.value.motion))
 const selected=computed(()=>identifyMotionPreset(doc.value.motion,doc.value.transition))
@@ -9,6 +10,9 @@ function apply(id:string){const p=MOTION_PRESETS.find(p=>p.id===id)!;doc.value={
 function set(key:keyof VideoMotionSettings,value:string){doc.value={...doc.value,motion:{...m.value,[key]:value}};if(key==='camera'&&value!=='none'&&!doc.value.effects.includes('shake'))doc.value.effects.push('shake')}
 function atmosphere(id:VideoMotionSettings['atmosphere'][number]){const current=m.value.atmosphere;if(!current.includes(id)&&current.length>=8)return;doc.value={...doc.value,motion:{...m.value,atmosphere:current.includes(id)?current.filter(v=>v!==id):[...current,id]}}}
 const value=(e:Event)=>(e.target as HTMLSelectElement).value
+// Efeitos desenhados à mão: uma categoria por momento; cada oferta sorteia um clipe diferente da categoria.
+const drawnOptions=(moment:DrawnFxMoment)=>DRAWN_FX_CATEGORIES.filter(c=>DRAWN_FX_FOR_MOMENT[moment].includes(c.id))
+function setDrawnFx(moment:DrawnFxMoment,category:string){const next={...(m.value.drawnFx||{}),[moment]:category as DrawnFxCategory};doc.value={...doc.value,motion:{...m.value,drawnFx:Object.values(next).some(v=>v&&v!=='none')?next:undefined}}}
 // Nova combinação de transições/entradas/destaques por oferta, sem mudar o estilo base escolhido.
 function shuffleVariation(){doc.value={...doc.value,motionVariation:'varied',variationSeed:Math.floor(Math.random()*2**31)}}
 </script>
@@ -42,6 +46,7 @@ function shuffleVariation(){doc.value={...doc.value,motionVariation:'varied',var
    <label>Transição entre ofertas<select v-model="doc.transition"><option v-for="t in SCENE_TRANSITIONS" :key="t.id" :value="t.id">{{ t.name }}</option></select></label>
    <label>Velocidade das entradas<select :value="m.speed" @change="set('speed',value($event))"><option value="fast">Rápida · varejo</option><option value="balanced">Mais moderada</option></select></label>
   </div><p class="motion-subtitle">Elementos adicionais no fundo · até 8 ao mesmo tempo</p><div class="motion-checks"><label v-for="effect in ATMOSPHERE_EFFECTS" :key="effect.id"><input type="checkbox" :checked="m.atmosphere.includes(effect.id)" :disabled="!m.atmosphere.includes(effect.id)&&m.atmosphere.length>=8" @change="atmosphere(effect.id)"/>{{ effect.name }}</label></div></details>
+  <details open><summary>Efeitos desenhados à mão</summary><p class="motion-note">Explosões, fogo, fumaça, raios, respingos e quadrinhos desenhados. Cada oferta recebe um efeito diferente da categoria escolhida.</p><div class="motion-fields"><label v-for="moment in DRAWN_FX_MOMENTS" :key="moment.id">{{ moment.name }}<select :value="m.drawnFx?.[moment.id]||'none'" @change="setDrawnFx(moment.id,value($event))"><option v-for="c in drawnOptions(moment.id)" :key="c.id" :value="c.id">{{ c.name }}</option></select></label></div></details>
   <details><summary>Escolher e ouvir os sons</summary><p class="motion-note">Os sons acompanham a entrada e o destaque do preço. O volume pode ser ajustado junto da música, abaixo.</p><div class="motion-fields"><label v-for="field in ([{key:'transitionSound',name:'Som da entrada'},{key:'accentSound',name:'Som do impacto'}] as const)" :key="field.key">{{ field.name }}<select :value="m[field.key]" @change="set(field.key,value($event))"><option v-for="sound in SOUND_EFFECTS" :key="sound.id" :value="sound.id">{{ sound.name }}</option></select><audio :key="m[field.key]" controls preload="none" :src="'/video-studio/audio/'+soundAsset(m[field.key])"/></label></div></details>
  </section>
 </template>

@@ -9,7 +9,7 @@ const root = resolve(import.meta.dirname, '../..')
 const source = join(root, 'public/video-studio')
 const archive = join(root, 'output/video-studio-catalog-source')
 const manifestFile = join(root, 'shared/video-studio/catalog-assets.json')
-const types = { '.png': 'image/png', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.mp4': 'video/mp4', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' }
+const types = { '.png': 'image/png', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.mp4': 'video/mp4', '.webm': 'video/webm', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' }
 const upload = process.argv.includes('--upload')
 const shouldArchive = process.argv.includes('--archive')
 if (shouldArchive && !upload) throw new Error('--archive exige --upload com verificação no Wasabi.')
