@@ -21,7 +21,13 @@ import { compactBusinessFooter, createFooterPaymentGroup, layoutOfferValidityBan
 const fabric = window.fabric;
 if (!globalThis.crypto.randomUUID) globalThis.crypto.randomUUID = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
 const KEYS = ['name','isProductZone','isGridZone','isFrame','_customId','_zoneGlobalStyles','_zoneStateSnapshot','_zonePadding','_zoneTemplateSnapshot','_zoneTemplateSnapshotId','structureByProductCount','structureByProductCountByPreviewFormat','structureVariantsByProductCountByPreviewFormat','structureVariantByProductCountByPreviewFormat','quickValidityLayout','dynamicFieldBaseFontSize','parentFrameId','footerLayout','footerStack','footerColumnWeights','footerPaymentColumns','footerPaymentTile','footerPaymentWidth','footerPaymentHeight','businessProfileField','quickFieldEnabled','quickLogoUseProfileInTemplate'];
-window.render = async (json, w, h, format, productsByZone) => {
+window.render = async (json, w, h, format, productsByZone, options = {}) => {
+  // As faces só carregam quando usadas: sem carregar antes, o layout mede o texto com a fonte reserva
+  // (mais larga) e a validade sai descentralizada.
+  const faces = new Set();
+  const collect = node => { if (node?.fontFamily) faces.add((node.fontWeight || 400) + ' 40px "' + node.fontFamily + '"'); for (const child of node?.objects || []) collect(child); };
+  (json.objects || []).forEach(collect);
+  await Promise.all([...faces].map(face => document.fonts.load(face).catch(() => [])));
   await document.fonts.ready;
   const source = JSON.parse(JSON.stringify(json));
   const canvas = new fabric.StaticCanvas(document.getElementById('canvas'), { width: w, height: h, renderOnAddRemove: false, enableRetinaScaling: false });
@@ -44,8 +50,10 @@ window.render = async (json, w, h, format, productsByZone) => {
   restoreCanvasStickerOutlines(canvas, () => document.createElement('canvas'));
   // Geometria final do rodapé, como o app organiza, para gravar no modelo. Só objetos do rodapé:
   // logo, selo e produtos nunca são reescritos por aqui.
+  // options.persistValidity: grava também a validade já diagramada (data e calendário).
   const isFooterPart = o => /^footer-/.test(String(o?.name || '')) || ['icon-whatsapp', 'icon-address'].includes(o?.name) ||
-    ['whatsapp', 'address', 'footerPaymentImages'].includes(o?.businessProfileField);
+    ['whatsapp', 'address', 'footerPaymentImages'].includes(o?.businessProfileField) ||
+    (options.persistValidity === true && /^header-validity(-calendar.*)?$/.test(String(o?.name || '')));
   const GEO = ['left','top','width','height','scaleX','scaleY','originX','originY','visible','fontSize','text','lineHeight','dynamicFieldHeight','dynamicFieldBaseFontSize','dynamicFieldAutoFitFontSize','dynamicFieldAutoHeight','footerPaymentWidth','footerPaymentHeight'];
   const persisted = JSON.parse(JSON.stringify(json));
   persisted.objects = persisted.objects.map(saved => {
@@ -59,6 +67,7 @@ window.render = async (json, w, h, format, productsByZone) => {
       return object;
     }
     for (const k of GEO) if (live[k] !== undefined) saved[k] = live[k];
+    if (/^header-validity/.test(String(saved.name || '')) && live.textAlign) saved.textAlign = live.textAlign;
     return saved;
   });
   // Produtos: grade nativa (calculateManualProductSlots) e card nativo (createManualProductCard) por zona.
@@ -143,8 +152,8 @@ export async function renderer(files, fetchKey = null) {
   await call('Page.navigate', { url: 'http://127.0.0.1:' + srv.address().port });
   for (let i = 0; i < 150; i++) { if ((await call('Runtime.evaluate', { expression: 'window.__ready === true', returnByValue: true })).result?.value) break; await new Promise(r => setTimeout(r, 100)); }
   return {
-    async render(canvas, w, h, format, productsByZone) {
-      const r = await call('Runtime.evaluate', { expression: `window.render(${JSON.stringify(canvas)},${w},${h},${JSON.stringify(format)},${JSON.stringify(productsByZone)})`, awaitPromise: true, returnByValue: true });
+    async render(canvas, w, h, format, productsByZone, options = {}) {
+      const r = await call('Runtime.evaluate', { expression: `window.render(${JSON.stringify(canvas)},${w},${h},${JSON.stringify(format)},${JSON.stringify(productsByZone)},${JSON.stringify(options)})`, awaitPromise: true, returnByValue: true });
       if (!r.result?.value?.png?.startsWith('data:image/png')) throw Error(JSON.stringify(r.exceptionDetails || r.result).slice(0, 1500) + '\n' + logs.slice(-5).join('\n'));
       return { png: Buffer.from(r.result.value.png.split(',')[1], 'base64'), checks: r.result.value.checks, slots: r.result.value.slots, persisted: JSON.parse(r.result.value.persisted) };
     },
