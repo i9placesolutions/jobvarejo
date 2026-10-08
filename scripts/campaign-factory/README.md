@@ -1,6 +1,6 @@
 ---
 name: campanhas-varejo
-description: Criar novas campanhas de varejo completas no JobVarejo (modelo de encarte em 5 formatos, 8 cartazes do Cartazista, vídeo vertical e horizontal) com selos 3D, fundos e elementos baixados do Magnific via API. Use quando o usuário pedir novos modelos/campanhas de encarte, cartaz ou vídeo "como o Sextou", com selo 3D, logo/WhatsApp/endereço/data dinâmicos.
+description: Criar novas campanhas de varejo completas no JobVarejo (modelo de encarte em 5 formatos, 8 cartazes do Cartazista, vídeo vertical e horizontal) com selos 3D, fundos e elementos baixados do Magnific via API. Dois formatos de encarte — "Sextou" (fundo cheio gerado) e "cabeçalho com faixa" (arte no cabeçalho, data na faixa, painel do Instagram, campo claro). Use quando o usuário pedir novos modelos/campanhas de encarte, cartaz ou vídeo, trocar selos de modelos existentes ou ajustar validade/Instagram/selo em lote.
 ---
 
 # Campanhas de varejo (encarte + cartaz + vídeo) com acervo Magnific
@@ -19,6 +19,10 @@ Fábrica versionada em `scripts/campaign-factory/` (lote de referência: 10 camp
 - **Rodapé completo**: cada bloco com ícone + título + valor — `FALE CONOSCO`, `ENDEREÇO`, `CARTÕES ACEITOS` (o `compose.mjs` já cria via `scripts/lib/footer-titles.mjs`). Padrão geral em `docs/encartes-padrao-design.md`; para ajustar modelos existentes em lote, `scripts/flyer-templates/` (snapshot → standardize plan → persist).
 - Cartazes **seguem o padrão do Cartazista** (modelo padrão com fonte de pincel, A1–A7 + Faixa 2 m, cabeçalho `thematic-seal`), gerados pelo próprio código do app.
 - **Piloto antes do lote**: gerar 1–2 campanhas, mostrar folhas (encartes, cartazes, quadros de vídeo + MP4) e só gravar na conta após aprovação.
+- **Selo grande e na paleta** (08/10/2026): o selo ocupa toda a altura livre do cabeçalho (do topo até a validade) e a largura até perto da logo; selo "largo e baixo" (texto em faixa) é reprovado. A cor dominante do selo tem que combinar com o modelo (painel, validade, rodapé, base); se destoar, recolorir só a faixa de matiz (`scripts/flyer-templates/recolor-seal.mjs`).
+- **Validade em uma linha**, centralizada (ícone + texto), dentro da faixa reservada pela arte; nunca coberta por painel/selo. Painel "Siga nosso Instagram" compacto (título e @ juntos).
+- **Prévia igual ao editor**: a miniatura/prévia mostra o modelo como abre para edição (logo e contatos do modelo).
+- **Conferir TODOS os formatos** na prancha (feed, quadrado, stories, impressão, TV) — o quadrado e a TV têm geometria própria.
 
 ## Passo a passo
 1. **Lote novo**: `bash scripts/campaign-factory/init.sh campanhas-<tema>-AAAA-MM-DD` (copia scripts, troca caminhos, instala `ag-psd`, compila `runtime.mjs`). Rodar comandos de busca/download dentro da pasta do lote com `node --env-file=../../.env`.
@@ -38,7 +42,24 @@ Fábrica versionada em `scripts/campaign-factory/` (lote de referência: 10 camp
     - `node <lote>/render-video.mjs --doc` por campanha (`SLUG=`) e depois `node --env-file=.env <lote>/persist-extras.mjs` (8 cartazes + projeto de vídeo + 2 renders + vínculo no `template_config`). Esta etapa complementa o `template_config`, então roda sempre depois do `persist.mjs`.
 12. **Encerrar**: saldo Magnific inalterado, procedência atualizada, entregar pasta `entrega/` com folhas e MP4.
 
+## Formato "cabeçalho com faixa" (modelos de 03/10, corrigidos em 08/10)
+Arte só no cabeçalho, vão de cor de base onde fica a validade, campo de produtos claro, rodapé com arte,
+logo + painel do Instagram à direita do selo. Ferramentas em `scripts/flyer-templates/` (todas com plano sem gravar → prancha → gravação com leitura de volta → reversão).
+1. **Snapshot** (somente leitura, cópia de segurança): `node --env-file=.env scripts/flyer-templates/snapshot.mjs output/<lote>/before`.
+2. **Selo e fundo do acervo** (download, sem IA): na pasta do lote, `scan.mjs`/`scan2.mjs <saída> vector <termos>` → `download.mjs` (PSD do selo) / `download-photo.mjs` (fundo) → `inspect.mjs` + `extract.mjs` (camada do selo) → `existing.mjs` + `similar.mjs`. Fundo sem texto escrito; preferir selo compacto e alto.
+3. **Spec** da campanha (`spec.json`): `slug`, `name`, `baseProject` (um modelo corrigido desse formato, ex.: Super Ofertas — Moedas `1f1f2fbe-…`), `seal`, `background`, `header.y`/`footer.y` (fração da altura da arte para o recorte), `field` (degradê claro), `colors` (de/para das cores do modelo-base; levantar as cores visíveis antes).
+4. **Gerar** (não grava): `node --env-file=.env scripts/flyer-templates/banded-campaign.mjs <snapshot> <spec.json> <saída>` → `png/` dos 5 formatos, `after/`, `assets.json`. Já aplica selo grande (`replace-seal-lib`), validade no vão e painel compacto/fora da validade (`validity-gap-lib`).
+5. **Prancha dos 5 formatos** e aprovação do usuário.
+6. **Criar o modelo**: `create-template.mjs <saída>` (simulação) → `--confirm` (arquivos e páginas com leitura de volta; id de modelo próprio; não copia variações de estrutura nem vínculos de vídeo/cartaz do modelo-base).
+
+Correções em lote de modelos existentes (mesmo fluxo plano → prancha → `persist.mjs` → `revert.mjs`):
+- `validity-gap.mjs <snapshot> <saída>`: validade no vão, painel do Instagram compacto e acima da validade no quadrado.
+- `replace-seal.mjs plan <snapshot> <saída> --map=<modelo>:<selo.png>,...` → `upload` → `persist.mjs`.
+
 ## Armadilhas já resolvidas
+- Quadrado do formato com faixa: o vão da validade fica atrás do painel do Instagram — subir o painel e reduzir a área da logo (`liftInstagramAboveValidity`).
+- Stories do formato com faixa: `campaign-bg-header` vinha oculto; TV usa `campaign-bg-tv-campaign-column`/`-retail-field`/`-footer`.
+- Renderizador do lote: pré-carregar as fontes antes do layout (senão a validade sai descentralizada); a prévia do servidor registra famílias com espaço ("Barlow Condensed").
 - `migrate-catalog-to-wasabi.mjs --archive` **move** os arquivos de `public/video-studio/templates` para `output/video-studio-catalog-source/`; `render-posters.mjs` serve os arquivados.
 - Raios girando no vídeo: PNG cinza sobre preto (sem alfa) + `blend=screen`; com alfa o `rotate` vira branco chapado.
 - Estrela fixa atrás do selo só no encarte (no vídeo o selo se move).
