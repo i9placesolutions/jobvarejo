@@ -101,7 +101,14 @@ export interface FlyerCustomization {
   validityDateFormat?: 'numeric' | 'long'
   /** Valores só deste pedido; o cadastro da loja só muda com confirmação explícita. */
   business?: { whatsapp?: string; address?: string; instagram?: string }
+  /** Estrutura pedida pelo cliente; sem ela, o sistema escolhe pelas ofertas (utils/flyerStructure). */
+  structure?: FlyerStructureChoice
+  /** Ofertas marcadas como destaque/carro-chefe (até 2), que viram Produto Herói. */
+  featuredProductIds?: string[]
 }
+
+export const FLYER_STRUCTURE_CHOICES = ['classico', 'heroi', 'setores', 'lateral'] as const
+export type FlyerStructureChoice = typeof FLYER_STRUCTURE_CHOICES[number]
 
 export const FLYER_CUSTOMIZATION_LIMITS = {
   nameScale: [0.5, 2.5], labelScale: [0.6, 1.6], badgeScale: [0.6, 1.6], logoScale: [0.6, 1.8], sealScale: [0.6, 1.8]
@@ -163,6 +170,11 @@ export function normalizeFlyerCustomization(value: unknown): FlyerCustomization 
     const instagram = typeof source.business.instagram === 'string' ? source.business.instagram.trim() : ''
     if (/^@?[a-z0-9._]{1,30}$/i.test(instagram)) business.instagram = instagram.startsWith('@') ? instagram : `@${instagram}`
     if (Object.keys(business).length) out.business = business
+  }
+  if (FLYER_STRUCTURE_CHOICES.includes(source.structure)) out.structure = source.structure
+  if (Array.isArray(source.featuredProductIds)) {
+    const featured = [...new Set(source.featuredProductIds.map(id).filter(Boolean) as string[])].slice(0, 2)
+    if (featured.length) out.featuredProductIds = featured
   }
   return Object.keys(out).length ? out : undefined
 }

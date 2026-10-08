@@ -294,7 +294,8 @@ def render(payload, output_dir: Path, fabric_path: Path):
     if not zones:
         fail("O modelo não possui área de produtos editável.")
     page_capacity = 9 if story else 16
-    max_slots = min(len(zones), page_capacity) if len(zones) > 1 else page_capacity
+    # Várias zonas dividem a capacidade da página (cada uma recebe várias ofertas).
+    max_slots = page_capacity
     page_count = payload.get("pageCount")
     if page_count is not None and (not isinstance(page_count, int) or isinstance(page_count, bool) or page_count < 2 or page_count > 100):
         fail("Quantidade de partes inválida para a divisão do encarte.")
@@ -400,11 +401,29 @@ def render(payload, output_dir: Path, fabric_path: Path):
               return backdrop;
             });
             const sortedZones = zones.sort((a, b) => a.top - b.top || a.left - b.left);
+            const previewFormat = String(input.formatId || '').toLowerCase() === 'stories' ? 'story'
+              : String(input.formatId || '').toLowerCase() === 'square' ? 'post'
+              : String(input.formatId || '').toLowerCase() === 'tv' ? 'banner'
+              : String(input.formatId || '').toLowerCase() === 'print' ? 'a4' : 'feed';
+            // Várias zonas: cada uma recebe suas ofertas (setor pelo nome da zona, resto pela área)
+            // e monta a própria grade. A lista de produtos é reordenada para seguir os encaixes.
+            let pageProducts = entry.products;
             const zoneSlots = sortedZones.length > 1
-              ? sortedZones.slice(0, input.capacity).map((zone, zoneIndex) => {
-                  const bounds = zone.getBoundingRect();
-                  return {zoneIndex, left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height};
-                })
+              ? (() => {
+                  const assignment = JobVarejoNative.assignProductsToZones(entry.products,
+                    sortedZones.map(zone => { const b = zone.getBoundingRect(); return {id: zone._customId || zone.name, name: zone.zoneName || zone._zoneStateSnapshot?.zone?.name || '', area: b.width * b.height}; }));
+                  const byId = new Map(entry.products.map(product => [product.id, product]));
+                  const slots = [];
+                  pageProducts = [];
+                  sortedZones.forEach((zone, zoneIndex) => {
+                    const ids = assignment[zone._customId || zone.name] || [];
+                    if (!ids.length) return;
+                    const bounds = zone.getBoundingRect();
+                    JobVarejoNative.calculateManualProductSlots(zone, ids.length, previewFormat, bounds)
+                      .forEach((slot, index) => { slots.push({ ...slot, zoneIndex }); pageProducts.push(byId.get(ids[index])); });
+                  });
+                  return slots;
+                })()
               : (() => {
                   const zone = sortedZones[0];
                   const bounds = zone.getBoundingRect();
@@ -421,8 +440,8 @@ def render(payload, output_dir: Path, fabric_path: Path):
                 })();
             const zoneState = sortedZones.map(zone => ({visible: zone.visible, excludeFromExport: zone.excludeFromExport}));
             sortedZones.forEach(zone => { zone.visible = false; zone.excludeFromExport = true; });
-            for (let i = 0; i < entry.products.length; i++) {
-              const product = entry.products[i], slot = zoneSlots[i], zone = sortedZones[slot?.zoneIndex];
+            for (let i = 0; i < pageProducts.length; i++) {
+              const product = pageProducts[i], slot = zoneSlots[i], zone = sortedZones[slot?.zoneIndex];
               if (!zone) throw new Error('Não há espaço no modelo para todos os produtos.');
               const left = slot.width ? slot.left : zone.left || 0, top = slot.height ? slot.top : zone.top || 0;
               const width = slot.width || zone.width * (zone.scaleX || 1), height = slot.height || zone.height * (zone.scaleY || 1);

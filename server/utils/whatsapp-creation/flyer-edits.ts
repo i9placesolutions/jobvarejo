@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import {
   FLYER_CUSTOMIZATION_LIMITS, mergeFlyerCustomization,
-  type CreationProduct, type FlyerCustomization, type FlyerImageFillCustomization
+  type CreationProduct, type FlyerCustomization, type FlyerImageFillCustomization, type FlyerStructureChoice
 } from '~/shared/whatsapp-creation'
 import { isAlcoholicProduct } from '~/utils/product-card-configuration'
 import { parseLiteralValidityPeriod } from './validity-period'
@@ -12,7 +12,7 @@ import { parseLiteralValidityPeriod } from './validity-period'
  * personalização absoluta. Nada neste arquivo acessa banco, storage ou rede.
  */
 
-export const FLYER_EDIT_TARGETS = ['logo', 'seal', 'product_names', 'price_label', 'alcohol_badge', 'highlight_color', 'card_color', 'validity_format', 'whatsapp', 'address', 'instagram', 'product_images'] as const
+export const FLYER_EDIT_TARGETS = ['logo', 'seal', 'product_names', 'price_label', 'alcohol_badge', 'highlight_color', 'card_color', 'validity_format', 'whatsapp', 'address', 'instagram', 'product_images', 'structure', 'featured_products'] as const
 export const FLYER_EDIT_OPERATIONS = ['increase', 'decrease', 'set', 'choose', 'hide', 'show'] as const
 export type FlyerEditTarget = typeof FLYER_EDIT_TARGETS[number]
 export type FlyerEditAmount = 'little' | 'normal' | 'lot'
@@ -88,7 +88,8 @@ const COMBINATIONS: Record<FlyerEditTarget, ReadonlyArray<FlyerEdit['operation']
   logo: ['increase', 'decrease'], seal: ['increase', 'decrease'], product_names: ['increase', 'decrease'],
   price_label: ['increase', 'decrease', 'choose'], alcohol_badge: ['increase', 'decrease'],
   highlight_color: ['set'], card_color: ['set'], validity_format: ['set'],
-  whatsapp: ['set'], address: ['set'], instagram: ['set'], product_images: ['set']
+  whatsapp: ['set'], address: ['set'], instagram: ['set'], product_images: ['set'],
+  structure: ['set'], featured_products: ['set', 'hide']
 }
 
 /**
@@ -108,7 +109,9 @@ const TARGET_WORDS: Record<FlyerEdit['target'], RegExp> = {
   whatsapp: /\bwhats|zap|telefone|celular|contato/,
   address: /\bendereco|rua|avenida|bairro/,
   instagram: /\binsta|@/,
-  product_images: /\bfoto|imagem|imagens/
+  product_images: /\bfoto|imagem|imagens/,
+  structure: /\bsetor|departamento|secao|sessao|categoria|corredor|lateral|coluna|grade|tudo junto|junta tudo|separ/,
+  featured_products: /\bdestaque|destacar|carro.?chefe|principal|maior|chamariz/
 }
 export function validFlyerEdits(edits: readonly FlyerEdit[] | undefined, text: string): FlyerEdit[] {
   if (!edits?.length) return []
@@ -210,6 +213,22 @@ const FORMAT_WORDS: Array<[RegExp, 'numeric' | 'long']> = [
   [/\b(?:extenso|por extenso|long|longo|escrit[oa]|nome do mes|com o nome)\b/, 'long'],
   [/\b(?:numeric[oa]?|numero|numeros|barra|barras|dd mm|curto|curta)\b/, 'numeric']
 ]
+
+/** Como cada estrutura é descrita na resposta ao cliente. */
+export const STRUCTURE_LABELS: Record<FlyerStructureChoice, string> = {
+  classico: 'em grade completa', heroi: 'com produto em destaque', setores: 'separado por setor', lateral: 'com faixa lateral'
+}
+const STRUCTURE_WORDS: Array<[RegExp, FlyerStructureChoice]> = [
+  [/\b(?:sem setor|tudo junto|junta tudo|grade|normal|padrao|classic[oa]|como (?:era|estava)|sem destaque)\b/, 'classico'],
+  [/\b(?:setor(?:es)?|departamento(?:s)?|secao|secoes|sessao|sessoes|categoria(?:s)?|corredor(?:es)?)\b/, 'setores'],
+  [/\b(?:lateral|faixa (?:do|no) lado|coluna|contatos? (?:do|no) lado)\b/, 'lateral'],
+  [/\b(?:destaque|heroi|carro.?chefe|produto principal|oferta principal)\b/, 'heroi']
+]
+/** Estrutura pedida pelo cliente (palavras da mensagem); undefined quando não dá para saber. */
+export function resolveStructureChoice(value: string | undefined): FlyerStructureChoice | undefined {
+  const text = normalize(String(value || ''))
+  return STRUCTURE_WORDS.find(([pattern]) => pattern.test(text))?.[1]
+}
 
 function resolveImageFill(value: string | undefined): FlyerImageFillCustomization | undefined {
   const text = normalize(String(value || ''))
@@ -331,6 +350,29 @@ export function resolveFlyerEdits(edits: readonly FlyerEdit[], context: FlyerEdi
         patch = { ...patch, imageFill: fill }
         changes.push(`${fillLabel(fill)} em todos os produtos`)
       }
+      continue
+    }
+    if (edit.target === 'structure') {
+      const choice = resolveStructureChoice(edit.value) || resolveStructureChoice(context.text)
+      if (!choice) { unsupported.push('Posso montar o encarte em grade completa, com produto em destaque, separado por setor ou com faixa lateral. Qual você prefere?'); continue }
+      if (nextState().structure === choice) { notices.push(`O encarte já está ${STRUCTURE_LABELS[choice]}.`); continue }
+      patch = { ...patch, structure: choice }
+      changes.push(`encarte ${STRUCTURE_LABELS[choice]}`)
+      continue
+    }
+    if (edit.target === 'featured_products') {
+      if (edit.operation === 'hide') {
+        patch = { ...patch, featuredProductIds: [], ...(nextState().structure === 'heroi' ? { structure: 'classico' as const } : {}) }
+        changes.push('sem produto em destaque')
+        continue
+      }
+      const items = itemsOf(edit, 'unclear')
+      if (items.scope !== 'items') { asks.push({ kind: 'items', target: 'featured_products' }); continue }
+      const ids = items.ids.slice(0, 2)
+      const names = ids.map(id => context.products.find(product => product.id === id)?.name).filter(Boolean)
+      patch = { ...patch, featuredProductIds: ids, structure: 'heroi' }
+      changes.push(`${ids.length === 1 ? 'destaque' : 'destaques'}: ${names.join(' e ')}`)
+      if (items.ids.length > 2) notices.push('Destaco no máximo 2 produtos; usei os 2 primeiros que você citou.')
       continue
     }
     unsupported.push('Esse ajuste eu ainda não consigo fazer pelo WhatsApp; pelo painel de edição dá para fazer.')

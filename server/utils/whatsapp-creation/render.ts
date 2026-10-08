@@ -36,6 +36,9 @@ import { extractStorageKeyFromRef } from '~/utils/storageRef'
 import { ownedStorageBytes } from './media'
 import { ensureProcessedWhatsAppPhoto, isRawWhatsAppPhoto } from './product-photo'
 import { bakeLogoCrops } from './logo-crop'
+import { orderForStructure, pickFlyerStructure, structureNotice, type FlyerStructureBlueprint } from './flyer-structure'
+import { expandSectorPanel } from '~/utils/flyerSectorPanel'
+import type { FlyerStructureFormat } from '~/utils/flyerStructure'
 import { CARTAZISTA_FORMATS, CARTAZISTA_THEMES, type CartazistaModelKey, type CartazistaDocument, type CartazistaProduct } from '~/types/cartazista'
 import { createCartazistaDocument, applyCartazistaProduct } from '~/utils/cartazista/composition'
 import { hydrateCartazistaBusiness } from '~/utils/cartazista/business-bindings'
@@ -694,14 +697,20 @@ async function renderCartazista(order: CreationOrder, user: AuthenticatedUser, p
   return { artifacts: outputs }
 }
 
-async function getTemplateCanvasPage(project: any, format: CreationFormat, formatId: string, userId: string): Promise<{ page: any; canvas: any }> {
+/**
+ * Página do modelo no formato pedido. Com `blueprint` (variação de estrutura), o canvas vem da
+ * variação; os metadados da página (tema, formato) continuam os da página normal do modelo.
+ */
+async function getTemplateCanvasPage(project: any, format: CreationFormat, formatId: string, userId: string, blueprint?: FlyerStructureBlueprint | null): Promise<{ page: any; canvas: any }> {
   const source = Array.isArray(project.canvas_data) ? project.canvas_data : project.canvas_data?.pages
   if (!Array.isArray(source)) fail(422, 'O modelo selecionado não possui páginas.')
   const page = source.find((candidate: any) => String(candidate.templateFormatId || '') === formatId) || source.find((candidate: any) => Number(candidate.width) === format.width && Number(candidate.height) === format.height)
   if (!page || Number(page.width) !== format.width || Number(page.height) !== format.height) fail(422, `O cabeçalho não possui uma página no formato ${formatId}.`)
-  let canvas = page.canvasData
-  if (!canvas && page.canvasDataPath) {
-    const key = String(normalizeStoredStorageRef(page.canvasDataPath) || '')
+  if (blueprint && (Number(blueprint.width) !== format.width || Number(blueprint.height) !== format.height)) fail(422, `A variação ${blueprint.structureId} não tem o tamanho do formato ${formatId}.`)
+  let canvas = blueprint ? undefined : page.canvasData
+  const canvasPath = blueprint ? blueprint.canvasDataPath : page.canvasDataPath
+  if (!canvas && canvasPath) {
+    const key = String(normalizeStoredStorageRef(canvasPath) || '')
     const ownerId = String(project.user_id)
     if (!isValidStoragePath(key) || !key.startsWith(`projects/${ownerId}/`)) fail(403, 'O canvas do cabeçalho está fora do projeto de origem autorizado.')
     const result = await s3Bytes(key, 32 * 1024 * 1024)
@@ -994,7 +1003,13 @@ async function buildFlyerPages(order: CreationOrder, user: AuthenticatedUser, ac
   const payloadPages: FlyerPayloadPage[] = []
   const notices = new Set<string>()
   for (const format of formats) {
-    const { page, canvas } = await getTemplateCanvasPage(projectTemplate, format, format.id, user.id)
+    // Estrutura do encarte (Setores, Produto Herói, Faixa Lateral) quando o modelo tem variações.
+    const structure = pickFlyerStructure(order, customization, projectTemplate.template_config, format.id)
+    const loaded = await getTemplateCanvasPage(projectTemplate, format, format.id, user.id, structure?.blueprint)
+    const page = loaded.page
+    let canvas = loaded.canvas
+    if (structure?.blueprint && structure.plan.structure === 'setores') canvas = expandSectorPanel(canvas, structure.plan.sectors, format.id as FlyerStructureFormat).canvas
+    if (structure?.blueprint) { const notice = structureNotice(structure.plan, Boolean(customization?.structure || customization?.featuredProductIds?.length)); if (notice) notices.add(notice) }
     assertFlyerProfileBindings(canvas, profile, !!logo, order.validity)
     const templateConfig = projectTemplate.template_config || {}
     const themeCandidates = [page.templateThemeId, page.templateThemeName, templateConfig.category,
@@ -1023,7 +1038,7 @@ async function buildFlyerPages(order: CreationOrder, user: AuthenticatedUser, ac
       payloadPages.push({ format, page: { canvas: preparedCanvas, png: null }, productIds: [], department: null })
       continue
     }
-    const items = order.products.map((product) => {
+    const items = orderForStructure(order.products, structure?.plan).map((product) => {
       const image = images.get(product.id)
       if (!image && !options.allowMissingImages) return fail(422, `A foto de “${product.name}” não está disponível.`)
       return customizeFlyerItem({ ...product, imageDataUrl: image?.dataUrl || '', condition: product.condition || order.conditions, validity: order.validity }, effective)

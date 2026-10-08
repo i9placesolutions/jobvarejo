@@ -10,6 +10,8 @@ export { resolveProductZoneStructure } from '../../utils/product-zone-structure'
 export { fitResponsiveProductTypography, harmonizeProductCardTypography } from '../../utils/productCardResponsiveTypography'
 export { layoutHeaderInstagram } from '../../utils/referenceFlyerLayout'
 export { layoutInlineFooterValidity } from '../../utils/inlineFooterValidityLayout'
+// Distribuição das ofertas entre várias zonas (setores) da mesma página.
+export { assignProductsToZones } from '../../utils/flyerStructure'
 
 import { createProductCardConfigurationLayout } from '../../utils/editorProductCardConfiguration'
 import { normalizePriceGroupPlacementInCard } from '../../utils/fabricMeasure'

@@ -63,6 +63,73 @@ export const proposalSchema = z.object({
     z.array(flyerEditSchema).max(6)).optional()
 }).strict()
 export type Proposal = z.infer<typeof proposalSchema>
+
+// O modelo costuma "preencher o contrato" inteiro com vazios (kind: "", division: "", choice: 0).
+// Vazio, null, lista vazia e número não positivo valem como campo não informado.
+const isBlankProposalValue = (value: unknown): boolean => value === null || value === undefined ||
+  (typeof value === 'string' && !value.trim()) || (Array.isArray(value) && value.length === 0)
+const POSITIVE_PROPOSAL_NUMBERS = new Set(['choice', 'pageCount', 'approvalRevision'])
+const PRODUCT_INPUT_KEYS = new Set(Object.keys(productInput.shape))
+
+/**
+ * Primeiro objeto JSON completo do texto do modelo. Quando o modelo entra em repetição e estoura o
+ * limite de tokens, o objeto do começo costuma estar inteiro; o resto (lixo repetido) é ignorado.
+ */
+export function extractModelJson(content: unknown): unknown {
+  const text = String(content ?? '').replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '')
+  try { return JSON.parse(text) } catch { /* tenta o primeiro objeto completo */ }
+  const start = text.indexOf('{')
+  if (start < 0) return undefined
+  let depth = 0, inString = false, escaped = false
+  for (let index = start; index < text.length; index++) {
+    const char = text[index]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') inString = false
+      continue
+    }
+    if (char === '"') inString = true
+    else if (char === '{') depth++
+    else if (char === '}' && --depth === 0) {
+      try { return JSON.parse(text.slice(start, index + 1)) } catch { return undefined }
+    }
+  }
+  return undefined
+}
+
+/**
+ * Interpreta a resposta da IA sem derrubar a mensagem por um campo ruim: limpa vazios, tira
+ * chaves desconhecidas dos produtos e descarta só o campo que continuar fora do formato.
+ * A intenção principal (ação, produtos, confirmação) segue valendo.
+ */
+export function parseProposal(raw: unknown): Proposal {
+  const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
+  const source: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input)) {
+    if (isBlankProposalValue(value)) continue
+    if (POSITIVE_PROPOSAL_NUMBERS.has(key) && !(Number(value) > 0)) continue
+    if (key === 'institutionalText' && value && typeof value === 'object' && Object.values(value).every(isBlankProposalValue)) continue
+    if (key === 'products' && Array.isArray(value)) {
+      source.products = value.filter(item => item && typeof item === 'object').map(item => Object.fromEntries(
+        Object.entries(item as Record<string, unknown>).filter(([field, fieldValue]) => PRODUCT_INPUT_KEYS.has(field) && fieldValue !== null)))
+      continue
+    }
+    source[key] = value
+  }
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const parsed = proposalSchema.safeParse(source)
+    if (parsed.success) return parsed.data
+    const invalid = new Set<string>()
+    for (const issue of parsed.error.issues) {
+      if (issue.code === 'unrecognized_keys' && !issue.path.length) issue.keys.forEach(key => invalid.add(key))
+      else if (issue.path.length) invalid.add(String(issue.path[0]))
+    }
+    if (!invalid.size) throw parsed.error
+    for (const key of invalid) delete source[key]
+  }
+  return proposalSchema.parse(source)
+}
 export type ConversationArtifact = { artifactId: string; formatId: string; key: string; previewKey?: string; hash: string; mimeType: string; projectId: string; editUrl: string }
 type Header = { id: string; revision: number; theme: string; nativeThemeId?: string; formats: string[]; name: string; headerKey?: string; previewUrl?: string; related?: boolean; listPreviewKey?: string }
 /** Perguntas de ajuste que a conversa espera responder sem consultar a IA. */
@@ -636,11 +703,16 @@ export function interpretationRequest(state: ConversationState, text: string, na
     model: (mediaContent as any)?.type === 'input_audio'
       ? process.env.JOBVAREJO_OPENROUTER_AUDIO_MODEL || 'google/gemini-2.5-flash-lite'
       : process.env.JOBVAREJO_OPENROUTER_MODEL || 'xiaomi/mimo-v2.6-flash', max_tokens: 2500,
-    temperature: 0, provider: { require_parameters: true, allow_fallbacks: false },
+    // Modelo reserva barato: limite (429) ou queda do provedor principal não pode virar erro para o cliente.
+    models: [...new Set([(mediaContent as any)?.type === 'input_audio'
+      ? process.env.JOBVAREJO_OPENROUTER_AUDIO_MODEL || 'google/gemini-2.5-flash-lite'
+      : process.env.JOBVAREJO_OPENROUTER_MODEL || 'xiaomi/mimo-v2.6-flash',
+    process.env.JOBVAREJO_OPENROUTER_FALLBACK_MODEL || 'google/gemini-2.5-flash-lite'])],
+    temperature: 0, provider: { require_parameters: true, allow_fallbacks: true },
     response_format: { type: 'json_object' },
-    messages: [{ role: 'system', content: `Você conversa pelo WhatsApp do Job Varejo em português brasileiro informal, com respostas curtas, naturais e contextualizadas. Entenda a intenção pelo sentido da mensagem e pelo histórico; nunca ensine palavras ou frases que a pessoa precise repetir. Retorne só JSON neste contrato: ${JSON.stringify({ action: 'update|choose_header|approve_data|approve_images|approve_script|approve_preview|more_headers|status|cancel|new_order|cancel_and_start_new|account_project', confirmationIntent: 'approve|reject|unclear', confirmationEvidence: 'trecho literal da mensagem que demonstra a confirmação ou vazio', productOperation: 'patch|replace|append|unclear', kind: 'encarte|video|cartaz|studio', additionalKinds: ['outros tipos pedidos explicitamente'], theme: 'tema literal pedido', catalogTheme: 'tema da lista do catálogo que melhor corresponde ao pedido pelo sentido, copiado exatamente da lista, ou vazio', formats: CREATION_FORMATS.map(format => format.id), division: 'single|pages|department', pageCount: 2, products: [{ id: 'ID existente se conhecido', name: '', brand: '', variant: '', weight: '', price: 'preço literal', department: '', condition: '' }], validity: 'datas explícitas completas ou sem validade', conditions: 'condições literais', choice: 1, institutionalText: { title: '', message: '', callToAction: '' }, script: 'locução literal por extenso', itemNumbers: [1], artifactNumbers: [1], approvalRevision: 1, projectQuery: 'descrição literal do encarte já salvo', edits: [{ target: 'logo|seal|product_names|price_label|alcohol_badge|highlight_color|card_color|validity_format|whatsapp|address|product_images', operation: 'increase|decrease|set|choose', scope: 'all|items|unclear', itemNumbers: [1], amount: 'little|normal|lot', value: 'valor literal dito', choice: 1, persist: 'order|account', evidence: 'trecho literal da mensagem' }] })}.
+    messages: [{ role: 'system', content: `Você conversa pelo WhatsApp do Job Varejo em português brasileiro informal, com respostas curtas, naturais e contextualizadas. Entenda a intenção pelo sentido da mensagem e pelo histórico; nunca ensine palavras ou frases que a pessoa precise repetir. Retorne só JSON neste contrato: ${JSON.stringify({ action: 'update|choose_header|approve_data|approve_images|approve_script|approve_preview|more_headers|status|cancel|new_order|cancel_and_start_new|account_project', confirmationIntent: 'approve|reject|unclear', confirmationEvidence: 'trecho literal da mensagem que demonstra a confirmação ou vazio', productOperation: 'patch|replace|append|unclear', kind: 'encarte|video|cartaz|studio', additionalKinds: ['outros tipos pedidos explicitamente'], theme: 'tema literal pedido', catalogTheme: 'tema da lista do catálogo que melhor corresponde ao pedido pelo sentido, copiado exatamente da lista, ou vazio', formats: CREATION_FORMATS.map(format => format.id), division: 'single|pages|department', pageCount: 2, products: [{ id: 'ID existente se conhecido', name: '', brand: '', variant: '', weight: '', price: 'preço literal', department: '', condition: '' }], validity: 'datas explícitas completas ou sem validade', conditions: 'condições literais', choice: 1, institutionalText: { title: '', message: '', callToAction: '' }, script: 'locução literal por extenso', itemNumbers: [1], artifactNumbers: [1], approvalRevision: 1, projectQuery: 'descrição literal do encarte já salvo', edits: [{ target: 'logo|seal|product_names|price_label|alcohol_badge|highlight_color|card_color|validity_format|whatsapp|address|product_images|structure|featured_products', operation: 'increase|decrease|set|choose', scope: 'all|items|unclear', itemNumbers: [1], amount: 'little|normal|lot', value: 'valor literal dito', choice: 1, persist: 'order|account', evidence: 'trecho literal da mensagem' }] })}.
 Encarte já pronto na conta: quando a pessoa pedir um encarte que já existe ou está salvo na conta dela (por exemplo “me manda o encarte de terça e quarta que fiz ontem”, “quero aquele encarte do açougue que está na minha conta”, “manda o último encarte”), use action=account_project e copie em projectQuery só a descrição literal (nome, tema, dia ou data citados). Isso não é pedido novo: não preencha kind, tema, produtos nem validade. Nunca invente nomes de encartes.
-Ajustes visuais do encarte (em qualquer fase): quando a pessoa pedir para mexer na aparência do encarte, devolva edits (no máximo 6) e use action=update sem products. Alvos: logo (tamanho da logo), seal (selo decorativo do modelo/cabeçalho; “selo” sem contexto é este), alcohol_badge (selo +18 de bebida alcoólica), product_names (tamanho do nome dos produtos), price_label (tamanho da etiqueta de preço com increase/decrease; trocar o modelo da etiqueta é operation=choose), highlight_color (cor dos cards em destaque), card_color (cor de todos os cards), validity_format (data por extenso ou numérica, value=“por extenso”/“numérica”), whatsapp, address e instagram (trocar o contato do encarte, value=literal dito; instagram com o @), product_images (quantas fotos por produto, value=“2”, “3 lado a lado”...). amount só para increase/decrease: “um pouco” = little, sem qualificador = normal, “bem maior/muito” = lot. scope=items com itemNumbers (ou produto citado) quando for só alguns produtos; scope=all quando for todos; unclear se não disser. choice só se a pessoa já respondeu o número de uma etiqueta que foi apresentada. persist=account só se pedir para atualizar o cadastro da loja. evidence é o trecho literal da mensagem que pede o ajuste. Nunca invente cor, telefone, endereço ou Instagram: precisam estar escritos na mensagem. Se a pessoa só responder “3” ou “só do arroz” a uma pergunta sobre etiqueta, não devolva edits.
+Ajustes visuais do encarte (em qualquer fase): quando a pessoa pedir para mexer na aparência do encarte, devolva edits (no máximo 6) e use action=update sem products. Alvos: logo (tamanho da logo), seal (selo decorativo do modelo/cabeçalho; “selo” sem contexto é este), alcohol_badge (selo +18 de bebida alcoólica), product_names (tamanho do nome dos produtos), price_label (tamanho da etiqueta de preço com increase/decrease; trocar o modelo da etiqueta é operation=choose), highlight_color (cor dos cards em destaque), card_color (cor de todos os cards), validity_format (data por extenso ou numérica, value=“por extenso”/“numérica”), whatsapp, address e instagram (trocar o contato do encarte, value=literal dito; instagram com o @), structure (como o encarte é organizado: separar por setor/departamento, grade completa/normal, faixa lateral; operation=set e value=o que a pessoa disse, ex.: “separa por setor”), featured_products (produto(s) em destaque/carro-chefe/oferta principal; operation=set com itemNumbers ou o nome; tirar o destaque é operation=hide), product_images (quantas fotos por produto, value=“2”, “3 lado a lado”...). amount só para increase/decrease: “um pouco” = little, sem qualificador = normal, “bem maior/muito” = lot. scope=items com itemNumbers (ou produto citado) quando for só alguns produtos; scope=all quando for todos; unclear se não disser. choice só se a pessoa já respondeu o número de uma etiqueta que foi apresentada. persist=account só se pedir para atualizar o cadastro da loja. evidence é o trecho literal da mensagem que pede o ajuste. Nunca invente cor, telefone, endereço ou Instagram: precisam estar escritos na mensagem. Se a pessoa só responder “3” ou “só do arroz” a uma pergunta sobre etiqueta, não devolva edits.
 Use a fala anterior do atendente e as últimas mensagens para entender respostas curtas como “pode fazer”, “fechado”, “manda ver”, “perfeito”, “o outro”, “esse mesmo” ou correções referidas por contexto. Extraia apenas campos novos ou realmente alterados. OMITA todo campo igual ao rascunho/contexto, inclusive products, validade, tema e formatos; isso permite aprovar sem tratar eco do estado como correção. Campo igual não significa mudança. Exemplo: cliente “fechado” numa revisão de dados => action=approve_data, confirmação approve com evidência “fechado”, sem products; cliente “Pode seguir, mas põe 20 reais no arroz” => action=update, products com preço corrigido, sem aprovação.
 Temas: o cliente fala do jeito dele (“quarta da carne”, “promoção de aniversário”, “frutas e verduras”); copie em theme o que ele disse e em catalogTheme o tema do catálogo mais próximo pelo sentido (seção, produto ou campanha), escolhido só da lista de temas do catálogo. Ex.: “quarta da carne” => catalogTheme “Açougue” ou “Quinta da Carne”; “feira” => “Hortifruti”. Nunca diga que não existe modelo; o servidor confere. Sempre devolva o campo action. Remover produto (“tira o feijão”, “remove o item 2”) usa productOperation=remove com products contendo só o nome do item (ou itemNumbers); nunca escreva “remover” como condição. Com o encarte já entregue (etapa approved/delivered): reenviar a imagem (“reenvie”, “manda de novo”) é status; agradecimento ou elogio é status; gerar de novo/nova versão é status; corrigir preço/produto é update com products; outro encarte com outros produtos é new_order.
 Siga a fase: data aceita approve_data; images aceita approve_images e usa itemNumbers para itens/fotos; script aceita approve_script; preview aceita approve_preview, approvalRevision só se dita e artifactNumbers para selecionar arquivos. Cabeçalho atualizado único aceita confirmação como choose_header, choice=1. Exemplo: “não precisa mudar nada, segue” em data é approve_data; “sim, pode seguir” com uma opção de cabeçalho atualizada é choose_header. Respostas com pergunta ou hesitação (por exemplo “será que pode mandar?”) usam unclear.

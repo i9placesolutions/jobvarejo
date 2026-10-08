@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { authenticateWhatsAppService } from '~/server/utils/whatsapp-creation/access'
 import { ingestCreationEvent, claimCreationMessage, loadLeasedMessage, persistConversationResult,
   claimCreationOutbound, acknowledgeCreationOutbound, assertCreationAccess, beginCreationOrder } from '~/server/utils/whatsapp-creation/repository'
-import { interpretationRequest, transcriptionRequest, advanceConversation, normalizeConversationIntent, rememberConversationTurns, proposalSchema, effectiveMessageText } from '~/server/utils/whatsapp-creation/conversation'
+import { interpretationRequest, transcriptionRequest, advanceConversation, normalizeConversationIntent, rememberConversationTurns, parseProposal, extractModelJson, effectiveMessageText } from '~/server/utils/whatsapp-creation/conversation'
 import { pollWhatsAppJobs, followUpWhatsAppThemes } from '~/server/utils/whatsapp-creation/jobs'
 import { listCreationThemeNames } from '~/server/utils/whatsapp-creation/catalog'
 import { downloadProviderMedia } from '~/server/utils/whatsapp-creation/media'
@@ -19,6 +19,18 @@ import { flyerProjectEditedInPanel } from '~/server/utils/whatsapp-creation/rend
 // Temas do catálogo para a IA mapear a fala do cliente; se a consulta falhar, segue sem a lista.
 const catalogThemesFor = (accountId: string) => listCreationThemeNames(accountId).catch(() => [] as string[])
 const leaseSchema = z.object({ eventId: z.string().uuid(), leaseToken: z.string().uuid() })
+// Guarda a causa real da falha no evento (sem dados pessoais); o n8n chama `fail` em seguida.
+async function applyWithDiagnostics<T>(body: unknown, run: () => Promise<T>): Promise<T> {
+  try { return await run() } catch (error: any) {
+    const issues = Array.isArray(error?.issues) ? error.issues.slice(0, 4).map((issue: any) => `${(issue.path || []).join('.')}: ${issue.message}`).join(' | ') : ''
+    const reason = `${error?.statusCode || error?.name || 'erro'}: ${issues || error?.statusMessage || error?.message || ''}`.replace(/\d{8,}/g, '<num>').slice(0, 300)
+    console.error('[whatsapp-creation:apply]', reason)
+    const lease = leaseSchema.safeParse(body)
+    // Falha ao registrar não pode esconder o erro original.
+    if (lease.success) try { await pgQuery('UPDATE public.whatsapp_creation_events SET last_error=$3 WHERE id=$1 AND lease_token=$2', [lease.data.eventId, lease.data.leaseToken, `apply ${reason}`]) } catch { /* segue com o erro original */ }
+    throw error
+  }
+}
 export default defineEventHandler(async event => {
   authenticateWhatsAppService(event)
   setHeader(event, 'Cache-Control', 'private, no-store')
@@ -55,16 +67,17 @@ export default defineEventHandler(async event => {
     await pgQuery("UPDATE public.whatsapp_creation_events SET payload=jsonb_set(jsonb_set(payload,'{transcript}',to_jsonb($3::text)),'{transcriptionUsage}',$4::jsonb) WHERE id=$1 AND lease_token=$2 AND status='processing'", [eventId, leaseToken, transcript, JSON.stringify(transcriptionUsage)])
     return { request: interpretationRequest(context.state, effectiveMessageText(context.state, transcript), context.account.user.user_metadata.name || 'Cliente', undefined, await catalogThemesFor(context.owner_id)) }
   }
-  if (operation === 'apply') {
+  if (operation === 'apply') return applyWithDiagnostics(body, async () => {
     const { eventId, leaseToken } = leaseSchema.parse(body)
     let context = await loadLeasedMessage(eventId, leaseToken)
     const phaseBefore = context.state.phase
     const response = body.result
     const choice = response?.choices?.[0]
-    if (!choice?.message?.content || choice.finish_reason === 'length') throw createError({ statusCode: 422, statusMessage: 'A mensagem precisa ser dividida ou interpretada novamente.' })
-    let proposed: unknown
-    try { proposed = JSON.parse(String(choice.message.content).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')) } catch { throw createError({ statusCode: 422, statusMessage: 'Interpretação incompleta. Nenhuma criação foi autorizada.' }) }
-    const proposal = proposalSchema.parse(proposed)
+    if (!choice?.message?.content) throw createError({ statusCode: 422, statusMessage: 'A mensagem precisa ser dividida ou interpretada novamente.' })
+    // Resposta cortada pelo limite ainda vale se trouxer um objeto JSON completo no começo.
+    const proposed = extractModelJson(choice.message.content)
+    if (!proposed || typeof proposed !== 'object') throw createError({ statusCode: 422, statusMessage: choice.finish_reason === 'length' ? 'A mensagem precisa ser dividida ou interpretada novamente.' : 'Interpretação incompleta. Nenhuma criação foi autorizada.' })
+    const proposal = parseProposal(proposed)
     const modelAction = proposal.action
     let routeAction: string | null = null
     const messageText = effectiveMessageText(context.state, context.payload.type === 'audio' ? context.payload.transcript || '' : context.payload.text || '')
@@ -159,7 +172,7 @@ export default defineEventHandler(async event => {
       generate: result.generate
     })
     return { ok: true, generation: generation || null }
-  }
+  })
   if (operation === 'fail') {
     const { eventId, leaseToken } = leaseSchema.parse(body)
     const context = await loadLeasedMessage(eventId, leaseToken)
@@ -175,7 +188,7 @@ export default defineEventHandler(async event => {
       { role: 'assistant', text }
     ])
     await persistConversationResult(eventId, leaseToken, context.state, [{ type: 'text', text }], true)
-    await pgQuery("UPDATE public.whatsapp_creation_events SET status='failed',last_error='workflow_failed' WHERE id=$1 AND owner_id=$2", [eventId, context.owner_id])
+    await pgQuery("UPDATE public.whatsapp_creation_events SET status='failed',last_error=coalesce(last_error,'workflow_failed') WHERE id=$1 AND owner_id=$2", [eventId, context.owner_id])
     return { ok: true }
   }
   if (operation === 'outbox-claim') return claimCreationOutbound()
