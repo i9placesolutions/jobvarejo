@@ -117,10 +117,49 @@ export function moveValidityIntoGap(source) {
 }
 
 /** As duas correções dos modelos da fábrica de 03/10: validade no vão e painel do Instagram compacto. */
-export function fixCampaignHeader(source) {
+export function fixCampaignHeader(source, pageWidth = 1080) {
   const validity = moveValidityIntoGap(source)
   const instagram = compactInstagramPanel(validity.canvas)
-  const changes = [...validity.changes, ...instagram.changes]
-  if (!changes.length) return { canvas: source, changes, skipped: `${validity.skipped}; ${instagram.skipped}` }
-  return { canvas: instagram.canvas, changes }
+  const lifted = liftInstagramAboveValidity(instagram.canvas, pageWidth)
+  const changes = [...validity.changes, ...instagram.changes, ...lifted.changes]
+  if (!changes.length) return { canvas: source, changes, skipped: `${validity.skipped}; ${instagram.skipped}; ${lifted.skipped}` }
+  return { canvas: lifted.canvas, changes }
+}
+
+const INSTAGRAM_PARTS = /^header-(instagram-panel|instagram-title|instagram-background|instagram|icon-instagram)$/
+/**
+ * No quadrado o vão da validade fica atrás do painel do Instagram (a data some pela metade). Sobe o painel
+ * para terminar acima da validade; se encostar na logo, reduz a área da logo na medida exata (centralizada).
+ * @param {any} source canvas do Fabric
+ * @param {number} pageWidth largura da página (escala das margens)
+ */
+export function liftInstagramAboveValidity(source, pageWidth = 1080) {
+  const objects = source?.objects || []
+  const by = name => objects.find(o => o?.name === name)
+  const panel = by('header-instagram-panel'), area = by('standard-validity-background'), date = by('header-validity')
+  if (!visible(panel) || !area || !visible(date)) return { canvas: source, changes: [], skipped: 'sem painel e validade' }
+  const p = bounds(panel), a = bounds(area), m = 6 * pageWidth / 1080
+  if (!(p.bottom > a.top + 1 && p.top < a.bottom && p.left < a.right && p.right > a.left)) return { canvas: source, changes: [], skipped: 'painel não cobre a validade' }
+
+  const canvas = structuredClone(source)
+  const dy = a.top - m - p.bottom
+  for (const o of canvas.objects.filter(o => INSTAGRAM_PARTS.test(String(o?.name || '')))) o.top = num(o.top) + dy
+  const changes = [`painel do Instagram ${Math.round(-dy)} px acima, fora da validade`]
+  const logo = canvas.objects.find(o => o?.name === 'header-logo-slot')
+  const panelTop = p.top + dy
+  if (visible(logo)) {
+    const l = bounds(logo)
+    if (l.bottom > panelTop - m && l.right > p.left && l.left < p.right) {
+      const k = (panelTop - m - l.top) / l.height
+      if (!(k > .5)) return { canvas: source, changes: [], skipped: 'sem espaço para a logo' }
+      const cx = l.left + l.width / 2
+      Object.assign(logo, { originX: 'left', originY: 'top', scaleX: num(logo.scaleX, 1) * k, scaleY: num(logo.scaleY, 1) * k, top: l.top, left: cx - l.width * k / 2 })
+      if (num(logo.quickLogoMaxWidth)) logo.quickLogoMaxWidth *= k
+      if (num(logo.quickLogoMaxHeight)) logo.quickLogoMaxHeight *= k
+      if (logo.quickLogoCenterX !== undefined) logo.quickLogoCenterX = cx
+      if (logo.quickLogoCenterY !== undefined) logo.quickLogoCenterY = l.top + l.height * k / 2
+      changes.push(`área da logo ${Math.round((1 - k) * 100)}% menor`)
+    }
+  }
+  return { canvas, changes }
 }

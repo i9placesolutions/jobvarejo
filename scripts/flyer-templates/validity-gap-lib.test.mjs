@@ -1,7 +1,7 @@
 // node --test scripts/flyer-templates/validity-gap-lib.test.mjs
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { compactInstagramPanel, fixCampaignHeader, moveValidityIntoGap, validityTextColor } from './validity-gap-lib.mjs'
+import { compactInstagramPanel, fixCampaignHeader, liftInstagramAboveValidity, moveValidityIntoGap, validityTextColor } from './validity-gap-lib.mjs'
 
 const page = (extra = {}) => ({ objects: [
   { type: 'Rect', isFrame: true, name: 'frame', left: 0, top: 0, width: 1080, height: 1350, fill: '#171819' },
@@ -70,4 +70,22 @@ test('não mexe em painel já compacto e junta as duas correções', () => {
   const both = fixCampaignHeader({ objects: [...page().objects, ...instagram().objects] })
   assert.ok(both.changes.includes('pílula de validade escondida'))
   assert.ok(both.changes.includes('painel do Instagram 30 px mais baixo'))
+})
+
+test('sobe o painel do Instagram que cobre a validade e reduz a logo só o necessário', () => {
+  const source = { objects: [
+    { type: 'Image', name: 'header-logo-slot', left: 619, top: 39, width: 444, height: 238, quickLogoMaxWidth: 444, quickLogoMaxHeight: 238 },
+    { type: 'Rect', name: 'header-instagram-panel', left: 619, top: 305, width: 444, height: 73 },
+    { type: 'Textbox', name: 'header-instagram-title', left: 627, top: 313, width: 427, height: 21 },
+    { type: 'Rect', name: 'standard-validity-background', left: 27, top: 346, width: 1026, height: 54 },
+    { type: 'Textbox', name: 'header-validity', left: 288, top: 349, width: 549, height: 48 }
+  ] }
+  const { canvas, changes } = liftInstagramAboveValidity(source, 1080)
+  assert.equal(by(canvas, 'header-instagram-panel').top, 267)
+  assert.equal(by(canvas, 'header-instagram-title').top, 275)
+  const logo = by(canvas, 'header-logo-slot'), bottom = logo.top + logo.height * logo.scaleY
+  assert.ok(Math.abs(bottom - 261) < .01, `logo termina em ${bottom}`)
+  assert.ok(Math.abs(logo.left + logo.width * logo.scaleX / 2 - 841) < .01, 'logo centralizada')
+  assert.equal(changes.length, 2)
+  assert.equal(liftInstagramAboveValidity(canvas, 1080).changes.length, 0)
 })

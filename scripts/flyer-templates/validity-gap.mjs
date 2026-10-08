@@ -45,7 +45,7 @@ try {
     let touched = false
     for (const page of project.pages) {
       const source = JSON.parse(await fs.readFile(`${snapshotDir}/pages/${page.file}.json`, 'utf8'))
-      const result = fixCampaignHeader(source)
+      const result = fixCampaignHeader(source, page.width || source.width || 1080)
       const entry = { project: project.id, model: project.name, page: page.id, file: page.file, format: page.format, changes: result.changes, skipped: result.skipped || null }
       if (result.changes.length) {
         touched = true
