@@ -16,6 +16,7 @@ const visible = o => o && o.visible !== false && num(o.opacity, 1) > 0
 const isSeal = o => /^image$/i.test(String(o?.type)) && /^Selo 3D /.test(String(o?.name || ''))
 // Elementos que limitam o selo por baixo: validade e logo (o painel do Instagram fica ao lado, na outra coluna).
 const OBSTACLES = /^(standard-validity-background|retail-validity-visual-band|header-validity|header-logo-slot)$/
+const SIDE = /^(header-logo-slot|header-instagram-panel)$/
 
 /**
  * @param {any} source canvas do Fabric
@@ -25,12 +26,16 @@ export function replaceSeal(source, seal) {
   const old = (source?.objects || []).find(isSeal)
   if (!visible(old)) return { canvas: source, changes: [], skipped: 'sem selo 3D visível' }
   if (old.__originalSrc === seal.src || old.src === seal.src) return { canvas: source, changes: [], skipped: 'selo já trocado' }
-  const box = bounds(old), u = num(seal.pageWidth, 1080) / 1080, margin = 12 * u
-  const center = box.top + box.height / 2
+  const box = bounds(old), u = num(seal.pageWidth, 1080) / 1080, margin = 8 * u, gap = 12 * u
+  const center = box.top + box.height / 2, middle = box.left + box.width / 2
   const limits = source.objects.filter(o => visible(o) && OBSTACLES.test(String(o.name || ''))).map(bounds)
     .filter(b => b.top > center && b.left < box.right && b.right > box.left).map(b => b.top)
   if (!limits.length) return { canvas: source, changes: [], skipped: 'sem limite abaixo do selo' }
-  const area = { left: box.left, width: box.width, top: margin, height: Math.min(...limits) - margin * 2 }
+  const bottom = Math.min(...limits) - margin
+  // Selo grande: a coluna vai até perto da logo/painel do Instagram à direita (nunca menor que a do selo antigo).
+  const right = Math.min(...source.objects.filter(o => visible(o) && SIDE.test(String(o.name || ''))).map(bounds)
+    .filter(b => b.left > middle && b.top < bottom && b.bottom > margin).map(b => b.left - gap), Infinity)
+  const area = { left: box.left, width: Math.max(box.width, Number.isFinite(right) ? right - box.left : box.width), top: margin, height: bottom - margin }
   const scale = Math.min(area.width / seal.width, area.height / seal.height)
 
   const canvas = structuredClone(source)

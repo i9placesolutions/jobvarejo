@@ -15,10 +15,10 @@ test('ocupa a altura livre entre o topo e a validade, na mesma coluna', () => {
   const s = canvas.objects[0]
   assert.equal(s.src, seal.src)
   const h = s.height * s.scaleY, w = s.width * s.scaleX
-  assert.ok(Math.abs(h - (472 - 24)) < .01, `altura ${h}`)
-  assert.ok(Math.abs(s.top - 12) < .01)
-  assert.ok(Math.abs(s.left + w / 2 - (9 + 572 / 2)) < .01, 'centralizado na coluna')
-  assert.ok(w <= 572)
+  assert.ok(Math.abs(h - (472 - 16)) < .01, `altura ${h}`)
+  assert.ok(Math.abs(s.top - 8) < .01)
+  assert.ok(Math.abs(s.left + w / 2 - (9 + (607 - 9) / 2)) < .01, 'centralizado na coluna até a logo')
+  assert.ok(s.left + w <= 607)
   assert.equal(changes.length, 1)
 })
 
@@ -31,5 +31,5 @@ test('é idempotente e não altera o original', () => {
 
 test('limita pela largura quando a coluna é mais estreita que a altura', () => {
   const { canvas } = replaceSeal(page(), { ...seal, width: 1600, height: 800 })
-  assert.ok(Math.abs(canvas.objects[0].width * canvas.objects[0].scaleX - 572) < .01)
+  assert.ok(Math.abs(canvas.objects[0].width * canvas.objects[0].scaleX - (607 - 9)) < .01)
 })
