@@ -2,7 +2,7 @@
 /**
  * Baixa (acervo Magnific, sem IA) e converte efeitos desenhados em WebM VP9 com transparência.
  *
- *   node --env-file=.env scripts/video-studio/drawn-fx/process.mjs <selected.json> <pasta> [--concurrency=3]
+ *   node --env-file=.env scripts/video-studio/drawn-fx/process.mjs <selected.json> <pasta> [--concurrency=3] [--offline]
  *
  * Por clipe: MP4 de até 1920 px → fundo detectado nos cantos (preto, verde ou branco) → alfa real:
  *  - preto: colorkey do quase preto com borda suave, cor original (desenho de cor chapada fica opaco);
@@ -28,8 +28,15 @@ const libraryFile = `${dir}/library.json`
 const library = existsSync(libraryFile) ? JSON.parse(await fs.readFile(libraryFile, 'utf8')) : {}
 const save = () => fs.writeFile(libraryFile, JSON.stringify(library, null, 1))
 
+// --offline: usa o arquivo já baixado pelo conector Magnific da conta (save-signed.mjs), sem chamar a API
+// (download de vídeo pela chave de API consome créditos).
+const OFFLINE = process.argv.includes('--offline')
 async function download(item) {
   const out = `${dir}/raw/${item.id}.mp4`
+  if (OFFLINE) {
+    if (!existsSync(out)) throw Error('arquivo do conector ainda não baixado')
+    return { out, data: { name: item.title, url: `https://www.magnific.com/br/video/${item.id}`, author: null } }
+  }
   const { data } = await api(`/v1/videos/${item.id}`)
   if (existsSync(out)) return { out, data }
   const options = data.options.filter(o => o.active && o.container === 'mp4')
