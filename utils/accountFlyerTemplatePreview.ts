@@ -103,7 +103,7 @@ export const buildAccountFlyerPreviewCacheKey = (options: {
   logoSource: string
   logoPreference?: AccountFlyerLogoPreference | null
   revision: string
-}): string => ['account-preview-v2',
+}): string => ['account-preview-v3',
   String(options.templateId || '').trim(),
   String(options.accountId || '').trim(),
   String(options.logoSource || '').trim(),

@@ -10,7 +10,6 @@ import {createHash} from 'node:crypto'
 import {readFile,writeFile,mkdir,readdir,rename} from 'node:fs/promises'
 import {gunzipSync} from 'node:zlib'
 import {S3Client,GetObjectCommand,PutObjectCommand,HeadObjectCommand} from '@aws-sdk/client-s3'
-const {prepareNeutralFlyerCanvas}=await import('../utils/flyerGalleryPreview.ts')
 const {generateThumbnailFromCanvasJson}=await import('../utils/editorThumbnail.ts')
 const {buildFlyerTemplateConfigFromPages,inferFormatIdFromPage,orderFlyerTemplatePages}=await import('../utils/flyerTemplateApi.ts')
 const apply=process.argv.includes('--upload'),limit=Number(process.argv.find(x=>x.startsWith('--limit='))?.split('=')[1]||0)
@@ -63,18 +62,18 @@ async function processProject(project){
  const page=ordered.find(p=>p.templateModelId===config.defaultModelId&&inferFormatIdFromPage(p)===config.defaultFormatId)||ordered[0]
  if(!page)throw Error('Modelo sem página '+project.id)
  let canvas=page.canvasData;if(!canvas){const b=await readAsset(assertFlyerGallerySourceKey(keyOf(page.canvasDataPath),project.user_id));canvas=JSON.parse(b[0]===31&&b[1]===139?gunzipSync(b):b)}
- const neutral=prepareNeutralFlyerCanvas(canvas)
+ const neutral=structuredClone(canvas) // igual ao editor (política 2)
  // Validate every source even when reusing a previously prepared thumbnail.
  const validate=node=>{if(!node||typeof node!=='object')return;if(String(node.type||'').toLowerCase()==='image'&&node.src&&!node.src.startsWith('data:'))assertFlyerGallerySourceKey(keyOf(node.src),project.user_id);for(const value of Object.values(node)){if(Array.isArray(value))value.forEach(validate);else if(value&&typeof value==='object')validate(value)}}
  validate(neutral)
- if(apply&&old?.revision===revision&&old.sourcePolicyVersion===1){const head=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:old.key}));if(head.ContentLength!==old.bytes||head.Metadata?.sha256!==old.sha256)throw Error('Catálogo remoto adulterado');manifest.assets[project.id]=old;completed++;return}
+ if(apply&&old?.revision===revision&&old.sourcePolicyVersion===2){const head=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:old.key}));if(head.ContentLength!==old.bytes||head.Metadata?.sha256!==old.sha256)throw Error('Catálogo remoto adulterado');manifest.assets[project.id]=old;completed++;return}
  canvas=neutral;await prepareImages(canvas,project.user_id)
  const image=await generateThumbnailFromCanvasJson({sourceJson:canvas,staticCanvasCtor:StaticCanvas,pageWidth:page.width,pageHeight:page.height})
  if(!image)throw Error('Falha de render '+project.id)
  const bytes=await sharp(Buffer.from(image.split(',')[1],'base64')).webp({quality:76}).toBuffer(),sha256=createHash('sha256').update(bytes).digest('hex'),key='imagens/catalogo-encartes/'+sha256+'.webp'
  await writeFile(output+'/'+project.id+'.webp',bytes)
  if(apply){await s3.send(new PutObjectCommand({Bucket:bucket,Key:key,Body:bytes,ContentType:'image/webp',ContentMD5:createHash('md5').update(bytes).digest('base64'),Metadata:{sha256},CacheControl:'public,max-age=31536000,immutable'}));const head=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:key}));if(head.ContentLength!==bytes.length||head.Metadata?.sha256!==sha256)throw Error('Upload não confirmado '+project.id)}
- manifest.assets[project.id]={revision,key,sha256,bytes:bytes.length,sourcePolicyVersion:1};const metric={id:project.id,bytes:bytes.length,prepareMs:Math.round(performance.now()-start)};metrics.push(metric)
+ manifest.assets[project.id]={revision,key,sha256,bytes:bytes.length,sourcePolicyVersion:2};const metric={id:project.id,bytes:bytes.length,prepareMs:Math.round(performance.now()-start)};metrics.push(metric)
  completed++
  if(apply&&!limit){const snapshot=JSON.stringify(manifest,null,2)+'\n';checkpoint=checkpoint.then(async()=>{await writeFile(manifestPath+'.tmp',snapshot);await rename(manifestPath+'.tmp',manifestPath)});await checkpoint}
  console.log(JSON.stringify({completed,total:limit||rows.length,...metric}))

@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
 import { assertFlyerGallerySourceKey } from '~/scripts/lib/flyer-gallery-source-policy.mjs'
-import { prepareNeutralFlyerCanvas, removeFlyerAccountContacts } from '../../utils/flyerGalleryPreview'
 import { extractStorageKeyFromRef } from '../../utils/storageRef'
 import videoCatalogManifest from '../../shared/video-studio/catalog-assets.json'
 import { resolveVideoCatalogAsset, type VideoCatalogManifest } from './video-studio/catalog-assets'
@@ -36,7 +35,8 @@ const MAX_S3_SOURCE_READ_MS = 12_000
 const MAX_SOURCE_PREPARATION_MS = 30_000
 const MAX_ALLOWED_IMAGE_FORMATS = new Set(['png', 'jpeg', 'webp', 'avif', 'gif'])
 // Mudar a versão invalida as prévias em cache (todas são redesenhadas). v2: contorno de adesivo no servidor.
-const RENDERER_POLICY = 'catalog-preview-v2'
+// v3: encarte desenhado igual ao editor, sem remover logo nem contatos.
+const RENDERER_POLICY = 'catalog-preview-v3'
 const typedVideoCatalogManifest = videoCatalogManifest as VideoCatalogManifest
 
 let activeTasks = 0
@@ -328,11 +328,8 @@ export const renderCatalogPreview = async (options: RenderCatalogPreviewOptions)
     throw new Error('Dimensões do canvas inválidas para a prévia.')
   }
 
-  const canvasJson = options.kind === 'flyer'
-    ? options.personalize
-      ? removeFlyerAccountContacts(options.canvasJson)
-      : prepareNeutralFlyerCanvas(options.canvasJson)
-    : JSON.parse(JSON.stringify(options.canvasJson || {}))
+  // A prévia mostra o modelo exatamente como abre para edição (logo, Instagram e contatos do modelo).
+  const canvasJson = JSON.parse(JSON.stringify(options.canvasJson || {}))
   await prepareCanvasImages(canvasJson, options.sourceOwnerId, options.kind, options.trustedTemplateAssets === true)
   // Desenho nativo (CPU) fora do processo principal: login, páginas e healthcheck seguem respondendo.
   return await drawCatalogPreviewIsolated({ kind: options.kind, canvasJson, width, height })

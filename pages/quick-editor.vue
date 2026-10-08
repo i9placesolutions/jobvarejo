@@ -793,7 +793,6 @@ onUnmounted(() => {
             :gallery-preview-url="previewTemplate.gallery_preview_url"
             :profile="accountPreviewProfile"
             :profile-ready="accountPreviewProfileReady"
-            personalize
             eager
             fit="contain"
             class="relative max-h-[65dvh] max-w-full object-contain shadow-sm"
