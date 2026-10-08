@@ -1,7 +1,7 @@
 {
  "fonte": "Magnific (antigo Freepik) — download do acervo de stock via API, plano Premium, uso interno para clientes (sem geração por IA)",
  "licenca": "https://www.magnific.com/legal/terms-of-use",
- "atualizadoEm": "2026-10-06T17:31:43.694Z",
+ "atualizadoEm": "2026-10-08T13:35:00.462Z",
  "campanhas": [
   {
    "slug": "mega-oferta-estrelas",
@@ -692,6 +692,22 @@
     "videoVertical": "backgrounds-video/magnific-promocao-da-semana-vertical.mp4",
     "videoWide": "backgrounds-video/magnific-promocao-da-semana-wide.mp4"
    }
+  },
+  {
+   "slug": "domingo-turbinado-roxo",
+   "nome": "Domingo Turbinado de Ofertas — Roxo Neon",
+   "projeto": "0b351a73-2274-4d90-83d7-e71e87ee79b5",
+   "formato": "cabeçalho com faixa",
+   "selo": {
+    "magnificId": 32765154,
+    "titulo": "DOMINGO TURBINADO DE OFERTAS",
+    "arquivo": "templates/campanhas/domingo-turbinado-roxo/14adbcbe9692b593ab601e2a0000279a56a6048d5408e7c7065edf91ec910dd3.png"
+   },
+   "fotoFundo": {
+    "magnificId": 42582013,
+    "titulo": "Banner vertical de fundo escuro de efeito de linha oblíqua clara"
+   },
+   "criadoEm": "2026-10-08T13:34:43.042Z"
   }
  ],
  "elementos": [
@@ -769,6 +785,68 @@
    "magnificId": 133912841,
    "titulo": "Red Shopping Bag Shopping Online conceito 3d",
    "arquivo": "templates/catalog/magnific-element-133912841.png"
+  }
+ ],
+ "selosTrocados": [
+  {
+   "projeto": "82c90116-464a-49ff-9cf8-c612239f1519",
+   "nome": "Leve Mais Pague Menos — Calculadora",
+   "selo": {
+    "magnificId": 21766762,
+    "titulo": "Logo 3D calculadora Leve Mais Pague Menos para supermercados",
+    "pagina": "https://www.magnific.com/21766762",
+    "arquivo": "templates/selos/f51cec3336c94cc3f1061c13a4db48812fb05cc2252c76c78c8f8ce851573865.png",
+    "recolorido": "marinho"
+   },
+   "em": "2026-10-08"
+  },
+  {
+   "projeto": "bdb34119-7241-449d-94e0-de05c8289646",
+   "nome": "Fim de Mês de Ofertas",
+   "selo": {
+    "magnificId": 173517839,
+    "titulo": "Selo promocional com moedas azuis (Saldão de Fim de Mês)",
+    "pagina": "https://www.magnific.com/173517839",
+    "arquivo": "templates/selos/5f3d0a166b3d7b37ce28cf0ce2802252f81155255b5339e589f5d3c2c1bf3745.png",
+    "recolorido": "vermelho"
+   },
+   "em": "2026-10-08"
+  },
+  {
+   "projeto": "167aecc3-3a83-4fdb-8f3d-437272e07455",
+   "nome": "Quarta do Hortifruti — Cesta",
+   "selo": {
+    "magnificId": 427971274,
+    "titulo": "Logo 3D cesta de compras com etiqueta — hortifruti",
+    "pagina": "https://www.magnific.com/427971274",
+    "arquivo": "templates/selos/bfcd1211a4ef26d48371986fcb226dd518fb94b4fdf6eecf061d512587c28a95.png",
+    "recolorido": null
+   },
+   "em": "2026-10-08"
+  },
+  {
+   "projeto": "1f1f2fbe-7b8a-4d7a-869c-91e7ebcea765",
+   "nome": "Super Ofertas — Moedas",
+   "selo": {
+    "magnificId": 433274204,
+    "titulo": "Efeito de texto 3D dourado metálico Super Oferta",
+    "pagina": "https://www.magnific.com/433274204",
+    "arquivo": "templates/selos/3771f64ebe1b27bc958f2c6b2658f12baee44c967b73539a4874cac3e2c214cc.png",
+    "recolorido": null
+   },
+   "em": "2026-10-08"
+  },
+  {
+   "projeto": "a0ad029a-3d67-49c6-83cb-65a74b8c6ae4",
+   "nome": "Terça de Ofertas — Carrinho",
+   "selo": {
+    "magnificId": 428215036,
+    "titulo": "Efeito de texto 3D Terça de Ofertas",
+    "pagina": "https://www.magnific.com/428215036",
+    "arquivo": "templates/selos/ed19a7fab6f9ca17b8322cb1323a3baec5ecc5527e8b97e4a0b0488e93abe9d1.png",
+    "recolorido": null
+   },
+   "em": "2026-10-08"
   }
  ]
 }
