@@ -137,4 +137,36 @@ describe('layout dinâmico da campanha varejo', () => {
     expect(address.left).toBe(20)
     expect(panel.visible).toBe(false)
   })
+
+  it('empilha WhatsApp, endereço e cartões na coluna lateral e redistribui as linhas', () => {
+    const background = { name: 'footer-premium-background', parentFrameId: 'frame', footerLayout: 'campaign-retail', footerStack: true, footerColumnWeights: [1, 1.45, 2.2], left: 17, top: 785, width: 344, height: 548 }
+    const whatsapp = text('footer-dynamic-whatsapp', 'whatsapp', '(11) 99999-9999')
+    const address = text('footer-dynamic-address', 'address', 'Rua da Loja, 100 - Centro, Cidade - UF')
+    const payment: any = { type: 'Group', name: 'footer-payment-images', parentFrameId: 'frame', width: 200, height: 80, visible: true, objects: [{ type: 'Image' }] }
+    const whatsappIcon = { type: 'Image', name: 'icon-whatsapp', parentFrameId: 'frame', width: 40, height: 40, left: 0, top: 0, visible: true }
+    const addressIcon = { ...whatsappIcon, name: 'icon-address' }
+    const divider1: any = { type: 'Rect', name: 'footer-column-divider-1', parentFrameId: 'frame', width: 2, height: 80, left: 0, top: 0, visible: true }
+    const divider2: any = { ...divider1, name: 'footer-column-divider-2' }
+    const nodes = [background, whatsapp, address, payment, whatsappIcon, addressIcon, divider1, divider2]
+    compactBusinessFooter(nodes)
+    // Linhas em sequência vertical, todas dentro da coluna e com a largura da coluna.
+    expect(whatsapp.top).toBeLessThan(address.top)
+    expect(address.top).toBeLessThan(payment.top)
+    for (const o of [whatsapp, address, payment]) {
+      expect(o.left).toBeGreaterThanOrEqual(background.left)
+      expect(o.left + o.width * (o.scaleX || 1)).toBeLessThanOrEqual(background.left + background.width + .5)
+      expect(o.top + o.height * (o.scaleY || 1)).toBeLessThanOrEqual(background.top + background.height + .5)
+    }
+    expect(payment.footerPaymentWidth).toBeCloseTo(background.width - 2 * 20 * (344 / 380), 5)
+    // Divisórias horizontais entre as linhas.
+    expect(divider1.width).toBeGreaterThan(divider1.height)
+    expect([divider1.visible, divider2.visible]).toEqual([true, true])
+    // Sem endereço, cartões ganham a altura liberada.
+    const before = payment.footerPaymentHeight
+    address.text = ''
+    compactBusinessFooter(nodes)
+    expect(address.visible).toBe(false)
+    expect(payment.footerPaymentHeight).toBeGreaterThan(before)
+    expect([divider1.visible, divider2.visible]).toEqual([true, false])
+  })
 })

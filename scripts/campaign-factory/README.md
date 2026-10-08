@@ -16,6 +16,7 @@ Fábrica versionada em `scripts/campaign-factory/` (lote de referência: 10 camp
 - Qualidade de referência = **Sextou de Ofertas**: selo grande (~60% da largura no cabeçalho), fundo cheio estilo varejo (luz, faixas, confete, elementos 3D), nada de espaço vazio.
 - **Logo sem quadro/cartão branco**: logo livre, respeitando a preferência de logo do perfil (sem fundo / contorno sticker / fundo próprio). O modelo usa padrão contorno sticker branco; a preferência do cliente sobrescreve.
 - Instagram só (sem Facebook); logo, Instagram, WhatsApp, endereço, cartões e validade dinâmicos; datas centralizadas.
+- **Rodapé completo**: cada bloco com ícone + título + valor — `FALE CONOSCO`, `ENDEREÇO`, `CARTÕES ACEITOS` (o `compose.mjs` já cria via `scripts/lib/footer-titles.mjs`). Padrão geral em `docs/encartes-padrao-design.md`; para ajustar modelos existentes em lote, `scripts/flyer-templates/` (snapshot → standardize plan → persist).
 - Cartazes **seguem o padrão do Cartazista** (modelo padrão com fonte de pincel, A1–A7 + Faixa 2 m, cabeçalho `thematic-seal`), gerados pelo próprio código do app.
 - **Piloto antes do lote**: gerar 1–2 campanhas, mostrar folhas (encartes, cartazes, quadros de vídeo + MP4) e só gravar na conta após aprovação.
 

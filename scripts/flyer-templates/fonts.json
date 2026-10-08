@@ -1,0 +1,230 @@
+[
+{
+"family": "Barlow",
+"file": "Barlow-Regular.ttf",
+"weight": "400",
+"style": "normal"
+},
+{
+"family": "Barlow",
+"file": "Barlow-SemiBold.ttf",
+"weight": "600",
+"style": "normal"
+},
+{
+"family": "Barlow",
+"file": "Barlow-Bold.ttf",
+"weight": "700",
+"style": "normal"
+},
+{
+"family": "Barlow",
+"file": "Barlow-ExtraBold.ttf",
+"weight": "800",
+"style": "normal"
+},
+{
+"family": "Barlow",
+"file": "Barlow-Black.ttf",
+"weight": "900",
+"style": "normal"
+},
+{
+"family": "Barlow",
+"file": "Barlow-Italic.ttf",
+"weight": "400",
+"style": "italic"
+},
+{
+"family": "Barlow",
+"file": "Barlow-SemiBoldItalic.ttf",
+"weight": "600",
+"style": "italic"
+},
+{
+"family": "Barlow",
+"file": "Barlow-BoldItalic.ttf",
+"weight": "700",
+"style": "italic"
+},
+{
+"family": "Barlow",
+"file": "Barlow-ExtraBoldItalic.ttf",
+"weight": "800",
+"style": "italic"
+},
+{
+"family": "Barlow",
+"file": "Barlow-BlackItalic.ttf",
+"weight": "900",
+"style": "italic"
+},
+{
+"family": "Barlow Condensed",
+"file": "BarlowCondensed-Regular.ttf",
+"weight": "400",
+"style": "normal"
+},
+{
+"family": "Barlow Condensed",
+"file": "BarlowCondensed-SemiBold.ttf",
+"weight": "600",
+"style": "normal"
+},
+{
+"family": "Barlow Condensed",
+"file": "BarlowCondensed-Bold.ttf",
+"weight": "700",
+"style": "normal"
+},
+{
+"family": "Barlow Condensed",
+"file": "BarlowCondensed-ExtraBold.ttf",
+"weight": "800",
+"style": "normal"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-Light.ttf",
+"weight": "300",
+"style": "normal"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-LightItalic.ttf",
+"weight": "300",
+"style": "italic"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-Regular.ttf",
+"weight": "400",
+"style": "normal"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-Italic.ttf",
+"weight": "400",
+"style": "italic"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-Medium.ttf",
+"weight": "500",
+"style": "normal"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-MediumItalic.ttf",
+"weight": "500",
+"style": "italic"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-Bold.ttf",
+"weight": "700",
+"style": "normal"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-BoldItalic.ttf",
+"weight": "700",
+"style": "italic"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-ExtraBold.ttf",
+"weight": "800",
+"style": "normal"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-ExtraBoldItalic.ttf",
+"weight": "800",
+"style": "italic"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-Black.ttf",
+"weight": "900",
+"style": "normal"
+},
+{
+"family": "Fira Sans",
+"file": "FiraSans-BlackItalic.ttf",
+"weight": "900",
+"style": "italic"
+},
+{
+"family": "Inter",
+"file": "Inter-Variable.ttf",
+"weight": "100 900",
+"style": "normal"
+},
+{
+"family": "Anton",
+"file": "Anton-Regular.ttf",
+"weight": "400",
+"style": "normal"
+},
+{
+"family": "Audiowide",
+"file": "Audiowide-Regular.ttf",
+"weight": "400",
+"style": "normal"
+},
+{
+"family": "Bebas Neue",
+"file": "BebasNeue-Regular.ttf",
+"weight": "400",
+"style": "normal"
+},
+{
+"family": "Caveat",
+"file": "Caveat[wght].ttf",
+"weight": "100 900",
+"style": "normal"
+},
+{
+"family": "Consumidor Referencia",
+"file": "ConsumidorReferencia-Regular.ttf",
+"weight": "400",
+"style": "normal"
+},
+{
+"family": "Knewave",
+"file": "Knewave-Regular.ttf",
+"weight": "400",
+"style": "normal"
+},
+{
+"family": "Montserrat",
+"file": "Montserrat[wght].ttf",
+"weight": "100 900",
+"style": "normal"
+},
+{
+"family": "Oswald",
+"file": "Oswald[wght].ttf",
+"weight": "200 900",
+"style": "normal"
+},
+{
+"family": "Patua One",
+"file": "PatuaOne-Regular.ttf",
+"weight": "400",
+"style": "normal"
+},
+{
+"family": "Roboto Slab",
+"file": "RobotoSlab[wght].ttf",
+"weight": "100 900",
+"style": "normal"
+},
+{
+"family": "Russo One",
+"file": "RussoOne-Regular.ttf",
+"weight": "400",
+"style": "normal"
+}
+]

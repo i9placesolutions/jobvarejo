@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+// Caminho válido tanto em scripts/campaign-factory quanto num lote copiado para output/<lote>.
+import { ensureFooterTitles } from '../../scripts/lib/footer-titles.mjs';
 
 // Paleta vem do tema de cada campanha (campaigns.mjs); a estrutura é a mesma do Sextou de Ofertas.
 const CONDENSED = 'Barlow Condensed';
@@ -80,7 +82,8 @@ export function layoutFor(f, W, H, variant = 'left') {
   return L;
 }
 
-export function compose({ donor, page, assets, ids, theme: T, slug, variant = 'left' }) {
+// L (opcional): layout pronto de uma estrutura (scripts/flyer-templates/structures); senão, layoutFor(variant).
+export function compose({ donor, page, assets, ids, theme: T, slug, variant = 'left', L: layout = null }) {
   const RED = T.base, YELLOW = T.accent, DATE_YELLOW = T.date, INK = T.ink;
   const W = page.width, H = page.height, f = page.templateFormatId, tv = f === 'tv';
   const u = tv ? 1 : W / 1080;
@@ -99,7 +102,7 @@ export function compose({ donor, page, assets, ids, theme: T, slug, variant = 'l
   const place = (o, x, y, size) => { const k = size / Math.max(o.width, o.height); return Object.assign(o, { left: x, top: y, originX: 'left', originY: 'top', scaleX: k, scaleY: k, parentFrameId: frameId, _frameClipOwner: frameId, _customId: randomUUID() }); };
   const vgrad = stops => ({ type: 'linear', gradientUnits: 'percentage', coords: { x1: 0, y1: 0, x2: 0, y2: 1 }, colorStops: stops.map(([offset, color]) => ({ offset, color })) });
 
-  const L = layoutFor(f, W, H, variant);
+  const L = layout || layoutFor(f, W, H, variant);
 
   const frame = structuredClone(src.find(o => o.isFrame));
   Object.assign(frame, { _customId: frameId, name: `template-frame-${slug}-${f}`, layerName: 'FRAMER', left: W / 2, top: H / 2, width: W, height: H, fill: RED, originX: 'center', originY: 'center' });
@@ -174,7 +177,7 @@ export function compose({ donor, page, assets, ids, theme: T, slug, variant = 'l
   // Rodapé vermelho com borda amarela: WhatsApp | endereço | cartões em azulejos brancos (grade 3×2).
   const ft = L.footer, fs = ft.h / REF.footerH;
   layers.push(rect('footer-premium-background', ft, vgrad([[0, T.card[1]], [.6, T.card[2]], [1, T.card[3]]]), { rx: 24 * fs, ry: 24 * fs, stroke: T.gold[1], strokeWidth: 3 * fs,
-    footerLayout: 'campaign-retail', footerColumnWeights: tv ? [1, 1.5, 1.7] : [1, 1.05, 1.05], shadow: { color: T.shadow, blur: 12 * fs, offsetX: 0, offsetY: 3 * fs } }));
+    footerLayout: 'campaign-retail', footerColumnWeights: tv ? [1, 1.5, 1.7] : [1.2, 1.2, .8], shadow: { color: T.shadow, blur: 12 * fs, offsetX: 0, offsetY: 3 * fs } }));
   layers.push(field('footer-dynamic-whatsapp', 'whatsapp', '(11) 99999-9999', { x: ft.x + 90 * fs, y: ft.y + 50 * fs, w: 230 * fs, h: 44 * fs }, 30 * fs, '#ffffff', { fontWeight: 800 }));
   layers.push(field('footer-dynamic-address', 'address', 'Rua da Loja, 100 - Centro, Cidade - UF', { x: ft.x + 410 * fs, y: ft.y + 40 * fs, w: 260 * fs, h: 64 * fs }, 22 * fs, '#ffffff', { fontWeight: 700, lineHeight: 1.12 }));
   const wa = place(take('icon-whatsapp'), ft.x + 20 * fs, ft.y + 40 * fs, 60 * fs);
@@ -216,5 +219,7 @@ export function compose({ donor, page, assets, ids, theme: T, slug, variant = 'l
 
   for (const o of layers.slice(1)) { o.parentFrameId = frameId; o._frameClipOwner = frameId; }
   assert(zoneBox.h > 250, `zona pequena em ${f}`);
-  return { version: donor.version, background: '', __labelTemplates: donor.__labelTemplates, templateModelId: page.templateModelId, templateModelName: page.templateModelName, templateFormatId: f, objects: layers };
+  // Rodapé completo: "FALE CONOSCO", "ENDEREÇO" e "CARTÕES ACEITOS" (docs/encartes-padrao-design.md).
+  const composed = { version: donor.version, background: '', __labelTemplates: donor.__labelTemplates, templateModelId: page.templateModelId, templateModelName: page.templateModelName, templateFormatId: f, objects: layers };
+  return tv ? composed : ensureFooterTitles(composed).canvas;
 }

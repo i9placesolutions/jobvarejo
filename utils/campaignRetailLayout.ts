@@ -146,13 +146,19 @@ export const layoutCampaignSocial = (objects: any[]): boolean => {
   return changed
 }
 
-/** Rodapé de três blocos independentes da campanha. A geometria dos fundos é fixa. */
+/**
+ * Rodapé de três blocos independentes da campanha. A geometria dos fundos é fixa.
+ * Com `footerStack: true` os blocos ficam empilhados (WhatsApp, endereço, cartões),
+ * para estruturas com contatos numa coluna lateral; os pesos viram alturas das linhas.
+ */
 export const layoutCampaignRetailFooter = (objects: any[]): boolean => {
   let changed = false
   for (const background of objects.filter(o => o?.name === 'footer-premium-background' && o.footerLayout === 'campaign-retail')) {
     const siblings = objects.filter(o => String(o.parentFrameId || '') === String(background.parentFrameId || ''))
     const area = box(background)
-    const scale = Math.max(.25, area.width / 1080)
+    const stack = background.footerStack === true
+    // Empilhado, a coluna é estreita: a escala segue uma coluna de referência de 380 px.
+    const scale = stack ? Math.min(1.4, Math.max(.25, area.width / 380)) : Math.max(.25, area.width / 1080)
     const find = (name: string) => siblings.find(o => o.name === name)
     const defs = [
       { field: 'whatsapp', name: 'footer-dynamic-whatsapp', title: 'footer-reference-whatsapp-label', caption: 'footer-whatsapp-caption', icon: 'icon-whatsapp' },
@@ -177,10 +183,12 @@ export const layoutCampaignRetailFooter = (objects: any[]): boolean => {
     if (phonePanel) set(phonePanel, { visible: enabled[0] })
     const inset = 20 * scale
     const gap = 12 * scale
-    const available = Math.max(1, area.width - inset * 2 - gap * Math.max(0, activeEntries.length - 1))
+    const span = stack ? area.height : area.width
+    const available = Math.max(1, span - inset * 2 - gap * Math.max(0, activeEntries.length - 1))
     const weights = entries.map((_, index) => Math.max(.01, num(background.footerColumnWeights?.[index], 1)))
     const activeWeight = activeEntries.reduce((total, entry) => total + weights[entries.indexOf(entry)]!, 0)
     let colLeft = area.left + inset
+    let rowTop = area.top + inset
     for (const entry of entries) {
       const on = enabled[entries.indexOf(entry)]
       if (entry.body) set(entry.body, { visible: on })
@@ -193,12 +201,17 @@ export const layoutCampaignRetailFooter = (objects: any[]): boolean => {
       if (divider) set(divider, { visible: i < activeEntries.length - 1 })
     }
     activeEntries.forEach((entry, index) => {
-      const x = colLeft
-      const width = available * weights[entries.indexOf(entry)]! / Math.max(.01, activeWeight)
-      const y = area.top + area.height * .12
-      const h = area.height * .76
+      const share = available * weights[entries.indexOf(entry)]! / Math.max(.01, activeWeight)
+      // Faixa do bloco: coluna (rodapé horizontal) ou linha (contatos empilhados).
+      const cell = stack
+        ? { left: area.left + inset, top: rowTop, width: area.width - inset * 2, height: share }
+        : { left: colLeft, top: area.top, width: share, height: area.height }
+      const x = cell.left
+      const width = cell.width
+      const y = cell.top + cell.height * .12
+      const h = cell.height * .76
       if (entry.field === 'whatsapp' && phonePanel && !phonePanel.__manualTransform) {
-        set(phonePanel, { left: x - 6 * scale, top: area.top + area.height * .08, width: width + 12 * scale, height: area.height * .84, scaleX: 1, scaleY: 1, originX: 'left', originY: 'top' })
+        set(phonePanel, { left: x - 6 * scale, top: cell.top + cell.height * .08, width: width + 12 * scale, height: cell.height * .84, scaleX: 1, scaleY: 1, originX: 'left', originY: 'top' })
       }
       const multilineTitle = String(entry.titleObject?.text || '').includes('\n')
       // Sem título nem legenda, o valor ocupa a altura toda e fica centralizado na faixa.
@@ -215,27 +228,30 @@ export const layoutCampaignRetailFooter = (objects: any[]): boolean => {
       } else {
         const icon = entry.iconObject
         const iconScale = Math.min(1, Math.max(.2, num(icon?.footerIconScale, 1)))
-        const iconSize = icon ? Math.min(width * .22, area.height * .55, 72 * scale) * iconScale : 0
+        const iconSize = icon ? Math.min(width * .22, cell.height * (stack ? .7 : .55), 72 * scale) * iconScale : 0
         const iconGap = icon ? 12 * scale : 0
         const contentLeft = x + iconSize + iconGap
         const textWidth = Math.max(1, width - iconSize - iconGap)
         if (icon && !icon.__manualTransform) {
           const fit = iconSize / Math.max(1, num(icon.width, 1), num(icon.height, 1))
-          set(icon, { visible: true, originX: 'left', originY: 'top', left: x, top: area.top + (area.height - iconSize) / 2, scaleX: fit, scaleY: fit })
+          set(icon, { visible: true, originX: 'left', originY: 'top', left: x, top: cell.top + (cell.height - iconSize) / 2, scaleX: fit, scaleY: fit })
         }
         fitText(entry.titleObject, contentLeft, y, textWidth, titleH, 21 * scale, !multilineTitle)
-        fitText(entry.body, contentLeft, bodyY + bodyH * .05, textWidth, bodyH * .9, entry.field === 'address' ? 22 * scale : 32 * scale, entry.field === 'whatsapp')
+        fitText(entry.body, contentLeft, bodyY + bodyH * .05, textWidth, bodyH * .9, entry.field === 'address' ? 24 * scale : 38 * scale, entry.field === 'whatsapp')
         if (bare && entry.body && !entry.body.__manualTransform && activeText(entry.body)) {
           const measured = box(entry.body)
-          set(entry.body, { top: area.top + (area.height - measured.height) / 2 })
+          set(entry.body, { top: cell.top + (cell.height - measured.height) / 2 })
         }
         if (entry.captionObject && !entry.captionObject.__manualTransform) fitText(entry.captionObject, contentLeft, bodyY + bodyH + captionH * .05, textWidth, captionH * .9, 16 * scale, true)
       }
       if (index < activeEntries.length - 1 && index < dividers.length && dividers[index]) {
         const divider = dividers[index]
-        if (!divider.__manualTransform) set(divider, { visible: true, left: x + width + gap / 2, top: area.top + area.height * .16, width: 1.5 * scale, height: area.height * .68, scaleX: 1, scaleY: 1 })
+        if (!divider.__manualTransform) set(divider, stack
+          ? { visible: true, left: cell.left + cell.width * .08, top: cell.top + cell.height + gap / 2, width: cell.width * .84, height: 1.5 * scale, scaleX: 1, scaleY: 1 }
+          : { visible: true, left: x + width + gap / 2, top: area.top + area.height * .16, width: 1.5 * scale, height: area.height * .68, scaleX: 1, scaleY: 1 })
       }
-      colLeft += width + gap
+      colLeft += share + gap
+      rowTop += share + gap
     })
     changed = before !== changedState(tracked) || changed
   }
