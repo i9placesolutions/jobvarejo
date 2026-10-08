@@ -15,6 +15,13 @@ export default defineNuxtConfig({
     // Worktrees de agentes são cópias inteiras do projeto; vigiá-las força reloads e limpa o cache.
     '/.claude',
   ],
+  // O typecheck inclui ../**/* com allowJs: sem excluir builds locais, os bundles
+  // de output/ redefinem globalThis.$fetch (quebra $fetch<T>) e esgotam a memória.
+  typescript: {
+    tsConfig: {
+      exclude: ['../output', '../artifacts', '../tmp', '../work', '../.output-*', '../.nuxt-*', '../node-compile-cache', '../.claude', '../scripts/**/*.mts'],
+    },
+  },
   devServer: {
     port: 80,
   },
