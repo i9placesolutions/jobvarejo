@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Plano (não grava) da validade no vão da arte — ver validity-gap-lib.mjs.
+ * Plano (não grava) da validade no vão da arte e do painel do Instagram compacto — ver validity-gap-lib.mjs.
  *
  *   node --env-file=.env scripts/flyer-templates/validity-gap.mjs <snapshot> <saída> [--only=<id>,<id>]
  *
@@ -11,7 +11,7 @@ import fs from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { EXCLUDED_TEMPLATE_IDS } from '../standardize-flyer-template-dynamics.mjs'
-import { moveValidityIntoGap } from './validity-gap-lib.mjs'
+import { fixCampaignHeader } from './validity-gap-lib.mjs'
 import { renderer, RUNTIME_OUT } from './renderer.mjs'
 
 const [snapshotDir, outDir] = process.argv.slice(2)
@@ -45,7 +45,7 @@ try {
     let touched = false
     for (const page of project.pages) {
       const source = JSON.parse(await fs.readFile(`${snapshotDir}/pages/${page.file}.json`, 'utf8'))
-      const result = moveValidityIntoGap(source)
+      const result = fixCampaignHeader(source)
       const entry = { project: project.id, model: project.name, page: page.id, file: page.file, format: page.format, changes: result.changes, skipped: result.skipped || null }
       if (result.changes.length) {
         touched = true

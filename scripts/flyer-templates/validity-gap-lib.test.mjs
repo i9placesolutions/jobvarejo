@@ -1,7 +1,7 @@
 // node --test scripts/flyer-templates/validity-gap-lib.test.mjs
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { moveValidityIntoGap, validityTextColor } from './validity-gap-lib.mjs'
+import { compactInstagramPanel, fixCampaignHeader, moveValidityIntoGap, validityTextColor } from './validity-gap-lib.mjs'
 
 const page = (extra = {}) => ({ objects: [
   { type: 'Rect', isFrame: true, name: 'frame', left: 0, top: 0, width: 1080, height: 1350, fill: '#171819' },
@@ -45,4 +45,29 @@ test('usa branco ou preto quando a cor da pílula não contrasta com a faixa', (
   assert.equal(validityTextColor('#ffdc22', '#171819'), '#ffdc22')
   assert.equal(validityTextColor('#1b5e20', '#14501a'), '#ffffff')
   assert.equal(validityTextColor('#fff8e1', '#ffeb3b'), '#171717')
+})
+
+const instagram = (gapTop = 408) => ({ objects: [
+  { type: 'Rect', name: 'header-instagram-panel', left: 619, top: 345, width: 444, height: 117, fill: '#171717' },
+  { type: 'Textbox', name: 'header-instagram-title', left: 627, top: 353, width: 427, height: 21, text: 'SIGA NOSSO INSTAGRAM' },
+  { type: 'Rect', name: 'header-instagram-background', left: 677, top: gapTop, width: 303, height: 54 },
+  { type: 'Group', name: 'header-icon-instagram', left: 699, top: gapTop - 12, width: 44, height: 44 },
+  { type: 'Textbox', name: 'header-instagram', left: 760, top: gapTop - 12, width: 198, height: 43, text: '@SUALOJA' }
+] })
+
+test('compacta o painel do Instagram mantendo o topo', () => {
+  const { canvas, changes } = compactInstagramPanel(instagram())
+  assert.equal(by(canvas, 'header-instagram-background').top, 378)
+  assert.equal(by(canvas, 'header-instagram').top, 366)
+  assert.equal(by(canvas, 'header-icon-instagram').top, 366)
+  assert.deepEqual([by(canvas, 'header-instagram-panel').top, by(canvas, 'header-instagram-panel').height], [345, 87])
+  assert.deepEqual(changes, ['painel do Instagram 30 px mais baixo'])
+  assert.equal(compactInstagramPanel(canvas).changes.length, 0)
+})
+
+test('não mexe em painel já compacto e junta as duas correções', () => {
+  assert.equal(compactInstagramPanel(instagram(380)).skipped, 'painel do Instagram já compacto')
+  const both = fixCampaignHeader({ objects: [...page().objects, ...instagram().objects] })
+  assert.ok(both.changes.includes('pílula de validade escondida'))
+  assert.ok(both.changes.includes('painel do Instagram 30 px mais baixo'))
 })

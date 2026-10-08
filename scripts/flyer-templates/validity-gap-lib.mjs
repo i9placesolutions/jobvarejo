@@ -43,6 +43,38 @@ export const validityTextColor = (pillColor, stripColor) => {
 }
 
 /**
+ * Painel "Siga nosso Instagram" alto demais (mesmos modelos): sobe a faixa do @ para logo abaixo do
+ * título, como nos demais modelos (vão < 10 px), e encurta o painel na mesma medida, mantendo o topo.
+ * O layout do editor (layoutHeaderInstagram) só centraliza o @ dentro da faixa, então o ajuste se mantém.
+ * @param {any} source canvas do Fabric
+ * @returns {{ canvas: any, changes: string[], skipped?: string }}
+ */
+export function compactInstagramPanel(source) {
+  const objects = source?.objects || []
+  const by = name => objects.find(o => o?.name === name)
+  const panel = by('header-instagram-panel'), title = by('header-instagram-title'), band = by('header-instagram-background')
+  if (!visible(panel) || !visible(title) || !band) return { canvas: source, changes: [], skipped: 'sem painel do Instagram com título' }
+  const titleBox = bounds(title), bandBox = bounds(band), panelBox = bounds(panel)
+  if (bandBox.top - titleBox.bottom < 10) return { canvas: source, changes: [], skipped: 'painel do Instagram já compacto' }
+  if (titleBox.top < panelBox.top || bandBox.bottom > panelBox.bottom + 1) return { canvas: source, changes: [], skipped: 'painel do Instagram fora do padrão' }
+
+  const canvas = structuredClone(source)
+  const find = name => canvas.objects.find(o => o?.name === name)
+  const gap = Math.round(4 * bandBox.height / 54)
+  const dy = titleBox.bottom + gap - bandBox.top
+  for (const name of ['header-instagram-background', 'header-instagram', 'header-icon-instagram']) {
+    const object = find(name)
+    if (object) object.top = num(object.top) + dy
+  }
+  const livePanel = find('header-instagram-panel')
+  // Encurta pela base (topo fixo): o painel fica abaixo da logo e sobra fundo antes da validade.
+  if (livePanel.originY === 'center') livePanel.top = num(livePanel.top) + dy / 2
+  else if (livePanel.originY === 'bottom') livePanel.top = num(livePanel.top) + dy
+  livePanel.height = num(livePanel.height) + dy / Math.abs(num(livePanel.scaleY, 1))
+  return { canvas, changes: [`painel do Instagram ${Math.round(-dy)} px mais baixo`] }
+}
+
+/**
  * @param {any} source canvas do Fabric
  * @returns {{ canvas: any, changes: string[], skipped?: string }}
  */
@@ -82,4 +114,13 @@ export function moveValidityIntoGap(source) {
     changes.push('calendário na cor da data')
   }
   return { canvas, changes }
+}
+
+/** As duas correções dos modelos da fábrica de 03/10: validade no vão e painel do Instagram compacto. */
+export function fixCampaignHeader(source) {
+  const validity = moveValidityIntoGap(source)
+  const instagram = compactInstagramPanel(validity.canvas)
+  const changes = [...validity.changes, ...instagram.changes]
+  if (!changes.length) return { canvas: source, changes, skipped: `${validity.skipped}; ${instagram.skipped}` }
+  return { canvas: instagram.canvas, changes }
 }
