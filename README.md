@@ -1,23 +1,15 @@
-# Nuxt Minimal Starter
+# JobVarejo
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Editor de encartes, cartazes, artes e vídeos para varejo (Nuxt 4 + Fabric.js 7 + PostgreSQL + Wasabi S3).
+Guia técnico para agentes e devs: [`AGENTS.md`](AGENTS.md). Documentos de módulos ficam em [`docs/`](docs/);
+análises e auditorias antigas (algumas citam Vercel/Contabo/Supabase, hoje fora de uso) ficam em [`docs/arquivo/`](docs/arquivo/).
 
 ## Setup
 
-Make sure to install dependencies:
-
 ```bash
-# npm
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
+cp .env.example .env   # preencha os valores
+npm run dev            # http://localhost:3000
 ```
 
 ## Environment variables
@@ -103,56 +95,17 @@ Para auth local (sem Supabase Auth), aplique tambem:
 - `database/auth_local_password_migration.sql`
 - se necessario, defina senha local por usuario com `scripts/db/set-user-password.sh`
 
-## Development Server
-
-Start the development server on `http://localhost:3000`:
+## Verificações antes de publicar
 
 ```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
+npm test               # vitest
+npm run typecheck      # vue-tsc via Nuxt
+npm run check          # build + limite do chunk cliente
 ```
 
-## Production
+## Produção (Coolify)
 
-Build the application for production:
-
-```bash
-# npm
-npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+- O deploy é feito pelo Coolify a partir do [`Dockerfile`](Dockerfile); um push na `main` dispara deploy automático.
+- Healthcheck: `GET /api/health`.
+- Variáveis de ambiente ficam no painel do Coolify (nunca no repositório). Use `npm run env:check:full` como referência da lista completa.
+- A Vercel (`vercel.json`) é apenas fallback legado.

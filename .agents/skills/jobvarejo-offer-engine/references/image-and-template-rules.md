@@ -49,7 +49,7 @@ Antes de criar um visual novo:
 Entradas relevantes:
 - [components/LabelTemplatesDialog.vue](/Users/rafaelmendes/Documents/jobvarejo/components/LabelTemplatesDialog.vue)
 - [components/EditorCanvas.vue](/Users/rafaelmendes/Documents/jobvarejo/components/EditorCanvas.vue)
-- [ANALISE_EDITOR_DIAGNOSTICO_2026-02-17.md](/Users/rafaelmendes/Documents/jobvarejo/ANALISE_EDITOR_DIAGNOSTICO_2026-02-17.md)
+- [ANALISE_EDITOR_DIAGNOSTICO_2026-02-17.md](/Users/rafaelmendes/Documents/Projetos/jobvarejo/docs/arquivo/ANALISE_EDITOR_DIAGNOSTICO_2026-02-17.md)
 
 ## Regra visual
 

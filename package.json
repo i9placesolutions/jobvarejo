@@ -20,7 +20,7 @@
     "db:sync:data": "bash scripts/db/incremental-sync-data.sh",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
-    "typecheck": "nuxt typecheck",
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=8192 nuxt typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",

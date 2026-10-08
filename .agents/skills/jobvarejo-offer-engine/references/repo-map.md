@@ -53,10 +53,10 @@ Ler este arquivo quando precisar localizar rapidamente onde o JobVarejo trata in
 - [types/project.ts](/Users/rafaelmendes/Documents/jobvarejo/types/project.ts)
   - contrato de pagina, tipo de pagina e linha de projeto
 
-- [ANALISE_PERSISTENCIA.md](/Users/rafaelmendes/Documents/jobvarejo/ANALISE_PERSISTENCIA.md)
+- [ANALISE_PERSISTENCIA.md](/Users/rafaelmendes/Documents/Projetos/jobvarejo/docs/arquivo/ANALISE_PERSISTENCIA.md)
   - resumo de persistencia de canvas, viewport, templates e thumbnails
 
-- [ANALISE_EDITOR_DIAGNOSTICO_2026-02-17.md](/Users/rafaelmendes/Documents/jobvarejo/ANALISE_EDITOR_DIAGNOSTICO_2026-02-17.md)
+- [ANALISE_EDITOR_DIAGNOSTICO_2026-02-17.md](/Users/rafaelmendes/Documents/Projetos/jobvarejo/docs/arquivo/ANALISE_EDITOR_DIAGNOSTICO_2026-02-17.md)
   - historico de riscos, regressao e areas sensiveis
 
 ## Regra pratica

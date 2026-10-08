@@ -32,3 +32,10 @@ test-results
 
 _to_delete
 **/__pycache__
+node-compile-cache
+work
+tmp
+.output-*
+.nuxt-*
+.art-studio-deletion-backups
+docs/arquivo

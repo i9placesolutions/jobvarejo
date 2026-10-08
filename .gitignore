@@ -95,3 +95,13 @@ coverage/
 
 # Worker das prévias do catálogo: gerado no build (Dockerfile) a partir de render-worker.ts
 workers/catalog-preview/render-worker.mjs
+
+# Lixo local / caches (organização para produção)
+node-compile-cache/
+_to_delete/
+app_old/
+.qwen/
+/work/
+/tmp/
+.output-*/
+.nuxt-*/
