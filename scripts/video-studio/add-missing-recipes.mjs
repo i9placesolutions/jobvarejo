@@ -67,6 +67,8 @@ function recipeFor(a, i) {
       ...Object.fromEntries(Object.entries(direction).filter(([key]) => key !== 'transition')), transitionSound: 'retail-whoosh-v1', accentSound: 'retail-pop-v1',
       // Efeitos desenhados à mão (drawn-fx) pelo tema do modelo.
       drawnFx: drawnFxForTheme(`${a.name} ${a.nativeTitle || ''}`, seed) },
+    // Fundo claro: contatos do encerramento na cor escura do modelo (o padrão é texto branco).
+    ...(lum(a.base) > .6 ? { appearanceDefaults: { contactColor: a.ink } } : {}),
     labelNames: labelType === 'electric' || labelType === 'industrial' ? ['preto/amarelo 3d', 'Padrão'] : labelType === 'harvest' || labelType === 'rose' ? ['Padrão', 'PRETA VERMELHA AMARELA'] : ['PRETA VERMELHA AMARELA', 'Padrão'] }
 }
 
@@ -74,6 +76,7 @@ const db = new pg.Client({ connectionString: process.env.POSTGRES_DATABASE_URL }
 const rows = (await db.query(`select id, name, canvas_data from projects where is_template = true and (template_config->>'category') is not null order by name, id`)).rows
 await db.query('rollback'); await db.end()
 const loadCanvas = async p => { const page = p.canvas_data.find(x => x.templateFormatId === 'stories') || p.canvas_data.find(x => x.width === 1080 && x.height === 1920) || p.canvas_data[0]; let b = await fetchKey(page.canvasDataPath); if (b[0] === 31 && b[1] === 139) b = gunzipSync(b); return JSON.parse(b) }
+const lum = hex => { const n = parseInt(hex.slice(1), 16); return (.299 * (n >> 16) + .587 * (n >> 8 & 255) + .114 * (n & 255)) / 255 }
 const visible = o => o.visible !== false && (o.opacity ?? 1) > 0
 await mkdir(OUT, { recursive: true })
 const created = []

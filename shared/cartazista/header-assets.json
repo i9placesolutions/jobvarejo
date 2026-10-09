@@ -481,5 +481,10 @@
     "background": "/video-studio/templates/catalog/magnific-promocao-da-semana-cartaz-header.jpg",
     "seal": "/video-studio/templates/catalog/magnific-promocao-da-semana-seal.png",
     "backgroundCropY": 0.5
+  },
+  "4f092cdb-138c-4cf1-b2f7-4aacc018a890": {
+    "background": "/video-studio/templates/catalog/4f092cdb-138c-4cf1-b2f7-4aacc018a890-background.png",
+    "seal": "/video-studio/templates/catalog/4f092cdb-138c-4cf1-b2f7-4aacc018a890-seal-title-v1.png",
+    "backgroundCropY": 0
   }
 }
