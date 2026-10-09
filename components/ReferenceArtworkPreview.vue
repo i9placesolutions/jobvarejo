@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RetailReferenceArtwork, ReferenceArtworkBox } from '~/shared/retail-reference-artwork'
-const props = defineProps<{ artwork: RetailReferenceArtwork; title: string }>()
+const props = defineProps<{ artwork: RetailReferenceArtwork; title: string; preview?: boolean }>()
 const box = (b: ReferenceArtworkBox) => ({ left: `${b[0] * 100}%`, top: `${b[1] / props.artwork.headerBottom * 100}%`, width: `${b[2] * 100}%`, height: `${b[3] / props.artwork.headerBottom * 100}%` })
 const logoInk = computed(() => {
   const rgb = props.artwork.colors.logo.slice(1).match(/../g)?.map(v => parseInt(v, 16)) || [255,255,255]
@@ -9,7 +9,7 @@ const logoInk = computed(() => {
 </script>
 <template>
   <div class="reference-artwork-preview" :style="{ aspectRatio: artwork.width / (artwork.height * artwork.headerBottom) }" role="img" :aria-label="title">
-    <img :src="artwork.src" alt="" loading="lazy" />
+    <img :src="preview ? artwork.src.replace('/video-studio/templates/', '/video-studio/preview/templates/') : artwork.src" alt="" loading="lazy" />
     <span class="reference-cover" :style="{ ...box(artwork.logoMask), background: artwork.colors.logo }" />
     <span class="reference-cover" :style="{ ...box(artwork.socialMask), background: artwork.colors.social }" />
     <span v-for="(mask, index) in artwork.additionalMasks || []" :key="index" class="reference-cover" :style="{ ...box(mask.box), background: mask.color }" />

@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react'
 import {Img, cancelRender, continueRender, delayRender} from 'remotion'
 import {fillStickerHoles} from './sticker-mask'
+import {createStickerLogoCache} from './sticker-cache'
 
 function canvas(width: number, height: number) {
   const element = document.createElement('canvas')
@@ -9,7 +10,7 @@ function canvas(width: number, height: number) {
 }
 
 // Derivado apenas para o vídeo. A marca cadastrada e seus pixels de cor são preservados.
-export async function makeStickerLogo(src: string): Promise<string> {
+async function renderStickerLogo(src: string): Promise<string> {
   const image = new Image()
   image.crossOrigin = 'anonymous'; image.src = src
   await image.decode()
@@ -46,6 +47,8 @@ export async function makeStickerLogo(src: string): Promise<string> {
   oc.drawImage(source, 0, 0)
   return output.toDataURL('image/png')
 }
+
+export const makeStickerLogo = createStickerLogoCache(renderStickerLogo)
 
 export function StickerLogo({src, style}: {src: string; style: React.CSSProperties}) {
   const [ready, setReady] = useState<{src: string; image: string} | null>(null)

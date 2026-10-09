@@ -3,6 +3,7 @@ import catalogManifest from '~/shared/video-studio/catalog-assets.json'
 import { enforceRateLimit } from '~/server/utils/rate-limit'
 import { getS3Client } from '~/server/utils/s3'
 import { videoBucket } from '~/server/utils/video-studio/service'
+import { catalogPreview, CATALOG_PREVIEW_VERSION } from '~/server/utils/video-studio/catalog-preview'
 import {
   matchesVideoCatalogEtag,
   normalizeVideoCatalogPath,
@@ -16,7 +17,9 @@ import {
 const manifest = catalogManifest as VideoCatalogManifest
 
 export default defineEventHandler(async (event) => {
-  const path = normalizeVideoCatalogPath(getRouterParam(event, 'path'))
+  const requestedPath = String(getRouterParam(event, 'path') || '')
+  const preview = requestedPath.startsWith('preview/')
+  const path = normalizeVideoCatalogPath(preview ? requestedPath.slice('preview/'.length) : requestedPath)
   if (!path) throw createError({ statusCode: 404, statusMessage: 'Asset de catálogo não encontrado.' })
 
   await enforceRateLimit(
@@ -28,6 +31,30 @@ export default defineEventHandler(async (event) => {
 
   const asset = resolveVideoCatalogAsset(manifest, path)
   if (!asset) throw createError({ statusCode: 404, statusMessage: 'Asset de catálogo não encontrado.' })
+
+  // A prévia tem URL e ETag próprios; o worker/exportação conserva o original.
+  if (preview && /^image\/(png|jpeg|webp)$/.test(asset.contentType) && asset.bytes <= 24 * 1024 * 1024) {
+    const etag = `"${asset.sha256}-${CATALOG_PREVIEW_VERSION}"`
+    setResponseHeaders(event, { 'Cache-Control': 'public, max-age=3600', 'Content-Type': 'image/webp', ETag: etag })
+    if (matchesVideoCatalogEtag(getRequestHeader(event, 'if-none-match'), etag)) {
+      setResponseStatus(event, 304)
+      return null
+    }
+    try {
+      const bytes = await catalogPreview(asset.sha256, async () => {
+        const object = await getS3Client().send(new GetObjectCommand({ Bucket: videoBucket(), Key: asset.key }))
+        if (!object.Body) throw new Error('Imagem indisponível.')
+        return Buffer.from(await object.Body.transformToByteArray())
+      })
+      setResponseHeader(event, 'Content-Length', bytes.length)
+      return bytes
+    } catch {
+      // Uma imagem incompatível ou cache ocupado continua disponível no original.
+      setResponseHeader(event, 'Cache-Control', 'no-store')
+      removeResponseHeader(event, 'ETag')
+      return sendRedirect(event, `/video-studio/${path}`, 302)
+    }
+  }
 
   const etag = videoCatalogEtag(asset.sha256)
   setResponseHeaders(event, {
