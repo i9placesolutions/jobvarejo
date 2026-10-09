@@ -2617,6 +2617,18 @@
       "bytes": 1670500,
       "contentType": "image/png"
     },
+    "templates/catalog/07564aee-2857-4cc0-a2d5-9fb13738f71d-background.png": {
+      "key": "video-studio/catalog/b88b58156b6ade3916bf2a9dee977a410d5271fc82688355486bd8f9b7336237/templates/catalog/07564aee-2857-4cc0-a2d5-9fb13738f71d-background.png",
+      "sha256": "b88b58156b6ade3916bf2a9dee977a410d5271fc82688355486bd8f9b7336237",
+      "bytes": 2543460,
+      "contentType": "image/png"
+    },
+    "templates/catalog/07564aee-2857-4cc0-a2d5-9fb13738f71d-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/d479e0ef66689d07be7f82e36108c0a92a3b3cadfe66cdce05e7dbcd9e78e6eb/templates/catalog/07564aee-2857-4cc0-a2d5-9fb13738f71d-seal-trimmed-v1.png",
+      "sha256": "d479e0ef66689d07be7f82e36108c0a92a3b3cadfe66cdce05e7dbcd9e78e6eb",
+      "bytes": 2429637,
+      "contentType": "image/png"
+    },
     "templates/catalog/09f97ca1-7a0b-448d-bdd8-2c3be407d753-background.png": {
       "key": "video-studio/catalog/6c0eaf56d49539e726c49b885433a7abf0e0756f66c7fbac0d46db472ceeb414/templates/catalog/09f97ca1-7a0b-448d-bdd8-2c3be407d753-background.png",
       "sha256": "6c0eaf56d49539e726c49b885433a7abf0e0756f66c7fbac0d46db472ceeb414",
@@ -2633,6 +2645,18 @@
       "key": "video-studio/catalog/b5b9241846e69625f24038397ad08bb1ea0269b1ee1ce04af735e146f3b2c4ba/templates/catalog/09f97ca1-7a0b-448d-bdd8-2c3be407d753-seal.png",
       "sha256": "b5b9241846e69625f24038397ad08bb1ea0269b1ee1ce04af735e146f3b2c4ba",
       "bytes": 1494731,
+      "contentType": "image/png"
+    },
+    "templates/catalog/0b351a73-2274-4d90-83d7-e71e87ee79b5-background.png": {
+      "key": "video-studio/catalog/4cc2b2d8c38c85a1dd358d51a2fa9f3d26a3baf6b3027aa8ad5fc8c7ffe2fb0c/templates/catalog/0b351a73-2274-4d90-83d7-e71e87ee79b5-background.png",
+      "sha256": "4cc2b2d8c38c85a1dd358d51a2fa9f3d26a3baf6b3027aa8ad5fc8c7ffe2fb0c",
+      "bytes": 3307418,
+      "contentType": "image/png"
+    },
+    "templates/catalog/0b351a73-2274-4d90-83d7-e71e87ee79b5-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/a4770479637b7a26a6b28cc40090e0d979514960bdc4844ff16c9ba48a91ccb2/templates/catalog/0b351a73-2274-4d90-83d7-e71e87ee79b5-seal-trimmed-v1.png",
+      "sha256": "a4770479637b7a26a6b28cc40090e0d979514960bdc4844ff16c9ba48a91ccb2",
+      "bytes": 2050630,
       "contentType": "image/png"
     },
     "templates/catalog/11264706-ea22-4ae1-bd52-fcf11df89a03-background.png": {
@@ -2669,6 +2693,12 @@
       "key": "video-studio/catalog/1bef17138c619d86c947d880fd2ed76e4a8928ba893d4615dcdaf154f208f63b/templates/catalog/1555a997-254e-40a1-85b0-064f2247315e-seal.png",
       "sha256": "1bef17138c619d86c947d880fd2ed76e4a8928ba893d4615dcdaf154f208f63b",
       "bytes": 1510858,
+      "contentType": "image/png"
+    },
+    "templates/catalog/167aecc3-3a83-4fdb-8f3d-437272e07455-seal-v2.png": {
+      "key": "video-studio/catalog/1b3376b7ab467e4b5bd846fb8dac3e1cb6ba59182c073d7625914243827a4287/templates/catalog/167aecc3-3a83-4fdb-8f3d-437272e07455-seal-v2.png",
+      "sha256": "1b3376b7ab467e4b5bd846fb8dac3e1cb6ba59182c073d7625914243827a4287",
+      "bytes": 4481866,
       "contentType": "image/png"
     },
     "templates/catalog/16abbc12-b89b-40ef-a195-3f0ce8ef5f90-background.png": {
@@ -2789,6 +2819,12 @@
       "key": "video-studio/catalog/0eedacda82710e2a804898e94c5b31d33508f2057163125bbe097769cd8c8937/templates/catalog/1d98aad4-2379-4f8d-bc7d-0e89f03693e2-seal.png",
       "sha256": "0eedacda82710e2a804898e94c5b31d33508f2057163125bbe097769cd8c8937",
       "bytes": 2477559,
+      "contentType": "image/png"
+    },
+    "templates/catalog/1f1f2fbe-7b8a-4d7a-869c-91e7ebcea765-seal-v2.png": {
+      "key": "video-studio/catalog/38e053c22eebda42edbc3426a4d16c13153ad83ef0ea61602c35c40474b2f7a0/templates/catalog/1f1f2fbe-7b8a-4d7a-869c-91e7ebcea765-seal-v2.png",
+      "sha256": "38e053c22eebda42edbc3426a4d16c13153ad83ef0ea61602c35c40474b2f7a0",
+      "bytes": 3641671,
       "contentType": "image/png"
     },
     "templates/catalog/1f6219e1-f877-41f1-a294-7f40a8f8f477-background.png": {
@@ -3109,6 +3145,18 @@
       "bytes": 1679847,
       "contentType": "image/png"
     },
+    "templates/catalog/454cb8bf-ec09-45d9-8676-414ec93bc0db-background.png": {
+      "key": "video-studio/catalog/7409b589e7c4fac3df96a8a0ab9087797d9f930dccf604336e354440eb930a51/templates/catalog/454cb8bf-ec09-45d9-8676-414ec93bc0db-background.png",
+      "sha256": "7409b589e7c4fac3df96a8a0ab9087797d9f930dccf604336e354440eb930a51",
+      "bytes": 1783628,
+      "contentType": "image/png"
+    },
+    "templates/catalog/454cb8bf-ec09-45d9-8676-414ec93bc0db-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/e35a9e7fa3fa3d60ad009a38ac4cfaebd72951e50a657be0c3093a2f98437465/templates/catalog/454cb8bf-ec09-45d9-8676-414ec93bc0db-seal-trimmed-v1.png",
+      "sha256": "e35a9e7fa3fa3d60ad009a38ac4cfaebd72951e50a657be0c3093a2f98437465",
+      "bytes": 2432396,
+      "contentType": "image/png"
+    },
     "templates/catalog/4b8b98f0-9a34-46e3-ab41-ddcc6135c79d-background.png": {
       "key": "video-studio/catalog/1d8bf9f50bea6558942852ea5b9e672b99a6964c210cc30f76c5b0e2ea3fc0f1/templates/catalog/4b8b98f0-9a34-46e3-ab41-ddcc6135c79d-background.png",
       "sha256": "1d8bf9f50bea6558942852ea5b9e672b99a6964c210cc30f76c5b0e2ea3fc0f1",
@@ -3125,6 +3173,18 @@
       "key": "video-studio/catalog/297303f44b3ad811e46bb1efd9ec7f3b295a810bdb433d7f5b2916f2eaba06dc/templates/catalog/4b8b98f0-9a34-46e3-ab41-ddcc6135c79d-seal.png",
       "sha256": "297303f44b3ad811e46bb1efd9ec7f3b295a810bdb433d7f5b2916f2eaba06dc",
       "bytes": 2378648,
+      "contentType": "image/png"
+    },
+    "templates/catalog/4d176278-f6de-44de-b967-c4a5eb948e9c-background.png": {
+      "key": "video-studio/catalog/c0ddb3821d3fc2ad456f7aa81619a69865f4d894ae7863f8d9c041c62dcb31e8/templates/catalog/4d176278-f6de-44de-b967-c4a5eb948e9c-background.png",
+      "sha256": "c0ddb3821d3fc2ad456f7aa81619a69865f4d894ae7863f8d9c041c62dcb31e8",
+      "bytes": 2657604,
+      "contentType": "image/png"
+    },
+    "templates/catalog/4d176278-f6de-44de-b967-c4a5eb948e9c-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/8db8abd5d4c8364f9ffed3c17ceebe23c41c36bbccc19d6a832ce1484127233e/templates/catalog/4d176278-f6de-44de-b967-c4a5eb948e9c-seal-trimmed-v1.png",
+      "sha256": "8db8abd5d4c8364f9ffed3c17ceebe23c41c36bbccc19d6a832ce1484127233e",
+      "bytes": 2414509,
       "contentType": "image/png"
     },
     "templates/catalog/4e4c6061-260b-4f90-b494-d1412b4d8f2a-background.png": {
@@ -3149,6 +3209,12 @@
       "key": "video-studio/catalog/8ccf77f9702ac313fa635bf79d6cf0677f593448fc510182667f1609934f3cf1/templates/catalog/4f092cdb-138c-4cf1-b2f7-4aacc018a890-background.png",
       "sha256": "8ccf77f9702ac313fa635bf79d6cf0677f593448fc510182667f1609934f3cf1",
       "bytes": 733326,
+      "contentType": "image/png"
+    },
+    "templates/catalog/4f092cdb-138c-4cf1-b2f7-4aacc018a890-seal-title-v1.png": {
+      "key": "video-studio/catalog/5bdf0b9d333b9adcc0ac5f3304645576a211358f0f877439609a604d3d6cfd2f/templates/catalog/4f092cdb-138c-4cf1-b2f7-4aacc018a890-seal-title-v1.png",
+      "sha256": "5bdf0b9d333b9adcc0ac5f3304645576a211358f0f877439609a604d3d6cfd2f",
+      "bytes": 45975,
       "contentType": "image/png"
     },
     "templates/catalog/4fa00e96-746d-41bf-ac47-b2485be621f5-background.png": {
@@ -3541,6 +3607,18 @@
       "bytes": 1327992,
       "contentType": "image/png"
     },
+    "templates/catalog/80faa604-3dd2-42a2-810b-660ae210acfd-background.png": {
+      "key": "video-studio/catalog/41eb6889a8fc90972afc0909b3d5312d8d7ff3fd0f8ded8353e08b877e1e7cc4/templates/catalog/80faa604-3dd2-42a2-810b-660ae210acfd-background.png",
+      "sha256": "41eb6889a8fc90972afc0909b3d5312d8d7ff3fd0f8ded8353e08b877e1e7cc4",
+      "bytes": 2380281,
+      "contentType": "image/png"
+    },
+    "templates/catalog/80faa604-3dd2-42a2-810b-660ae210acfd-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/46a4aa94f63fc9cdd87470e065bf7d8f5eb2cdb9b69bff231f55f54012a8192b/templates/catalog/80faa604-3dd2-42a2-810b-660ae210acfd-seal-trimmed-v1.png",
+      "sha256": "46a4aa94f63fc9cdd87470e065bf7d8f5eb2cdb9b69bff231f55f54012a8192b",
+      "bytes": 2306692,
+      "contentType": "image/png"
+    },
     "templates/catalog/81092a72-c807-46a5-8996-a0eb8c229446-background.png": {
       "key": "video-studio/catalog/cf2d1b1e2655eaa101f649c8faebd26788df633ed29a3d534ad03c6022038d8b/templates/catalog/81092a72-c807-46a5-8996-a0eb8c229446-background.png",
       "sha256": "cf2d1b1e2655eaa101f649c8faebd26788df633ed29a3d534ad03c6022038d8b",
@@ -3559,6 +3637,12 @@
       "bytes": 1265783,
       "contentType": "image/png"
     },
+    "templates/catalog/82c90116-464a-49ff-9cf8-c612239f1519-seal-v2.png": {
+      "key": "video-studio/catalog/c94f7a7bb407db6df81597e136e76baa3d5c5744bddade2bc1b94fb9e72c98d8/templates/catalog/82c90116-464a-49ff-9cf8-c612239f1519-seal-v2.png",
+      "sha256": "c94f7a7bb407db6df81597e136e76baa3d5c5744bddade2bc1b94fb9e72c98d8",
+      "bytes": 3088162,
+      "contentType": "image/png"
+    },
     "templates/catalog/82d00ae9-c8a6-476f-936a-89a13cca86bc-background.png": {
       "key": "video-studio/catalog/8ddeb3544dcfd0d7b23b12c212855b8d24f8acafd40a1f33595163cedde7c62d/templates/catalog/82d00ae9-c8a6-476f-936a-89a13cca86bc-background.png",
       "sha256": "8ddeb3544dcfd0d7b23b12c212855b8d24f8acafd40a1f33595163cedde7c62d",
@@ -3575,6 +3659,18 @@
       "key": "video-studio/catalog/ad17e134ded69b987da66f7a0f3c35584dd8c3ad1d8b551f9fbdff38ae417b70/templates/catalog/82d00ae9-c8a6-476f-936a-89a13cca86bc-seal.png",
       "sha256": "ad17e134ded69b987da66f7a0f3c35584dd8c3ad1d8b551f9fbdff38ae417b70",
       "bytes": 1259744,
+      "contentType": "image/png"
+    },
+    "templates/catalog/84ed1885-6284-4d98-8e15-d06445800cee-background.png": {
+      "key": "video-studio/catalog/af69480ed98e7103494310dfaf476e90ea41310ad32d8ed4647f12dd3790b7fc/templates/catalog/84ed1885-6284-4d98-8e15-d06445800cee-background.png",
+      "sha256": "af69480ed98e7103494310dfaf476e90ea41310ad32d8ed4647f12dd3790b7fc",
+      "bytes": 2386257,
+      "contentType": "image/png"
+    },
+    "templates/catalog/84ed1885-6284-4d98-8e15-d06445800cee-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/e8954a3ff5c5ef9b329bdbe297e3fe460d913dcc2c2f47cf0f6a6c3f1997105c/templates/catalog/84ed1885-6284-4d98-8e15-d06445800cee-seal-trimmed-v1.png",
+      "sha256": "e8954a3ff5c5ef9b329bdbe297e3fe460d913dcc2c2f47cf0f6a6c3f1997105c",
+      "bytes": 3109237,
       "contentType": "image/png"
     },
     "templates/catalog/87d633a3-da24-4245-90e7-7000cf26f988-background.png": {
@@ -3739,6 +3835,12 @@
       "bytes": 1378255,
       "contentType": "image/png"
     },
+    "templates/catalog/a0ad029a-3d67-49c6-83cb-65a74b8c6ae4-seal-v2.png": {
+      "key": "video-studio/catalog/52ae0f7a906fa6027aef8de27f39e8aebc1213f7cb982b077d9018284a18a702/templates/catalog/a0ad029a-3d67-49c6-83cb-65a74b8c6ae4-seal-v2.png",
+      "sha256": "52ae0f7a906fa6027aef8de27f39e8aebc1213f7cb982b077d9018284a18a702",
+      "bytes": 3440210,
+      "contentType": "image/png"
+    },
     "templates/catalog/a307ebdd-c0b1-4a6c-9091-ee4005246c50-background.png": {
       "key": "video-studio/catalog/dfd1c478636220d9085ab125c9fc98be118a46a49c824af6931d5f2fb57d0356/templates/catalog/a307ebdd-c0b1-4a6c-9091-ee4005246c50-background.png",
       "sha256": "dfd1c478636220d9085ab125c9fc98be118a46a49c824af6931d5f2fb57d0356",
@@ -3811,6 +3913,18 @@
       "bytes": 2265910,
       "contentType": "image/png"
     },
+    "templates/catalog/a76039b5-7ebc-4a95-8e7c-c493b54e0593-background.png": {
+      "key": "video-studio/catalog/15652a8b34336ed2b140e03466e634d790c075bd64e3478988fc3b54d8cc9909/templates/catalog/a76039b5-7ebc-4a95-8e7c-c493b54e0593-background.png",
+      "sha256": "15652a8b34336ed2b140e03466e634d790c075bd64e3478988fc3b54d8cc9909",
+      "bytes": 2417208,
+      "contentType": "image/png"
+    },
+    "templates/catalog/a76039b5-7ebc-4a95-8e7c-c493b54e0593-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/9b6b3617fa65e4047b3e2e5c53c3e32df3cf6177266d365fbd4b377fd4a07f5d/templates/catalog/a76039b5-7ebc-4a95-8e7c-c493b54e0593-seal-trimmed-v1.png",
+      "sha256": "9b6b3617fa65e4047b3e2e5c53c3e32df3cf6177266d365fbd4b377fd4a07f5d",
+      "bytes": 2693421,
+      "contentType": "image/png"
+    },
     "templates/catalog/ab690e7b-f393-4416-b81c-e6ad3da654a4-background.png": {
       "key": "video-studio/catalog/ac4e82f6be3eb989677fffb46394a5b10ada866e5393c371251438b03382e4c1/templates/catalog/ab690e7b-f393-4416-b81c-e6ad3da654a4-background.png",
       "sha256": "ac4e82f6be3eb989677fffb46394a5b10ada866e5393c371251438b03382e4c1",
@@ -3865,6 +3979,18 @@
       "bytes": 2468449,
       "contentType": "image/png"
     },
+    "templates/catalog/af26b643-2f84-40a6-a9a5-49510e9767a5-background.png": {
+      "key": "video-studio/catalog/e72d8db6212a81ca6421ae6b7b6e6bcb3ea5d4320635929c53d7fc5308c5022c/templates/catalog/af26b643-2f84-40a6-a9a5-49510e9767a5-background.png",
+      "sha256": "e72d8db6212a81ca6421ae6b7b6e6bcb3ea5d4320635929c53d7fc5308c5022c",
+      "bytes": 1813569,
+      "contentType": "image/png"
+    },
+    "templates/catalog/af26b643-2f84-40a6-a9a5-49510e9767a5-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/6984c9473b6f639ba7ecfd62b904b7ef31e059c283811de034b8c2605aea44d0/templates/catalog/af26b643-2f84-40a6-a9a5-49510e9767a5-seal-trimmed-v1.png",
+      "sha256": "6984c9473b6f639ba7ecfd62b904b7ef31e059c283811de034b8c2605aea44d0",
+      "bytes": 2997432,
+      "contentType": "image/png"
+    },
     "templates/catalog/b101ac2c-1e71-45fa-9d7f-657f001fcd00-background.png": {
       "key": "video-studio/catalog/5cf6c2f983ffeb9e944e96ea68e47a5107cd4333dd9ac75bf60027a06a24af0d/templates/catalog/b101ac2c-1e71-45fa-9d7f-657f001fcd00-background.png",
       "sha256": "5cf6c2f983ffeb9e944e96ea68e47a5107cd4333dd9ac75bf60027a06a24af0d",
@@ -3901,6 +4027,18 @@
       "bytes": 1267992,
       "contentType": "image/png"
     },
+    "templates/catalog/b61333c9-646b-4464-aa48-7b4b841f096b-background.png": {
+      "key": "video-studio/catalog/a7b5670cfdf48b665ce082f7c3cbf2c619940485b08366a191dc07199adc34a1/templates/catalog/b61333c9-646b-4464-aa48-7b4b841f096b-background.png",
+      "sha256": "a7b5670cfdf48b665ce082f7c3cbf2c619940485b08366a191dc07199adc34a1",
+      "bytes": 2347880,
+      "contentType": "image/png"
+    },
+    "templates/catalog/b61333c9-646b-4464-aa48-7b4b841f096b-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/e982f53e648f4a53927640cff03cd46522b98674eac7b71ab33fccb241fe1028/templates/catalog/b61333c9-646b-4464-aa48-7b4b841f096b-seal-trimmed-v1.png",
+      "sha256": "e982f53e648f4a53927640cff03cd46522b98674eac7b71ab33fccb241fe1028",
+      "bytes": 2528978,
+      "contentType": "image/png"
+    },
     "templates/catalog/b8a497c1-b11a-431a-95a9-d97cb985980d-background.png": {
       "key": "video-studio/catalog/0f736d635d42eac47bbebf2386d96cf218e8ea97459e3ad7a2a8e280a317f8ae/templates/catalog/b8a497c1-b11a-431a-95a9-d97cb985980d-background.png",
       "sha256": "0f736d635d42eac47bbebf2386d96cf218e8ea97459e3ad7a2a8e280a317f8ae",
@@ -3935,6 +4073,12 @@
       "key": "video-studio/catalog/ebc862d69ddc7687e28f6363009dd51f6a03e37e7c2e3991f10c52f0d28c975f/templates/catalog/ba3907a1-1319-4e2b-80e0-90f20a3353fc-seal.png",
       "sha256": "ebc862d69ddc7687e28f6363009dd51f6a03e37e7c2e3991f10c52f0d28c975f",
       "bytes": 1612102,
+      "contentType": "image/png"
+    },
+    "templates/catalog/bdb34119-7241-449d-94e0-de05c8289646-seal-v2.png": {
+      "key": "video-studio/catalog/c1979d17842d03d8dd8e98e5d626ac23e43578d277e76cb81c764167833956d6/templates/catalog/bdb34119-7241-449d-94e0-de05c8289646-seal-v2.png",
+      "sha256": "c1979d17842d03d8dd8e98e5d626ac23e43578d277e76cb81c764167833956d6",
+      "bytes": 3855169,
       "contentType": "image/png"
     },
     "templates/catalog/bf5ee0e4-82eb-4de4-a46b-cc2dd712803b-background.png": {
@@ -4385,6 +4529,30 @@
       "key": "video-studio/catalog/f4d7f309dc2e392bcb38a8a0b23fbfb6cfde4fa5292a11a59ab49cdbf1d521db/templates/catalog/fca4e039-f585-4bb6-9022-370d490e163f-seal.png",
       "sha256": "f4d7f309dc2e392bcb38a8a0b23fbfb6cfde4fa5292a11a59ab49cdbf1d521db",
       "bytes": 1585855,
+      "contentType": "image/png"
+    },
+    "templates/catalog/fcd6a55e-0509-4d34-abb3-d80fd67c64b5-background.png": {
+      "key": "video-studio/catalog/42751b62e4543283d5da2af399c955bae980febefda01a918c74a69879c75cac/templates/catalog/fcd6a55e-0509-4d34-abb3-d80fd67c64b5-background.png",
+      "sha256": "42751b62e4543283d5da2af399c955bae980febefda01a918c74a69879c75cac",
+      "bytes": 2103579,
+      "contentType": "image/png"
+    },
+    "templates/catalog/fcd6a55e-0509-4d34-abb3-d80fd67c64b5-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/a202e52467501717d98c52127e5726d9e80494ea29fddb639022bd4e479aa7cc/templates/catalog/fcd6a55e-0509-4d34-abb3-d80fd67c64b5-seal-trimmed-v1.png",
+      "sha256": "a202e52467501717d98c52127e5726d9e80494ea29fddb639022bd4e479aa7cc",
+      "bytes": 2659253,
+      "contentType": "image/png"
+    },
+    "templates/catalog/fd399262-ecdf-4abc-abc1-89d3f9168f06-background.png": {
+      "key": "video-studio/catalog/221fd3a1bc4bc8f4deaefe46215858e166001c72842ae43b62e2b3a2c7101fb7/templates/catalog/fd399262-ecdf-4abc-abc1-89d3f9168f06-background.png",
+      "sha256": "221fd3a1bc4bc8f4deaefe46215858e166001c72842ae43b62e2b3a2c7101fb7",
+      "bytes": 1828029,
+      "contentType": "image/png"
+    },
+    "templates/catalog/fd399262-ecdf-4abc-abc1-89d3f9168f06-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/d79486806e3c335d4dd9bdc4ca1997bf9b2ba654c6e357678a0c23e8281fe035/templates/catalog/fd399262-ecdf-4abc-abc1-89d3f9168f06-seal-trimmed-v1.png",
+      "sha256": "d79486806e3c335d4dd9bdc4ca1997bf9b2ba654c6e357678a0c23e8281fe035",
+      "bytes": 3181055,
       "contentType": "image/png"
     },
     "templates/catalog/magnific-aqui-tem-super-ofertas-background-wide.jpg": {
@@ -5384,33 +5552,33 @@
       "contentType": "image/png"
     },
     "templates/drawn-fx/1017334.webm": {
-      "key": "video-studio/catalog/11c335ee541053557afdf4553e168add74ed5ef3238f55829cf9156ee470f45a/templates/drawn-fx/1017334.webm",
-      "sha256": "11c335ee541053557afdf4553e168add74ed5ef3238f55829cf9156ee470f45a",
-      "bytes": 2378052,
+      "key": "video-studio/catalog/265f36cd0eb17738995211a70c823cfeb5a28c91cbdc6b398ca5854c111463f5/templates/drawn-fx/1017334.webm",
+      "sha256": "265f36cd0eb17738995211a70c823cfeb5a28c91cbdc6b398ca5854c111463f5",
+      "bytes": 2297094,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3384248.webm": {
-      "key": "video-studio/catalog/03b6f7d14508c913f627cf0578ee3fe20345d7109ac915e98ec74b5e2aa86275/templates/drawn-fx/3384248.webm",
-      "sha256": "03b6f7d14508c913f627cf0578ee3fe20345d7109ac915e98ec74b5e2aa86275",
-      "bytes": 289952,
+      "key": "video-studio/catalog/8f563e169f62a6e8bff5baca364cea3576bcabeb9447318ac55a74ddb53d1961/templates/drawn-fx/3384248.webm",
+      "sha256": "8f563e169f62a6e8bff5baca364cea3576bcabeb9447318ac55a74ddb53d1961",
+      "bytes": 274095,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3384264.webm": {
-      "key": "video-studio/catalog/62b03766699a9a8b48469de5d1d0842700a23e2ab9f624ef48329a2a0d413d72/templates/drawn-fx/3384264.webm",
-      "sha256": "62b03766699a9a8b48469de5d1d0842700a23e2ab9f624ef48329a2a0d413d72",
-      "bytes": 565538,
+      "key": "video-studio/catalog/1aa21eb81623a585f745329cfc48504d956a6d480a1facdbf23a6a92a1fe4e5c/templates/drawn-fx/3384264.webm",
+      "sha256": "1aa21eb81623a585f745329cfc48504d956a6d480a1facdbf23a6a92a1fe4e5c",
+      "bytes": 557728,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3384265.webm": {
-      "key": "video-studio/catalog/86299c0844bf4c0eb732abadc06a167340067f6972bc9cf6e59fed41cbf57d9a/templates/drawn-fx/3384265.webm",
-      "sha256": "86299c0844bf4c0eb732abadc06a167340067f6972bc9cf6e59fed41cbf57d9a",
-      "bytes": 564845,
+      "key": "video-studio/catalog/66e3514ab7aa2feb5eb8fcf788802ce417d9f37166aaabfec7af18edb436f8e8/templates/drawn-fx/3384265.webm",
+      "sha256": "66e3514ab7aa2feb5eb8fcf788802ce417d9f37166aaabfec7af18edb436f8e8",
+      "bytes": 539553,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3384268.webm": {
-      "key": "video-studio/catalog/501131c33e4c3253739c997787b25779395c5b658596a32243da27c739edfc2a/templates/drawn-fx/3384268.webm",
-      "sha256": "501131c33e4c3253739c997787b25779395c5b658596a32243da27c739edfc2a",
-      "bytes": 469200,
+      "key": "video-studio/catalog/1bc35a9e1ce9ea47815b3191e21279f3bfdb54a4699bae580b43a34dc41ad8d7/templates/drawn-fx/3384268.webm",
+      "sha256": "1bc35a9e1ce9ea47815b3191e21279f3bfdb54a4699bae580b43a34dc41ad8d7",
+      "bytes": 467446,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3384320.webm": {
@@ -5420,9 +5588,9 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3384323.webm": {
-      "key": "video-studio/catalog/6d5773e4499ced8a4f9420b4e7e768984077e6be65579cc0394cfe1e2d007b54/templates/drawn-fx/3384323.webm",
-      "sha256": "6d5773e4499ced8a4f9420b4e7e768984077e6be65579cc0394cfe1e2d007b54",
-      "bytes": 719816,
+      "key": "video-studio/catalog/9350f6ce116283e19130d898129f2f48b34a1e54bcf6d792cf456c1f4e12a3d5/templates/drawn-fx/3384323.webm",
+      "sha256": "9350f6ce116283e19130d898129f2f48b34a1e54bcf6d792cf456c1f4e12a3d5",
+      "bytes": 889252,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3384350.webm": {
@@ -5432,15 +5600,15 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3386653.webm": {
-      "key": "video-studio/catalog/b2d75c87c78c3360f542ace48c2264d8326f41dbea84607dd8f8296cbb21d10f/templates/drawn-fx/3386653.webm",
-      "sha256": "b2d75c87c78c3360f542ace48c2264d8326f41dbea84607dd8f8296cbb21d10f",
-      "bytes": 560259,
+      "key": "video-studio/catalog/5c0f1699b13d67816f24c5ace1162446d51f14a959786128b401fed40228f3d1/templates/drawn-fx/3386653.webm",
+      "sha256": "5c0f1699b13d67816f24c5ace1162446d51f14a959786128b401fed40228f3d1",
+      "bytes": 702173,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3386658.webm": {
-      "key": "video-studio/catalog/d0141b6bd10f522e9327f5ddf9800d86a8ea5826fef152ae3e9be3c523141867/templates/drawn-fx/3386658.webm",
-      "sha256": "d0141b6bd10f522e9327f5ddf9800d86a8ea5826fef152ae3e9be3c523141867",
-      "bytes": 633908,
+      "key": "video-studio/catalog/e934d327e1edb6804bf86310681d164b05650cc3bfc2e8095d54ba3cae672e96/templates/drawn-fx/3386658.webm",
+      "sha256": "e934d327e1edb6804bf86310681d164b05650cc3bfc2e8095d54ba3cae672e96",
+      "bytes": 824786,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3386669.webm": {
@@ -5450,21 +5618,21 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3386677.webm": {
-      "key": "video-studio/catalog/fa687c10cf313c5cedfbed2873913e18f769aa4e04195e1bcda9e1f1cc362b28/templates/drawn-fx/3386677.webm",
-      "sha256": "fa687c10cf313c5cedfbed2873913e18f769aa4e04195e1bcda9e1f1cc362b28",
-      "bytes": 279341,
+      "key": "video-studio/catalog/98d8d8d3067e59a4cd971cb1e9aaf0d296c50945b12fee6a1bcf30fc44c91cdf/templates/drawn-fx/3386677.webm",
+      "sha256": "98d8d8d3067e59a4cd971cb1e9aaf0d296c50945b12fee6a1bcf30fc44c91cdf",
+      "bytes": 339518,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3386679.webm": {
-      "key": "video-studio/catalog/331261553ef1aea9e118c634a57100d45f2f578bcaeb70e37114d624f648be6e/templates/drawn-fx/3386679.webm",
-      "sha256": "331261553ef1aea9e118c634a57100d45f2f578bcaeb70e37114d624f648be6e",
-      "bytes": 726277,
+      "key": "video-studio/catalog/72b1ffd4126170d4054a2a5939ec8f1b3a99675eb29e8b50162890dd7f53833d/templates/drawn-fx/3386679.webm",
+      "sha256": "72b1ffd4126170d4054a2a5939ec8f1b3a99675eb29e8b50162890dd7f53833d",
+      "bytes": 748098,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3386681.webm": {
-      "key": "video-studio/catalog/7eced5985b85dc823f12f0ac293c16d0408cb2a57d54bd7a4f0ae133289a7837/templates/drawn-fx/3386681.webm",
-      "sha256": "7eced5985b85dc823f12f0ac293c16d0408cb2a57d54bd7a4f0ae133289a7837",
-      "bytes": 659788,
+      "key": "video-studio/catalog/b79d19530732a5492462e1733686b6776f5f29677db9b7a3e112392dd1095096/templates/drawn-fx/3386681.webm",
+      "sha256": "b79d19530732a5492462e1733686b6776f5f29677db9b7a3e112392dd1095096",
+      "bytes": 659910,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3386690.webm": {
@@ -5474,15 +5642,15 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3386695.webm": {
-      "key": "video-studio/catalog/1a7eff7ebe1862f51a120c1dd34c0cccbac32ee17771c2249103be510c36203d/templates/drawn-fx/3386695.webm",
-      "sha256": "1a7eff7ebe1862f51a120c1dd34c0cccbac32ee17771c2249103be510c36203d",
-      "bytes": 1107348,
+      "key": "video-studio/catalog/c38c9f6cf9be1590c81041cd97902217cb9651e80d40a11be4788fb869234e2d/templates/drawn-fx/3386695.webm",
+      "sha256": "c38c9f6cf9be1590c81041cd97902217cb9651e80d40a11be4788fb869234e2d",
+      "bytes": 1109044,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3386700.webm": {
-      "key": "video-studio/catalog/8e18c439c0f954c0d616476c3cae213807541bc700030d3c80ebb39766c48a65/templates/drawn-fx/3386700.webm",
-      "sha256": "8e18c439c0f954c0d616476c3cae213807541bc700030d3c80ebb39766c48a65",
-      "bytes": 568710,
+      "key": "video-studio/catalog/7a28f3fa62726b730b3e62b36077ea3d78b23472d2e8c7ddd91c7231ff08a52f/templates/drawn-fx/3386700.webm",
+      "sha256": "7a28f3fa62726b730b3e62b36077ea3d78b23472d2e8c7ddd91c7231ff08a52f",
+      "bytes": 570162,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3526511.webm": {
@@ -5492,15 +5660,15 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3556322.webm": {
-      "key": "video-studio/catalog/73176113693c8155c11e992716b5640279bf5529738925a238a02e656e69b9ab/templates/drawn-fx/3556322.webm",
-      "sha256": "73176113693c8155c11e992716b5640279bf5529738925a238a02e656e69b9ab",
-      "bytes": 2160028,
+      "key": "video-studio/catalog/908e800a425cbb0696ac4b8671e3cc2b372053b1840d0c402ea1083c9a4e78f5/templates/drawn-fx/3556322.webm",
+      "sha256": "908e800a425cbb0696ac4b8671e3cc2b372053b1840d0c402ea1083c9a4e78f5",
+      "bytes": 2241285,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3557396.webm": {
-      "key": "video-studio/catalog/6e57b555fec8627dbcc6b88f51570197e97dfb53c77b40f3d21d0b5a49574505/templates/drawn-fx/3557396.webm",
-      "sha256": "6e57b555fec8627dbcc6b88f51570197e97dfb53c77b40f3d21d0b5a49574505",
-      "bytes": 2660163,
+      "key": "video-studio/catalog/6612537ed46f8324031d1c78b1cb8b4282131d64e7c1cb99ec35fc0e7f35f9ae/templates/drawn-fx/3557396.webm",
+      "sha256": "6612537ed46f8324031d1c78b1cb8b4282131d64e7c1cb99ec35fc0e7f35f9ae",
+      "bytes": 2545392,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3588030.webm": {
@@ -5540,9 +5708,9 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3954635.webm": {
-      "key": "video-studio/catalog/c7162ced69fb633f0dc6d450c3032b324c0be32ff2a48cb677b8e4d4df1fe81b/templates/drawn-fx/3954635.webm",
-      "sha256": "c7162ced69fb633f0dc6d450c3032b324c0be32ff2a48cb677b8e4d4df1fe81b",
-      "bytes": 1272848,
+      "key": "video-studio/catalog/596934bfe823060d3ab3b61dcd4f80b6ed39db10765c5e174d112e3d7de0f2f6/templates/drawn-fx/3954635.webm",
+      "sha256": "596934bfe823060d3ab3b61dcd4f80b6ed39db10765c5e174d112e3d7de0f2f6",
+      "bytes": 1548223,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/3993350.webm": {
@@ -5558,15 +5726,15 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/4135022.webm": {
-      "key": "video-studio/catalog/04b80b06cda0ac87a2c4eda412b78411ec8a2147a158c6b04166b4f606a90001/templates/drawn-fx/4135022.webm",
-      "sha256": "04b80b06cda0ac87a2c4eda412b78411ec8a2147a158c6b04166b4f606a90001",
-      "bytes": 1482372,
+      "key": "video-studio/catalog/dd6079c59baa77d44536304af19f784f3a2115192a37dd13e83f68f4a98b3990/templates/drawn-fx/4135022.webm",
+      "sha256": "dd6079c59baa77d44536304af19f784f3a2115192a37dd13e83f68f4a98b3990",
+      "bytes": 1641734,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/4135107.webm": {
-      "key": "video-studio/catalog/01ed5338f3e9abd1559812b3e8f705d11c3ca3095d751e96690b1175594c12a2/templates/drawn-fx/4135107.webm",
-      "sha256": "01ed5338f3e9abd1559812b3e8f705d11c3ca3095d751e96690b1175594c12a2",
-      "bytes": 1621164,
+      "key": "video-studio/catalog/67516b7fa77c2741c4c12d8da08a4fbf0e072cb44ef3e83aea6d1369af1324ef/templates/drawn-fx/4135107.webm",
+      "sha256": "67516b7fa77c2741c4c12d8da08a4fbf0e072cb44ef3e83aea6d1369af1324ef",
+      "bytes": 1755809,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/4138321.webm": {
@@ -5576,15 +5744,15 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/4257871.webm": {
-      "key": "video-studio/catalog/6277682e61465609ac228d91f801232a69516ca92ea8634813d3f2eec3118ab5/templates/drawn-fx/4257871.webm",
-      "sha256": "6277682e61465609ac228d91f801232a69516ca92ea8634813d3f2eec3118ab5",
-      "bytes": 3638280,
+      "key": "video-studio/catalog/88461dd7527a4cb2f9e611bc408b68d65854d5649a55bb0086e035f927ae8832/templates/drawn-fx/4257871.webm",
+      "sha256": "88461dd7527a4cb2f9e611bc408b68d65854d5649a55bb0086e035f927ae8832",
+      "bytes": 4217757,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/4289366.webm": {
-      "key": "video-studio/catalog/aa6870d371c11c901a36e8e1bfe43961af6293a2399edde297c6532a54355011/templates/drawn-fx/4289366.webm",
-      "sha256": "aa6870d371c11c901a36e8e1bfe43961af6293a2399edde297c6532a54355011",
-      "bytes": 934628,
+      "key": "video-studio/catalog/24d8366a455b4c0f5236dcbd5b5a1b85a0bf1d7d907b1d417c133a96d9a7f8dc/templates/drawn-fx/4289366.webm",
+      "sha256": "24d8366a455b4c0f5236dcbd5b5a1b85a0bf1d7d907b1d417c133a96d9a7f8dc",
+      "bytes": 963406,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/4385865.webm": {
@@ -5612,9 +5780,9 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/7138753.webm": {
-      "key": "video-studio/catalog/35302d201ca285561bb6a4d52a4d9ca6e4fcdd976de0fbbd26ca6708241dd22b/templates/drawn-fx/7138753.webm",
-      "sha256": "35302d201ca285561bb6a4d52a4d9ca6e4fcdd976de0fbbd26ca6708241dd22b",
-      "bytes": 14489578,
+      "key": "video-studio/catalog/bf217da0a361f16a8ae920e0bd7be9f4b62f1a9c6d92d3188817f67d5fe8c0d8/templates/drawn-fx/7138753.webm",
+      "sha256": "bf217da0a361f16a8ae920e0bd7be9f4b62f1a9c6d92d3188817f67d5fe8c0d8",
+      "bytes": 13624466,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/7148690.webm": {
@@ -5942,9 +6110,9 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/8442872.webm": {
-      "key": "video-studio/catalog/e421906f3244fa19f930cc1b1ccf30c53fe2e2f1b87148b27d61947554b1aefd/templates/drawn-fx/8442872.webm",
-      "sha256": "e421906f3244fa19f930cc1b1ccf30c53fe2e2f1b87148b27d61947554b1aefd",
-      "bytes": 2669457,
+      "key": "video-studio/catalog/9e1b87e66b903c0ba7b07da3c612d607524804da6cec2fb0fb1f2940abe47ea1/templates/drawn-fx/8442872.webm",
+      "sha256": "9e1b87e66b903c0ba7b07da3c612d607524804da6cec2fb0fb1f2940abe47ea1",
+      "bytes": 2477755,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/8754038.webm": {
@@ -6014,9 +6182,9 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/9096768.webm": {
-      "key": "video-studio/catalog/a6ea54ce320a3281deae0618bc051d0ff8f56556fbe38fc90c8a1c3ce1497547/templates/drawn-fx/9096768.webm",
-      "sha256": "a6ea54ce320a3281deae0618bc051d0ff8f56556fbe38fc90c8a1c3ce1497547",
-      "bytes": 521034,
+      "key": "video-studio/catalog/c4b081f7331a2987a73c5fae067a76df0fe20f19e46b660eda9d8d27a3d44c5d/templates/drawn-fx/9096768.webm",
+      "sha256": "c4b081f7331a2987a73c5fae067a76df0fe20f19e46b660eda9d8d27a3d44c5d",
+      "bytes": 516416,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/9251775.webm": {
@@ -6044,21 +6212,21 @@
       "contentType": "video/webm"
     },
     "templates/drawn-fx/9492228.webm": {
-      "key": "video-studio/catalog/87353466072325588394244d69a27d54acac0d836ae3d2541ea4b67a30e7265a/templates/drawn-fx/9492228.webm",
-      "sha256": "87353466072325588394244d69a27d54acac0d836ae3d2541ea4b67a30e7265a",
-      "bytes": 1037636,
+      "key": "video-studio/catalog/981f72d3b667ca3c8aa9905fb4566aafb9c4a39e715464cba69d10ef1cc7bff2/templates/drawn-fx/9492228.webm",
+      "sha256": "981f72d3b667ca3c8aa9905fb4566aafb9c4a39e715464cba69d10ef1cc7bff2",
+      "bytes": 1038792,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/9492630.webm": {
-      "key": "video-studio/catalog/846a599192c27baa50c19e3780a85d54e915177b449838fdad2608a141d5de1a/templates/drawn-fx/9492630.webm",
-      "sha256": "846a599192c27baa50c19e3780a85d54e915177b449838fdad2608a141d5de1a",
-      "bytes": 1037526,
+      "key": "video-studio/catalog/87af5c39f897842fa05ad95c1e7027b71fd85b416d1675bbd0eba34925ef7990/templates/drawn-fx/9492630.webm",
+      "sha256": "87af5c39f897842fa05ad95c1e7027b71fd85b416d1675bbd0eba34925ef7990",
+      "bytes": 1038597,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/9493772.webm": {
-      "key": "video-studio/catalog/39fe681df9eb98c08a6b23b963a4a7be37910586ccbdbc3f64b12513576f0c06/templates/drawn-fx/9493772.webm",
-      "sha256": "39fe681df9eb98c08a6b23b963a4a7be37910586ccbdbc3f64b12513576f0c06",
-      "bytes": 2140078,
+      "key": "video-studio/catalog/8775dcfbba6496cb307ba81d70ec9a4acfa13c38b651bcfe9259eb87342dd48e/templates/drawn-fx/9493772.webm",
+      "sha256": "8775dcfbba6496cb307ba81d70ec9a4acfa13c38b651bcfe9259eb87342dd48e",
+      "bytes": 2933717,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/9790028.webm": {

@@ -64,9 +64,10 @@ describe('personalização privada de vídeos',()=>{
   }
  })
  it('não herda a empresa da campanha usada como origem do modelo',()=>{
-  const recipe=FLYER_RECIPES['flyer-6a1de6f4-4cd8-46d2-b5d7-0a19c1afbcc4']!
+  // Modelo com nome de loja no título ("Atacado Barlow"): a campanha vem do modelo, a empresa não.
+  const recipe=FLYER_RECIPES['flyer-ea0d0789-3081-409c-b830-10739806b065']!
   const doc=newVideoFromTemplate(recipe.id)
-  expect(doc.campaign).toBe('ESPECIAL DIA DO CLIENTE')
+  expect(doc.campaign).toBe('Semana do Cliente')
   expect(doc.brand.name).toBe('')
   expect(personalizedRecipe(recipe,doc).seal).toBe(recipe.seal)
  })

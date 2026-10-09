@@ -74,7 +74,7 @@ const FILTER = {
 }
 async function convert(item, raw, bg, meta) {
   const width = item.category === 'transicao' ? 1920 : 1280
-  const key = bg.kind === 'green' ? `chromakey=${hex(bg.color)}:0.13:0.06,format=rgba` : FILTER[bg.kind]
+  const key = bg.kind === 'green' ? `chromakey=${hex(bg.color)}:0.13:0.06,format=rgba,despill=type=green:mix=0.6:expand=0.15` : FILTER[bg.kind]
   const out = `${dir}/fx/${item.id}.webm`, seconds = Math.min(meta.duration, 6)
   await run('ffmpeg', ['-v', 'error', '-y', '-i', raw, '-t', String(seconds), '-vf', `scale=${width}:-2:flags=lanczos,fps=30,${key}`,
     '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '33', '-row-mt', '1', '-deadline', 'realtime', '-cpu-used', '7', '-auto-alt-ref', '0', '-an', out], { maxBuffer: 1 << 26 })
