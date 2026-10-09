@@ -2,7 +2,7 @@
  "fonte": "Magnific (antigo Freepik) — download do acervo de vídeo via API, plano Premium, uso interno para clientes (sem geração por IA). Fundo sólido removido localmente (colorkey/chromakey) e convertido para WebM VP9 com alfa.",
  "licenca": "https://www.magnific.com/legal/terms-of-use",
  "referencia": "RTFX Generator (VideoHive 19563523) usado só como referência de categorias; nenhum arquivo do pacote.",
- "atualizadoEm": "2026-10-09T02:43:05.818Z",
+ "atualizadoEm": "2026-10-09T03:05:08.539Z",
  "efeitos": [
   {
    "magnificId": 677089,
@@ -185,6 +185,16 @@
    "baixadoEm": "2026-10-08T18:19:22.387Z"
   },
   {
+   "magnificId": 3526511,
+   "titulo": "faiscas",
+   "pagina": "https://www.magnific.com/br/video/3526511",
+   "autor": null,
+   "categoria": "faiscas",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/3526511.webm",
+   "baixadoEm": "2026-10-09T03:04:32.714Z"
+  },
+  {
    "magnificId": 3556322,
    "titulo": "tela verde de fundo ou recurso gráfico de estilo esboço de cartoon thunder bolt",
    "pagina": "https://www.magnific.com/br/video/3556322",
@@ -245,6 +255,36 @@
    "baixadoEm": "2026-10-09T02:31:58.034Z"
   },
   {
+   "magnificId": 3829022,
+   "titulo": "faiscas",
+   "pagina": "https://www.magnific.com/br/video/3829022",
+   "autor": null,
+   "categoria": "faiscas",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/3829022.webm",
+   "baixadoEm": "2026-10-09T03:04:36.921Z"
+  },
+  {
+   "magnificId": 3829264,
+   "titulo": "faiscas",
+   "pagina": "https://www.magnific.com/br/video/3829264",
+   "autor": null,
+   "categoria": "faiscas",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/3829264.webm",
+   "baixadoEm": "2026-10-09T03:04:38.167Z"
+  },
+  {
+   "magnificId": 3954635,
+   "titulo": "comic",
+   "pagina": "https://www.magnific.com/br/video/3954635",
+   "autor": null,
+   "categoria": "comic",
+   "fundoOriginal": "green",
+   "arquivo": "templates/drawn-fx/3954635.webm",
+   "baixadoEm": "2026-10-09T03:04:49.600Z"
+  },
+  {
    "magnificId": 3993350,
    "titulo": "Linhas de velocidade radiais laranja para sobreposição de ação de quadrinhos. Fundo em loop de linhas radiais de flash de quadrinhos isolado transparente com canal alfa Quicktime ProRes 4444. Quadro de velocidade de mangá, ação de super-herói",
    "pagina": "https://www.magnific.com/br/video/3993350",
@@ -263,6 +303,36 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/3995356.webm",
    "baixadoEm": "2026-10-09T02:41:55.394Z"
+  },
+  {
+   "magnificId": 4135022,
+   "titulo": "comic",
+   "pagina": "https://www.magnific.com/br/video/4135022",
+   "autor": null,
+   "categoria": "comic",
+   "fundoOriginal": "green",
+   "arquivo": "templates/drawn-fx/4135022.webm",
+   "baixadoEm": "2026-10-09T03:04:43.743Z"
+  },
+  {
+   "magnificId": 4135107,
+   "titulo": "comic",
+   "pagina": "https://www.magnific.com/br/video/4135107",
+   "autor": null,
+   "categoria": "comic",
+   "fundoOriginal": "green",
+   "arquivo": "templates/drawn-fx/4135107.webm",
+   "baixadoEm": "2026-10-09T03:04:43.133Z"
+  },
+  {
+   "magnificId": 4138321,
+   "titulo": "fumaca",
+   "pagina": "https://www.magnific.com/br/video/4138321",
+   "autor": null,
+   "categoria": "fumaca",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/4138321.webm",
+   "baixadoEm": "2026-10-09T03:04:49.468Z"
   },
   {
    "magnificId": 4257871,
@@ -293,6 +363,16 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/4385865.webm",
    "baixadoEm": "2026-10-09T02:41:18.071Z"
+  },
+  {
+   "magnificId": 4558783,
+   "titulo": "fumaca",
+   "pagina": "https://www.magnific.com/br/video/4558783",
+   "autor": null,
+   "categoria": "fumaca",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/4558783.webm",
+   "baixadoEm": "2026-10-09T03:04:49.116Z"
   },
   {
    "magnificId": 5847795,
@@ -435,6 +515,36 @@
    "baixadoEm": "2026-10-09T02:31:59.434Z"
   },
   {
+   "magnificId": 7891506,
+   "titulo": "faiscas",
+   "pagina": "https://www.magnific.com/br/video/7891506",
+   "autor": null,
+   "categoria": "faiscas",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/7891506.webm",
+   "baixadoEm": "2026-10-09T03:04:31.585Z"
+  },
+  {
+   "magnificId": 7891507,
+   "titulo": "faiscas",
+   "pagina": "https://www.magnific.com/br/video/7891507",
+   "autor": null,
+   "categoria": "faiscas",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/7891507.webm",
+   "baixadoEm": "2026-10-09T03:04:31.643Z"
+  },
+  {
+   "magnificId": 7891508,
+   "titulo": "faiscas",
+   "pagina": "https://www.magnific.com/br/video/7891508",
+   "autor": null,
+   "categoria": "faiscas",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/7891508.webm",
+   "baixadoEm": "2026-10-09T03:04:31.767Z"
+  },
+  {
    "magnificId": 7891532,
    "titulo": "Efeito de Quadrinhos com Linhas de Velocidade Animadas em Fundo Preto",
    "pagina": "https://www.magnific.com/br/video/7891532",
@@ -495,6 +605,36 @@
    "baixadoEm": "2026-10-09T02:31:36.817Z"
   },
   {
+   "magnificId": 8144730,
+   "titulo": "fumaca",
+   "pagina": "https://www.magnific.com/br/video/8144730",
+   "autor": null,
+   "categoria": "fumaca",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/8144730.webm",
+   "baixadoEm": "2026-10-09T03:04:46.125Z"
+  },
+  {
+   "magnificId": 8144738,
+   "titulo": "fumaca",
+   "pagina": "https://www.magnific.com/br/video/8144738",
+   "autor": null,
+   "categoria": "fumaca",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/8144738.webm",
+   "baixadoEm": "2026-10-09T03:04:45.947Z"
+  },
+  {
+   "magnificId": 8144741,
+   "titulo": "fumaca",
+   "pagina": "https://www.magnific.com/br/video/8144741",
+   "autor": null,
+   "categoria": "fumaca",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/8144741.webm",
+   "baixadoEm": "2026-10-09T03:04:48.221Z"
+  },
+  {
    "magnificId": 8144747,
    "titulo": "Efeitos de Animação de Fogo e Energia Desenhados à Mão em Fundo Preto",
    "pagina": "https://www.magnific.com/br/video-premium/efeitos-animacao-fogo-energia-desenhados-mao-fundo-preto_8144747",
@@ -513,6 +653,16 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/8144755.webm",
    "baixadoEm": "2026-10-08T18:17:35.091Z"
+  },
+  {
+   "magnificId": 8144765,
+   "titulo": "fumaca",
+   "pagina": "https://www.magnific.com/br/video/8144765",
+   "autor": null,
+   "categoria": "fumaca",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/8144765.webm",
+   "baixadoEm": "2026-10-09T03:04:49.784Z"
   },
   {
    "magnificId": 8144766,
@@ -543,6 +693,26 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/8144805.webm",
    "baixadoEm": "2026-10-09T02:31:36.890Z"
+  },
+  {
+   "magnificId": 8144816,
+   "titulo": "fumaca",
+   "pagina": "https://www.magnific.com/br/video/8144816",
+   "autor": null,
+   "categoria": "fumaca",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/8144816.webm",
+   "baixadoEm": "2026-10-09T03:04:48.061Z"
+  },
+  {
+   "magnificId": 8144818,
+   "titulo": "fumaca",
+   "pagina": "https://www.magnific.com/br/video/8144818",
+   "autor": null,
+   "categoria": "fumaca",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/8144818.webm",
+   "baixadoEm": "2026-10-09T03:04:45.866Z"
   },
   {
    "magnificId": 8144820,
@@ -705,6 +875,16 @@
    "baixadoEm": "2026-10-08T17:58:59.709Z"
   },
   {
+   "magnificId": 8333238,
+   "titulo": "energia",
+   "pagina": "https://www.magnific.com/br/video/8333238",
+   "autor": null,
+   "categoria": "energia",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/8333238.webm",
+   "baixadoEm": "2026-10-09T03:04:36.779Z"
+  },
+  {
    "magnificId": 8333244,
    "titulo": "Explosões de Desenho Animado Animadas com Efeitos de Fumaça em Fundo Preto",
    "pagina": "https://www.magnific.com/br/video-premium/explosoes-desenho-animado-animadas-efeitos-fumaca-fundo-preto_8333244",
@@ -865,6 +1045,16 @@
    "baixadoEm": "2026-10-09T02:42:22.878Z"
   },
   {
+   "magnificId": 9089525,
+   "titulo": "fumaca",
+   "pagina": "https://www.magnific.com/br/video/9089525",
+   "autor": null,
+   "categoria": "fumaca",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/9089525.webm",
+   "baixadoEm": "2026-10-09T03:04:50.550Z"
+  },
+  {
    "magnificId": 9096768,
    "titulo": "Animação 2D de Expansão de Anel de Fumaça em Tela Verde",
    "pagina": "https://www.magnific.com/br/video/9096768",
@@ -915,6 +1105,26 @@
    "baixadoEm": "2026-10-09T02:41:49.500Z"
   },
   {
+   "magnificId": 9492228,
+   "titulo": "comic",
+   "pagina": "https://www.magnific.com/br/video/9492228",
+   "autor": null,
+   "categoria": "comic",
+   "fundoOriginal": "green",
+   "arquivo": "templates/drawn-fx/9492228.webm",
+   "baixadoEm": "2026-10-09T03:04:46.093Z"
+  },
+  {
+   "magnificId": 9492630,
+   "titulo": "comic",
+   "pagina": "https://www.magnific.com/br/video/9492630",
+   "autor": null,
+   "categoria": "comic",
+   "fundoOriginal": "green",
+   "arquivo": "templates/drawn-fx/9492630.webm",
+   "baixadoEm": "2026-10-09T03:04:43.737Z"
+  },
+  {
    "magnificId": 9493772,
    "titulo": "Designer adicionando gráfico de explosão estilo quadrinhos sobre fundo transparente, impulsionando visuais de marketing.",
    "pagina": "https://www.magnific.com/br/video-premium/designer-adicionando-grafico-explosao-estilo-quadrinhos-sobre-fundo-transparente-impulsionando-visuais-marketing_9493772",
@@ -923,6 +1133,16 @@
    "fundoOriginal": "green",
    "arquivo": "templates/drawn-fx/9493772.webm",
    "baixadoEm": "2026-10-08T18:08:11.361Z"
+  },
+  {
+   "magnificId": 9790028,
+   "titulo": "energia",
+   "pagina": "https://www.magnific.com/br/video/9790028",
+   "autor": null,
+   "categoria": "energia",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/9790028.webm",
+   "baixadoEm": "2026-10-09T03:04:41.332Z"
   },
   {
    "magnificId": 9889313,
@@ -963,6 +1183,16 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/9976325.webm",
    "baixadoEm": "2026-10-09T02:41:26.415Z"
+  },
+  {
+   "magnificId": 9976629,
+   "titulo": "energia",
+   "pagina": "https://www.magnific.com/br/video/9976629",
+   "autor": null,
+   "categoria": "energia",
+   "fundoOriginal": "black",
+   "arquivo": "templates/drawn-fx/9976629.webm",
+   "baixadoEm": "2026-10-09T03:04:37.142Z"
   }
  ]
 }

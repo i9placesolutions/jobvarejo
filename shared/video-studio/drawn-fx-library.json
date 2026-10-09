@@ -272,6 +272,21 @@
    "coverage": 0.049
   },
   {
+   "id": 3526511,
+   "category": "faiscas",
+   "file": "drawn-fx/3526511.webm",
+   "frames": 151,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.05,
+    "y0": 0.044,
+    "x1": 0.95,
+    "y1": 0.911
+   },
+   "coverage": 0.045
+  },
+  {
    "id": 3556322,
    "category": "eletricidade",
    "file": "drawn-fx/3556322.webm",
@@ -362,6 +377,51 @@
    "coverage": 0.147
   },
   {
+   "id": 3829022,
+   "category": "faiscas",
+   "file": "drawn-fx/3829022.webm",
+   "frames": 151,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.019,
+    "y0": 0.067,
+    "x1": 0.919,
+    "y1": 0.922
+   },
+   "coverage": 0.084
+  },
+  {
+   "id": 3829264,
+   "category": "faiscas",
+   "file": "drawn-fx/3829264.webm",
+   "frames": 155,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.013,
+    "y0": 0.078,
+    "x1": 0.975,
+    "y1": 0.9
+   },
+   "coverage": 0.142
+  },
+  {
+   "id": 3954635,
+   "category": "comic",
+   "file": "drawn-fx/3954635.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 676,
+   "box": {
+    "x0": 0.294,
+    "y0": 0.106,
+    "x1": 0.7,
+    "y1": 0.882
+   },
+   "coverage": 0.194
+  },
+  {
    "id": 3993350,
    "category": "energia",
    "file": "drawn-fx/3993350.webm",
@@ -390,6 +450,51 @@
     "y1": 0.989
    },
    "coverage": 0.369
+  },
+  {
+   "id": 4135022,
+   "category": "comic",
+   "file": "drawn-fx/4135022.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.119,
+    "y0": 0.056,
+    "x1": 0.863,
+    "y1": 0.933
+   },
+   "coverage": 0.33
+  },
+  {
+   "id": 4135107,
+   "category": "comic",
+   "file": "drawn-fx/4135107.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.119,
+    "y0": 0.056,
+    "x1": 0.856,
+    "y1": 0.933
+   },
+   "coverage": 0.329
+  },
+  {
+   "id": 4138321,
+   "category": "fumaca",
+   "file": "drawn-fx/4138321.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.069,
+    "y0": 0.378,
+    "x1": 0.894,
+    "y1": 0.644
+   },
+   "coverage": 0.052
   },
   {
    "id": 4257871,
@@ -435,6 +540,21 @@
     "y1": 0.878
    },
    "coverage": 0.032
+  },
+  {
+   "id": 4558783,
+   "category": "fumaca",
+   "file": "drawn-fx/4558783.webm",
+   "frames": 37,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.194,
+    "y0": 0.178,
+    "x1": 0.806,
+    "y1": 0.822
+   },
+   "coverage": 0.109
   },
   {
    "id": 5847795,
@@ -647,6 +767,51 @@
    "coverage": 0.044
   },
   {
+   "id": 7891506,
+   "category": "faiscas",
+   "file": "drawn-fx/7891506.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.381,
+    "y0": 0.289,
+    "x1": 0.563,
+    "y1": 0.667
+   },
+   "coverage": 0.008
+  },
+  {
+   "id": 7891507,
+   "category": "faiscas",
+   "file": "drawn-fx/7891507.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.144,
+    "y0": 0.3,
+    "x1": 0.8,
+    "y1": 0.811
+   },
+   "coverage": 0.013
+  },
+  {
+   "id": 7891508,
+   "category": "faiscas",
+   "file": "drawn-fx/7891508.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.144,
+    "y0": 0.289,
+    "x1": 0.8,
+    "y1": 0.856
+   },
+   "coverage": 0.026
+  },
+  {
    "id": 7891532,
    "category": "linhas",
    "file": "drawn-fx/7891532.webm",
@@ -737,6 +902,51 @@
    "coverage": 0.136
   },
   {
+   "id": 8144730,
+   "category": "fumaca",
+   "file": "drawn-fx/8144730.webm",
+   "frames": 61,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.206,
+    "y0": 0.278,
+    "x1": 0.675,
+    "y1": 0.778
+   },
+   "coverage": 0.077
+  },
+  {
+   "id": 8144738,
+   "category": "fumaca",
+   "file": "drawn-fx/8144738.webm",
+   "frames": 61,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.256,
+    "y0": 0.122,
+    "x1": 0.725,
+    "y1": 0.856
+   },
+   "coverage": 0.054
+  },
+  {
+   "id": 8144741,
+   "category": "fumaca",
+   "file": "drawn-fx/8144741.webm",
+   "frames": 61,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.213,
+    "y0": 0.111,
+    "x1": 0.775,
+    "y1": 0.878
+   },
+   "coverage": 0.269
+  },
+  {
    "id": 8144747,
    "category": "fogo",
    "file": "drawn-fx/8144747.webm",
@@ -765,6 +975,21 @@
     "y1": 0.611
    },
    "coverage": 0.055
+  },
+  {
+   "id": 8144765,
+   "category": "fumaca",
+   "file": "drawn-fx/8144765.webm",
+   "frames": 61,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.063,
+    "y0": 0.311,
+    "x1": 0.931,
+    "y1": 0.789
+   },
+   "coverage": 0.138
   },
   {
    "id": 8144766,
@@ -810,6 +1035,36 @@
     "y1": 0.889
    },
    "coverage": 0.09
+  },
+  {
+   "id": 8144816,
+   "category": "fumaca",
+   "file": "drawn-fx/8144816.webm",
+   "frames": 81,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.294,
+    "y0": 0.344,
+    "x1": 0.881,
+    "y1": 0.644
+   },
+   "coverage": 0.065
+  },
+  {
+   "id": 8144818,
+   "category": "fumaca",
+   "file": "drawn-fx/8144818.webm",
+   "frames": 91,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.244,
+    "y0": 0.167,
+    "x1": 0.75,
+    "y1": 0.856
+   },
+   "coverage": 0.065
   },
   {
    "id": 8144820,
@@ -1052,6 +1307,21 @@
    "coverage": 0.172
   },
   {
+   "id": 8333238,
+   "category": "energia",
+   "file": "drawn-fx/8333238.webm",
+   "frames": 153,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.294,
+    "y0": 0.233,
+    "x1": 0.7,
+    "y1": 0.767
+   },
+   "coverage": 0.043
+  },
+  {
    "id": 8333244,
    "category": "explosao",
    "file": "drawn-fx/8333244.webm",
@@ -1292,6 +1562,21 @@
    "coverage": 0.013
   },
   {
+   "id": 9089525,
+   "category": "fumaca",
+   "file": "drawn-fx/9089525.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.381,
+    "y0": 0.311,
+    "x1": 0.625,
+    "y1": 0.7
+   },
+   "coverage": 0.06
+  },
+  {
    "id": 9096768,
    "category": "transicao",
    "file": "drawn-fx/9096768.webm",
@@ -1367,6 +1652,36 @@
    "coverage": 0.27
   },
   {
+   "id": 9492228,
+   "category": "comic",
+   "file": "drawn-fx/9492228.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 676,
+   "box": {
+    "x0": 0.088,
+    "y0": 0.094,
+    "x1": 0.913,
+    "y1": 0.953
+   },
+   "coverage": 0.108
+  },
+  {
+   "id": 9492630,
+   "category": "comic",
+   "file": "drawn-fx/9492630.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 676,
+   "box": {
+    "x0": 0.088,
+    "y0": 0.094,
+    "x1": 0.913,
+    "y1": 0.953
+   },
+   "coverage": 0.108
+  },
+  {
    "id": 9493772,
    "category": "explosao",
    "file": "drawn-fx/9493772.webm",
@@ -1380,6 +1695,21 @@
     "y1": 0.976
    },
    "coverage": 0.338
+  },
+  {
+   "id": 9790028,
+   "category": "energia",
+   "file": "drawn-fx/9790028.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.344,
+    "y0": 0.211,
+    "x1": 0.656,
+    "y1": 0.778
+   },
+   "coverage": 0.021
   },
   {
    "id": 9889313,
@@ -1440,6 +1770,21 @@
     "y1": 0.7
    },
    "coverage": 0.015
+  },
+  {
+   "id": 9976629,
+   "category": "energia",
+   "file": "drawn-fx/9976629.webm",
+   "frames": 180,
+   "width": 1280,
+   "height": 720,
+   "box": {
+    "x0": 0.244,
+    "y0": 0.044,
+    "x1": 0.738,
+    "y1": 0.956
+   },
+   "coverage": 0.053
   }
  ]
 }

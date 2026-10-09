@@ -5485,6 +5485,12 @@
       "bytes": 568710,
       "contentType": "video/webm"
     },
+    "templates/drawn-fx/3526511.webm": {
+      "key": "video-studio/catalog/0bfacb85533abfedb5db2773bed9614747155b831ccac8a29ed7c3503f18a0f8/templates/drawn-fx/3526511.webm",
+      "sha256": "0bfacb85533abfedb5db2773bed9614747155b831ccac8a29ed7c3503f18a0f8",
+      "bytes": 872974,
+      "contentType": "video/webm"
+    },
     "templates/drawn-fx/3556322.webm": {
       "key": "video-studio/catalog/73176113693c8155c11e992716b5640279bf5529738925a238a02e656e69b9ab/templates/drawn-fx/3556322.webm",
       "sha256": "73176113693c8155c11e992716b5640279bf5529738925a238a02e656e69b9ab",
@@ -5521,6 +5527,24 @@
       "bytes": 2383734,
       "contentType": "video/webm"
     },
+    "templates/drawn-fx/3829022.webm": {
+      "key": "video-studio/catalog/32eea6c2b1541607061bcbe48aaf5689339d6395c47760e25cc8bc4b7fb50710/templates/drawn-fx/3829022.webm",
+      "sha256": "32eea6c2b1541607061bcbe48aaf5689339d6395c47760e25cc8bc4b7fb50710",
+      "bytes": 1222853,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/3829264.webm": {
+      "key": "video-studio/catalog/3bd75b03199d54f874ad9ebff745e3dfd79a8e5d5762b32f00bd0f0e5681f084/templates/drawn-fx/3829264.webm",
+      "sha256": "3bd75b03199d54f874ad9ebff745e3dfd79a8e5d5762b32f00bd0f0e5681f084",
+      "bytes": 1148295,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/3954635.webm": {
+      "key": "video-studio/catalog/c7162ced69fb633f0dc6d450c3032b324c0be32ff2a48cb677b8e4d4df1fe81b/templates/drawn-fx/3954635.webm",
+      "sha256": "c7162ced69fb633f0dc6d450c3032b324c0be32ff2a48cb677b8e4d4df1fe81b",
+      "bytes": 1272848,
+      "contentType": "video/webm"
+    },
     "templates/drawn-fx/3993350.webm": {
       "key": "video-studio/catalog/ccdfb9070eff35c35c3e81b826f2b4d2f4c7b63afdfffa0fe88cb9fcef76f514/templates/drawn-fx/3993350.webm",
       "sha256": "ccdfb9070eff35c35c3e81b826f2b4d2f4c7b63afdfffa0fe88cb9fcef76f514",
@@ -5531,6 +5555,24 @@
       "key": "video-studio/catalog/6b26fd10071f589c33be3682f1c8d7e22a94d337eee7bd9acbe496625050ca74/templates/drawn-fx/3995356.webm",
       "sha256": "6b26fd10071f589c33be3682f1c8d7e22a94d337eee7bd9acbe496625050ca74",
       "bytes": 3417781,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/4135022.webm": {
+      "key": "video-studio/catalog/04b80b06cda0ac87a2c4eda412b78411ec8a2147a158c6b04166b4f606a90001/templates/drawn-fx/4135022.webm",
+      "sha256": "04b80b06cda0ac87a2c4eda412b78411ec8a2147a158c6b04166b4f606a90001",
+      "bytes": 1482372,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/4135107.webm": {
+      "key": "video-studio/catalog/01ed5338f3e9abd1559812b3e8f705d11c3ca3095d751e96690b1175594c12a2/templates/drawn-fx/4135107.webm",
+      "sha256": "01ed5338f3e9abd1559812b3e8f705d11c3ca3095d751e96690b1175594c12a2",
+      "bytes": 1621164,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/4138321.webm": {
+      "key": "video-studio/catalog/cabe522cb93c6f86216111d2bf0340903ccab931c646247a8473fa73925271d9/templates/drawn-fx/4138321.webm",
+      "sha256": "cabe522cb93c6f86216111d2bf0340903ccab931c646247a8473fa73925271d9",
+      "bytes": 879770,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/4257871.webm": {
@@ -5549,6 +5591,12 @@
       "key": "video-studio/catalog/ab9c5f5c2605db43ff5e3f41eea91c5ef6fac07277d8d3c8e0b4983384f64c22/templates/drawn-fx/4385865.webm",
       "sha256": "ab9c5f5c2605db43ff5e3f41eea91c5ef6fac07277d8d3c8e0b4983384f64c22",
       "bytes": 1377248,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/4558783.webm": {
+      "key": "video-studio/catalog/4b3d290fd0e1e5cdcc2993e41e435e090663a7acd89710980df09cb433b387ee/templates/drawn-fx/4558783.webm",
+      "sha256": "4b3d290fd0e1e5cdcc2993e41e435e090663a7acd89710980df09cb433b387ee",
+      "bytes": 349742,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/5847795.webm": {
@@ -5641,6 +5689,24 @@
       "bytes": 1272688,
       "contentType": "video/webm"
     },
+    "templates/drawn-fx/7891506.webm": {
+      "key": "video-studio/catalog/6a8db3d6aeb6f9410757bc6b28db1880faf7efcb1de1bee5af7db310689ad837/templates/drawn-fx/7891506.webm",
+      "sha256": "6a8db3d6aeb6f9410757bc6b28db1880faf7efcb1de1bee5af7db310689ad837",
+      "bytes": 100162,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/7891507.webm": {
+      "key": "video-studio/catalog/09d704bb400046c39d9405c4d04863d611151b4d55dc65e88fb707c099479639/templates/drawn-fx/7891507.webm",
+      "sha256": "09d704bb400046c39d9405c4d04863d611151b4d55dc65e88fb707c099479639",
+      "bytes": 158431,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/7891508.webm": {
+      "key": "video-studio/catalog/66d0a913d70e4ee5c5336beabd6c326167d30a6a916d6132dfa36ab385ed05f2/templates/drawn-fx/7891508.webm",
+      "sha256": "66d0a913d70e4ee5c5336beabd6c326167d30a6a916d6132dfa36ab385ed05f2",
+      "bytes": 203271,
+      "contentType": "video/webm"
+    },
     "templates/drawn-fx/7891532.webm": {
       "key": "video-studio/catalog/d5fc6f6d857344e9b7afaed55eb1c12f8fa5405174dc650516d62e59d13cfe53/templates/drawn-fx/7891532.webm",
       "sha256": "d5fc6f6d857344e9b7afaed55eb1c12f8fa5405174dc650516d62e59d13cfe53",
@@ -5677,6 +5743,24 @@
       "bytes": 685922,
       "contentType": "video/webm"
     },
+    "templates/drawn-fx/8144730.webm": {
+      "key": "video-studio/catalog/364e45450d9a570515d15d6031d0de57b4f275aba87498cb1599c3fbf13ed0f0/templates/drawn-fx/8144730.webm",
+      "sha256": "364e45450d9a570515d15d6031d0de57b4f275aba87498cb1599c3fbf13ed0f0",
+      "bytes": 433609,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/8144738.webm": {
+      "key": "video-studio/catalog/59cf4b7abc0fa24a498fd973c47c020ffc37016b0c683aff3c6368b9ce667f76/templates/drawn-fx/8144738.webm",
+      "sha256": "59cf4b7abc0fa24a498fd973c47c020ffc37016b0c683aff3c6368b9ce667f76",
+      "bytes": 436361,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/8144741.webm": {
+      "key": "video-studio/catalog/48d106ddac1fb12f0ea6fca975a2aa9b3ecb08b6ab1b514b7d0102a112eb0ec4/templates/drawn-fx/8144741.webm",
+      "sha256": "48d106ddac1fb12f0ea6fca975a2aa9b3ecb08b6ab1b514b7d0102a112eb0ec4",
+      "bytes": 537713,
+      "contentType": "video/webm"
+    },
     "templates/drawn-fx/8144747.webm": {
       "key": "video-studio/catalog/79afb8897fe857bdcf5ecb1d7753160b909325a1a660f3a115ba7f8683619f81/templates/drawn-fx/8144747.webm",
       "sha256": "79afb8897fe857bdcf5ecb1d7753160b909325a1a660f3a115ba7f8683619f81",
@@ -5687,6 +5771,12 @@
       "key": "video-studio/catalog/851e16a8b4af3f8e9a0220d0726c9c09869645fcdae742a11280e3a758cea167/templates/drawn-fx/8144755.webm",
       "sha256": "851e16a8b4af3f8e9a0220d0726c9c09869645fcdae742a11280e3a758cea167",
       "bytes": 743213,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/8144765.webm": {
+      "key": "video-studio/catalog/b57d4aa4b55dd9bba93198e25809e42da3c79c0c0e7f56ba957984203575cfc1/templates/drawn-fx/8144765.webm",
+      "sha256": "b57d4aa4b55dd9bba93198e25809e42da3c79c0c0e7f56ba957984203575cfc1",
+      "bytes": 324644,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/8144766.webm": {
@@ -5705,6 +5795,18 @@
       "key": "video-studio/catalog/4baa098f767f56f0c490ee958c73e89de81b7411661678bbeacc805d5ca7d85e/templates/drawn-fx/8144805.webm",
       "sha256": "4baa098f767f56f0c490ee958c73e89de81b7411661678bbeacc805d5ca7d85e",
       "bytes": 658664,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/8144816.webm": {
+      "key": "video-studio/catalog/45dced86460b14662094a9603a8088fb46aec605e0078cad87af4bb1cbb1a297/templates/drawn-fx/8144816.webm",
+      "sha256": "45dced86460b14662094a9603a8088fb46aec605e0078cad87af4bb1cbb1a297",
+      "bytes": 408308,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/8144818.webm": {
+      "key": "video-studio/catalog/c6d51f2debf23ea467765e982c9b48c6b5fe914bb41b68ec2e2d248ad376c97f/templates/drawn-fx/8144818.webm",
+      "sha256": "c6d51f2debf23ea467765e982c9b48c6b5fe914bb41b68ec2e2d248ad376c97f",
+      "bytes": 292425,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/8144820.webm": {
@@ -5803,6 +5905,12 @@
       "bytes": 548690,
       "contentType": "video/webm"
     },
+    "templates/drawn-fx/8333238.webm": {
+      "key": "video-studio/catalog/5a837b64694a35bb0209ad6d7a9277ff7084e4324a2dba242c264d447d7c4deb/templates/drawn-fx/8333238.webm",
+      "sha256": "5a837b64694a35bb0209ad6d7a9277ff7084e4324a2dba242c264d447d7c4deb",
+      "bytes": 406501,
+      "contentType": "video/webm"
+    },
     "templates/drawn-fx/8333244.webm": {
       "key": "video-studio/catalog/279b9e006cf60a6ca90122c8b185d228b0965f71ab50b4856fe8ccceafa21fe6/templates/drawn-fx/8333244.webm",
       "sha256": "279b9e006cf60a6ca90122c8b185d228b0965f71ab50b4856fe8ccceafa21fe6",
@@ -5899,6 +6007,12 @@
       "bytes": 3005553,
       "contentType": "video/webm"
     },
+    "templates/drawn-fx/9089525.webm": {
+      "key": "video-studio/catalog/b686e3131a208160f5491b842658e4ec156f178fe2e4c5d9427a43742999ddfc/templates/drawn-fx/9089525.webm",
+      "sha256": "b686e3131a208160f5491b842658e4ec156f178fe2e4c5d9427a43742999ddfc",
+      "bytes": 495257,
+      "contentType": "video/webm"
+    },
     "templates/drawn-fx/9096768.webm": {
       "key": "video-studio/catalog/a6ea54ce320a3281deae0618bc051d0ff8f56556fbe38fc90c8a1c3ce1497547/templates/drawn-fx/9096768.webm",
       "sha256": "a6ea54ce320a3281deae0618bc051d0ff8f56556fbe38fc90c8a1c3ce1497547",
@@ -5929,10 +6043,28 @@
       "bytes": 3355227,
       "contentType": "video/webm"
     },
+    "templates/drawn-fx/9492228.webm": {
+      "key": "video-studio/catalog/87353466072325588394244d69a27d54acac0d836ae3d2541ea4b67a30e7265a/templates/drawn-fx/9492228.webm",
+      "sha256": "87353466072325588394244d69a27d54acac0d836ae3d2541ea4b67a30e7265a",
+      "bytes": 1037636,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/9492630.webm": {
+      "key": "video-studio/catalog/846a599192c27baa50c19e3780a85d54e915177b449838fdad2608a141d5de1a/templates/drawn-fx/9492630.webm",
+      "sha256": "846a599192c27baa50c19e3780a85d54e915177b449838fdad2608a141d5de1a",
+      "bytes": 1037526,
+      "contentType": "video/webm"
+    },
     "templates/drawn-fx/9493772.webm": {
       "key": "video-studio/catalog/39fe681df9eb98c08a6b23b963a4a7be37910586ccbdbc3f64b12513576f0c06/templates/drawn-fx/9493772.webm",
       "sha256": "39fe681df9eb98c08a6b23b963a4a7be37910586ccbdbc3f64b12513576f0c06",
       "bytes": 2140078,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/9790028.webm": {
+      "key": "video-studio/catalog/31f9484e1a63d59cf58196cfafed555ef7a7b36776f465d1acf4d836e18ed876/templates/drawn-fx/9790028.webm",
+      "sha256": "31f9484e1a63d59cf58196cfafed555ef7a7b36776f465d1acf4d836e18ed876",
+      "bytes": 715087,
       "contentType": "video/webm"
     },
     "templates/drawn-fx/9889313.webm": {
@@ -5957,6 +6089,12 @@
       "key": "video-studio/catalog/bda6422a2d12487317b397dd333bd17ac3499f8e927d00408dfeeca88164d10f/templates/drawn-fx/9976325.webm",
       "sha256": "bda6422a2d12487317b397dd333bd17ac3499f8e927d00408dfeeca88164d10f",
       "bytes": 473331,
+      "contentType": "video/webm"
+    },
+    "templates/drawn-fx/9976629.webm": {
+      "key": "video-studio/catalog/0b8248f4c3ac8503d1558c84e811a5cb0efd74acf3273cf816e61139b454739c/templates/drawn-fx/9976629.webm",
+      "sha256": "0b8248f4c3ac8503d1558c84e811a5cb0efd74acf3273cf816e61139b454739c",
+      "bytes": 1051823,
       "contentType": "video/webm"
     },
     "templates/economia-barato-verdade-bg.png": {
