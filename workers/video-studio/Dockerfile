@@ -9,7 +9,7 @@ RUN /opt/video-python/bin/python -c "from faster_whisper import download_model; 
 ENV VIDEO_ALIGNMENT_MODEL=/opt/video-alignment-model
 ENV VIDEO_STUDIO_PYTHON=/opt/video-python/bin/python
 COPY shared/video-studio ./shared/video-studio
-COPY shared/musicgpt-retail.mjs shared/elevenlabs-retail.mjs ./shared/
+COPY shared/musicgpt-retail.mjs shared/elevenlabs-retail.mjs shared/retail-reference-artwork.ts ./shared/
 COPY utils/offerValidity.ts utils/product-card-configuration.ts utils/priceTagText.ts ./utils/
 COPY workers/video-studio ./workers/video-studio
 COPY public/art-studio/fonts ./public/art-studio/fonts
