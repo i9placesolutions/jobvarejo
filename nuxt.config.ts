@@ -22,9 +22,8 @@ export default defineNuxtConfig({
       exclude: ['../output', '../artifacts', '../tmp', '../work', '../.output-*', '../.nuxt-*', '../node-compile-cache', '../.claude', '../scripts/**/*.mts'],
     },
   },
-  devServer: {
-    port: 80,
-  },
+  // Usar a porta padrão do Nuxt (3000, com fallback automático se ocupada).
+  // A porta 80 exige privilégios elevados no macOS.
   app: {
     head: {
       meta: [
@@ -242,15 +241,16 @@ export default defineNuxtConfig({
               id.includes('/server/utils/ai-') ||
               id.includes('/server/utils/openai-')
             ) return 'editor-ai'
+            // Helpers usados pelo painel (como useResponsive) ficam fora daqui:
+            // importar um símbolo deste chunk carrega também suas dependências de canvas.
             if (
               id.includes('/composables/useEditor') ||
               id.includes('/composables/useProject.ts') ||
               id.includes('/composables/useStorage.ts') ||
               id.includes('/composables/useFigmaCrop.ts') ||
-              id.includes('/composables/useResponsive.ts') ||
               id.includes('/composables/useAiImageStudio.ts') ||
               (id.includes('/utils/price') && !id.endsWith('/utils/priceTagText.ts')) ||
-              id.includes('/utils/labelTemplate') ||
+              (id.includes('/utils/labelTemplate') && !id.endsWith('/utils/labelTemplateHelpers.ts')) ||
               id.includes('/utils/templateSnapshot') ||
               id.includes('/utils/redBurst') ||
               id.includes('/utils/livePrice') ||

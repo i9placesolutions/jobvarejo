@@ -78,6 +78,10 @@ const autoplayBlocked = ref(false)
 let requestPollTimer: ReturnType<typeof setInterval> | null = null
 let playerRefreshTimer: ReturnType<typeof setInterval> | null = null
 let lastScheduleSignature = ''
+let pageDisposed = false
+let initialLoadComplete = false
+let refreshingRequests = false
+let refreshingPlayer = false
 
 const genres = computed(() => {
   const fromApi = Array.isArray(radio.facets.value?.genres) ? radio.facets.value.genres.map((item: any) => String(item.genre)) : []
@@ -149,14 +153,18 @@ const setView = (view: string) => {
 const loadAll = async () => {
   try {
     await radio.loadBootstrap()
+    if (pageDisposed) return
     await Promise.all([radio.loadCatalog(), radio.loadPlayer(), radio.loadRequests(), radio.loadVoices(), radio.loadMembers()])
+    if (pageDisposed) return
     if (!memberForm.stationIds.length && selectedStationId.value) memberForm.stationIds = [selectedStationId.value]
     if (!requestPlaylistId.value && playlists.value[0]?.id) requestPlaylistId.value = String(playlists.value[0].id)
     if (!selectedPlaylistId.value && playlists.value[0]?.id) selectedPlaylistId.value = String(playlists.value[0].id)
     const firstTrack = queue.value[0] || radio.catalog.value[0]
     if (firstTrack && !currentTrack.value) currentTrack.value = firstTrack
-    await radio.registerCache()
-    await radio.prefetchQueue(queue.value)
+    // Cache offline é secundário: não atrasar a primeira reprodução por downloads.
+    void radio.registerCache().then(() => {
+      if (!pageDisposed) return radio.prefetchQueue(queue.value)
+    }).catch(() => undefined)
   } catch (error: any) {
     showNotice(error?.data?.statusMessage || error?.statusMessage || 'Não foi possível carregar a Rádio Indoor', 'error')
   }
@@ -172,11 +180,11 @@ const changeStation = async () => {
   isPlaying.value = false
   try {
     await radio.switchStation(selectedStationId.value)
-    await radio.loadMembers()
+    if (pageDisposed) return
     memberForm.stationIds = [selectedStationId.value]
     const firstTrack = queue.value[0] || radio.catalog.value[0]
     if (firstTrack) currentTrack.value = firstTrack
-    await radio.prefetchQueue(queue.value)
+    void radio.prefetchQueue(queue.value)
     showNotice(`Loja ativa: ${station.value?.name || 'selecionada'}.`, 'success')
   } catch (error: any) {
     showNotice(error?.data?.statusMessage || 'Não foi possível trocar de loja', 'error')
@@ -708,10 +716,13 @@ const addRequestToPlaylist = async (item: any) => {
 }
 
 const refreshPlayerQueue = async (force = false) => {
+  if (pageDisposed || refreshingPlayer) return
+  refreshingPlayer = true
   try {
     const previousId = currentTrack.value?.id
     const wasPlaying = isPlaying.value
     await radio.loadPlayer()
+    if (pageDisposed) return
     const signature = [
       radio.playerData.value?.schedule?.id || '',
       radio.playerData.value?.schedule?.startTime || '',
@@ -720,7 +731,7 @@ const refreshPlayerQueue = async (force = false) => {
     ].join('|')
     if (!force && signature === lastScheduleSignature) return
     lastScheduleSignature = signature
-    await radio.prefetchQueue(queue.value)
+    void radio.prefetchQueue(queue.value)
     if (previousId) {
       const stillThere = queue.value.find((track) => track.id === previousId)
       if (stillThere) {
@@ -732,6 +743,8 @@ const refreshPlayerQueue = async (force = false) => {
     if (!currentTrack.value && queue.value[0]) currentTrack.value = queue.value[0]
   } catch {
     // Falha silenciosa: a faixa atual continua no buffer do <audio>.
+  } finally {
+    refreshingPlayer = false
   }
 }
 
@@ -841,12 +854,20 @@ const downloadRequestAudio = async (item: any) => {
 }
 
 const refreshPendingRequests = async () => {
+  if (pageDisposed || refreshingRequests || document.hidden) return
   const pending = radio.requests.value.filter((item: any) =>
     item?.providerTaskId && !['ready', 'failed', 'cancelled'].includes(String(item.status))
   )
   if (!pending.length) return
-  const results = await Promise.allSettled(pending.map((item: any) => refreshRequest(String(item.id), true)))
-  if (results.some((result) => result.status === 'fulfilled' && result.value)) await radio.loadRequests()
+  refreshingRequests = true
+  try {
+    const results = await Promise.allSettled(pending.map((item: any) => refreshRequest(String(item.id), true)))
+    if (!pageDisposed && results.some((result) => result.status === 'fulfilled' && result.value)) await radio.loadRequests()
+  } catch {
+    // Uma falha transitória na lista será tentada novamente no próximo ciclo.
+  } finally {
+    refreshingRequests = false
+  }
 }
 
 const createMember = async () => {
@@ -904,6 +925,8 @@ onMounted(() => {
   const storedTheme = window.localStorage.getItem(RADIO_THEME_STORAGE_KEY)
   if (storedTheme === 'light' || storedTheme === 'dark') radioTheme.value = storedTheme
   void loadAll().then(async () => {
+    if (pageDisposed) return
+    initialLoadComplete = true
     lastScheduleSignature = [
       radio.playerData.value?.schedule?.id || '',
       radio.playerData.value?.schedule?.startTime || '',
@@ -922,11 +945,13 @@ onMounted(() => {
   })
   // Sem webhook configurado, consulta tarefas pendentes periodicamente para
   // que o usuário não precise recarregar a página ou clicar em cada item.
-  requestPollTimer = setInterval(() => { void refreshPendingRequests() }, 15_000)
+  requestPollTimer = setInterval(() => { if (initialLoadComplete) void refreshPendingRequests() }, 15_000)
   // Recarrega a fila quando a agenda muda de janela (ex.: 08:00 → 18:00).
-  playerRefreshTimer = setInterval(() => { void refreshPlayerQueue(false) }, 60_000)
+  // A fila continua atualizada em segundo plano para manter a rádio tocando.
+  playerRefreshTimer = setInterval(() => { if (initialLoadComplete) void refreshPlayerQueue(false) }, 60_000)
 })
 onBeforeUnmount(() => {
+  pageDisposed = true
   if (requestPollTimer) clearInterval(requestPollTimer)
   if (playerRefreshTimer) clearInterval(playerRefreshTimer)
   audioRef.value?.pause()

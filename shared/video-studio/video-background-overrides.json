@@ -1,0 +1,242 @@
+{
+  "4ac789c8-71f4-4a8b-96ae-8d9e703f0282": {
+    "name": "Baixa Tudo Total — Verde Neon",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-01-background.png",
+    "base": "#063719",
+    "backgroundVideo": "backgrounds-video/magnific-91280-vertical.mp4",
+    "backgroundVideoDuration": 6.033333,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-91280-wide.mp4",
+    "backgroundVideoHorizontalDuration": 6.033333
+  },
+  "f6dcbbe6-f9b1-4d09-8e21-31fe305cbbe5": {
+    "name": "Promoção Só Hoje — Vermelha",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-02-background.png",
+    "base": "#48060a",
+    "backgroundVideo": "backgrounds-video/magnific-5063757-vertical.mp4",
+    "backgroundVideoDuration": 15,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-5063757-wide.mp4",
+    "backgroundVideoHorizontalDuration": 15
+  },
+  "1a014da8-d0f0-483b-b56c-cf8f3a49a40b": {
+    "name": "24h de Preços Imbatíveis — Laranja",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-03-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#642800",
+    "backgroundVideo": "backgrounds-video/magnific-9866945-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9866945-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "1c9b7763-fa63-436b-9f2d-dfe1875ed04d": {
+    "name": "Mega Ofertas — Azul e Amarelo",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-04-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#101a64",
+    "backgroundVideo": "backgrounds-video/magnific-9660453-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9660453-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "78be56e6-beee-4095-adcb-871ef579c199": {
+    "name": "Aqui Tem Grandes Ofertas — Azul",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-05-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#101a64",
+    "backgroundVideo": "backgrounds-video/magnific-9660453-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9660453-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "15edbe91-acc8-4d49-9f0e-e61992c07421": {
+    "name": "Semana de Ofertas — Azul",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-06-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#101a64",
+    "backgroundVideo": "backgrounds-video/magnific-9660453-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9660453-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "4a578d49-087d-4922-a9f6-9f2376c099cc": {
+    "name": "Black Friday — Ouro e Prata",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-07-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#241907",
+    "backgroundVideo": "backgrounds-video/magnific-4150821-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-4150821-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12
+  },
+  "d840b59b-6b17-4897-a7c3-9c312c756e4d": {
+    "name": "Black Friday — Vermelho e Preto",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-08-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#250b07",
+    "backgroundVideo": "backgrounds-video/magnific-2841861-vertical.mp4",
+    "backgroundVideoDuration": 15,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-2841861-wide.mp4",
+    "backgroundVideoHorizontalDuration": 15
+  },
+  "e6b1d002-8bc2-4d6c-9678-6840f7f169a3": {
+    "name": "Black Friday Antecipado — Ouro",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-09-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#241907",
+    "backgroundVideo": "backgrounds-video/magnific-4150821-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-4150821-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12
+  },
+  "76386259-0a88-439e-b20e-b658acdff2a8": {
+    "name": "Comece o Mês Economizando — Clássico",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-10-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#241907",
+    "backgroundVideo": "backgrounds-video/magnific-4150821-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-4150821-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12
+  },
+  "d90ab0ad-ac4b-40db-8fea-f4bc77801480": {
+    "name": "Comece o Mês Economizando — Calendário",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-11-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#642800",
+    "backgroundVideo": "backgrounds-video/magnific-9866945-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9866945-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "df643073-16d3-4c30-9417-883bb287ff7c": {
+    "name": "Começou o Mês — Azul e Amarelo",
+    "revision": 2,
+    "legacyBackground": "collection-20261001-12-background.png",
+    "legacyContactColor": "#18324a",
+    "base": "#101a64",
+    "backgroundVideo": "backgrounds-video/magnific-9660453-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9660453-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "07564aee-2857-4cc0-a2d5-9fb13738f71d": {
+    "name": "Compras de Mês",
+    "revision": 20,
+    "legacyBackground": "catalog/07564aee-2857-4cc0-a2d5-9fb13738f71d-background.png",
+    "legacyContactColor": "#44070e",
+    "base": "#241907",
+    "backgroundVideo": "backgrounds-video/magnific-4150821-vertical.mp4",
+    "backgroundVideoDuration": 12,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-4150821-wide.mp4",
+    "backgroundVideoHorizontalDuration": 12
+  },
+  "80faa604-3dd2-42a2-810b-660ae210acfd": {
+    "name": "Economia Total",
+    "revision": 20,
+    "legacyBackground": "catalog/80faa604-3dd2-42a2-810b-660ae210acfd-background.png",
+    "legacyContactColor": "#3b0710",
+    "base": "#510714",
+    "backgroundVideo": "backgrounds-video/magnific-7789349-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-7789349-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "a76039b5-7ebc-4a95-8e7c-c493b54e0593": {
+    "name": "FDS com Promoção Só Aqui!",
+    "revision": 20,
+    "legacyBackground": "catalog/a76039b5-7ebc-4a95-8e7c-c493b54e0593-background.png",
+    "legacyContactColor": "#3b0710",
+    "base": "#642800",
+    "backgroundVideo": "backgrounds-video/magnific-9866945-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9866945-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "454cb8bf-ec09-45d9-8676-414ec93bc0db": {
+    "name": "Impacto de Oferta",
+    "revision": 20,
+    "legacyBackground": "catalog/454cb8bf-ec09-45d9-8676-414ec93bc0db-background.png",
+    "legacyContactColor": "#032e78",
+    "base": "#48060a",
+    "backgroundVideo": "backgrounds-video/magnific-5063757-vertical.mp4",
+    "backgroundVideoDuration": 15,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-5063757-wide.mp4",
+    "backgroundVideoHorizontalDuration": 15
+  },
+  "fd399262-ecdf-4abc-abc1-89d3f9168f06": {
+    "name": "Mês de Aniversário",
+    "revision": 20,
+    "legacyBackground": "catalog/fd399262-ecdf-4abc-abc1-89d3f9168f06-background.png",
+    "legacyContactColor": "#032e78",
+    "base": "#101a64",
+    "backgroundVideo": "backgrounds-video/magnific-9660453-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9660453-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "84ed1885-6284-4d98-8e15-d06445800cee": {
+    "name": "Operação Zera Estoque",
+    "revision": 20,
+    "legacyBackground": "catalog/84ed1885-6284-4d98-8e15-d06445800cee-background.png",
+    "legacyContactColor": "#44070e",
+    "base": "#101a64",
+    "backgroundVideo": "backgrounds-video/magnific-9660453-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9660453-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "af26b643-2f84-40a6-a9a5-49510e9767a5": {
+    "name": "Quarta de Promoção",
+    "revision": 20,
+    "legacyBackground": "catalog/af26b643-2f84-40a6-a9a5-49510e9767a5-background.png",
+    "legacyContactColor": "#3b0710",
+    "base": "#642800",
+    "backgroundVideo": "backgrounds-video/magnific-9866945-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-9866945-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "4d176278-f6de-44de-b967-c4a5eb948e9c": {
+    "name": "Saldão de Carnes",
+    "revision": 20,
+    "legacyBackground": "catalog/4d176278-f6de-44de-b967-c4a5eb948e9c-background.png",
+    "legacyContactColor": "#3b0710",
+    "base": "#250b07",
+    "backgroundVideo": "backgrounds-video/magnific-2841861-vertical.mp4",
+    "backgroundVideoDuration": 15,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-2841861-wide.mp4",
+    "backgroundVideoHorizontalDuration": 15
+  },
+  "b61333c9-646b-4464-aa48-7b4b841f096b": {
+    "name": "Semana Baixou Geral",
+    "revision": 20,
+    "legacyBackground": "catalog/b61333c9-646b-4464-aa48-7b4b841f096b-background.png",
+    "legacyContactColor": "#3b0710",
+    "base": "#510714",
+    "backgroundVideo": "backgrounds-video/magnific-7789349-vertical.mp4",
+    "backgroundVideoDuration": 10,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-7789349-wide.mp4",
+    "backgroundVideoHorizontalDuration": 10
+  },
+  "fcd6a55e-0509-4d34-abb3-d80fd67c64b5": {
+    "name": "Semana Torra Tudo",
+    "revision": 20,
+    "legacyBackground": "catalog/fcd6a55e-0509-4d34-abb3-d80fd67c64b5-background.png",
+    "legacyContactColor": "#3b0710",
+    "base": "#250b07",
+    "backgroundVideo": "backgrounds-video/magnific-2841861-vertical.mp4",
+    "backgroundVideoDuration": 15,
+    "backgroundVideoHorizontal": "backgrounds-video/magnific-2841861-wide.mp4",
+    "backgroundVideoHorizontalDuration": 15
+  }
+}

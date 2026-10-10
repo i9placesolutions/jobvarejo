@@ -15,6 +15,7 @@ export const BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID = 'tpl_black_yellow'
 export const BUILTIN_RED_BURST_LABEL_TEMPLATE_ID = 'tpl_red_burst'
 export const BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID = 'tpl_oferta_amarela'
 export const BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID = 'tpl_barlow_black'
+export const BUILTIN_VERMELHA_DOURADA_LABEL_TEMPLATE_ID = 'tpl_vermelha_dourada'
 
 /**
  * Set de todos os IDs built-in. Templates com id nesse set NUNCA devem
@@ -26,7 +27,8 @@ export const BUILTIN_LABEL_TEMPLATE_IDS: ReadonlySet<string> = new Set([
     BUILTIN_FARDO_SPECIAL_LABEL_TEMPLATE_ID,
     BUILTIN_BLACK_YELLOW_LABEL_TEMPLATE_ID,
     BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID,
-    BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID
+    BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID,
+    BUILTIN_VERMELHA_DOURADA_LABEL_TEMPLATE_ID
 ])
 
 /**

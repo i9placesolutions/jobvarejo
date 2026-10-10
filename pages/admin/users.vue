@@ -2,7 +2,7 @@
 import { ACCESS_ACTIONS, ACCESS_AREAS, ACCESS_AREA_ACTIONS, type AccessAction, type AccessArea, type EditorPermissions } from '~/shared/access-control'
 import type { UserRole } from '~/types/auth'
 import AdminWorkspaceShell from '~/components/AdminWorkspaceShell.vue'
-import { Eye, EyeOff } from 'lucide-vue-next'
+import { Eye, EyeOff, Plus, Search, Users, X } from 'lucide-vue-next'
 import { formatBrazilWhatsApp } from '~/utils/whatsapp-auth'
 
 definePageMeta({ layout: false, middleware: ['auth', 'admin'], ssr: false })
@@ -25,6 +25,27 @@ type ManagedUser = {
 const auth = useAuth()
 const users = ref<ManagedUser[]>([])
 const search = ref('')
+const showForm = ref(false)
+const formPanel = ref<HTMLElement | null>(null)
+const createButton = ref<HTMLButtonElement | null>(null)
+const roleFilter = ref('')
+const statusFilter = ref('')
+const filteredUsers = computed(() => users.value.filter(user =>
+  (!roleFilter.value || user.role === roleFilter.value)
+  && (!statusFilter.value || (statusFilter.value === 'active' ? user.is_active : !user.is_active))
+))
+const focusForm = async () => {
+  showForm.value = true
+  await nextTick()
+  formPanel.value?.scrollIntoView({ block: 'start', behavior: 'instant' })
+  formPanel.value?.querySelector<HTMLInputElement>('input:not([disabled])')?.focus({ preventScroll: true })
+}
+const closeForm = () => {
+  showForm.value = false
+  createButton.value?.focus()
+}
+const clearFilters = () => { search.value = ''; roleFilter.value = ''; statusFilter.value = '' }
+
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
@@ -74,7 +95,7 @@ const editUser = (user: ManagedUser) => {
     permissions[area.id][action.id] = user.permissions?.[area.id]?.[action.id] === true
   }
   error.value = ''
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  void focusForm()
 }
 const formatWhatsAppInput = (event: Event) => {
   const input = event.target as HTMLInputElement
@@ -138,6 +159,7 @@ const save = async () => {
       notice.value = form.role === 'user' ? 'Empresa criada. Ela já está disponível para os editores.' : 'Usuário criado.'
     }
     resetForm()
+    closeForm()
     await load()
   } catch (cause: any) {
     error.value = cause?.data?.statusMessage || 'Não foi possível salvar o usuário.'
@@ -214,7 +236,7 @@ const removeUser = async () => {
 </script>
 
 <template>
-  <AdminWorkspaceShell>
+  <AdminWorkspaceShell active-nav="users">
     <main class="users-page">
       <header class="users-heading">
         <div>
@@ -222,15 +244,16 @@ const removeUser = async () => {
           <h1>Usuários e níveis de acesso</h1>
           <span>Administradores acessam todas as contas. Editores recebem permissões por área. Usuários comuns criam apenas seus próprios materiais.</span>
         </div>
+        <button ref="createButton" type="button" class="users-create" :aria-expanded="showForm" aria-controls="user-form-panel" @click="focusForm"><Plus :size="18" />{{ editingId ? 'Continuar edição' : 'Novo cadastro' }}</button>
       </header>
 
       <p v-if="notice" class="users-notice" role="status">{{ notice }}</p>
       <p v-if="error" class="users-error" role="alert">{{ error }}</p>
 
-      <section class="users-card" aria-label="Cadastro de empresa ou usuário">
+      <section v-show="showForm" id="user-form-panel" ref="formPanel" class="users-card users-form-panel" aria-label="Cadastro de empresa ou usuário">
         <div class="users-section-heading">
           <h2>{{ editingId ? 'Editar usuário' : form.role === 'user' ? 'Criar empresa' : 'Criar usuário' }}</h2>
-          <button v-if="editingId" type="button" @click="resetForm">Cancelar edição</button>
+          <button type="button" :disabled="saving || actionBusy" @click="resetForm(); closeForm()"><X :size="16" /> Cancelar</button>
         </div>
         <form class="users-form" @submit.prevent="save">
           <label v-if="form.role === 'user' || editingSuperAdmin">Nome da empresa <input v-model="form.companyName" :required="form.role === 'user'" minlength="2" maxlength="160" autocomplete="organization" placeholder="Ex.: Mercado Central"></label>
@@ -279,11 +302,21 @@ const removeUser = async () => {
       </section>
 
       <section class="users-card" aria-label="Usuários cadastrados">
-        <div class="users-section-heading"><h2>Usuários cadastrados</h2><span>{{ users.length }}</span></div>
-        <input v-model="search" class="users-search" type="search" placeholder="Buscar empresa, nome, e-mail ou WhatsApp" aria-label="Buscar usuários">
-        <p v-if="loading">Carregando usuários…</p>
+        <div class="users-section-heading"><h2>Usuários cadastrados</h2><span role="status">{{ loading ? 'Carregando…' : `${filteredUsers.length} ${filteredUsers.length === 1 ? 'cadastro' : 'cadastros'}` }}</span></div>
+        <div class="users-filters">
+          <label class="users-search-wrap"><Search :size="18" aria-hidden="true" /><input v-model="search" class="users-search" type="search" placeholder="Empresa, nome, e-mail ou WhatsApp" aria-label="Buscar usuários"></label>
+          <label>Nível de acesso<select v-model="roleFilter"><option value="">Todos os níveis</option><option value="user">Usuário comum</option><option value="editor">Editor</option><option value="admin">Administrador</option><option value="super_admin">Super admin</option></select></label>
+          <label>Situação<select v-model="statusFilter"><option value="">Todas as situações</option><option value="active">Ativos</option><option value="blocked">Bloqueados</option></select></label>
+        </div>
+        <div v-if="loading" class="users-loading" role="status">Carregando usuários…</div>
+        <div v-else-if="!filteredUsers.length" class="users-empty">
+          <Users :size="30" aria-hidden="true" />
+          <h3>{{ search || roleFilter || statusFilter ? 'Nenhum cadastro encontrado' : 'Nenhum usuário cadastrado' }}</h3>
+          <p>{{ search || roleFilter || statusFilter ? 'Altere a busca ou os filtros para encontrar a conta.' : 'Use Novo cadastro para adicionar uma empresa ou pessoa.' }}</p>
+          <button v-if="search || roleFilter || statusFilter" type="button" @click="clearFilters">Limpar filtros</button>
+        </div>
         <div v-else class="users-list">
-          <article v-for="user in users" :key="user.id" class="users-list-item" :class="{ 'users-list-item-admin': canAdministerAccount(user) }">
+          <article v-for="user in filteredUsers" :key="user.id" class="users-list-item" :class="{ 'users-list-item-admin': canAdministerAccount(user) }">
             <div><strong>{{ user.company_name || user.name || user.email }}</strong><small>{{ user.internal_only ? 'Uso interno · sem acesso à plataforma' : `${user.name} · ${user.email} · ${user.whatsapp || 'Sem WhatsApp'}` }}</small></div>
             <span class="users-role">{{ roleLabel(user.role) }}</span>
             <span :class="user.is_active ? 'users-active' : 'users-inactive'">{{ user.is_active ? 'Ativo' : 'Bloqueado' }}</span>
@@ -320,8 +353,23 @@ const removeUser = async () => {
 </template>
 
 <style scoped>
+.users-create { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; min-height: 44px; padding: 10px 16px; border-radius: 9px; background: #2160b4; color: white; font-size: 13px; font-weight: 700; cursor: pointer; }
+.users-create:hover { background: #173d70; }
+.users-form-panel { scroll-margin-top: 16px; border-top: 3px solid #2160b4; }
+.users-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 18px 0; }
+.users-filters > label { display: flex; flex-direction: column; gap: 5px; color: #60758f; font-size: 12px; font-weight: 600; }
+.users-filters select { appearance: none; height: 42px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2360758f' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; min-height: 42px; padding: 8px 30px 8px 10px; border: 1px solid #cbd5e1; border-radius: 9px; color: #172b45; background-color: #fff; }
+.users-filters .users-search-wrap { position: relative; flex: 1 1 260px; }
+.users-search-wrap svg { position: absolute; left: 12px; top: 12px; }
+.users-filters .users-search { padding-left: 38px; margin: 0; }
+.users-empty, .users-loading { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 16px; text-align: center; color: #60758f; font-size: 14px; }
+.users-empty h3 { font-weight: 700; color: #172b45; }
+.users-empty button { padding: 10px 16px; color: #2160b4; font-weight: 700; border: 1px solid #d7e4f1; border-radius: 8px; }
+.users-page button:focus-visible, .users-page select:focus-visible, .users-page input:focus-visible { outline: 2px solid #2160b4; outline-offset: 2px; }
+@media (max-width: 640px) { .users-page .users-heading { flex-direction: column; gap: 14px; } .users-create { width: 100%; } .users-filters > label { flex: 1 1 140px; } .users-filters select { width: 100%; font-size: 16px; } }
+
 .users-page { width: min(1120px, 100%); min-width: 0; margin: 0 auto; padding: clamp(16px, 2vw, 28px) clamp(12px, 2vw, 24px) 32px; color: #172b45; container-type: inline-size; }
-.users-heading { margin-bottom: 22px; }
+.users-heading { margin-bottom: 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .users-heading p { margin: 0 0 5px; color: #2563eb; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
 .users-heading h1 { margin: 0 0 7px; font-size: clamp(21px, 2vw, 28px); font-weight: 700; line-height: 1.25; }
 .users-heading span { color: #64748b; font-size: 13px; line-height: 1.5; }

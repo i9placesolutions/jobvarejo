@@ -1,23 +1,9 @@
 <script setup lang="ts">
-import {
-  Clapperboard,
-  Grid3X3,
-  HardDrive,
-  LayoutTemplate,
-  LogOut,
-  Menu as MenuIcon,
-  MessageCircle,
-  Mic2,
-  Radio,
-  SlidersHorizontal,
-  Sparkles,
-  Store,
-  User
-} from 'lucide-vue-next'
+import { ChevronRight, Menu as MenuIcon } from 'lucide-vue-next'
 import { useResponsive } from '~/composables/useResponsive'
 
 const props = withDefaults(defineProps<{
-  activeNav?: 'library' | 'musicgpt' | 'storage' | 'whatsapp' | 'art-studio' | 'videos' | 'cartazista' | 'cartazes' | 'radio' | 'builder' | 'cards' | 'zones' | 'encartes'
+  activeNav?: 'library' | 'users' | 'voices' | 'storage' | 'whatsapp' | 'art-studio' | 'videos' | 'cartazista' | 'cartazes' | 'radio' | 'builder' | 'cards' | 'zones' | 'encartes'
   showSearch?: boolean
 }>(), {
   activeNav: 'library',
@@ -46,10 +32,6 @@ watch(searchQuery, (value) => {
   emit('update:searchQuery', value)
 })
 
-const handleSignOut = async () => {
-  await auth.signOut()
-}
-
 const closeDrawer = () => {
   showMobileDrawer.value = false
 }
@@ -57,25 +39,23 @@ const closeDrawer = () => {
 watch(dashMobile, closeDrawer)
 watch(() => route.path, closeDrawer)
 
-const isActive = (key: NonNullable<typeof props.activeNav>) => {
-  if (props.activeNav === key) return true
-  if (key === 'musicgpt') return route.path.startsWith('/admin/musicgpt')
-  if (key === 'storage') return route.path.startsWith('/admin/storage')
-  if (key === 'whatsapp') return route.path.startsWith('/admin/whatsapp')
-  if (key === 'videos') return route.path.startsWith('/videos')
-  if (key === 'radio') return route.path.startsWith('/radio-indoor')
-  if (key === 'encartes') return route.path.startsWith('/flyer-templates') || route.path.startsWith('/quick-editor')
-  if (key === 'builder') return route.path.startsWith('/admin/builder')
-  if (key === 'cards') return route.path.startsWith('/card-configurations')
-  if (key === 'zones') return route.path.startsWith('/zone-structures')
-  if (key === 'art-studio') return route.path.startsWith('/art-studio')
-  if (key === 'cartazista' || key === 'cartazes') return route.path.startsWith('/cartazista')
-  return route.path === '/'
+const adminLabels: Record<string, string> = {
+  users: 'Usuários e acessos', voices: 'Banco de vozes', storage: 'Arquivos', whatsapp: 'WhatsApp',
+  builder: 'Modelos e configurações', themes: 'Temas', models: 'Modelos', layouts: 'Grades',
+  'price-tag-styles': 'Estilos de preço', 'badge-styles': 'Selos', 'font-configs': 'Fontes',
+  tenants: 'Empresas', 'card-templates': 'Modelos de produto', 'header-templates': 'Cabeçalhos',
+  'footer-templates': 'Rodapés', segments: 'Segmentos',
 }
+const breadcrumbs = computed(() => {
+  if (!route.path.startsWith('/admin/')) return []
+  const parts = route.path.split('/').filter(Boolean).slice(1)
+  return parts.map((part, index) => ({ label: adminLabels[part] || part, to: '/admin/' + parts.slice(0, index + 1).join('/') }))
+})
 </script>
 
 <template>
   <div :class="['admin-shell', dashMobile ? 'admin-shell--mobile' : '']">
+    <a href="#admin-main-content" class="admin-shell__skip">Ir para o conteúdo</a>
     <div class="admin-shell__frame">
       <header class="admin-shell__topbar">
         <div class="admin-shell__brand">
@@ -121,64 +101,22 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
 
       <div class="admin-shell__layout">
         <DashboardMobileDrawer v-if="dashMobile" v-model:open="showMobileDrawer">
-          <nav class="admin-shell__nav admin-shell__nav--drawer">
-            <p class="admin-shell__section">Biblioteca</p>
-            <NuxtLink prefetch-on="interaction" to="/" class="admin-shell__nav-item" :class="{ active: activeNav === 'library' && route.path === '/' }" @click="closeDrawer">
-              Biblioteca e projetos
-            </NuxtLink>
-            <p class="admin-shell__section">Soluções</p>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('encartes')" :to="auth.user.value?.role === 'user' ? '/quick-editor' : '/flyer-templates'" class="admin-shell__nav-item" :class="{ active: isActive('encartes') }" @click="closeDrawer"><LayoutTemplate class="h-3.5 w-3.5 text-blue-600" /> {{ auth.user.value?.role === 'user' ? 'Edição rápida' : 'Encartes' }}</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('cartazes')" to="/cartazista" class="admin-shell__nav-item" :class="{ active: isActive('cartazista') }" @click="closeDrawer"><Sparkles class="h-3.5 w-3.5 text-blue-500" /> Cartazes</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('videos')" to="/videos" class="admin-shell__nav-item" :class="{ active: isActive('videos') }" @click="closeDrawer"><Clapperboard class="h-3.5 w-3.5 text-blue-600" /> Vídeos</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('radio')" to="/radio-indoor" class="admin-shell__nav-item" :class="{ active: isActive('radio') }" @click="closeDrawer"><Radio class="h-3.5 w-3.5 text-blue-600" /> Rádio Indoor</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('artes')" to="/art-studio" class="admin-shell__nav-item" :class="{ active: isActive('art-studio') }" @click="closeDrawer"><Sparkles class="h-3.5 w-3.5 text-sky-600" /> Estúdio de Artes</NuxtLink>
-            <div class="admin-shell__spacer" />
-            <p class="admin-shell__section">Configuração</p>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/users" class="admin-shell__nav-item" @click="closeDrawer"><User class="h-3.5 w-3.5" /> Usuários e acessos</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/musicgpt" class="admin-shell__nav-item" :class="{ active: isActive('musicgpt') }" @click="closeDrawer"><Mic2 class="h-3.5 w-3.5 text-blue-600" /> MusicGPT</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/whatsapp" class="admin-shell__nav-item" :class="{ active: isActive('whatsapp') }" @click="closeDrawer"><MessageCircle class="h-3.5 w-3.5 text-emerald-600" /> WhatsApp</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/storage" class="admin-shell__nav-item" :class="{ active: isActive('storage') }" @click="closeDrawer"><HardDrive class="h-3.5 w-3.5 text-slate-400" /> Storage</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value || (auth.user.value?.role === 'editor' && auth.can('encartes'))" to="/card-configurations" class="admin-shell__nav-item" :class="{ active: isActive('cards') }" @click="closeDrawer"><SlidersHorizontal class="h-3.5 w-3.5 text-blue-600" /> Configuração de cards</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value || (auth.user.value?.role === 'editor' && auth.can('encartes'))" to="/zone-structures" class="admin-shell__nav-item" :class="{ active: isActive('zones') }" @click="closeDrawer"><Grid3X3 class="h-3.5 w-3.5 text-blue-600" /> Estrutura de zonas</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/builder" class="admin-shell__nav-item" :class="{ active: isActive('builder') }" @click="closeDrawer"><LayoutTemplate class="h-3.5 w-3.5 text-blue-600" /> Configurações do builder</NuxtLink>
-            <div class="admin-shell__divider" />
-            <button type="button" class="admin-shell__nav-item" @click="navigateTo('/profile'); closeDrawer()"><User class="h-3.5 w-3.5" /> Meu Perfil</button>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('loja')" to="/business-profile" class="admin-shell__nav-item" @click="closeDrawer"><Store class="h-3.5 w-3.5 text-blue-500" /> Minha loja</NuxtLink>
-            <button type="button" class="admin-shell__nav-item signout" @click="handleSignOut"><LogOut class="h-3.5 w-3.5" /> Sair</button>
-          </nav>
+          <AdminWorkspaceNav :active-nav="activeNav" @navigate="closeDrawer" />
         </DashboardMobileDrawer>
 
-        <aside v-show="!dashMobile" class="admin-shell__sidebar">
-          <nav class="admin-shell__nav">
-            <p class="admin-shell__section">Biblioteca</p>
-            <NuxtLink prefetch-on="interaction" to="/" class="admin-shell__nav-item" :class="{ active: activeNav === 'library' && route.path === '/' }">
-              Biblioteca e projetos
-            </NuxtLink>
-            <p class="admin-shell__section">Soluções</p>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('encartes')" :to="auth.user.value?.role === 'user' ? '/quick-editor' : '/flyer-templates'" class="admin-shell__nav-item" :class="{ active: isActive('encartes') }"><LayoutTemplate class="h-4 w-4 text-blue-600" /> {{ auth.user.value?.role === 'user' ? 'Edição rápida' : 'Encartes' }}</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('cartazes')" to="/cartazista" class="admin-shell__nav-item" :class="{ active: isActive('cartazista') }"><Sparkles class="h-4 w-4 text-blue-500" /> Cartazes</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('videos')" to="/videos" class="admin-shell__nav-item" :class="{ active: isActive('videos') }"><Clapperboard class="h-4 w-4 text-blue-600" /> Vídeos</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('radio')" to="/radio-indoor" class="admin-shell__nav-item" :class="{ active: isActive('radio') }"><Radio class="h-4 w-4 text-blue-600" /> Rádio Indoor</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('artes')" to="/art-studio" class="admin-shell__nav-item" :class="{ active: isActive('art-studio') }"><Sparkles class="h-4 w-4 text-sky-600" /> Estúdio de Artes</NuxtLink>
-          </nav>
-          <div class="admin-shell__bottom">
-            <div class="admin-shell__divider" />
-            <p class="admin-shell__section">Configuração</p>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/users" class="admin-shell__nav-item"><User class="h-4 w-4" /> Usuários e acessos</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/musicgpt" class="admin-shell__nav-item" :class="{ active: isActive('musicgpt') }"><Mic2 class="h-4 w-4 text-blue-600" /> MusicGPT</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/whatsapp" class="admin-shell__nav-item" :class="{ active: isActive('whatsapp') }"><MessageCircle class="h-4 w-4 text-emerald-600" /> WhatsApp</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/storage" class="admin-shell__nav-item" :class="{ active: isActive('storage') }"><HardDrive class="h-4 w-4 text-slate-400" /> Storage</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value || (auth.user.value?.role === 'editor' && auth.can('encartes'))" to="/card-configurations" class="admin-shell__nav-item" :class="{ active: isActive('cards') }"><SlidersHorizontal class="h-4 w-4 text-blue-600" /> Configuração de cards</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value || (auth.user.value?.role === 'editor' && auth.can('encartes'))" to="/zone-structures" class="admin-shell__nav-item" :class="{ active: isActive('zones') }"><Grid3X3 class="h-4 w-4 text-blue-600" /> Estrutura de zonas</NuxtLink>
-            <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/builder" class="admin-shell__nav-item" :class="{ active: isActive('builder') }"><LayoutTemplate class="h-4 w-4 text-blue-600" /> Configurações do builder</NuxtLink>
-            <div class="admin-shell__divider" />
-            <button type="button" class="admin-shell__nav-item" @click="navigateTo('/profile')"><User class="h-4 w-4" /> Meu Perfil</button>
-            <NuxtLink prefetch-on="interaction" v-if="auth.can('loja')" to="/business-profile" class="admin-shell__nav-item"><Store class="h-4 w-4 text-blue-500" /> Minha loja</NuxtLink>
-            <button type="button" class="admin-shell__nav-item signout" @click="handleSignOut"><LogOut class="h-4 w-4" /> Sair</button>
-          </div>
+        <aside v-if="!dashMobile" class="admin-shell__sidebar">
+          <AdminWorkspaceNav :active-nav="activeNav" />
         </aside>
 
-        <main class="admin-shell__main">
+        <main id="admin-main-content" class="admin-shell__main" tabindex="-1">
+          <nav v-if="breadcrumbs.length" class="admin-shell__breadcrumbs" aria-label="Caminho da página">
+            <NuxtLink to="/">Início</NuxtLink>
+            <template v-for="(crumb, index) in breadcrumbs" :key="crumb.to">
+              <ChevronRight :size="14" aria-hidden="true" />
+              <span v-if="index === breadcrumbs.length - 1" aria-current="page">{{ crumb.label }}</span>
+              <NuxtLink v-else :to="crumb.to">{{ crumb.label }}</NuxtLink>
+            </template>
+          </nav>
           <slot />
         </main>
       </div>
@@ -187,6 +125,13 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
 </template>
 
 <style scoped>
+.admin-shell__skip { position: absolute; top: -100px; left: 16px; z-index: 100; padding: 12px 18px; background: #173d70; color: white; border-radius: 8px; }
+.admin-shell__skip:focus { top: 8px; }
+.admin-shell__breadcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 16px clamp(12px, 2vw, 28px) 0; font-size: 12px; color: #60758f; }
+.admin-shell__breadcrumbs a { color: #2160b4; text-decoration: none; }
+.admin-shell__breadcrumbs a:hover { text-decoration: underline; }
+.admin-shell__breadcrumbs [aria-current] { color: #172b45; font-weight: 600; }
+
 .admin-shell {
   --jv-navy: #173d70;
   --jv-blue: #2160b4;
@@ -349,76 +294,6 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   background: #fff;
 }
 
-.admin-shell__nav {
-  padding: 10px 10px 6px;
-  flex: 0 0 auto;
-}
-
-.admin-shell__nav--drawer {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-}
-
-.admin-shell__bottom {
-  margin-top: auto;
-  flex: 0 0 auto;
-  padding: 6px 10px 10px;
-}
-
-.admin-shell__section {
-  margin: 12px 4px 8px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #7b93b0;
-}
-
-.admin-shell__nav-item {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  padding: 0 10px;
-  border-radius: 8px;
-  color: #355074;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  text-align: left;
-}
-
-.admin-shell__nav-item svg { flex-shrink: 0; }
-.admin-shell__nav-item:focus-visible,
-.admin-shell__icon-btn:focus-visible { outline: 2px solid var(--jv-blue); outline-offset: 2px; }
-
-.admin-shell__nav-item:hover,
-.admin-shell__nav-item.active {
-  background: rgba(37, 99, 235, 0.1);
-  color: #1d4ed8;
-}
-
-.admin-shell__nav-item.signout:hover {
-  background: rgba(239, 68, 68, 0.08);
-  color: #dc2626;
-}
-
-.admin-shell__divider {
-  height: 1px;
-  margin: 10px 4px;
-  background: rgba(148, 163, 184, 0.28);
-}
-
-.admin-shell__spacer {
-  flex: 1;
-}
-
 .admin-shell__main {
   flex: 1;
   overflow: auto;
@@ -448,17 +323,12 @@ const isActive = (key: NonNullable<typeof props.activeNav>) => {
   .admin-shell__topbar { min-height: calc(56px + env(safe-area-inset-top, 0px)); gap: 8px; }
   .admin-shell__brand { flex: 1; gap: 4px; }
   .admin-shell__brand-link img { height: 28px; max-width: 120px; object-fit: contain; }
-  .admin-shell__nav-item { min-height: 44px; }
+
 }
 
 @media (max-width: 359px) {
   .admin-shell__topbar { padding-inline: 8px; gap: 4px; }
   .admin-shell__brand-link img { max-width: 96px; height: auto; }
-}
-
-@media (max-height: 600px) and (min-width: 1024px) {
-  .admin-shell__nav-item { min-height: 34px; font-size: 12px; }
-  .admin-shell__section { margin-block: 8px 4px; }
 }
 
 @media print {

@@ -107,14 +107,15 @@ describe('shouldUseIncomingTemplateSnapshot', () => {
 })
 
 describe('BUILTIN_LABEL_TEMPLATE_IDS', () => {
-  it('contem os 6 IDs built-in', () => {
-    expect(BUILTIN_LABEL_TEMPLATE_IDS.size).toBe(6)
+  it('contem os 7 IDs built-in', () => {
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.size).toBe(7)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_default')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_atacarejo_10fd')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_fardo_special')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_black_yellow')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_oferta_amarela')).toBe(true)
     expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_barlow_black')).toBe(true)
+    expect(BUILTIN_LABEL_TEMPLATE_IDS.has('tpl_vermelha_dourada')).toBe(true)
   })
 
   it('constantes individuais batem com IDs do Set', () => {

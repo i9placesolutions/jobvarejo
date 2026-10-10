@@ -29,14 +29,14 @@ describe('Modelos reutilizáveis de vídeo',()=>{
    'flyer-e6b1d002-8bc2-4d6c-9678-6840f7f169a3','flyer-76386259-0a88-439e-b20e-b658acdff2a8',
    'flyer-d90ab0ad-ac4b-40db-8fea-f4bc77801480','flyer-df643073-16d3-4c30-9417-883bb287ff7c'
   ]
-  for(const [index,id] of ids.entries()){
+  for(const id of ids){
    const recipe=flyerRecipe(id)!,doc=newVideoFromTemplate(id)
    expect(doc.campaign).toBe(recipe.campaign)
    expect(resolveVideoLabel([{id:'account-label',name:recipe.labelNames[0]!}] as VideoLabel[],id)?.id).toBe('account-label')
    const [x,y,w,h]=recipe.horizontal.condition
    expect(x).toBeGreaterThanOrEqual(0);expect(y).toBeGreaterThanOrEqual(recipe.horizontal.price[1]+recipe.horizontal.price[3])
    expect(x+w).toBeLessThanOrEqual(1920);expect(y+h).toBeLessThanOrEqual(1080)
-   expect(doc.appearance?.contactColor).toBe(index>=2?'#18324a':undefined)
+   expect(doc.appearance?.contactColor).toBe('#ffffff')
   }
   const doc=newVideoFromTemplate(ids[2]!)
   doc.appearance={contactColor:'#bada55',textColor:'#cc00cc'}

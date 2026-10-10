@@ -466,6 +466,180 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     return group
   }
 
+  function buildVermelhaDouradaPriceGroupForCard(
+    priceStr: string,
+    _cardW: number,
+    _cardH: number,
+    top: number,
+    unitText?: string
+  ) {
+    // Etiqueta vermelho-vinho com moldura dourada: R$ amarelo e preço branco
+    // com centavos no mesmo tamanho do inteiro.
+    const fabric = getFabricOrThrow(deps)
+    const labelW = 340
+    const labelH = 120
+    const corner = 26
+    const borderW = 7
+    const fillWine = fabric?.Gradient
+      ? new fabric.Gradient({
+          type: 'radial',
+          coords: { x1: labelW * 0.42, y1: labelH * 0.5, r1: 0, x2: labelW * 0.42, y2: labelH * 0.5, r2: labelW * 0.62 },
+          colorStops: [
+            { offset: 0, color: '#a5160f' },
+            { offset: 0.55, color: '#7d0c08' },
+            { offset: 1, color: '#4a0503' }
+          ]
+        })
+      : '#7d0c08'
+    const strokeGold = fabric?.Gradient
+      ? new fabric.Gradient({
+          type: 'linear',
+          coords: { x1: 0, y1: 0, x2: 0, y2: labelH },
+          colorStops: [
+            { offset: 0, color: '#fff3b0' },
+            { offset: 0.35, color: '#ffc928' },
+            { offset: 0.7, color: '#f08a00' },
+            { offset: 1, color: '#ffd45a' }
+          ]
+        })
+      : '#ffc928'
+    const outerGlow = new fabric.Rect({
+      width: labelW + 14,
+      height: labelH + 14,
+      rx: corner + 7,
+      ry: corner + 7,
+      fill: 'rgba(255,170,30,0.22)',
+      originX: 'center',
+      originY: 'center',
+      left: 0,
+      top: 0,
+      selectable: false,
+      evented: false,
+      name: 'price_burst_outer_glow'
+    })
+    const priceBg = new fabric.Rect({
+      width: labelW,
+      height: labelH,
+      rx: corner,
+      ry: corner,
+      fill: fillWine,
+      stroke: strokeGold,
+      strokeWidth: borderW,
+      originX: 'center',
+      originY: 'center',
+      left: 0,
+      top: 0,
+      name: 'price_bg',
+      shadow: new fabric.Shadow({ color: 'rgba(255,140,0,0.55)', blur: 14, offsetX: 0, offsetY: 3 }),
+      __roundness: (corner * 2) / labelH,
+      __strokeWidth: borderW
+    })
+    const innerBorder = new fabric.Rect({
+      width: labelW - borderW * 2.4,
+      height: labelH - borderW * 2.4,
+      rx: corner - borderW,
+      ry: corner - borderW,
+      fill: 'transparent',
+      stroke: 'rgba(255,214,120,0.35)',
+      strokeWidth: 1.5,
+      originX: 'center',
+      originY: 'center',
+      left: 0,
+      top: 0,
+      selectable: false,
+      evented: false,
+      name: 'price_inner_border'
+    })
+    const currencyCircle = new fabric.Circle({
+      radius: labelH * 0.25,
+      fill: 'rgba(0,0,0,0)',
+      originX: 'center',
+      originY: 'center',
+      left: -(labelW / 2) + 38,
+      top: 0,
+      name: 'price_currency_bg',
+      visible: false
+    })
+    const currencyText = new fabric.Text('R$', {
+      fontSize: 40,
+      fontFamily: 'Barlow',
+      fontWeight: '900',
+      fill: '#FFD43B',
+      originX: 'center',
+      originY: 'center',
+      left: -118,
+      top: 6,
+      name: 'price_currency_text',
+      shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.35)', blur: 3, offsetX: 0, offsetY: 2 })
+    })
+    const parts = splitPriceParts(priceStr)
+    const priceShadow = () => new fabric.Shadow({ color: 'rgba(0,0,0,0.4)', blur: 4, offsetX: 0, offsetY: 3 })
+    const priceInteger = new fabric.IText(parts.integer, {
+      fontSize: 92,
+      fontFamily: 'Barlow',
+      fontWeight: '900',
+      fill: '#ffffff',
+      originX: 'left',
+      originY: 'center',
+      left: -84,
+      top: 0,
+      name: 'price_integer_text',
+      shadow: priceShadow(),
+      __fontScale: 0.77,
+      __yOffsetRatio: 0
+    })
+    const priceDecimal = new fabric.IText(`,${parts.dec}`, {
+      fontSize: 92,
+      fontFamily: 'Barlow',
+      fontWeight: '900',
+      fill: '#ffffff',
+      originX: 'left',
+      originY: 'center',
+      left: 16,
+      top: 0,
+      name: 'price_decimal_text',
+      shadow: priceShadow(),
+      __fontScale: 0.77,
+      __yOffsetRatio: 0
+    })
+    const unit = normalizeUnitForLabel(unitText)
+    const priceUnit = new fabric.IText(unit || '', {
+      fontSize: 20,
+      fontFamily: 'Barlow',
+      fontWeight: '800',
+      fill: '#FFD43B',
+      originX: 'left',
+      originY: 'center',
+      left: 110,
+      top: 36,
+      name: 'price_unit_text',
+      visible: false,
+      __fontScale: 0.17,
+      __yOffsetRatio: 0.3
+    })
+    const group = new fabric.Group([
+      outerGlow,
+      priceBg,
+      innerBorder,
+      currencyCircle,
+      currencyText,
+      priceInteger,
+      priceDecimal,
+      priceUnit
+    ], {
+      originX: 'center',
+      originY: 'center',
+      left: 0,
+      top,
+      name: 'priceGroup'
+    })
+    group.__preserveManualLayout = true
+    group.__isCustomTemplate = true
+    migratePriceGroupToRichText(group, fabric)
+    deps.safeAddWithUpdate(group)
+    return group
+  }
+
   function buildRedBurstPriceGroupForCard(
     priceStr: string,
     cardW: number,
@@ -841,6 +1015,7 @@ export const createPriceGroupBuilders = (deps: PriceGroupBuilderDeps) => {
     buildBlackYellowPriceGroupForCard,
     buildOfertaAmarelaPriceGroupForCard,
     buildBarlowBlackPriceGroupForCard,
+    buildVermelhaDouradaPriceGroupForCard,
     buildRedBurstPriceGroupForCard,
     buildAtacarejoPriceGroupForCard
   }

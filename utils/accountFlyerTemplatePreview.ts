@@ -103,7 +103,7 @@ export const buildAccountFlyerPreviewCacheKey = (options: {
   logoSource: string
   logoPreference?: AccountFlyerLogoPreference | null
   revision: string
-}): string => ['account-preview-v3',
+}): string => ['account-preview-v4',
   String(options.templateId || '').trim(),
   String(options.accountId || '').trim(),
   String(options.logoSource || '').trim(),
@@ -292,7 +292,7 @@ export const bindAccountLogoToFlyerCanvas = (
   const logoHeight = finitePositive(options.logoSize?.height)
   const hasLogoDimensions = !!(logoWidth && logoHeight)
   const removedLogoIds = new Set<string>()
-  const logoPreference = normalizeLogoPreference(options.logoPreference)
+  const logoPreference = normalizeLogoPreference(options.logoPreference) ?? normalizeLogoPreference({})!
 
   const visit = (container: any): void => {
     if (!container || typeof container !== 'object' || !Array.isArray(container.objects)) return
@@ -335,7 +335,14 @@ export const bindAccountLogoToFlyerCanvas = (
           quickLogoMaxHeight: slot.height
         }
         delete image.objects
-        if (logoPreference) applyLogoPreferenceToFabric(image, logoPreference)
+        applyLogoPreferenceToFabric(image, logoPreference)
+        if (logoPreference.backdrop === 'none') {
+          const ownerId = String(image._customId || '').trim()
+          const backdropId = String(image.quickLogoBackdropId || '').trim()
+          if (ownerId) removedLogoIds.add(ownerId)
+          if (backdropId) removedLogoIds.add(backdropId)
+          delete image.quickLogoBackdropId
+        }
         return [image]
       }
       visit(object)
@@ -347,7 +354,7 @@ export const bindAccountLogoToFlyerCanvas = (
   const removeAssociatedBackdrops = (container: any): void => {
     if (!container || typeof container !== 'object' || !Array.isArray(container.objects)) return
     container.objects = container.objects.filter((object: any) => {
-      if (object?.quickLogoBackdrop !== true) return true
+      if (object?.quickLogoBackdrop !== true || !['rect', 'ellipse', 'circle'].includes(String(object.type || '').toLowerCase())) return true
       const ownerId = String(object.quickLogoBackdropOwnerId || '').trim()
       const objectId = String(object._customId || '').trim()
       return !removedLogoIds.has(ownerId) && !removedLogoIds.has(objectId)

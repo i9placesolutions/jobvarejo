@@ -167,6 +167,25 @@ describe('accountFlyerTemplatePreview', () => {
     })
   })
 
+  it('removes generated white plates without touching custom 3D artwork or products', () => {
+    const source = { objects: [
+      { type: 'image', businessProfileField: 'logo', _customId: 'logo', quickLogoBackdropId: 'plate', width: 100, height: 60, quickLogoBackdropMode: 'square', __stickerOutlineEnabled: true },
+      { type: 'Rect', quickLogoBackdrop: true, quickLogoBackdropOwnerId: 'logo', _customId: 'plate', fill: '#fff' },
+      { type: 'image', src: 'custom-3d-base.png', _customId: 'decoration' },
+      { type: 'rect', isProductZone: true, width: 700, height: 900 }
+    ] }
+    const options = { logoSrc: 'brand.png', logoSize: { width: 200, height: 100 } }
+    const result = bindAccountLogoToFlyerCanvas(source, options)
+    expect(result.objects).toHaveLength(3)
+    expect(result.objects[0]).toMatchObject({ quickLogoBackdropMode: 'none', __stickerOutlineEnabled: false })
+    expect(result.objects[0].quickLogoBackdropId).toBeUndefined()
+    expect(result.objects.slice(1)).toEqual(source.objects.slice(2))
+    expect(source.objects).toHaveLength(4)
+    const optedIn = bindAccountLogoToFlyerCanvas(source, { ...options, logoPreference: { backdrop: 'square', outline: true } })
+    expect(optedIn.objects).toHaveLength(4)
+    expect(optedIn.objects[0].__stickerOutlineEnabled).toBe(true)
+  })
+
   it('reads the selected account logo and preference from the profile payload', () => {
     const profile = { id: 'account-2', business_profile: { logo: 'logo/account-2.png', logoPreference: { outline: true } } }
     expect(getAccountFlyerLogoSource(profile)).toBe('logo/account-2.png')

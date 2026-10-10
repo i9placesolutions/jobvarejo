@@ -11,7 +11,7 @@ import * as fabric from '/fabric.mjs';
 const { StaticCanvas } = fabric;
 const fonts = [['Barlow','Barlow-ExtraBold.ttf','800'],['Barlow','Barlow-Bold.ttf','700'],['Barlow','Barlow-SemiBold.ttf','600'],['Barlow Condensed','BarlowCondensed-ExtraBold.ttf','800'],['Barlow Condensed','BarlowCondensed-SemiBold.ttf','600']];
 const LONG_ADDRESS = 'Avenida Principal do Comércio, número 12345, Quadra 99, Setor Residencial Jardim das Palmeiras, Rio Verde - Goiás';
-window.__logoPreference = { backdrop: 'none', outline: true, outlineColor: '#FFFFFF', outlineWidth: 4, outlineMode: 'outside', outlineOpacity: 1 };
+window.__logoPreference = { backdrop: 'none', outline: false, outlineColor: '#FFFFFF', outlineWidth: 4, outlineMode: 'outside', outlineOpacity: 1 };
 window.render = async (json, w, h, scenario = 'all') => {
   for (const [n, f, weight, extra] of fonts) { const face = new FontFace(n, 'url(/font/' + encodeURIComponent(f) + ')', { weight, ...(extra || {}) }); await face.load(); document.fonts.add(face); }
   await document.fonts.ready;

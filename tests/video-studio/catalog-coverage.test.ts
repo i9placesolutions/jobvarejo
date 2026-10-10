@@ -26,10 +26,10 @@ describe('Cobertura do catálogo de encartes',()=>{
  })
  it('não deixa referências de arte quebradas e preserva os fundos vetoriais',()=>{
   for(const r of recipes){expect(Boolean(r.seal||r.nativeTitle||r.referenceArtwork)).toBe(true)
-   const explicitBackground=Boolean(r.background||r.backgroundGradient)
+   const explicitBackground=Boolean(r.background||r.backgroundGradient||r.backgroundVideo)
    const animatedPaletteBackground=Boolean(r.referenceArtwork&&/^#[0-9a-f]{6}$/i.test(r.base)&&r.backgroundKind&&r.motion.atmosphere.length)
    expect(explicitBackground||animatedPaletteBackground).toBe(true)
-   for(const a of [r.background,r.seal,r.energyBackground,r.energyBackgroundVertical].filter(Boolean))expect(hasCatalogAsset(`templates/${a}`)).toBe(true)
+   for(const a of [r.background,r.seal,r.energyBackground,r.energyBackgroundVertical,r.backgroundVideo,r.backgroundVideoHorizontal].filter(Boolean))expect(hasCatalogAsset(`templates/${a}`)).toBe(true)
    if(r.referenceArtwork)expect(hasCatalogAsset(r.referenceArtwork.src.replace('/video-studio/',''))).toBe(true)
   }
  })

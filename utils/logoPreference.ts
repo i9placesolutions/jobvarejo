@@ -44,8 +44,8 @@ export const logoPreferenceFromFabric = (object: any): LogoPreference => normali
   borderWidth: object.strokeWidth || object.__strokeWidthBackup
 })!
 export const applyLogoPreferenceToFabric = (object: any, value: unknown): boolean => {
-  const p = normalizeLogoPreference(value)
-  if (!p) return false
+  // Sem escolha salva, a marca entra limpa; não herda efeitos do modelo.
+  const p = normalizeLogoPreference(value) ?? normalizeLogoPreference({})!
   const patch = {
     quickLogoBackdropMode: p.backdrop,
     __stickerOutlineEnabled: p.outline,
@@ -66,7 +66,7 @@ export const applyLogoPreferenceToFabric = (object: any, value: unknown): boolea
   return true
 }
 export const applyLogoPreferenceToArt = (layer: any, value: unknown) => {
-  const p = normalizeLogoPreference(value)
-  if (!p || layer.binding !== 'logo') return
+  if (layer.binding !== 'logo') return
+  const p = normalizeLogoPreference(value) ?? normalizeLogoPreference({})!
   Object.assign(layer, { logoBackdrop: p.backdrop, logoOutline: p.outline, logoOutlineColor: p.outlineColor, logoOutlineWidth: p.outlineWidth })
 }

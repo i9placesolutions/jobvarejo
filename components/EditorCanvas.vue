@@ -440,6 +440,7 @@ import {
     BUILTIN_RED_BURST_LABEL_TEMPLATE_ID,
     BUILTIN_OFER_AMARELA_LABEL_TEMPLATE_ID,
     BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID,
+    BUILTIN_VERMELHA_DOURADA_LABEL_TEMPLATE_ID,
     BUILTIN_LABEL_TEMPLATE_IDS,
     LABEL_TEMPLATE_EXTRA_PROPS,
     MANUAL_TEMPLATE_STABLE_PROPS,
@@ -713,6 +714,7 @@ let buildDefaultPriceGroupForCard: (...args: any[]) => any = () => null
 let buildBlackYellowPriceGroupForCard: (...args: any[]) => any = () => null
 let buildOfertaAmarelaPriceGroupForCard: (...args: any[]) => any = () => null
 let buildBarlowBlackPriceGroupForCard: (...args: any[]) => any = () => null
+let buildVermelhaDouradaPriceGroupForCard: (...args: any[]) => any = () => null
 let buildRedBurstPriceGroupForCard: (...args: any[]) => any = () => null
 let buildAtacarejoPriceGroupForCard: (...args: any[]) => any = () => null
 let layoutPriceGroup: (...args: any[]) => any = () => null
@@ -1687,6 +1689,7 @@ const ensureLabelTemplatesReady = async () => {
     await ensureBuiltInBlackYellowLabelTemplate(false);
     await ensureBuiltInOfertaAmarelaLabelTemplate(false);
     await ensureBuiltInBarlowBlackLabelTemplate(false);
+    await ensureBuiltInVermelhaDouradaLabelTemplate(false);
 
     // Hard guard: never keep duplicated IDs in memory.
     const dedup = new Map<string, any>();
@@ -25791,6 +25794,7 @@ buildDefaultPriceGroupForCard = priceGroupBuilders.buildDefaultPriceGroupForCard
 buildBlackYellowPriceGroupForCard = priceGroupBuilders.buildBlackYellowPriceGroupForCard
 buildOfertaAmarelaPriceGroupForCard = priceGroupBuilders.buildOfertaAmarelaPriceGroupForCard
 buildBarlowBlackPriceGroupForCard = priceGroupBuilders.buildBarlowBlackPriceGroupForCard
+buildVermelhaDouradaPriceGroupForCard = priceGroupBuilders.buildVermelhaDouradaPriceGroupForCard
 buildRedBurstPriceGroupForCard = priceGroupBuilders.buildRedBurstPriceGroupForCard
 buildAtacarejoPriceGroupForCard = priceGroupBuilders.buildAtacarejoPriceGroupForCard
 
@@ -26764,6 +26768,35 @@ async function ensureBuiltInBarlowBlackLabelTemplate(renderPreview = true) {
     const tpl: LabelTemplate = {
         id: BUILTIN_BARLOW_BLACK_LABEL_TEMPLATE_ID,
         name: 'Barlow Black',
+        kind: 'priceGroup-v1',
+        group: serializePriceGroupForTemplate(pg),
+        isBuiltIn: true,
+        createdAt: now,
+        updatedAt: now
+    };
+    if (renderPreview) tpl.previewDataUrl = await renderLabelTemplatePreview(tpl);
+    labelTemplates.value = [tpl, ...(labelTemplates.value || [])];
+    saveCurrentState();
+    await persistBuiltInLabelTemplateToCatalog(tpl);
+}
+
+async function ensureBuiltInVermelhaDouradaLabelTemplate(renderPreview = true) {
+    // Etiqueta vermelho-vinho com moldura dourada, R$ amarelo e preço branco.
+    if (!fabric) return;
+    if (hasAuthoritativeGlobalLabelTemplate(BUILTIN_VERMELHA_DOURADA_LABEL_TEMPLATE_ID)) return;
+    const exists = (labelTemplates.value || []).some(t => t.id === BUILTIN_VERMELHA_DOURADA_LABEL_TEMPLATE_ID);
+    if (exists) return;
+
+    const now = new Date().toISOString();
+    const pg = buildVermelhaDouradaPriceGroupForCard('13,98', 320, 450, 0);
+    pg.set({ name: 'priceGroup', subTargetCheck: true, interactive: true });
+    if (typeof pg.getObjects === 'function') {
+        pg.getObjects().forEach((child: any) => child.set({ selectable: true, evented: true, hasControls: true, hasBorders: true }));
+    }
+
+    const tpl: LabelTemplate = {
+        id: BUILTIN_VERMELHA_DOURADA_LABEL_TEMPLATE_ID,
+        name: 'Vermelha Dourada',
         kind: 'priceGroup-v1',
         group: serializePriceGroupForTemplate(pg),
         isBuiltIn: true,

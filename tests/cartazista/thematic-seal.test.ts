@@ -69,3 +69,20 @@ it('substitui a logo legada do cartaz pela conta ativa em vez de reaproveitar a 
   expect(parsed.settings.header?.backgroundCropY).toBe(0);
   expect(parsed.composition.layers.find(l=>l.id==='cartaz-campaign-background')?.cropY).toBe(0);
  });
+
+it('respeita a preferência da conta e mantém bases 3D específicas', () => {
+ const source = rebuildCartazistaComposition(createCartazistaDocument()).composition
+ const logo = source.layers.find(layer => layer.id === 'cartaz-logo')!
+ logo.logoOutline = true
+ logo.logoBackdrop = 'square'
+ source.layers.push({...logo, id:'cartaz-logo-backdrop', binding:'', kind:'shape', shape:'rect', fill:'#fff'})
+ const profile = {companyName:'Loja',whatsapp:'',address:'',instagram:''}
+ const clean = hydrateCartazistaBusiness(source,profile,'/logo.png')
+ expect(clean.layers.find(layer=>layer.id==='cartaz-logo')).toMatchObject({logoOutline:false,logoBackdrop:'none'})
+ expect(clean.layers.find(layer=>layer.id==='cartaz-logo-backdrop')?.visible).toBe(false)
+ const outlined = hydrateCartazistaBusiness(source,{...profile,logoPreference:{backdrop:'none',outline:true,outlineColor:'#112233',outlineWidth:8,outlineMode:'outside',outlineOpacity:1,border:false,borderColor:'#ffffff',borderWidth:0}},'/logo.png')
+ expect(outlined.layers.find(layer=>layer.id==='cartaz-logo')).toMatchObject({logoOutline:true,logoOutlineColor:'#112233',logoOutlineWidth:8})
+ source.layers.find(layer=>layer.id==='cartaz-logo-backdrop')!.kind = 'image'
+ expect(hydrateCartazistaBusiness(source,profile,'/logo.png').layers.find(layer=>layer.id==='cartaz-logo-backdrop')?.visible).toBe(true)
+ expect(logo.logoOutline).toBe(true)
+})

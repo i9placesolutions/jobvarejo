@@ -1,5 +1,6 @@
 import generated from './generated-flyer-recipes.json'
 import videoSeals from './video-seals.json'
+import {withVideoBackground} from './video-backgrounds'
 import type {VideoMotionSettings, SceneTransition} from './effect-catalog'
 import type {RetailReferenceArtwork} from '../retail-reference-artwork'
 export type FlyerRecipeId = string
@@ -28,6 +29,7 @@ export const PILOT_RECIPES:Record<FlyerRecipeId,FlyerRecipe>={
 }
 const preparedVideoSeals=videoSeals.seals as Record<string,{filename:string;sealAspect:number}>
 export const FLYER_RECIPES:Record<string,FlyerRecipe>=Object.fromEntries((generated as unknown as FlyerRecipe[]).map(r=>{
+ r=withVideoBackground(r)
  const prepared=preparedVideoSeals[r.seal]
  return [r.id,prepared?{...r,seal:prepared.filename,sealAspect:prepared.sealAspect}:r]
 }))

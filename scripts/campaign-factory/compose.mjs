@@ -133,8 +133,8 @@ export function compose({ donor, page, assets, ids, theme: T, slug, variant = 'l
     left: logoBox.x + logoBox.w / 2, top: logoBox.y + logoBox.h / 2, scaleX: lk, scaleY: lk, angle: 0, shadow: null,
     quickLogoCenterX: logoBox.x + logoBox.w / 2, quickLogoCenterY: logoBox.y + logoBox.h / 2, quickLogoMaxWidth: logoBox.w, quickLogoMaxHeight: logoBox.h,
     quickLogoUseProfileInTemplate: true, quickLogoBackdropMode: 'none',
-    // Padrão sobre fundo colorido: contorno sticker branco; a preferência de logo do cliente sobrescreve.
-    __stickerOutlineEnabled: true, __stickerOutlineColor: '#FFFFFF', __stickerOutlineWidth: 4, __stickerOutlineMode: 'outside', __stickerOutlineOpacity: 1 });
+    // Sem efeitos automáticos: somente a preferência explícita da conta ativa contorno.
+    __stickerOutlineEnabled: false, __stickerOutlineColor: '#FFFFFF', __stickerOutlineWidth: 4, __stickerOutlineMode: 'outside', __stickerOutlineOpacity: 1 });
   layers.push(logo);
 
   const socialW = Math.min(white.w - 20 * fk, 420 * ss);

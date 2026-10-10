@@ -330,8 +330,38 @@ watch(step,value=>{if(value===1&&!doc.value.offers.length)showListImport.value=t
 async function next(){await goStep(Math.min(4,step.value+1))}
 
 watch([doc,scriptSource],()=>{if(switchingProject)return;normalized.value=[];if(autosave)clearTimeout(autosave);if(view.value==='editor'&&projectId.value)autosave=setTimeout(()=>{if(projectId.value!==reusingVoiceProjectId)void save().catch(sayError)},1800)},{deep:true})
-onMounted(async()=>{try{if(!await auth.getSession()){await navigateTo('/auth/login',{replace:true});return}await refreshLibrary();const selected=String(route.query.project||'');if(selected)await openVideo(selected)}catch(e){if(Number((e as any)?.statusCode||(e as any)?.response?.status)===401){await auth.getSession();await navigateTo('/auth/login',{replace:true})}else sayError(e)}finally{loading.value=false;if(auth.isAuthenticated.value)poll=setInterval(()=>{if(view.value!=='editor')return;refreshHealth();if(projectId.value&&(!liveJobs.value||activeJobs.value.length))refreshJobs().catch(()=>{})},6000)}})
-onBeforeUnmount(()=>{jobEvents?.close();if(poll)clearInterval(poll);if(autosave)clearTimeout(autosave)})
+let pageDisposed = false
+onMounted(async () => {
+ try {
+  // O middleware já restaurou a sessão ao entrar na rota.
+  if ((!auth.isAuthenticated.value || !auth.user.value) && !await auth.getSession()) {
+   await navigateTo('/auth/login', { replace: true })
+   return
+  }
+  const selected = String(route.query.project || '')
+  if (selected) await openVideo(selected)
+  else await refreshLibrary()
+ } catch (e) {
+  if (Number((e as any)?.statusCode || (e as any)?.response?.status) === 401) {
+   await auth.getSession()
+   await navigateTo('/auth/login', { replace: true })
+  } else sayError(e)
+ } finally {
+  loading.value = false
+  // Sair durante o fetch não pode criar um timer depois do cleanup.
+  if (!pageDisposed && auth.isAuthenticated.value) poll = setInterval(() => {
+   if (document.hidden || view.value !== 'editor') return
+   void refreshHealth()
+   if (projectId.value && (!liveJobs.value || activeJobs.value.length)) void refreshJobs().catch(() => {})
+  }, 6000)
+ }
+})
+onBeforeUnmount(() => {
+ pageDisposed = true
+ jobEvents?.close()
+ if (poll) clearInterval(poll)
+ if (autosave) clearTimeout(autosave)
+})
 onBeforeRouteLeave(async()=>{if(view.value==='editor'&&dirty.value){try{await save()}catch(e){sayError(e);return false}}})
 </script>
 

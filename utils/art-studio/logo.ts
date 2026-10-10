@@ -14,7 +14,7 @@ export const artLogoOptions = (layer: ArtLayer, preference?: LogoPreference | nu
   outline: layer.logoOutline === true,
   outlineColor: layer.logoOutlineColor || '#ffffff',
   outlineWidth: layer.logoOutlineWidth ?? 4,
-  ...(layer.binding === 'logo' ? normalizeLogoPreference(preference) : null)
+  ...(layer.binding === 'logo' ? normalizeLogoPreference(preference) ?? normalizeLogoPreference({}) : null)
 })
 export const artLayerImageSrc = (layer: ArtLayer, preference?: LogoPreference | null) => {
   if (!layer.src || !hasArtLogoTreatment(layer)) return layer.src || ''

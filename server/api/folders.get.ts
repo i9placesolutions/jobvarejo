@@ -43,13 +43,15 @@ export default defineEventHandler(async (event) => {
         const { rows } = await pgQuery<any>(
           `select f.*
            from public.folders f
-           left join public.asset_folders af on af.folder_id = f.id and af.user_id = $1
            where f.user_id = $1
              and (
                f.icon = 'project-folder'
                or (
                  coalesce(f.icon, 'folder') <> 'asset-folder'
-                 and af.folder_id is null
+                 and not exists (
+                   select 1 from public.asset_folders af
+                   where af.folder_id = f.id and af.user_id = $1
+                 )
                )
              )
            order by f.order_index asc, f.created_at asc`,
@@ -75,11 +77,13 @@ export default defineEventHandler(async (event) => {
         const { rows } = await pgQuery<any>(
           `select f.*
            from public.folders f
-           left join public.asset_folders af on af.folder_id = f.id and af.user_id = $1
            where f.user_id = $1
              and (
                f.icon = 'asset-folder'
-               or af.folder_id is not null
+               or exists (
+                 select 1 from public.asset_folders af
+                 where af.folder_id = f.id and af.user_id = $1
+               )
              )
            order by f.order_index asc, f.created_at asc`,
           [user.id]

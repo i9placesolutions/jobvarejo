@@ -16,6 +16,9 @@ import {
   Target,
   HelpCircle,
   Mic2,
+  Search,
+  ArrowUpRight,
+  RefreshCw,
 } from 'lucide-vue-next'
 
 definePageMeta({
@@ -23,6 +26,8 @@ definePageMeta({
   middleware: ['auth', 'admin'],
   ssr: false
 })
+
+useHead({ title: 'Modelos e configurações | JobVarejo' })
 
 const { getApiAuthHeaders } = useApiAuth()
 const sectionLinkComponent = resolveComponent('NuxtLink')
@@ -88,22 +93,22 @@ const sections = ref<SectionItem[]>([
   },
   {
     title: 'Empresas',
-    description: 'Gerenciar empresas e planos dos tenants',
+    description: 'Gerenciar empresas e seus planos',
     href: '/admin/builder/tenants',
     icon: Building2,
     countKey: 'tenants',
     count: null
   },
   {
-    title: 'Card Templates',
-    description: 'Templates visuais de produto (admin cria, cliente escolhe)',
+    title: 'Modelos de produto',
+    description: 'Aparência dos cards de produto disponíveis aos clientes',
     href: '/admin/builder/card-templates',
     icon: CreditCard,
     countKey: 'cardTemplates',
     count: null
   },
   {
-    title: 'Header Templates',
+    title: 'Cabeçalhos',
     description: 'Templates de cabeçalho do encarte',
     href: '/admin/builder/header-templates',
     icon: PanelTop,
@@ -111,7 +116,7 @@ const sections = ref<SectionItem[]>([
     count: null
   },
   {
-    title: 'Footer Templates',
+    title: 'Rodapés',
     description: 'Templates de rodapé do encarte',
     href: '/admin/builder/footer-templates',
     icon: PanelBottom,
@@ -145,55 +150,48 @@ const sections = ref<SectionItem[]>([
     count: null
   },
   {
-    title: 'MusicGPT / Banco de vozes',
+    title: 'Banco de vozes',
     description: 'Envie amostras autorizadas e gerencie as vozes usadas nas locuções',
-    href: '/admin/musicgpt',
+    href: '/admin/voices',
     icon: Mic2,
     countKey: 'radioVoices',
     count: null
   }
 ])
 
+const search = ref('')
+const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+const groups = [
+  { title: 'Aparência dos encartes', description: 'Defina o visual e a organização das ofertas.', keys: ['themes', 'models', 'layouts', 'priceTagStyles', 'badgeStyles', 'fontConfigs'] },
+  { title: 'Elementos reutilizáveis', description: 'Prepare os componentes usados na criação.', keys: ['cardTemplates', 'headerTemplates', 'footerTemplates'] },
+  { title: 'Operação e conteúdo', description: 'Gerencie empresas, segmentos e vozes.', keys: ['tenants', 'segments', 'radioVoices'] },
+  { title: 'Em preparação', description: 'Estas áreas ainda não estão disponíveis.', keys: ['canvaTemplates', 'qrAcademy'] }
+]
+const filteredGroups = computed(() => groups.map(group => ({
+  ...group,
+  items: sections.value.filter(section => group.keys.includes(section.countKey) && normalize(`${section.title} ${section.description}`).includes(normalize(search.value.trim())))
+})).filter(group => group.items.length))
+const resultCount = computed(() => filteredGroups.value.reduce((count, group) => count + group.items.length, 0))
 const isLoading = ref(true)
+const countError = ref(false)
 
 const fetchCounts = async () => {
   isLoading.value = true
-  const headers = await getApiAuthHeaders()
+  countError.value = false
+  try {
+    const headers = await getApiAuthHeaders()
 
-  const endpoints: Record<string, string> = {
-    themes: '/api/admin/builder/themes',
-    models: '/api/admin/builder/models',
-    layouts: '/api/admin/builder/layouts',
-    priceTagStyles: '/api/admin/builder/price-tag-styles',
-    badgeStyles: '/api/admin/builder/badge-styles',
-    fontConfigs: '/api/admin/builder/font-configs',
-    tenants: '/api/admin/builder/tenants',
-    cardTemplates: '/api/admin/builder/card-templates',
-    headerTemplates: '/api/admin/builder/header-templates',
-    footerTemplates: '/api/admin/builder/footer-templates',
-    radioVoices: '/api/admin/musicgpt/voices'
-  }
-
-  const results = await Promise.allSettled(
-    Object.entries(endpoints).map(async ([key, url]) => {
-      try {
-        const data = await $fetch<any>(url, { headers })
-        const list = Array.isArray(data) ? data : data?.data ?? data?.items ?? []
-        return { key, count: Array.isArray(list) ? list.length : 0 }
-      } catch {
-        return { key, count: null }
-      }
-    })
-  )
-
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      const section = sections.value.find(s => s.countKey === result.value.key)
-      if (section) section.count = result.value.count
+    const { counts } = await $fetch<{ counts: Record<string, number | null> }>('/api/admin/builder/counts', { headers })
+    for (const section of sections.value) {
+      if (section.available === false) continue
+      section.count = counts[section.countKey] ?? null
     }
+    countError.value = sections.value.some(section => section.available !== false && section.count === null)
+  } catch {
+    countError.value = true
+  } finally {
+    isLoading.value = false
   }
-
-  isLoading.value = false
 }
 
 onMounted(() => {
@@ -202,7 +200,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <AdminWorkspaceShell>
+  <AdminWorkspaceShell active-nav="builder">
     <div class="admin-page">
       <div class="admin-page__inner">
         <div class="mb-8 flex items-start gap-3">
@@ -211,18 +209,38 @@ onMounted(() => {
           </div>
           <div>
             <p class="admin-page__eyebrow">Configuração · Builder</p>
-            <h1 class="admin-page__title">Temas, templates e empresas</h1>
+            <h1 class="admin-page__title">Modelos e configurações</h1>
             <p class="admin-page__lead">
-              Configuração de temas, modelos, grades e empresas — mesma Central administrativa.
+              Encontre os recursos para preparar encartes e gerenciar a operação.
             </p>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="mb-6 flex flex-wrap items-center gap-3">
+          <label class="relative min-w-0 flex-1 basis-64">
+            <span class="sr-only">Buscar configurações</span>
+            <Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
+            <input v-model="search" type="search" class="admin-input !pl-10" placeholder="Buscar temas, vozes, empresas…" />
+          </label>
+          <button type="button" class="admin-btn admin-btn--secondary" :disabled="isLoading" @click="fetchCounts">
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" /> {{ isLoading ? 'Atualizando…' : 'Atualizar totais' }}
+          </button>
+        </div>
+        <p v-if="countError" role="status" class="admin-alert admin-alert--warning mb-5">Alguns totais não puderam ser carregados. Você pode abrir as configurações ou tentar atualizar novamente.</p>
+        <p v-if="search.trim()" role="status" class="mb-4 text-sm text-[color:var(--jv-muted)]">{{ resultCount }} resultado(s) para “{{ search.trim() }}”</p>
+        <div v-if="!resultCount" class="admin-card admin-card--pad text-center">
+          <p>Nenhuma configuração encontrada.</p>
+          <button type="button" class="admin-btn admin-btn--secondary mt-3" @click="search = ''">Limpar busca</button>
+        </div>
+        <section v-for="group in filteredGroups" :key="group.title" class="mb-8">
+          <h2 class="text-base font-bold text-[color:var(--jv-navy)]">{{ group.title }}</h2>
+          <p class="mb-4 mt-1 text-sm text-[color:var(--jv-muted)]">{{ group.description }}</p>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <component
-            v-for="section in sections"
+            v-for="section in group.items"
             :key="section.href"
             :is="section.available === false ? 'div' : sectionLinkComponent"
+            :prefetch-on="section.available === false ? undefined : 'interaction'"
             :to="section.available === false ? undefined : section.href"
             class="admin-link-card group"
             :class="{ 'admin-link-card--pending': section.available === false }"
@@ -245,10 +263,12 @@ onMounted(() => {
                 class="h-5 w-8 animate-pulse rounded-full bg-slate-200"
               />
             </div>
-            <h2 class="admin-link-card__title">{{ section.title }}</h2>
+            <h3 class="admin-link-card__title">{{ section.title }}</h3>
             <p class="admin-link-card__desc">{{ section.description }}</p>
+            <span v-if="section.available !== false" class="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--jv-blue)]">Gerenciar <ArrowUpRight class="h-3.5 w-3.5" /></span>
           </component>
-        </div>
+          </div>
+        </section>
       </div>
     </div>
   </AdminWorkspaceShell>

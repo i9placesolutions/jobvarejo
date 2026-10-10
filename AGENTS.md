@@ -8,7 +8,7 @@ This file provides guidance to Qoder (qoder.com) when working with code in this 
 # Instalar dependencias
 npm install
 
-# Servidor de desenvolvimento (porta 80)
+# Servidor de desenvolvimento (3000 ou próxima porta disponível)
 npm run dev
 
 # Build de producao

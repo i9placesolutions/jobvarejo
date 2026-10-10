@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
                 coalesce(t.release_year, min(t.release_year)) as release_year,
                 count(*)::int as track_count,
                 min(t.thumbnail_key) as thumbnail_key,
-                min(t.id)::text as sample_track_id,
+                min(t.id::text) as sample_track_id,
                 count(*) over()::int as total_count
            from public.radio_catalog_tracks t
           where ${albumConditions.join(' and ')}

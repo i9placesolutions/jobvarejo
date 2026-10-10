@@ -5,10 +5,11 @@ import { normalizeLogoPreference, applyLogoPreferenceToFabric, logoPreferenceFro
 import { artLogoOptions } from '../../utils/art-studio/logo'
 
 describe('account logo preference', () => {
-  it('distinguishes no preference from explicitly disabling template effects', () => {
+  it('keeps an unset profile distinct while applying a clean logo by default', () => {
     expect(normalizeLogoPreference(undefined)).toBeNull()
     const logo = { quickLogoBackdropMode: 'round', __stickerOutlineEnabled: true, stroke: '#ff0000', strokeWidth: 8 }
-    expect(applyLogoPreferenceToFabric(logo, null)).toBe(false)
+    expect(applyLogoPreferenceToFabric(logo, null)).toBe(true)
+    expect(logo).toMatchObject({ quickLogoBackdropMode: 'none', __stickerOutlineEnabled: false, stroke: null, strokeWidth: 0 })
     applyLogoPreferenceToFabric(logo, { backdrop: 'none', outline: false, border: false })
     expect(logo).toMatchObject({ quickLogoBackdropMode: 'none', __stickerOutlineEnabled: false, stroke: null, strokeWidth: 0 })
   })
@@ -31,6 +32,12 @@ describe('account logo preference', () => {
     const logo: any = { ...seal, binding: 'logo' }
     applyLogoPreferenceToArt(logo, p)
     expect(artLogoOptions(logo, p)).toMatchObject({ backdrop: 'round', outline: true, outlineWidth: 7 })
+  })
+  it('does not inherit a sticker or white plate from a donor in Art Studio', () => {
+    const logo: any = { binding: 'logo', width: 300, height: 200, logoBackdrop: 'square', logoOutline: true }
+    expect(artLogoOptions(logo, null)).toMatchObject({ backdrop: 'none', outline: false })
+    applyLogoPreferenceToArt(logo, null)
+    expect(logo).toMatchObject({ logoBackdrop: 'none', logoOutline: false })
   })
   it('bounds effect values and rejects malformed colors', () => {
     expect(normalizeLogoPreference({ outlineWidth: 500, outlineOpacity: -3, outlineColor: 'url(x)', borderWidth: -7 })).toMatchObject({ outlineWidth: 40, outlineOpacity: 0, outlineColor: '#ffffff', borderWidth: 0 })

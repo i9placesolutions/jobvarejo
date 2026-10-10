@@ -14,23 +14,44 @@ const search = ref('')
 const loading = ref(false)
 const error = ref('')
 const detailsRef = ref<HTMLDetailsElement | null>(null)
+let accountsRequest: AbortController | null = null
+let accountsRequestVersion = 0
+let disposed = false
+let switchingAccount = false
+
+const cancelAccountsRequest = () => {
+  accountsRequestVersion++
+  accountsRequest?.abort()
+  accountsRequest = null
+}
 
 const selectedAccount = computed(() => accounts.value.find(account => account.id === selectedId.value))
 const selectedLabel = computed(() => selectedAccount.value?.label || 'Minha conta')
 const ownEmail = computed(() => auth.user.value?.email || 'Conta principal')
 
 const loadAccounts = async () => {
-  if (!auth.isStaff.value) return
+  if (disposed || switchingAccount || !auth.isStaff.value) return
+  cancelAccountsRequest()
+  const version = accountsRequestVersion
+  const controller = new AbortController()
+  accountsRequest = controller
   loading.value = true
   error.value = ''
   try {
-    const result = await $fetch<{ accounts: typeof accounts.value; selectedId: string | null }>('/api/access/accounts', { query: { search: search.value } })
+    const result = await $fetch<{ accounts: typeof accounts.value; selectedId: string | null }>('/api/access/accounts', {
+      query: { search: search.value }, signal: controller.signal
+    })
+    if (disposed || version !== accountsRequestVersion) return
     accounts.value = result.accounts
     selectedId.value = result.selectedId || ''
   } catch (cause: any) {
+    if (disposed || version !== accountsRequestVersion) return
     error.value = cause?.data?.statusMessage || 'Não foi possível carregar as contas.'
   } finally {
-    loading.value = false
+    if (version === accountsRequestVersion) {
+      loading.value = false
+      accountsRequest = null
+    }
   }
 }
 
@@ -50,14 +71,22 @@ onMounted(() => {
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(search, () => {
   if (searchTimer) clearTimeout(searchTimer)
+  cancelAccountsRequest()
+  loading.value = true
   searchTimer = setTimeout(loadAccounts, 250)
 })
 onUnmounted(() => {
+  disposed = true
+  cancelAccountsRequest()
   if (searchTimer) clearTimeout(searchTimer)
   document.removeEventListener('pointerdown', handleDocumentPointerdown)
 })
 
 const selectAccount = async () => {
+  if (switchingAccount) return
+  switchingAccount = true
+  if (searchTimer) clearTimeout(searchTimer)
+  cancelAccountsRequest()
   loading.value = true
   error.value = ''
   try {
@@ -67,6 +96,7 @@ const selectAccount = async () => {
   } catch (cause: any) {
     error.value = cause?.data?.statusMessage || 'Não foi possível selecionar a conta.'
     loading.value = false
+    switchingAccount = false
   }
 }
 </script>

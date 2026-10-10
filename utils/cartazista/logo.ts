@@ -18,7 +18,7 @@ export function cartazistaLogoNeedsOutline(pixels: Uint8ClampedArray, background
 const sourceCache = new Map<string, Promise<string>>()
 export function cartazistaLogoSource(layer: ArtLayer, doc: ArtComposition): Promise<string> {
   const background=doc.layers.find(l=>l.id==='cartaz-campaign-base')?.fill||doc.background
-  const key=JSON.stringify([layer.src,layer.binding,layer.logoOutline,layer.logoOutlineColor,background])
+  const key=JSON.stringify([layer.src,layer.binding,layer.logoOutline,layer.logoOutlineColor,layer.logoOutlineWidth,background])
   let result=sourceCache.get(key)
   if(!result){
     if(sourceCache.size>=32)sourceCache.delete(sourceCache.keys().next().value!)
@@ -28,15 +28,12 @@ export function cartazistaLogoSource(layer: ArtLayer, doc: ArtComposition): Prom
   return result
 }
 async function prepareLogo(layer: ArtLayer, background: string): Promise<string> {
-  if(layer.binding!=='logo'||!layer.src||layer.logoOutline===false)return layer.src||''
+  if(layer.binding!=='logo'||!layer.src||layer.logoOutline!==true)return layer.src||''
   const image=new Image();image.crossOrigin='anonymous';image.src=layer.src
   await image.decode()
-  const sample=document.createElement('canvas');sample.width=sample.height=96
-  const ctx=sample.getContext('2d')!;ctx.drawImage(image,0,0,96,96)
-  if(layer.logoOutline!==true&&!cartazistaLogoNeedsOutline(ctx.getImageData(0,0,96,96).data,background))return layer.src
   const scale=Math.min(1,1600/Math.max(image.naturalWidth,image.naturalHeight))
   const w=Math.round(image.naturalWidth*scale),h=Math.round(image.naturalHeight*scale)
-  const border=Math.max(2,Math.round(Math.min(w,h)*.025)),pad=border+2
+  const border=Math.max(1,Math.min(40,Math.round(layer.logoOutlineWidth ?? 4))),pad=border+2
   const mask=document.createElement('canvas');mask.width=w+pad*2;mask.height=h+pad*2
   const m=mask.getContext('2d')!;m.drawImage(image,pad,pad,w,h);m.globalCompositeOperation='source-in';m.fillStyle=layer.logoOutlineColor||'#ffffff';m.fillRect(0,0,mask.width,mask.height)
   const output=document.createElement('canvas');output.width=mask.width;output.height=mask.height

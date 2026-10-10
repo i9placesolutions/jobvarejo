@@ -7,6 +7,7 @@ import type { Folder as FolderModel } from '~/types/folder'
 import { useResponsive } from '~/composables/useResponsive'
 import { getProjectPreviewSource } from '~/utils/dashboardProjectPreview'
 import { saveProjectAsFlyerTemplate } from '~/utils/flyerTemplateApi'
+import { loadDashboardResources } from '~/utils/dashboardResources'
 import { formatNotificationDateTime } from '~/utils/notificationDateTime'
 
 const { screenWidth } = useResponsive()
@@ -177,6 +178,7 @@ const handleNotificationsOutsideClick = (e: Event) => {
 }
 
 // Load user profile, folders and projects
+let dashboardDisposed = false
 const loadData = async () => {
   isLoadingProjects.value = true
   try {
@@ -188,24 +190,23 @@ const loadData = async () => {
 
     const headers = await getApiAuthHeaders()
 
-    // Fire all three requests in parallel
-    const [profile, , projectsData] = await Promise.all([
-      $fetch('/api/profile', { headers }).catch(() => null),
-      loadFolders({ scope: 'project' }).catch(() => null),
-      // A dashboard organiza cards; o canvas completo só é necessário ao abrir
-      // um projeto no editor. O modo compacto preserva pastas/favoritos/recentes.
-      $fetch('/api/projects', { headers, query: { summary: 'dashboard' } }).catch(() => [])
-    ])
-
-    if (profile) user.value = profile as any
-    projects.value = (Array.isArray(projectsData) ? projectsData : []).map((p: any) => {
-      if (p && typeof p === 'object') {
-        // Pre-parse dates once to avoid repeated new Date() calls in computed properties
-        p._lastViewedMs = p.last_viewed ? new Date(p.last_viewed).getTime() : 0
-        p._updatedAtMs = p.updated_at ? new Date(p.updated_at).getTime() : 0
-        p._createdAtMs = p.created_at ? new Date(p.created_at).getTime() : 0
-      }
-      return p
+    await loadDashboardResources<any, any>({
+      profile: $fetch<any>('/api/profile', { headers }),
+      folders: loadFolders({ scope: 'project' }),
+      projects: $fetch<any[]>('/api/projects', { headers, query: { summary: 'dashboard' } }),
+      isCurrent: () => !dashboardDisposed && auth.user.value?.id === userId,
+      onProfile: profile => { user.value = profile },
+      onProjects: projectsData => {
+        projects.value = (Array.isArray(projectsData) ? projectsData : []).map((p: any) => {
+          if (p && typeof p === 'object') {
+            p._lastViewedMs = p.last_viewed ? new Date(p.last_viewed).getTime() : 0
+            p._updatedAtMs = p.updated_at ? new Date(p.updated_at).getTime() : 0
+            p._createdAtMs = p.created_at ? new Date(p.created_at).getTime() : 0
+          }
+          return p
+        })
+      },
+      onProjectsReady: () => { isLoadingProjects.value = false },
     })
 	  } catch (error) {
 	    console.error('Error loading data:', error)
@@ -352,6 +353,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  dashboardDisposed = true
   if (process.client) {
     document.removeEventListener('click', handleContextMenusOutsideClick)
     document.removeEventListener('click', handleNotificationsOutsideClick)
@@ -1461,7 +1463,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
           >
             <MenuIcon class="w-5 h-5" />
           </button>
-          <NuxtLink to="/" class="dash-brand-link" aria-label="JobVarejo, central administrativa">
+          <NuxtLink prefetch-on="interaction" to="/" class="dash-brand-link" aria-label="JobVarejo, central administrativa">
             <img src="/img/jobvarejo-logo-trim.png" alt="JobVarejo" width="176" height="56">
             <span v-if="!dashMobile" class="dash-brand-copy">
               <strong>Central administrativa</strong>
@@ -1568,25 +1570,26 @@ const handleDropOnRoot = async (event: DragEvent) => {
                 <FolderOpen class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Todos</span>
               </button>
               <p class="sidebar-section-label px-2 mt-4 mb-1">Soluções</p>
-              <NuxtLink to="/flyer-templates" class="dash-nav-item w-full" @click="showMobileDrawer = false"><LayoutTemplate class="w-3.5 h-3.5 shrink-0 text-indigo-500"/><span class="flex-1 text-left">Encartes</span></NuxtLink>
-              <NuxtLink to="/cartazista" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Sparkles class="w-3.5 h-3.5 shrink-0 text-blue-500"/><span class="flex-1 text-left">Cartazes</span></NuxtLink>
-              <NuxtLink to="/videos" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Clapperboard class="w-3.5 h-3.5 shrink-0 text-emerald-600"/><span class="flex-1 text-left">Vídeos</span></NuxtLink>
-              <NuxtLink to="/radio-indoor" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Radio class="w-3.5 h-3.5 shrink-0 text-orange-500"/><span class="flex-1 text-left">Rádio Indoor</span></NuxtLink>
-              <NuxtLink to="/art-studio" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Sparkles class="w-3.5 h-3.5 shrink-0 text-violet-500"/><span class="flex-1 text-left">Estúdio de Artes</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" to="/flyer-templates" class="dash-nav-item w-full" @click="showMobileDrawer = false"><LayoutTemplate class="w-3.5 h-3.5 shrink-0 text-indigo-500"/><span class="flex-1 text-left">Encartes</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" to="/cartazista" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Sparkles class="w-3.5 h-3.5 shrink-0 text-blue-500"/><span class="flex-1 text-left">Cartazes</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" to="/videos" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Clapperboard class="w-3.5 h-3.5 shrink-0 text-emerald-600"/><span class="flex-1 text-left">Vídeos</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" to="/radio-indoor" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Radio class="w-3.5 h-3.5 shrink-0 text-orange-500"/><span class="flex-1 text-left">Rádio Indoor</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" to="/art-studio" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Sparkles class="w-3.5 h-3.5 shrink-0 text-violet-500"/><span class="flex-1 text-left">Estúdio de Artes</span></NuxtLink>
             </div>
             <!-- Bottom -->
             <div class="px-2 pb-3 mt-auto shrink-0">
               <div class="sidebar-divider mx-1 mb-2"></div>
               <p class="sidebar-section-label px-2 mb-1">Configuração</p>
-              <NuxtLink to="/admin/users" class="dash-nav-item w-full" @click="showMobileDrawer = false"><User class="w-3.5 h-3.5 shrink-0"/><span class="flex-1 text-left">Usuários e acessos</span></NuxtLink>
-              <NuxtLink to="/admin/musicgpt" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Mic2 class="w-3.5 h-3.5 shrink-0 text-violet-400"/><span class="flex-1 text-left">MusicGPT</span></NuxtLink>
-              <NuxtLink v-if="auth.isAdmin.value" to="/admin/whatsapp" class="dash-nav-item w-full" @click="showMobileDrawer = false"><MessageCircle class="w-3.5 h-3.5 shrink-0 text-emerald-500"/><span class="flex-1 text-left">WhatsApp</span></NuxtLink>
-              <NuxtLink to="/admin/storage" class="dash-nav-item w-full" @click="showMobileDrawer = false"><HardDrive class="w-3.5 h-3.5 shrink-0 text-slate-400"/><span class="flex-1 text-left">Storage</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" to="/admin/users" class="dash-nav-item w-full" @click="showMobileDrawer = false"><User class="w-3.5 h-3.5 shrink-0"/><span class="flex-1 text-left">Usuários e acessos</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/voices" class="dash-nav-item w-full" @click="showMobileDrawer = false"><Mic2 class="w-3.5 h-3.5 shrink-0 text-violet-400"/><span class="flex-1 text-left">Banco de vozes</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/whatsapp" class="dash-nav-item w-full" @click="showMobileDrawer = false"><MessageCircle class="w-3.5 h-3.5 shrink-0 text-emerald-500"/><span class="flex-1 text-left">WhatsApp</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/storage" class="dash-nav-item w-full" @click="showMobileDrawer = false"><HardDrive class="w-3.5 h-3.5 shrink-0 text-slate-400"/><span class="flex-1 text-left">Arquivos</span></NuxtLink>
+              <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/builder" class="dash-nav-item w-full" @click="showMobileDrawer = false"><LayoutTemplate class="w-3.5 h-3.5 shrink-0"/><span class="flex-1 text-left">Modelos e configurações</span></NuxtLink>
               <div class="sidebar-divider mx-1 my-2"></div>
               <button @click="navigateTo('/profile'); showMobileDrawer = false" class="dash-nav-item w-full">
                 <User class="w-3.5 h-3.5 shrink-0" /><span class="flex-1 text-left">Meu Perfil</span>
               </button>
-              <NuxtLink to="/business-profile" class="dash-nav-item w-full" @click="showMobileDrawer = false">
+              <NuxtLink prefetch-on="interaction" to="/business-profile" class="dash-nav-item w-full" @click="showMobileDrawer = false">
                 <Store class="w-3.5 h-3.5 shrink-0 text-emerald-500" /><span class="flex-1 text-left">Minha loja</span>
               </NuxtLink>
               <button @click="handleSignOut" class="dash-nav-item signout w-full">
@@ -1597,10 +1600,10 @@ const handleDropOnRoot = async (event: DragEvent) => {
         </DashboardMobileDrawer>
 
         <!-- Sidebar (hidden on mobile) -->
-        <aside v-show="!dashMobile" class="dash-sidebar w-56 h-full min-h-0 flex flex-col shrink-0 overflow-hidden relative z-10">
+        <aside v-show="!dashMobile" class="dash-sidebar w-56 h-full min-h-0 flex flex-col shrink-0 overflow-y-auto relative z-10">
 
           <!-- Nav Section -->
-          <div class="px-3 pt-4 pb-1 shrink-0 overflow-y-auto max-h-[78%]">
+          <div class="px-3 pt-4 pb-1 shrink-0">
             <p class="sidebar-section-label px-1 mb-2">Biblioteca</p>
             <button
               @click="activeView = 'recent'"
@@ -1609,7 +1612,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
             >
               <Clock class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Recentes</span>
-              <span class="nav-count">10</span>
+              <span class="nav-count">{{ Math.min(10, safeProjects.length) }}</span>
             </button>
             <button
               @click="activeView = 'all'; setActiveFolder(null); filterFolderId = 'all'"
@@ -1621,23 +1624,23 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <span class="nav-count">{{ safeProjects.length }}</span>
             </button>
             <p class="sidebar-section-label px-1 mt-4 mb-2">Soluções</p>
-            <NuxtLink to="/flyer-templates" class="dash-nav-item w-full" aria-label="Abrir Encartes">
+            <NuxtLink prefetch-on="interaction" to="/flyer-templates" class="dash-nav-item w-full" aria-label="Abrir Encartes">
               <LayoutTemplate class="w-4 h-4 shrink-0 text-indigo-500" />
               <span class="flex-1 text-left">Encartes</span>
             </NuxtLink>
-            <NuxtLink to="/cartazista" class="dash-nav-item w-full" aria-label="Abrir Cartazes">
+            <NuxtLink prefetch-on="interaction" to="/cartazista" class="dash-nav-item w-full" aria-label="Abrir Cartazes">
               <Sparkles class="w-4 h-4 shrink-0 text-blue-500" />
               <span class="flex-1 text-left">Cartazes</span>
             </NuxtLink>
-            <NuxtLink to="/videos" class="dash-nav-item w-full" aria-label="Abrir Vídeos">
+            <NuxtLink prefetch-on="interaction" to="/videos" class="dash-nav-item w-full" aria-label="Abrir Vídeos">
               <Clapperboard class="w-4 h-4 shrink-0 text-emerald-600" />
               <span class="flex-1 text-left">Vídeos</span>
             </NuxtLink>
-            <NuxtLink to="/radio-indoor" class="dash-nav-item w-full" aria-label="Abrir Rádio Indoor">
+            <NuxtLink prefetch-on="interaction" to="/radio-indoor" class="dash-nav-item w-full" aria-label="Abrir Rádio Indoor">
               <Radio class="w-4 h-4 shrink-0 text-orange-500" />
               <span class="flex-1 text-left">Rádio Indoor</span>
             </NuxtLink>
-            <NuxtLink to="/art-studio" class="dash-nav-item w-full" aria-label="Abrir Estúdio de Artes">
+            <NuxtLink prefetch-on="interaction" to="/art-studio" class="dash-nav-item w-full" aria-label="Abrir Estúdio de Artes">
               <Sparkles class="w-4 h-4 shrink-0 text-violet-500" />
               <span class="flex-1 text-left">Estúdio de Artes</span>
             </NuxtLink>
@@ -1647,19 +1650,20 @@ const handleDropOnRoot = async (event: DragEvent) => {
           <div class="mt-auto px-3 pb-3 shrink-0">
             <div class="sidebar-divider mx-1 mb-2"></div>
             <p class="sidebar-section-label px-1 mb-2">Configuração</p>
-            <NuxtLink to="/admin/users" class="dash-nav-item w-full" aria-label="Administrar usuários e acessos"><User class="w-4 h-4 shrink-0"/><span class="flex-1 text-left">Usuários e acessos</span></NuxtLink>
-            <NuxtLink to="/admin/musicgpt" class="dash-nav-item w-full" aria-label="Abrir MusicGPT">
+            <NuxtLink prefetch-on="interaction" to="/admin/users" class="dash-nav-item w-full" aria-label="Administrar usuários e acessos"><User class="w-4 h-4 shrink-0"/><span class="flex-1 text-left">Usuários e acessos</span></NuxtLink>
+            <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/voices" class="dash-nav-item w-full" aria-label="Abrir Banco de vozes">
               <Mic2 class="w-4 h-4 shrink-0 text-violet-400" />
-              <span class="flex-1 text-left">MusicGPT</span>
+              <span class="flex-1 text-left">Banco de vozes</span>
             </NuxtLink>
-            <NuxtLink v-if="auth.isAdmin.value" to="/admin/whatsapp" class="dash-nav-item w-full" aria-label="Abrir WhatsApp">
+            <NuxtLink prefetch-on="interaction" v-if="auth.isAdmin.value" to="/admin/whatsapp" class="dash-nav-item w-full" aria-label="Abrir WhatsApp">
               <MessageCircle class="w-4 h-4 shrink-0 text-emerald-500" />
               <span class="flex-1 text-left">WhatsApp</span>
             </NuxtLink>
-            <NuxtLink to="/admin/storage" class="dash-nav-item w-full" aria-label="Abrir Storage">
+            <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/storage" class="dash-nav-item w-full" aria-label="Abrir arquivos">
               <HardDrive class="w-4 h-4 shrink-0 text-slate-400" />
-              <span class="flex-1 text-left">Storage</span>
+              <span class="flex-1 text-left">Arquivos</span>
             </NuxtLink>
+            <NuxtLink prefetch-on="interaction" v-if="auth.isSuperAdmin.value" to="/admin/builder" class="dash-nav-item w-full"><LayoutTemplate class="w-4 h-4 shrink-0"/><span class="flex-1 text-left">Modelos e configurações</span></NuxtLink>
             <div class="sidebar-divider mx-1 my-2"></div>
             <button
               @click="navigateTo('/profile')"
@@ -1669,7 +1673,7 @@ const handleDropOnRoot = async (event: DragEvent) => {
               <User class="w-4 h-4 shrink-0" />
               <span class="flex-1 text-left">Meu Perfil</span>
             </button>
-            <NuxtLink to="/business-profile" class="dash-nav-item w-full" aria-label="Abrir dados da loja">
+            <NuxtLink prefetch-on="interaction" to="/business-profile" class="dash-nav-item w-full" aria-label="Abrir dados da loja">
               <Store class="w-4 h-4 shrink-0 text-emerald-500" />
               <span class="flex-1 text-left">Minha loja</span>
             </NuxtLink>
@@ -1715,6 +1719,8 @@ const handleDropOnRoot = async (event: DragEvent) => {
             </div>
           </section>
 
+          <AdminQuickAccess v-if="auth.isAdmin.value && !searchQuery && !activeFolderId" />
+
           <!-- Page Header -->
           <div :class="['dash-page-header flex items-center justify-between gap-4 shrink-0', dashMobile ? 'px-4 pt-3 pb-2' : 'px-7 pt-5 pb-4']">
             <div class="min-w-0 flex-1">
@@ -1734,21 +1740,21 @@ const handleDropOnRoot = async (event: DragEvent) => {
             </div>
             <!-- Desktop: inline button / Mobile: FAB -->
             <div v-if="!dashMobile" class="flex items-center gap-2 shrink-0">
-              <NuxtLink
+              <NuxtLink prefetch-on="interaction"
                 to="/flyer-templates"
                 class="dash-secondary-cta h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all"
               >
                 <LayoutTemplate class="w-4 h-4" />
                 Encartes
               </NuxtLink>
-              <NuxtLink
+              <NuxtLink prefetch-on="interaction"
                 to="/cartazista"
                 class="dash-cta h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all"
               >
                 <Sparkles class="w-4 h-4" />
                 Cartazes
               </NuxtLink>
-              <NuxtLink
+              <NuxtLink prefetch-on="interaction"
                 to="/videos"
                 class="dash-cta shrink-0 h-10 px-4 rounded-xl text-[12px] font-semibold flex items-center gap-2 transition-all"
               >
