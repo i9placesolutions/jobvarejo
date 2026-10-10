@@ -6,6 +6,7 @@
  *   node --env-file=.env scripts/flyer-templates/replace-label.mjs <snapshot> <saída> <etiquetas.json> [--from=tpl_economia_mes_economia]
  *
  * <etiquetas.json>: etiquetas do banco [{ key, name, kind, group }] (as que o usuário enxerga).
+ * --from=none troca os modelos sem etiqueta definida. --families=<plano anterior> usa a cor real (render do feed).
  * Não grava nada: gera report.json, after/ e png/ (persist.mjs/revert.mjs) e sample/ (prévia com produtos).
  */
 import fs from 'node:fs/promises'
@@ -16,7 +17,9 @@ import { applyLabel, colorFamily, LABEL_POOL } from './replace-label-lib.mjs'
 import { renderer, RUNTIME_OUT } from './renderer.mjs'
 
 const [snapshotDir, outDir, labelsFile] = process.argv.slice(2).filter(a => !a.startsWith('--'))
-const from = process.argv.find(a => a.startsWith('--from='))?.split('=')[1] || 'tpl_economia_mes_economia'
+// --from=none: modelos sem etiqueta definida (saem todos com a etiqueta padrão do editor).
+const fromArg = process.argv.find(a => a.startsWith('--from='))?.split('=')[1] || 'tpl_economia_mes_economia'
+const from = fromArg === 'none' ? '' : fromArg
 if (!snapshotDir || !outDir || !labelsFile) { console.error('Uso: replace-label.mjs <snapshot> <saída> <etiquetas.json> [--from=<id>]'); process.exit(1) }
 const library = JSON.parse(await fs.readFile(labelsFile, 'utf8'))
 const recipes = JSON.parse(await fs.readFile('shared/video-studio/generated-flyer-recipes.json', 'utf8'))
