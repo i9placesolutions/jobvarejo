@@ -24,7 +24,6 @@ import {
   isBuiltInLabelTemplateId,
   normalizeLabelTemplateName
 } from '~/utils/labelTemplateHelpers'
-import { createEditableLabelTemplateGroup } from '~/utils/labelTemplateFactory'
 import { toWasabiProxyUrl } from '~/utils/storageProxy'
 import { createLazyCatalogPreviewQueue } from '~/utils/lazyCatalogPreviewQueue'
 
@@ -60,7 +59,8 @@ type TemplateSaveResult = {
 const { getApiAuthHeaders } = useApiAuth()
 const { uploadFile } = useUpload()
 
-const templates = ref<LabelTemplate[]>([])
+type CatalogTemplate = Omit<LabelTemplate, 'group'> & { group?: LabelTemplate['group'] }
+const templates = ref<CatalogTemplate[]>([])
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
 const searchQuery = ref('')
@@ -72,6 +72,7 @@ const createImagePreview = ref<string | null>(null)
 const createImageInput = ref<HTMLInputElement | null>(null)
 const isPreparingTemplate = ref(false)
 const editingTemplate = ref<LabelTemplate | null>(null)
+const openingTemplateId = ref<string | null>(null)
 const isSaving = ref(false)
 const isDuplicating = ref(false)
 const deletingTemplateId = ref<string | null>(null)
@@ -158,11 +159,10 @@ const cloneJson = <T,>(value: T): T => {
   }
 }
 
-const mapTemplateRow = (row: any): LabelTemplate | null => {
+const mapTemplateSummary = (row: any): CatalogTemplate | null => {
   if (!row || typeof row !== 'object') return null
   const id = String(row.id || '').trim()
-  const group = row.group ?? row['group']
-  if (!id || !group || typeof group !== 'object') return null
+  if (!id) return null
 
   const now = new Date().toISOString()
   const createdAt = String(row.created_at || row.createdAt || now)
@@ -171,7 +171,6 @@ const mapTemplateRow = (row: any): LabelTemplate | null => {
     id,
     name: normalizeLabelTemplateName(row.name, 'Etiqueta sem nome'),
     kind: (String(row.kind || 'priceGroup-v1') || 'priceGroup-v1') as LabelTemplate['kind'],
-    group,
     previewDataUrl: row.preview_data_url ?? row.previewDataUrl ?? undefined,
     isBuiltIn: Boolean(row.isBuiltIn || row.is_built_in) || isBuiltInLabelTemplateId(id),
     createdAt,
@@ -179,7 +178,13 @@ const mapTemplateRow = (row: any): LabelTemplate | null => {
   }
 }
 
-const sortTemplates = (items: LabelTemplate[]) => [...items].sort((a, b) => {
+const mapTemplateRow = (row: any): LabelTemplate | null => {
+  const summary = mapTemplateSummary(row)
+  if (!summary || !row.group || typeof row.group !== 'object') return null
+  return { ...summary, group: row.group }
+}
+
+const sortTemplates = (items: CatalogTemplate[]) => [...items].sort((a, b) => {
   const aTime = Date.parse(a.updatedAt || a.createdAt || '') || 0
   const bTime = Date.parse(b.updatedAt || b.createdAt || '') || 0
   return bTime - aTime
@@ -191,7 +196,7 @@ const invalidatePreview = (templateId: string): number => {
   return previewRevisionSequence
 }
 
-const queuePreview = (template: LabelTemplate) => {
+const queuePreview = (template: CatalogTemplate) => {
   if (!isPageMounted || failedPreviewIds.value.has(template.id)) return
   if (generatedPreviews.value[template.id]) return
   const revision = previewRevisions.get(template.id) ?? invalidatePreview(template.id)
@@ -205,7 +210,7 @@ const setPreviewElement = (templateId: string, element: unknown) => {
 
 const refreshPreviewObserver = async () => {
   await nextTick()
-  if (!isPageMounted) return
+  if (!isPageMounted || isLoading.value) return
   const targets = filteredTemplates.value.flatMap((template) => {
     const element = previewElements.get(template.id)
     if (!element || failedPreviewIds.value.has(template.id) || generatedPreviews.value[template.id]) return []
@@ -261,10 +266,10 @@ const markPreviewFailed = (templateId: string) => {
   if (template) queuePreview(template)
 }
 
-const previewSrc = (template: LabelTemplate): string | undefined =>
+const previewSrc = (template: CatalogTemplate): string | undefined =>
   !failedPreviewIds.value.has(template.id) ? generatedPreviews.value[template.id]?.url : undefined
 
-const retryPreview = (template: LabelTemplate) => {
+const retryPreview = (template: CatalogTemplate) => {
   failedPreviewIds.value.delete(template.id)
   previewImageRetries.delete(template.id)
   previewConflictRetries.delete(template.id)
@@ -278,13 +283,14 @@ const loadTemplates = async () => {
   loadError.value = null
   try {
     const headers = await getApiAuthHeaders()
-    const response: any = await $fetch('/api/label-templates', { method: 'GET', headers, query: { preview: '0' } })
+    const response: any = await $fetch('/api/label-templates', { method: 'GET', headers, query: { summary: '1' } })
+    if (!isPageMounted) return
     if (response?.success === false) {
       throw new Error(String(response?.message || 'Não foi possível carregar os modelos.'))
     }
     const rows = Array.isArray(response?.templates) ? response.templates : []
     for (const previous of templates.value) invalidatePreview(previous.id)
-    templates.value = sortTemplates(rows.map(mapTemplateRow).filter(Boolean) as LabelTemplate[])
+    templates.value = sortTemplates(rows.map(mapTemplateSummary).filter(Boolean) as CatalogTemplate[])
     for (const template of templates.value) invalidatePreview(template.id)
     generatedPreviews.value = {}
     failedPreviewIds.value = new Set()
@@ -305,6 +311,8 @@ const loadTemplates = async () => {
 const ensureStarterTemplate = async () => {
   if (templates.value.some((template) => template.id === BUILTIN_DEFAULT_LABEL_TEMPLATE_ID)) return
 
+  const { createEditableLabelTemplateGroup } = await import('~/utils/labelTemplateFactory')
+  if (!isPageMounted) return
   const now = new Date().toISOString()
   const starter: LabelTemplate = {
     id: BUILTIN_DEFAULT_LABEL_TEMPLATE_ID,
@@ -498,6 +506,7 @@ const resetCreateForm = () => {
 }
 
 const openCreateDialog = () => {
+  if (openingTemplateId.value || isSaving.value) return
   resetCreateForm()
   showCreateDialog.value = true
 }
@@ -536,6 +545,8 @@ const startCreateTemplate = async () => {
 
   isPreparingTemplate.value = true
   try {
+    const { createEditableLabelTemplateGroup } = await import('~/utils/labelTemplateFactory')
+    if (!isPageMounted) return
     let group: Record<string, any>
     if (createImageDataUrl.value) {
       const dimensions = await readImageDimensions(createImageDataUrl.value)
@@ -567,8 +578,33 @@ const startCreateTemplate = async () => {
   }
 }
 
-const openEditor = (template: LabelTemplate) => {
-  editingTemplate.value = cloneJson(template)
+const loadTemplateDetails = async (template: CatalogTemplate): Promise<LabelTemplate> => {
+  const cached = templates.value.find(item => item.id === template.id) || template
+  if (cached.group && typeof cached.group === 'object') return cached as LabelTemplate
+  const headers = await getApiAuthHeaders()
+  const response = await $fetch<any>('/api/label-templates', {
+    method: 'GET', headers, query: { ids: template.id, preview: '0' }
+  })
+  const full = mapTemplateRow(response?.templates?.find((row: any) => row.id === template.id))
+  if (!full) throw new Error('Não foi possível carregar o desenho desta etiqueta. Tente novamente.')
+  if (isPageMounted) {
+    const index = templates.value.findIndex(item => item.id === full.id)
+    if (index !== -1) templates.value[index] = full
+  }
+  return full
+}
+
+const openEditor = async (template: CatalogTemplate) => {
+  if (openingTemplateId.value || isSaving.value || isPreparingTemplate.value || deletingTemplateId.value) return
+  openingTemplateId.value = template.id
+  try {
+    const full = await loadTemplateDetails(template)
+    if (isPageMounted) editingTemplate.value = cloneJson(full)
+  } catch (error: any) {
+    if (isPageMounted) showToast(error?.data?.statusMessage || error?.message || 'Não foi possível abrir a etiqueta.', 'error')
+  } finally {
+    openingTemplateId.value = null
+  }
 }
 
 const closeEditor = () => {
@@ -619,14 +655,16 @@ const handleTemplateSave = async (
   }
 }
 
-const duplicateTemplate = async (template: LabelTemplate) => {
-  if (isSaving.value || isPreparingTemplate.value || isDuplicating.value) return
+const duplicateTemplate = async (template: CatalogTemplate) => {
+  if (openingTemplateId.value || isSaving.value || isPreparingTemplate.value || isDuplicating.value) return
   isDuplicating.value = true
   isSaving.value = true
   try {
+    const full = await loadTemplateDetails(template)
+    if (!isPageMounted) return
     const now = new Date().toISOString()
     const duplicate: LabelTemplate = {
-      ...cloneJson(template),
+      ...cloneJson(full),
       id: `tpl_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`}`,
       name: normalizeLabelTemplateName(`${template.name} (cópia)`, template.name),
       isBuiltIn: false,
@@ -644,8 +682,8 @@ const duplicateTemplate = async (template: LabelTemplate) => {
   }
 }
 
-const deleteTemplate = async (template: LabelTemplate) => {
-  if (template.isBuiltIn || deletingTemplateId.value) return
+const deleteTemplate = async (template: CatalogTemplate) => {
+  if (template.isBuiltIn || deletingTemplateId.value || openingTemplateId.value || isSaving.value) return
   if (!await confirmInSystem(`Excluir o modelo “${template.name}”?`)) return
 
   deletingTemplateId.value = template.id
@@ -671,7 +709,9 @@ const formatDate = (value: string) => {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-watch(filteredTemplates, () => { void refreshPreviewObserver() }, { flush: 'post' })
+// O catálogo pode chegar enquanto o v-if ainda mostra o loading. Observar
+// também a montagem da grade garante que os cards existentes sejam registrados.
+watch([filteredTemplates, isLoading, previewGrid], () => { void refreshPreviewObserver() }, { flush: 'post' })
 
 onMounted(() => {
   isPageMounted = true
@@ -787,10 +827,10 @@ onBeforeUnmount(() => {
                 <Check class="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" title="Disponível no editor" />
               </div>
               <div class="mt-4 flex items-center gap-2">
-                <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600" @click="openEditor(template)">
-                  <Pencil class="h-3.5 w-3.5" /> Editar
+                <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-50" :disabled="!!openingTemplateId || isSaving" @click="openEditor(template)">
+                  <LoaderCircle v-if="openingTemplateId === template.id" class="h-3.5 w-3.5 animate-spin" /><Pencil v-else class="h-3.5 w-3.5" /> {{ openingTemplateId === template.id ? 'Abrindo…' : 'Editar' }}
                 </button>
-                <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isSaving || isPreparingTemplate || !!deletingTemplateId" title="Duplicar modelo" @click="duplicateTemplate(template)">
+                <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!!openingTemplateId || isSaving || isPreparingTemplate || !!deletingTemplateId" title="Duplicar modelo" @click="duplicateTemplate(template)">
                   <Copy class="h-4 w-4" />
                 </button>
                 <button v-if="!template.isBuiltIn" type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600" title="Excluir modelo" :disabled="deletingTemplateId === template.id" @click="deleteTemplate(template)">

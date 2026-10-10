@@ -2,6 +2,7 @@
 import { confirmInSystem } from '~/utils/systemMessages'
 import type { LabelTemplate } from '~/types/label-template'
 import ColorPicker from './ui/ColorPicker.vue'
+import { normalizeFabricTextStylesForSerialization } from '~/utils/fabricTextStyleSerialization'
 import {
   AVAILABLE_FONT_FAMILIES,
   DEFAULT_EDITOR_FONT_FAMILY,
@@ -2122,6 +2123,7 @@ const serializeGroupForTemplate = (g: any) => {
   // Normalize so templates don't "jump" when applied elsewhere.
   g.set({ left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0, originX: 'center', originY: 'center' })
   safeAddWithUpdate(g)
+  normalizeFabricTextStylesForSerialization([g])
   const json: any = g.toObject(TEMPLATE_EXTRA_PROPS)
 
   // Persist a stable visual base size so product-canvas layout matches mini editor.
@@ -2257,6 +2259,7 @@ const serializeGroupForTemplate = (g: any) => {
 
 const serializeGroupForHistory = (g: any) => {
   if (!g || typeof g.toObject !== 'function') return null
+  normalizeFabricTextStylesForSerialization([g])
   const json: any = g.toObject(TEMPLATE_EXTRA_PROPS)
   delete json.layoutManager
   delete json.layout

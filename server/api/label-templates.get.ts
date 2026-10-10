@@ -3,8 +3,7 @@ import { enforceRateLimit } from '../utils/rate-limit'
 import { pgQuery } from '../utils/postgres'
 
 const isMissingTableError = (err: any): boolean =>
-  String(err?.code || '') === '42P01' ||
-  String(err?.message || '').toLowerCase().includes('label_templates')
+  String(err?.code || '') === '42P01'
 
 const isMissingCatalogScopeError = (err: any): boolean =>
   String(err?.code || '') === '42703' &&

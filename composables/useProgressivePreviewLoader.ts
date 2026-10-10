@@ -26,6 +26,8 @@ export const useProgressivePreviewLoader = <T>(opts: ProgressivePreviewLoaderOpt
   const pendingSet = new Set<string>()
   const prioritySet = new Set<string>()
   let observer: IntersectionObserver | null = null
+  let disposed = false
+  let observerGeneration = 0
   let hydrationTimer: ReturnType<typeof setTimeout> | null = null
   let hydrationIdleId: number | null = null
 
@@ -313,7 +315,8 @@ export const useProgressivePreviewLoader = <T>(opts: ProgressivePreviewLoaderOpt
   }
 
   const refreshObserver = async () => {
-    if (typeof window === 'undefined') return
+    const generation = ++observerGeneration
+    if (disposed || typeof window === 'undefined') return
     if (observer) {
       observer.disconnect()
       observer = null
@@ -321,6 +324,8 @@ export const useProgressivePreviewLoader = <T>(opts: ProgressivePreviewLoaderOpt
     if (!isEnabled()) return
 
     await nextTick()
+    // Navegação e atualizações concorrentes podem ocorrer durante o nextTick.
+    if (disposed || generation !== observerGeneration || !isEnabled()) return
     observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         const el = entry.target as HTMLElement
@@ -383,6 +388,8 @@ export const useProgressivePreviewLoader = <T>(opts: ProgressivePreviewLoaderOpt
   })
 
   onBeforeUnmount(() => {
+    disposed = true
+    observerGeneration += 1
     clearHydrationSchedule()
     visibilityMeta.clear()
     prioritySet.clear()
