@@ -496,5 +496,50 @@
     "background": "/video-studio/templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-cartaz-header-v1.jpg",
     "seal": "/video-studio/templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-seal-trimmed-v1.png",
     "backgroundCropY": 0.5
+  },
+  "fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb": {
+    "background": "/video-studio/templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-cartaz-header-v1.jpg",
+    "seal": "/video-studio/templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-seal-trimmed-v1.png",
+    "backgroundCropY": 0.5
+  },
+  "d49e1981-a825-459c-b8f5-937c6d97596d": {
+    "background": "/video-studio/templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-cartaz-header-v1.jpg",
+    "seal": "/video-studio/templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-seal-trimmed-v1.png",
+    "backgroundCropY": 0.5
+  },
+  "f95d236d-1a93-4733-a218-bfa276df77ea": {
+    "background": "/video-studio/templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-cartaz-header-v1.jpg",
+    "seal": "/video-studio/templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-seal-trimmed-v1.png",
+    "backgroundCropY": 0.5
+  },
+  "67ba3eaa-5145-4071-b389-efc5157af5f1": {
+    "background": "/video-studio/templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-cartaz-header-v1.jpg",
+    "seal": "/video-studio/templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-seal-trimmed-v1.png",
+    "backgroundCropY": 0.5
+  },
+  "c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5": {
+    "background": "/video-studio/templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-cartaz-header-v1.jpg",
+    "seal": "/video-studio/templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-seal-trimmed-v1.png",
+    "backgroundCropY": 0.5
+  },
+  "36837002-9097-43af-9f72-b9cdf4a8ca54": {
+    "background": "/video-studio/templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-cartaz-header-v1.jpg",
+    "seal": "/video-studio/templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-seal-trimmed-v1.png",
+    "backgroundCropY": 0.5
+  },
+  "20ed7b66-4deb-4e35-8897-f1ff3c0a65f0": {
+    "background": "/video-studio/templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-cartaz-header-v1.jpg",
+    "seal": "/video-studio/templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-seal-trimmed-v1.png",
+    "backgroundCropY": 0.5
+  },
+  "5304f745-3742-4f42-9805-719b79071405": {
+    "background": "/video-studio/templates/catalog/5304f745-3742-4f42-9805-719b79071405-cartaz-header-v1.jpg",
+    "seal": "/video-studio/templates/catalog/5304f745-3742-4f42-9805-719b79071405-seal-trimmed-v1.png",
+    "backgroundCropY": 0.5
+  },
+  "63482c33-db26-44bb-adf4-c23098d43f9a": {
+    "background": "/video-studio/templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-cartaz-header-v1.jpg",
+    "seal": "/video-studio/templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-seal-trimmed-v1.png",
+    "backgroundCropY": 0.5
   }
 }

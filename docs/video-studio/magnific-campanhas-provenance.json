@@ -1,7 +1,7 @@
 {
  "fonte": "Magnific (antigo Freepik) — download do acervo de stock via API, plano Premium, uso interno para clientes (sem geração por IA)",
  "licenca": "https://www.magnific.com/legal/terms-of-use",
- "atualizadoEm": "2026-10-10T11:01:29.063Z",
+ "atualizadoEm": "2026-10-10T11:52:01.337Z",
  "campanhas": [
   {
    "slug": "mega-oferta-estrelas",
@@ -741,6 +741,204 @@
     "pagina": "https://www.magnific.com/370759946"
    },
    "formato": "padrão da fábrica com mascote",
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "feirao-de-pisos",
+   "projeto": "fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb",
+   "formato": "padrão da fábrica com mascote",
+   "selo": {
+    "magnificId": 410802323,
+    "pagina": "https://www.magnific.com/410802323"
+   },
+   "mascote": {
+    "magnificId": 386351115,
+    "pagina": "https://www.magnific.com/386351115"
+   },
+   "videoFundo": {
+    "magnificId": 4115135,
+    "pagina": "https://www.magnific.com/4115135",
+    "arquivos": [
+     "templates/backgrounds-video/magnific-feirao-de-pisos-vertical.mp4",
+     "templates/backgrounds-video/magnific-feirao-de-pisos-wide.mp4"
+    ]
+   },
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "festival-de-pisos",
+   "projeto": "d49e1981-a825-459c-b8f5-937c6d97596d",
+   "formato": "padrão da fábrica com mascote",
+   "selo": {
+    "magnificId": 410802410,
+    "pagina": "https://www.magnific.com/410802410"
+   },
+   "mascote": {
+    "magnificId": 430067047,
+    "pagina": "https://www.magnific.com/430067047"
+   },
+   "videoFundo": {
+    "magnificId": 9624094,
+    "pagina": "https://www.magnific.com/9624094",
+    "arquivos": [
+     "templates/backgrounds-video/magnific-festival-de-pisos-vertical.mp4",
+     "templates/backgrounds-video/magnific-festival-de-pisos-wide.mp4"
+    ]
+   },
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "show-de-oferta-preto",
+   "projeto": "f95d236d-1a93-4733-a218-bfa276df77ea",
+   "formato": "padrão da fábrica com mascote",
+   "selo": {
+    "magnificId": 416479150,
+    "pagina": "https://www.magnific.com/416479150"
+   },
+   "mascote": {
+    "magnificId": 427239925,
+    "pagina": "https://www.magnific.com/427239925"
+   },
+   "videoFundo": {
+    "magnificId": 4198287,
+    "pagina": "https://www.magnific.com/4198287",
+    "arquivos": [
+     "templates/backgrounds-video/magnific-show-de-oferta-preto-vertical.mp4",
+     "templates/backgrounds-video/magnific-show-de-oferta-preto-wide.mp4"
+    ]
+   },
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "show-de-oferta-azul",
+   "projeto": "67ba3eaa-5145-4071-b389-efc5157af5f1",
+   "formato": "padrão da fábrica com mascote",
+   "selo": {
+    "magnificId": 416479262,
+    "pagina": "https://www.magnific.com/416479262"
+   },
+   "mascote": {
+    "magnificId": 143517852,
+    "pagina": "https://www.magnific.com/143517852"
+   },
+   "videoFundo": {
+    "magnificId": 2504026,
+    "pagina": "https://www.magnific.com/2504026",
+    "arquivos": [
+     "templates/backgrounds-video/magnific-show-de-oferta-azul-vertical.mp4",
+     "templates/backgrounds-video/magnific-show-de-oferta-azul-wide.mp4"
+    ]
+   },
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "mega-novembro",
+   "projeto": "c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5",
+   "formato": "padrão da fábrica com mascote",
+   "selo": {
+    "magnificId": 422375859,
+    "pagina": "https://www.magnific.com/422375859"
+   },
+   "mascote": {
+    "magnificId": 424871690,
+    "pagina": "https://www.magnific.com/424871690"
+   },
+   "videoFundo": {
+    "magnificId": 9866917,
+    "pagina": "https://www.magnific.com/9866917",
+    "arquivos": [
+     "templates/backgrounds-video/magnific-mega-novembro-vertical.mp4",
+     "templates/backgrounds-video/magnific-mega-novembro-wide.mp4"
+    ]
+   },
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "sabado-da-economia",
+   "projeto": "36837002-9097-43af-9f72-b9cdf4a8ca54",
+   "formato": "padrão da fábrica com mascote",
+   "selo": {
+    "magnificId": 422555884,
+    "pagina": "https://www.magnific.com/422555884"
+   },
+   "mascote": {
+    "magnificId": 408359622,
+    "pagina": "https://www.magnific.com/408359622"
+   },
+   "videoFundo": {
+    "magnificId": 4138357,
+    "pagina": "https://www.magnific.com/4138357",
+    "arquivos": [
+     "templates/backgrounds-video/magnific-sabado-da-economia-vertical.mp4",
+     "templates/backgrounds-video/magnific-sabado-da-economia-wide.mp4"
+    ]
+   },
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "oferta-do-dia-vermelho",
+   "projeto": "20ed7b66-4deb-4e35-8897-f1ff3c0a65f0",
+   "formato": "padrão da fábrica com mascote",
+   "selo": {
+    "magnificId": 426279545,
+    "pagina": "https://www.magnific.com/426279545"
+   },
+   "mascote": {
+    "magnificId": 422450991,
+    "pagina": "https://www.magnific.com/422450991"
+   },
+   "videoFundo": {
+    "magnificId": 8359059,
+    "pagina": "https://www.magnific.com/8359059",
+    "arquivos": [
+     "templates/backgrounds-video/magnific-oferta-do-dia-vermelho-vertical.mp4",
+     "templates/backgrounds-video/magnific-oferta-do-dia-vermelho-wide.mp4"
+    ]
+   },
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "oferta-de-hoje",
+   "projeto": "5304f745-3742-4f42-9805-719b79071405",
+   "formato": "padrão da fábrica com mascote",
+   "selo": {
+    "magnificId": 426279549,
+    "pagina": "https://www.magnific.com/426279549"
+   },
+   "mascote": {
+    "magnificId": 423916370,
+    "pagina": "https://www.magnific.com/423916370"
+   },
+   "videoFundo": {
+    "magnificId": 4065018,
+    "pagina": "https://www.magnific.com/4065018",
+    "arquivos": [
+     "templates/backgrounds-video/magnific-oferta-de-hoje-vertical.mp4",
+     "templates/backgrounds-video/magnific-oferta-de-hoje-wide.mp4"
+    ]
+   },
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "vem-poupar",
+   "projeto": "63482c33-db26-44bb-adf4-c23098d43f9a",
+   "formato": "padrão da fábrica com mascote",
+   "selo": {
+    "magnificId": 45351850,
+    "pagina": "https://www.magnific.com/45351850"
+   },
+   "mascote": {
+    "magnificId": 427069176,
+    "pagina": "https://www.magnific.com/427069176"
+   },
+   "videoFundo": {
+    "magnificId": 4256700,
+    "pagina": "https://www.magnific.com/4256700",
+    "arquivos": [
+     "templates/backgrounds-video/magnific-vem-poupar-vertical.mp4",
+     "templates/backgrounds-video/magnific-vem-poupar-wide.mp4"
+    ]
+   },
    "criadoEm": "2026-10-10"
   }
  ],

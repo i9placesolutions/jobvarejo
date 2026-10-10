@@ -2071,6 +2071,30 @@
       "bytes": 11304133,
       "contentType": "video/mp4"
     },
+    "templates/backgrounds-video/magnific-feirao-de-pisos-vertical.mp4": {
+      "key": "video-studio/catalog/07fdf4c83dc022ccb004efd6202bc05a1b049b07b8a8ebeba6e794971e10ff18/templates/backgrounds-video/magnific-feirao-de-pisos-vertical.mp4",
+      "sha256": "07fdf4c83dc022ccb004efd6202bc05a1b049b07b8a8ebeba6e794971e10ff18",
+      "bytes": 3877702,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-feirao-de-pisos-wide.mp4": {
+      "key": "video-studio/catalog/8ab117925e06d161a8bdd25c73333650dd8d8e5a468fddb8db87e7aa7c64c454/templates/backgrounds-video/magnific-feirao-de-pisos-wide.mp4",
+      "sha256": "8ab117925e06d161a8bdd25c73333650dd8d8e5a468fddb8db87e7aa7c64c454",
+      "bytes": 3440217,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-festival-de-pisos-vertical.mp4": {
+      "key": "video-studio/catalog/048ee94c497dc3b7de1936b69799faa7e3a5a389ef96b96256c6cab0381a836e/templates/backgrounds-video/magnific-festival-de-pisos-vertical.mp4",
+      "sha256": "048ee94c497dc3b7de1936b69799faa7e3a5a389ef96b96256c6cab0381a836e",
+      "bytes": 879264,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-festival-de-pisos-wide.mp4": {
+      "key": "video-studio/catalog/96f2a43e124215909553eb3d011cc70209a4c641cdb093adfe9a3c337eec23da/templates/backgrounds-video/magnific-festival-de-pisos-wide.mp4",
+      "sha256": "96f2a43e124215909553eb3d011cc70209a4c641cdb093adfe9a3c337eec23da",
+      "bytes": 1008283,
+      "contentType": "video/mp4"
+    },
     "templates/backgrounds-video/magnific-fim-de-semana-imbativel-vertical.mp4": {
       "key": "video-studio/catalog/ee0f5269161ecbadbfe41bbc2311dd3ce81f339469c7d90f981aa0437f17296b/templates/backgrounds-video/magnific-fim-de-semana-imbativel-vertical.mp4",
       "sha256": "ee0f5269161ecbadbfe41bbc2311dd3ce81f339469c7d90f981aa0437f17296b",
@@ -2081,6 +2105,18 @@
       "key": "video-studio/catalog/ed4f28b22d9bc3e87a7dcb3d55f4e98bae4d60b0b7bf152df0a008c3e1ef459b/templates/backgrounds-video/magnific-fim-de-semana-imbativel-wide.mp4",
       "sha256": "ed4f28b22d9bc3e87a7dcb3d55f4e98bae4d60b0b7bf152df0a008c3e1ef459b",
       "bytes": 13940782,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-mega-novembro-vertical.mp4": {
+      "key": "video-studio/catalog/ccb273ea693ae750d9f0a41506cb483f579b2644d372b864d757fcacb9122bc8/templates/backgrounds-video/magnific-mega-novembro-vertical.mp4",
+      "sha256": "ccb273ea693ae750d9f0a41506cb483f579b2644d372b864d757fcacb9122bc8",
+      "bytes": 11068417,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-mega-novembro-wide.mp4": {
+      "key": "video-studio/catalog/ca35cfb97fa334a53fe2efaed889f267b92f9e59d3089bfc8e8b9a3afec9c4bb/templates/backgrounds-video/magnific-mega-novembro-wide.mp4",
+      "sha256": "ca35cfb97fa334a53fe2efaed889f267b92f9e59d3089bfc8e8b9a3afec9c4bb",
+      "bytes": 8942750,
       "contentType": "video/mp4"
     },
     "templates/backgrounds-video/magnific-mega-oferta-estrelas-vertical.mp4": {
@@ -2105,6 +2141,30 @@
       "key": "video-studio/catalog/4bc0be9cd214369da1e19ede9f4f4653b499d9240b8254888169c68f35a3440d/templates/backgrounds-video/magnific-mega-promocao-wide.mp4",
       "sha256": "4bc0be9cd214369da1e19ede9f4f4653b499d9240b8254888169c68f35a3440d",
       "bytes": 13585313,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-oferta-de-hoje-vertical.mp4": {
+      "key": "video-studio/catalog/874389dcdab9ffd90596103345594b00bd239c673be0bb1460dfa53dda1ea827/templates/backgrounds-video/magnific-oferta-de-hoje-vertical.mp4",
+      "sha256": "874389dcdab9ffd90596103345594b00bd239c673be0bb1460dfa53dda1ea827",
+      "bytes": 7466470,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-oferta-de-hoje-wide.mp4": {
+      "key": "video-studio/catalog/a8746cfe897f5915a01b5ac4483779f4fae639fa296735682d768ed3cdbe38b1/templates/backgrounds-video/magnific-oferta-de-hoje-wide.mp4",
+      "sha256": "a8746cfe897f5915a01b5ac4483779f4fae639fa296735682d768ed3cdbe38b1",
+      "bytes": 7294043,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-oferta-do-dia-vermelho-vertical.mp4": {
+      "key": "video-studio/catalog/0efc6049655c2d022ee3e7541496ce3ede837e3d90f3646a57882b8d4462c771/templates/backgrounds-video/magnific-oferta-do-dia-vermelho-vertical.mp4",
+      "sha256": "0efc6049655c2d022ee3e7541496ce3ede837e3d90f3646a57882b8d4462c771",
+      "bytes": 4565615,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-oferta-do-dia-vermelho-wide.mp4": {
+      "key": "video-studio/catalog/f59892392b3d310e4500c3c6fe2f7c7ccba17a1dc8eb6a648ae12f35bdead3f5/templates/backgrounds-video/magnific-oferta-do-dia-vermelho-wide.mp4",
+      "sha256": "f59892392b3d310e4500c3c6fe2f7c7ccba17a1dc8eb6a648ae12f35bdead3f5",
+      "bytes": 6073066,
       "contentType": "video/mp4"
     },
     "templates/backgrounds-video/magnific-promocao-da-semana-vertical.mp4": {
@@ -2143,6 +2203,42 @@
       "bytes": 14929229,
       "contentType": "video/mp4"
     },
+    "templates/backgrounds-video/magnific-sabado-da-economia-vertical.mp4": {
+      "key": "video-studio/catalog/9538162fb4f20c26eaab829795bf81c3595a1710e9cab2dc65b47cae41485f26/templates/backgrounds-video/magnific-sabado-da-economia-vertical.mp4",
+      "sha256": "9538162fb4f20c26eaab829795bf81c3595a1710e9cab2dc65b47cae41485f26",
+      "bytes": 2500307,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-sabado-da-economia-wide.mp4": {
+      "key": "video-studio/catalog/e10c06c96086f63896b82606ee11d422aa33866a1183ce19b3597bc27141c817/templates/backgrounds-video/magnific-sabado-da-economia-wide.mp4",
+      "sha256": "e10c06c96086f63896b82606ee11d422aa33866a1183ce19b3597bc27141c817",
+      "bytes": 2251845,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-show-de-oferta-azul-vertical.mp4": {
+      "key": "video-studio/catalog/e31feadd485822223633739db1cd37bceb5a0496d5f50635c8c604356105a9ba/templates/backgrounds-video/magnific-show-de-oferta-azul-vertical.mp4",
+      "sha256": "e31feadd485822223633739db1cd37bceb5a0496d5f50635c8c604356105a9ba",
+      "bytes": 1553301,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-show-de-oferta-azul-wide.mp4": {
+      "key": "video-studio/catalog/0ba4c9247af6f10009717bc46fcdb0cc7c62dcc91a66e52876252d4187299d83/templates/backgrounds-video/magnific-show-de-oferta-azul-wide.mp4",
+      "sha256": "0ba4c9247af6f10009717bc46fcdb0cc7c62dcc91a66e52876252d4187299d83",
+      "bytes": 1487480,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-show-de-oferta-preto-vertical.mp4": {
+      "key": "video-studio/catalog/3e97962991249352156024627688f936e6a24fdf6af35bef7e280c3cc647997d/templates/backgrounds-video/magnific-show-de-oferta-preto-vertical.mp4",
+      "sha256": "3e97962991249352156024627688f936e6a24fdf6af35bef7e280c3cc647997d",
+      "bytes": 9392259,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-show-de-oferta-preto-wide.mp4": {
+      "key": "video-studio/catalog/2f24ae61b640aed6d1c697a0c511f6906166a5dd2ebe45b1812fce07cab10876/templates/backgrounds-video/magnific-show-de-oferta-preto-wide.mp4",
+      "sha256": "2f24ae61b640aed6d1c697a0c511f6906166a5dd2ebe45b1812fce07cab10876",
+      "bytes": 12665255,
+      "contentType": "video/mp4"
+    },
     "templates/backgrounds-video/magnific-super-economia-vertical.mp4": {
       "key": "video-studio/catalog/f786f91dad8ef2724b33640f6d0cdfd9c3540d1e62ea557021ef6da6593af2d1/templates/backgrounds-video/magnific-super-economia-vertical.mp4",
       "sha256": "f786f91dad8ef2724b33640f6d0cdfd9c3540d1e62ea557021ef6da6593af2d1",
@@ -2165,6 +2261,18 @@
       "key": "video-studio/catalog/6e16107439afd53d82693292fc85edde0f35a4f98cd75b4c2a7245f6b574d6fb/templates/backgrounds-video/magnific-super-promocao-preto-wide.mp4",
       "sha256": "6e16107439afd53d82693292fc85edde0f35a4f98cd75b4c2a7245f6b574d6fb",
       "bytes": 14937372,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-vem-poupar-vertical.mp4": {
+      "key": "video-studio/catalog/e8b9016bc818ae73aa46b8d58f3e35cc25349a9f645e4da36bc18de5817bad08/templates/backgrounds-video/magnific-vem-poupar-vertical.mp4",
+      "sha256": "e8b9016bc818ae73aa46b8d58f3e35cc25349a9f645e4da36bc18de5817bad08",
+      "bytes": 1999625,
+      "contentType": "video/mp4"
+    },
+    "templates/backgrounds-video/magnific-vem-poupar-wide.mp4": {
+      "key": "video-studio/catalog/11da99f033f9638112acddfbf5ae9f64e352f95269d1a63246987c6493460f2b/templates/backgrounds-video/magnific-vem-poupar-wide.mp4",
+      "sha256": "11da99f033f9638112acddfbf5ae9f64e352f95269d1a63246987c6493460f2b",
+      "bytes": 2457913,
       "contentType": "video/mp4"
     },
     "templates/backgrounds/blue-pattern-v1.png": {
@@ -2869,6 +2977,30 @@
       "bytes": 1899053,
       "contentType": "image/png"
     },
+    "templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/ab535f58ead962cebba6e8c37ba7c40226d4496a77b5c95472b8c471af4269c4/templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-cartaz-header-v1.jpg",
+      "sha256": "ab535f58ead962cebba6e8c37ba7c40226d4496a77b5c95472b8c471af4269c4",
+      "bytes": 196388,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/c2c0f4de35941323409e4c64edd2e5b403764977a6742c86b2bbde18dff1fc90/templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-seal-trimmed-v1.png",
+      "sha256": "c2c0f4de35941323409e4c64edd2e5b403764977a6742c86b2bbde18dff1fc90",
+      "bytes": 1739689,
+      "contentType": "image/png"
+    },
+    "templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/2560e0ea4e2cb3805916036fff641b25ec0f5557db9453bf5a66ae83d72dbd84/templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-video-horizontal-v1.png",
+      "sha256": "2560e0ea4e2cb3805916036fff641b25ec0f5557db9453bf5a66ae83d72dbd84",
+      "bytes": 424210,
+      "contentType": "image/png"
+    },
+    "templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-video-vertical-v1.png": {
+      "key": "video-studio/catalog/7da3e7544add7372aae969059201b39e3aff73e1388b310b9c37c75fbd437dd6/templates/catalog/20ed7b66-4deb-4e35-8897-f1ff3c0a65f0-video-vertical-v1.png",
+      "sha256": "7da3e7544add7372aae969059201b39e3aff73e1388b310b9c37c75fbd437dd6",
+      "bytes": 544045,
+      "contentType": "image/png"
+    },
     "templates/catalog/2162ee00-bb07-4c4e-ab73-03118354695f-background.png": {
       "key": "video-studio/catalog/ab9d92802982bbb0f9aa010374673a41d37b80b7ad0a2f3480f2a7f69d511512/templates/catalog/2162ee00-bb07-4c4e-ab73-03118354695f-background.png",
       "sha256": "ab9d92802982bbb0f9aa010374673a41d37b80b7ad0a2f3480f2a7f69d511512",
@@ -3059,6 +3191,30 @@
       "key": "video-studio/catalog/e20d77b6d7173f085f0f556a703fd2164291872460ef7566ade0f6b3647de4cb/templates/catalog/3556fb20-ced6-4882-a7f3-965b89be114a-seal.png",
       "sha256": "e20d77b6d7173f085f0f556a703fd2164291872460ef7566ade0f6b3647de4cb",
       "bytes": 1730501,
+      "contentType": "image/png"
+    },
+    "templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/4fba68d25fc50e3c083f4349e5f289ffb2bb5b4ee4360984dd699e1b883ff836/templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-cartaz-header-v1.jpg",
+      "sha256": "4fba68d25fc50e3c083f4349e5f289ffb2bb5b4ee4360984dd699e1b883ff836",
+      "bytes": 170661,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/f8da87999867fbb41b5b965c10aad6901c9e1d028192141f5ce788c444e7a8cb/templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-seal-trimmed-v1.png",
+      "sha256": "f8da87999867fbb41b5b965c10aad6901c9e1d028192141f5ce788c444e7a8cb",
+      "bytes": 2237059,
+      "contentType": "image/png"
+    },
+    "templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/72bb10d15dedd96d5fccac1844fb0fe4fb7f12638bf57357b8cb0cc513566537/templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-video-horizontal-v1.png",
+      "sha256": "72bb10d15dedd96d5fccac1844fb0fe4fb7f12638bf57357b8cb0cc513566537",
+      "bytes": 540552,
+      "contentType": "image/png"
+    },
+    "templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-video-vertical-v1.png": {
+      "key": "video-studio/catalog/2b67fb5400da70bae8916d604fe97eac9a8961d0ac8b1d2c9d4e305761af6262/templates/catalog/36837002-9097-43af-9f72-b9cdf4a8ca54-video-vertical-v1.png",
+      "sha256": "2b67fb5400da70bae8916d604fe97eac9a8961d0ac8b1d2c9d4e305761af6262",
+      "bytes": 592505,
       "contentType": "image/png"
     },
     "templates/catalog/3a257c5c-955e-473d-aef6-ad62209d0f98-background.png": {
@@ -3301,6 +3457,30 @@
       "bytes": 1426168,
       "contentType": "image/png"
     },
+    "templates/catalog/5304f745-3742-4f42-9805-719b79071405-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/942d8c0ca8ff6f835d9a83b220cbdbd078e4dd0f296e703abf198554bea754a9/templates/catalog/5304f745-3742-4f42-9805-719b79071405-cartaz-header-v1.jpg",
+      "sha256": "942d8c0ca8ff6f835d9a83b220cbdbd078e4dd0f296e703abf198554bea754a9",
+      "bytes": 171793,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/5304f745-3742-4f42-9805-719b79071405-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/eb031a89ad553c941e0769cd12328e3dc9547ea565b9a5666f45d527170d1bc3/templates/catalog/5304f745-3742-4f42-9805-719b79071405-seal-trimmed-v1.png",
+      "sha256": "eb031a89ad553c941e0769cd12328e3dc9547ea565b9a5666f45d527170d1bc3",
+      "bytes": 1327766,
+      "contentType": "image/png"
+    },
+    "templates/catalog/5304f745-3742-4f42-9805-719b79071405-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/7baa042dd7f2abc490a77a48414f7dbebb9256006795d1db07bbd2c6d66a9e76/templates/catalog/5304f745-3742-4f42-9805-719b79071405-video-horizontal-v1.png",
+      "sha256": "7baa042dd7f2abc490a77a48414f7dbebb9256006795d1db07bbd2c6d66a9e76",
+      "bytes": 553008,
+      "contentType": "image/png"
+    },
+    "templates/catalog/5304f745-3742-4f42-9805-719b79071405-video-vertical-v1.png": {
+      "key": "video-studio/catalog/c41585ed9a807251bfd2736d0f2908b3abc089d26429b1cb1e3efd4c1f359e10/templates/catalog/5304f745-3742-4f42-9805-719b79071405-video-vertical-v1.png",
+      "sha256": "c41585ed9a807251bfd2736d0f2908b3abc089d26429b1cb1e3efd4c1f359e10",
+      "bytes": 494540,
+      "contentType": "image/png"
+    },
     "templates/catalog/565b05fd-394a-4b68-b794-4cedbfd8bad7-background.png": {
       "key": "video-studio/catalog/78023d0388b6455c8b323a652a094a0563b1a76142a2cf7529fc7e59937e6c79/templates/catalog/565b05fd-394a-4b68-b794-4cedbfd8bad7-background.png",
       "sha256": "78023d0388b6455c8b323a652a094a0563b1a76142a2cf7529fc7e59937e6c79",
@@ -3403,6 +3583,30 @@
       "bytes": 77018,
       "contentType": "image/png"
     },
+    "templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/3ba9be3ac0cb41ea232acd01a977d5b79ec7e663d27fcecdef427b97856635a1/templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-cartaz-header-v1.jpg",
+      "sha256": "3ba9be3ac0cb41ea232acd01a977d5b79ec7e663d27fcecdef427b97856635a1",
+      "bytes": 128924,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/cb513dbb69537d40872cc4aab99a00fc41fc279b4612e12626004e0e0d056c68/templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-seal-trimmed-v1.png",
+      "sha256": "cb513dbb69537d40872cc4aab99a00fc41fc279b4612e12626004e0e0d056c68",
+      "bytes": 420957,
+      "contentType": "image/png"
+    },
+    "templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/d3f8ee7e348e9eb43bd64fd7607a0e26ec8eba061a68a1984db26a472692138d/templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-video-horizontal-v1.png",
+      "sha256": "d3f8ee7e348e9eb43bd64fd7607a0e26ec8eba061a68a1984db26a472692138d",
+      "bytes": 388383,
+      "contentType": "image/png"
+    },
+    "templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-video-vertical-v1.png": {
+      "key": "video-studio/catalog/b971a38c1e67be7295a783320f985479320743a0a262ba41727549eea305cfeb/templates/catalog/63482c33-db26-44bb-adf4-c23098d43f9a-video-vertical-v1.png",
+      "sha256": "b971a38c1e67be7295a783320f985479320743a0a262ba41727549eea305cfeb",
+      "bytes": 403359,
+      "contentType": "image/png"
+    },
     "templates/catalog/66aaabb8-33ef-43f3-a3f4-f8cb406f8862-background.png": {
       "key": "video-studio/catalog/0ce33392b7efbb3b1e40525c9593d3a061ed0a1d3a49de1d310ebad510aaaaac/templates/catalog/66aaabb8-33ef-43f3-a3f4-f8cb406f8862-background.png",
       "sha256": "0ce33392b7efbb3b1e40525c9593d3a061ed0a1d3a49de1d310ebad510aaaaac",
@@ -3419,6 +3623,30 @@
       "key": "video-studio/catalog/ed9b015a28e3111ee9ab8c349ef84b0f17963b4f65c528f256824546dfe7b770/templates/catalog/66aaabb8-33ef-43f3-a3f4-f8cb406f8862-seal.png",
       "sha256": "ed9b015a28e3111ee9ab8c349ef84b0f17963b4f65c528f256824546dfe7b770",
       "bytes": 2534903,
+      "contentType": "image/png"
+    },
+    "templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/614c4adbeb6cdb0117504330b795b9440154abda00974da0c8062db6153aede0/templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-cartaz-header-v1.jpg",
+      "sha256": "614c4adbeb6cdb0117504330b795b9440154abda00974da0c8062db6153aede0",
+      "bytes": 128532,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/b341c2d349d52477daa29b40cc418fcf48ac1ee2fb69daa9e67c7c354c396091/templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-seal-trimmed-v1.png",
+      "sha256": "b341c2d349d52477daa29b40cc418fcf48ac1ee2fb69daa9e67c7c354c396091",
+      "bytes": 1855401,
+      "contentType": "image/png"
+    },
+    "templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/57582c5ea36cf96ab4bdde841b24c84145e48d3aeb8a44e13c2279b4c65a588e/templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-video-horizontal-v1.png",
+      "sha256": "57582c5ea36cf96ab4bdde841b24c84145e48d3aeb8a44e13c2279b4c65a588e",
+      "bytes": 596788,
+      "contentType": "image/png"
+    },
+    "templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-video-vertical-v1.png": {
+      "key": "video-studio/catalog/786d9684334174858eed918b96ad489359cb0daf458809596a468b2d5984b053/templates/catalog/67ba3eaa-5145-4071-b389-efc5157af5f1-video-vertical-v1.png",
+      "sha256": "786d9684334174858eed918b96ad489359cb0daf458809596a468b2d5984b053",
+      "bytes": 630202,
       "contentType": "image/png"
     },
     "templates/catalog/69c947f6-a66d-41b4-91e8-65c158f3b3fa-background.png": {
@@ -4183,6 +4411,30 @@
       "bytes": 2053266,
       "contentType": "image/png"
     },
+    "templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/9ed651cfee1b0e1996ea2b3ba9de33656757e4a6a764b072f7d726920c27c4e0/templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-cartaz-header-v1.jpg",
+      "sha256": "9ed651cfee1b0e1996ea2b3ba9de33656757e4a6a764b072f7d726920c27c4e0",
+      "bytes": 184884,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/eaec9f8e9c3b1458cebaa95486ece05db9c67a1a870ac34232e0f19a1720d6fc/templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-seal-trimmed-v1.png",
+      "sha256": "eaec9f8e9c3b1458cebaa95486ece05db9c67a1a870ac34232e0f19a1720d6fc",
+      "bytes": 468614,
+      "contentType": "image/png"
+    },
+    "templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/9c70e2fda3ad942c17fcf68bb22e49ea78ea70865faa94a2a9e3d9ee08abaa99/templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-video-horizontal-v1.png",
+      "sha256": "9c70e2fda3ad942c17fcf68bb22e49ea78ea70865faa94a2a9e3d9ee08abaa99",
+      "bytes": 810321,
+      "contentType": "image/png"
+    },
+    "templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-video-vertical-v1.png": {
+      "key": "video-studio/catalog/78edc6c128ba40690dab3a21a7396177733bcab32e287a8302297300da518e07/templates/catalog/c1e5afbd-c2c6-4a19-87b3-01290d5c7cc5-video-vertical-v1.png",
+      "sha256": "78edc6c128ba40690dab3a21a7396177733bcab32e287a8302297300da518e07",
+      "bytes": 885579,
+      "contentType": "image/png"
+    },
     "templates/catalog/c69acb2e-1446-40a5-913e-82cfd822cffc-background.png": {
       "key": "video-studio/catalog/e2601bdffae606ff8ef473ce56a1caccbdb46ce2bd7ee2a207e7d40a60ff2e99/templates/catalog/c69acb2e-1446-40a5-913e-82cfd822cffc-background.png",
       "sha256": "e2601bdffae606ff8ef473ce56a1caccbdb46ce2bd7ee2a207e7d40a60ff2e99",
@@ -4271,6 +4523,30 @@
       "key": "video-studio/catalog/14345cad51cb5ff8ab5dd3cd80387468147466fe0a2ce399ef53377cd54c95f2/templates/catalog/d214f77a-3d3a-4f42-8cac-43f6234265f2-seal.png",
       "sha256": "14345cad51cb5ff8ab5dd3cd80387468147466fe0a2ce399ef53377cd54c95f2",
       "bytes": 2359312,
+      "contentType": "image/png"
+    },
+    "templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/80f75d693198087609c0e927b695d613245d9374624014d1a29352a34e49c25a/templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-cartaz-header-v1.jpg",
+      "sha256": "80f75d693198087609c0e927b695d613245d9374624014d1a29352a34e49c25a",
+      "bytes": 134853,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/f25b659b6b40fa4a3ac2e63cc8a0cabaf84fb024bd1b8fa04e02a86e63271ee4/templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-seal-trimmed-v1.png",
+      "sha256": "f25b659b6b40fa4a3ac2e63cc8a0cabaf84fb024bd1b8fa04e02a86e63271ee4",
+      "bytes": 1443455,
+      "contentType": "image/png"
+    },
+    "templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/e1d6ced0dcbe389c9942ddd0f81f9fbaa13423d6d80399411522b1f61531f01b/templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-video-horizontal-v1.png",
+      "sha256": "e1d6ced0dcbe389c9942ddd0f81f9fbaa13423d6d80399411522b1f61531f01b",
+      "bytes": 423272,
+      "contentType": "image/png"
+    },
+    "templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-video-vertical-v1.png": {
+      "key": "video-studio/catalog/9afd927d890d772ddea78cc08e75c54d6d24d242e8606b6b5f0fa332180e6e8f/templates/catalog/d49e1981-a825-459c-b8f5-937c6d97596d-video-vertical-v1.png",
+      "sha256": "9afd927d890d772ddea78cc08e75c54d6d24d242e8606b6b5f0fa332180e6e8f",
+      "bytes": 450781,
       "contentType": "image/png"
     },
     "templates/catalog/d8a13735-9a14-4c6b-845c-34593fd8d7f2-background.png": {
@@ -4547,6 +4823,54 @@
       "key": "video-studio/catalog/c74fc94a3befefa735af478794100c643cae62342207bd51f6c40f7e992cecd6/templates/catalog/f756b6a1-4725-4dbe-9d5a-ee0eb8af5462-seal.png",
       "sha256": "c74fc94a3befefa735af478794100c643cae62342207bd51f6c40f7e992cecd6",
       "bytes": 1294742,
+      "contentType": "image/png"
+    },
+    "templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/2d5b1ac65e224dd784a04ce1c721bac24ee23a093ec524fef62e1c3f275f44c1/templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-cartaz-header-v1.jpg",
+      "sha256": "2d5b1ac65e224dd784a04ce1c721bac24ee23a093ec524fef62e1c3f275f44c1",
+      "bytes": 193498,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/c8c9d17d4b9370e30dda552837a266734ff74dce708d15c900da029f47711dc5/templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-seal-trimmed-v1.png",
+      "sha256": "c8c9d17d4b9370e30dda552837a266734ff74dce708d15c900da029f47711dc5",
+      "bytes": 1709903,
+      "contentType": "image/png"
+    },
+    "templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/e6ae64ee840d3d1b25413ae0b18039b971678c98792ca7478b00390f4eca2ca2/templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-video-horizontal-v1.png",
+      "sha256": "e6ae64ee840d3d1b25413ae0b18039b971678c98792ca7478b00390f4eca2ca2",
+      "bytes": 635123,
+      "contentType": "image/png"
+    },
+    "templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-video-vertical-v1.png": {
+      "key": "video-studio/catalog/5f5e4eb8be06be911d160d9b3d8abceff56b7a479bd6f3c206670b14a9e17c82/templates/catalog/f95d236d-1a93-4733-a218-bfa276df77ea-video-vertical-v1.png",
+      "sha256": "5f5e4eb8be06be911d160d9b3d8abceff56b7a479bd6f3c206670b14a9e17c82",
+      "bytes": 624304,
+      "contentType": "image/png"
+    },
+    "templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/643518d91f949bab8a760c45a9db4cf9c89f8a899f1107fbd4e6189edb3739cc/templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-cartaz-header-v1.jpg",
+      "sha256": "643518d91f949bab8a760c45a9db4cf9c89f8a899f1107fbd4e6189edb3739cc",
+      "bytes": 150775,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/02e47d5423f2ebecba61c26797a28be70e2f296e04366514ee84816ab3f6124e/templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-seal-trimmed-v1.png",
+      "sha256": "02e47d5423f2ebecba61c26797a28be70e2f296e04366514ee84816ab3f6124e",
+      "bytes": 1638593,
+      "contentType": "image/png"
+    },
+    "templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/8522a7ac30c450154bf92c161faecd2db8198dfa37a062b9e5486d74852d4635/templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-video-horizontal-v1.png",
+      "sha256": "8522a7ac30c450154bf92c161faecd2db8198dfa37a062b9e5486d74852d4635",
+      "bytes": 502141,
+      "contentType": "image/png"
+    },
+    "templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-video-vertical-v1.png": {
+      "key": "video-studio/catalog/91902c77c7550f95a9778b417bd272e0233b8a1de97598c716285d475f8b6a04/templates/catalog/fb0ea712-c1d4-4a1b-95b1-c0cd0ac02dfb-video-vertical-v1.png",
+      "sha256": "91902c77c7550f95a9778b417bd272e0233b8a1de97598c716285d475f8b6a04",
+      "bytes": 490472,
       "contentType": "image/png"
     },
     "templates/catalog/fc95b924-a8a0-4deb-9b44-fdbc568a925f-background.png": {
