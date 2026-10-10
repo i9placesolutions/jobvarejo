@@ -1,7 +1,7 @@
 {
  "fonte": "Magnific (antigo Freepik) — download do acervo de stock via API, plano Premium, uso interno para clientes (sem geração por IA)",
  "licenca": "https://www.magnific.com/legal/terms-of-use",
- "atualizadoEm": "2026-10-08T13:35:00.462Z",
+ "atualizadoEm": "2026-10-10T11:01:29.063Z",
  "campanhas": [
   {
    "slug": "mega-oferta-estrelas",
@@ -708,6 +708,40 @@
     "titulo": "Banner vertical de fundo escuro de efeito de linha oblíqua clara"
    },
    "criadoEm": "2026-10-08T13:34:43.042Z"
+  },
+  {
+   "slug": "super-ofertas-mascote",
+   "nome": "Super Ofertas — Mascote",
+   "projeto": "f0208fcb-c899-441a-b2b6-b597af226ae8",
+   "selo": {
+    "magnificId": 428151668,
+    "titulo": "3D Seal Super Offers Blue",
+    "pagina": "https://www.magnific.com/428151668"
+   },
+   "mascote": {
+    "magnificId": 135452330,
+    "titulo": "PSD cartoon 3d man in orange t shirt making thumb up",
+    "pagina": "https://www.magnific.com/135452330"
+   },
+   "formato": "padrão da fábrica com mascote",
+   "criadoEm": "2026-10-10"
+  },
+  {
+   "slug": "mega-ofertas-megafone",
+   "nome": "Mega Ofertas — Megafone",
+   "projeto": "48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae",
+   "selo": {
+    "magnificId": 42473641,
+    "titulo": "Mega offer logo with lights top",
+    "pagina": "https://www.magnific.com/42473641"
+   },
+   "mascote": {
+    "magnificId": 370759946,
+    "titulo": "A man with a megaphone",
+    "pagina": "https://www.magnific.com/370759946"
+   },
+   "formato": "padrão da fábrica com mascote",
+   "criadoEm": "2026-10-10"
   }
  ],
  "elementos": [
@@ -847,6 +881,18 @@
     "recolorido": null
    },
    "em": "2026-10-08"
+  },
+  {
+   "projeto": "0581b138-dcc7-47d7-9f75-bca449903693",
+   "nome": "Leve Mais Pague Menos! — Faixas",
+   "selo": {
+    "magnificId": 417223346,
+    "titulo": "Selo 3D Leve Mais Pague Menos Redes Sociais",
+    "pagina": "https://www.magnific.com/417223346",
+    "arquivo": "templates/selos/f01db0ee5172bc335b8114b35576e2b30f57a9fd43ff123b61d0fbfe84da59d2.png",
+    "recolorido": null
+   },
+   "em": "2026-10-10"
   }
  ]
 }
