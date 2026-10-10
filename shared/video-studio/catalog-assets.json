@@ -3157,6 +3157,30 @@
       "bytes": 2432396,
       "contentType": "image/png"
     },
+    "templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/03936a0cba3aa292f83c5b98a947187216127ffe0cea71337b43927aa8f9a049/templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-cartaz-header-v1.jpg",
+      "sha256": "03936a0cba3aa292f83c5b98a947187216127ffe0cea71337b43927aa8f9a049",
+      "bytes": 140427,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/8b6c5567d3f2f50dfe9821bcbe5c13c15b7206167a6950cc1678d0ce8a0fa4c9/templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-seal-trimmed-v1.png",
+      "sha256": "8b6c5567d3f2f50dfe9821bcbe5c13c15b7206167a6950cc1678d0ce8a0fa4c9",
+      "bytes": 1625661,
+      "contentType": "image/png"
+    },
+    "templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/2cb15551bbd46197ce35542c17a64b3bd2216b20635012eab27f1c625fd12be1/templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-video-horizontal-v1.png",
+      "sha256": "2cb15551bbd46197ce35542c17a64b3bd2216b20635012eab27f1c625fd12be1",
+      "bytes": 455472,
+      "contentType": "image/png"
+    },
+    "templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-video-vertical-v1.png": {
+      "key": "video-studio/catalog/b8e3f23834e05bb3f3d0f70c312d26aebee45924e88160f3d6c40c95208276dd/templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-video-vertical-v1.png",
+      "sha256": "b8e3f23834e05bb3f3d0f70c312d26aebee45924e88160f3d6c40c95208276dd",
+      "bytes": 564755,
+      "contentType": "image/png"
+    },
     "templates/catalog/4b8b98f0-9a34-46e3-ab41-ddcc6135c79d-background.png": {
       "key": "video-studio/catalog/1d8bf9f50bea6558942852ea5b9e672b99a6964c210cc30f76c5b0e2ea3fc0f1/templates/catalog/4b8b98f0-9a34-46e3-ab41-ddcc6135c79d-background.png",
       "sha256": "1d8bf9f50bea6558942852ea5b9e672b99a6964c210cc30f76c5b0e2ea3fc0f1",
@@ -4439,6 +4463,30 @@
       "key": "video-studio/catalog/f284a85a384ce00367ead10cfe55d72b14b9a966db0adb9b06a634b6b58b5a41/templates/catalog/eda6e0c8-eb39-4361-8da0-763329a2f71b-seal.png",
       "sha256": "f284a85a384ce00367ead10cfe55d72b14b9a966db0adb9b06a634b6b58b5a41",
       "bytes": 945106,
+      "contentType": "image/png"
+    },
+    "templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-cartaz-header-v1.jpg": {
+      "key": "video-studio/catalog/52412993f2effdf7fe1edc1a8e2006fb80c4adf8d142008afd91ab4b16af1373/templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-cartaz-header-v1.jpg",
+      "sha256": "52412993f2effdf7fe1edc1a8e2006fb80c4adf8d142008afd91ab4b16af1373",
+      "bytes": 147108,
+      "contentType": "image/jpeg"
+    },
+    "templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-seal-trimmed-v1.png": {
+      "key": "video-studio/catalog/79afeae4cac9dab23b817246eafdca6dcd08f62aa6b4851d13f62acb5437ca12/templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-seal-trimmed-v1.png",
+      "sha256": "79afeae4cac9dab23b817246eafdca6dcd08f62aa6b4851d13f62acb5437ca12",
+      "bytes": 2295268,
+      "contentType": "image/png"
+    },
+    "templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-video-horizontal-v1.png": {
+      "key": "video-studio/catalog/8d22e5fe7b5d269921ac1f5bebc6d3d273c7ef67cb3b8f4971820ace631e324a/templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-video-horizontal-v1.png",
+      "sha256": "8d22e5fe7b5d269921ac1f5bebc6d3d273c7ef67cb3b8f4971820ace631e324a",
+      "bytes": 708717,
+      "contentType": "image/png"
+    },
+    "templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-video-vertical-v1.png": {
+      "key": "video-studio/catalog/56aa20c6683e27257bc83ca3bc2280d1593ee73ed87514890570730e90c06f0a/templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-video-vertical-v1.png",
+      "sha256": "56aa20c6683e27257bc83ca3bc2280d1593ee73ed87514890570730e90c06f0a",
+      "bytes": 706426,
       "contentType": "image/png"
     },
     "templates/catalog/f2fcc88f-1d67-486a-b4c8-d0561a47c505-background.png": {

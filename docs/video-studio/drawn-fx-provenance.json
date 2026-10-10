@@ -2,7 +2,7 @@
  "fonte": "Magnific (antigo Freepik) — download do acervo de vídeo via API, plano Premium, uso interno para clientes (sem geração por IA). Fundo sólido removido localmente (colorkey/chromakey) e convertido para WebM VP9 com alfa.",
  "licenca": "https://www.magnific.com/legal/terms-of-use",
  "referencia": "RTFX Generator (VideoHive 19563523) usado só como referência de categorias; nenhum arquivo do pacote.",
- "atualizadoEm": "2026-10-09T10:32:18.582Z",
+ "atualizadoEm": "2026-10-10T01:20:32.428Z",
  "efeitos": [
   {
    "magnificId": 677089,
@@ -93,16 +93,6 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/3384350.webm",
    "baixadoEm": "2026-10-08T18:20:59.883Z"
-  },
-  {
-   "magnificId": 3386653,
-   "titulo": "Flash de cano de desenho animado, melhor qualidade, animado em 4K com tela verde, Animação 3D, Ultra Alta Definição, vídeo 4K de Qualidade Premium.",
-   "pagina": "https://www.magnific.com/br/video/3386653",
-   "autor": null,
-   "categoria": "explosao",
-   "fundoOriginal": "green",
-   "arquivo": "templates/drawn-fx/3386653.webm",
-   "baixadoEm": "2026-10-09T10:31:29.498Z"
   },
   {
    "magnificId": 3386658,
@@ -245,16 +235,6 @@
    "baixadoEm": "2026-10-08T18:20:22.525Z"
   },
   {
-   "magnificId": 3827289,
-   "titulo": "Raio abstrato e divertido desenhado à mão em fundo branco. Elemento fofo de desenho animado em estilo stop motion vintage e moderno. Animação de esboço doodle em loop contínuo para projetos de design criativo.",
-   "pagina": "https://www.magnific.com/br/video/3827289",
-   "autor": null,
-   "categoria": "eletricidade",
-   "fundoOriginal": "white",
-   "arquivo": "templates/drawn-fx/3827289.webm",
-   "baixadoEm": "2026-10-09T02:31:58.034Z"
-  },
-  {
    "magnificId": 3829022,
    "titulo": "faiscas",
    "pagina": "https://www.magnific.com/br/video/3829022",
@@ -263,16 +243,6 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/3829022.webm",
    "baixadoEm": "2026-10-09T03:04:36.921Z"
-  },
-  {
-   "magnificId": 3829264,
-   "titulo": "faiscas",
-   "pagina": "https://www.magnific.com/br/video/3829264",
-   "autor": null,
-   "categoria": "faiscas",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/3829264.webm",
-   "baixadoEm": "2026-10-09T03:04:38.167Z"
   },
   {
    "magnificId": 3954635,
@@ -355,16 +325,6 @@
    "baixadoEm": "2026-10-09T10:31:33.949Z"
   },
   {
-   "magnificId": 4385865,
-   "titulo": "Relâmpago amarelo piscando com animação de efeito glitch. Raio. Fundo preto. Sinal de história em quadrinhos. 4K",
-   "pagina": "https://www.magnific.com/br/video/4385865",
-   "autor": null,
-   "categoria": "eletricidade",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/4385865.webm",
-   "baixadoEm": "2026-10-09T02:41:18.071Z"
-  },
-  {
    "magnificId": 4558783,
    "titulo": "fumaca",
    "pagina": "https://www.magnific.com/br/video/4558783",
@@ -403,16 +363,6 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/7148690.webm",
    "baixadoEm": "2026-10-09T02:42:10.999Z"
-  },
-  {
-   "magnificId": 7318480,
-   "titulo": "Nuvem de Desenho Animado com Raios sobre Fundo Preto.",
-   "pagina": "https://www.magnific.com/br/video/7318480",
-   "autor": null,
-   "categoria": "eletricidade",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/7318480.webm",
-   "baixadoEm": "2026-10-09T02:31:58.712Z"
   },
   {
    "magnificId": 7357962,
@@ -455,26 +405,6 @@
    "baixadoEm": "2026-10-09T02:42:05.150Z"
   },
   {
-   "magnificId": 7796132,
-   "titulo": "Ícone de Raio Preto Desenhado à Mão em Fundo Branco",
-   "pagina": "https://www.magnific.com/br/video/7796132",
-   "autor": null,
-   "categoria": "eletricidade",
-   "fundoOriginal": "white",
-   "arquivo": "templates/drawn-fx/7796132.webm",
-   "baixadoEm": "2026-10-09T02:32:03.349Z"
-  },
-  {
-   "magnificId": 7796362,
-   "titulo": "Raios Animados Desenhados à Mão em Fundo Branco",
-   "pagina": "https://www.magnific.com/br/video-premium/raios-animados-desenhados-mao-fundo-branco_7796362",
-   "autor": "MrsTortoise",
-   "categoria": "explosao",
-   "fundoOriginal": "white",
-   "arquivo": "templates/drawn-fx/7796362.webm",
-   "baixadoEm": "2026-10-08T18:14:35.806Z"
-  },
-  {
    "magnificId": 7796584,
    "titulo": "Raios de Desenho Animado Explodindo em Fundo Preto",
    "pagina": "https://www.magnific.com/br/video/7796584",
@@ -503,16 +433,6 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/7818403.webm",
    "baixadoEm": "2026-10-09T02:31:50.751Z"
-  },
-  {
-   "magnificId": 7822853,
-   "titulo": "Símbolo de Raio Animado Desenhado à Mão em Fundo Preto",
-   "pagina": "https://www.magnific.com/br/video/7822853",
-   "autor": null,
-   "categoria": "eletricidade",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/7822853.webm",
-   "baixadoEm": "2026-10-09T02:31:59.434Z"
   },
   {
    "magnificId": 7891506,
@@ -583,16 +503,6 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/8144715.webm",
    "baixadoEm": "2026-10-09T02:31:48.608Z"
-  },
-  {
-   "magnificId": 8144720,
-   "titulo": "Efeito de Explosão de Fumaça Animado em Cartoon em Fundo Preto",
-   "pagina": "https://www.magnific.com/br/video/8144720",
-   "autor": null,
-   "categoria": "transicao",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/8144720.webm",
-   "baixadoEm": "2026-10-09T02:31:40.192Z"
   },
   {
    "magnificId": 8144721,
@@ -755,16 +665,6 @@
    "baixadoEm": "2026-10-08T18:16:53.821Z"
   },
   {
-   "magnificId": 8144848,
-   "titulo": "Chama de Desenho Animado Animada com Fumaça em Fundo Preto",
-   "pagina": "https://www.magnific.com/br/video-premium/chama-desenho-animado-animada-fumaca-fundo-preto_8144848",
-   "autor": "JohanesMarcell",
-   "categoria": "fogo",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/8144848.webm",
-   "baixadoEm": "2026-10-08T18:20:27.247Z"
-  },
-  {
    "magnificId": 8144861,
    "titulo": "Animação de Chamas de Fogo Estilo Desenho Animado em Fundo Preto",
    "pagina": "https://www.magnific.com/br/video-premium/animacao-chamas-fogo-estilo-desenho-animado-fundo-preto_8144861",
@@ -785,16 +685,6 @@
    "baixadoEm": "2026-10-08T18:20:13.596Z"
   },
   {
-   "magnificId": 8144902,
-   "titulo": "Efeito de Explosão Animado de Desenho Animado em Fundo Preto",
-   "pagina": "https://www.magnific.com/br/video-premium/efeito-explosao-animado-desenho-animado-fundo-preto_8144902",
-   "autor": "JohanesMarcell",
-   "categoria": "transicao",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/8144902.webm",
-   "baixadoEm": "2026-10-08T17:55:25.009Z"
-  },
-  {
    "magnificId": 8144904,
    "titulo": "Efeito de Salpico de Água Animado de Desenho Animado em Fundo Preto",
    "pagina": "https://www.magnific.com/br/video/8144904",
@@ -803,16 +693,6 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/8144904.webm",
    "baixadoEm": "2026-10-09T02:41:39.354Z"
-  },
-  {
-   "magnificId": 8144908,
-   "titulo": "Fogo de Desenho Animado 2D Explodindo em Fumaça em Fundo Preto",
-   "pagina": "https://www.magnific.com/br/video/8144908",
-   "autor": null,
-   "categoria": "transicao",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/8144908.webm",
-   "baixadoEm": "2026-10-09T02:31:36.925Z"
   },
   {
    "magnificId": 8144911,
@@ -855,16 +735,6 @@
    "baixadoEm": "2026-10-09T02:31:36.465Z"
   },
   {
-   "magnificId": 8144956,
-   "titulo": "Explosão Animada de Desenho Animado 2D com Fumaça em Fundo Preto",
-   "pagina": "https://www.magnific.com/br/video-premium/explosao-animada-desenho-animado-2d-fumaca-fundo-preto_8144956",
-   "autor": "JohanesMarcell",
-   "categoria": "explosao",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/8144956.webm",
-   "baixadoEm": "2026-10-08T18:03:54.599Z"
-  },
-  {
    "magnificId": 8228285,
    "titulo": "Efeito de explosão animado de desenho animado em fundo preto.",
    "pagina": "https://www.magnific.com/br/video-premium/efeito-explosao-animado-desenho-animado-fundo-preto_8228285",
@@ -883,16 +753,6 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/8333238.webm",
    "baixadoEm": "2026-10-09T03:04:36.779Z"
-  },
-  {
-   "magnificId": 8333244,
-   "titulo": "Explosões de Desenho Animado Animadas com Efeitos de Fumaça em Fundo Preto",
-   "pagina": "https://www.magnific.com/br/video-premium/explosoes-desenho-animado-animadas-efeitos-fumaca-fundo-preto_8333244",
-   "autor": "fivestar_studio",
-   "categoria": "explosao",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/8333244.webm",
-   "baixadoEm": "2026-10-08T17:57:43.317Z"
   },
   {
    "magnificId": 8333270,
@@ -925,16 +785,6 @@
    "baixadoEm": "2026-10-08T18:08:15.317Z"
   },
   {
-   "magnificId": 8363183,
-   "titulo": "Animação de estrelas cintilantes desenhadas à mão em fundo branco",
-   "pagina": "https://www.magnific.com/br/video/8363183",
-   "autor": null,
-   "categoria": "faiscas",
-   "fundoOriginal": "white",
-   "arquivo": "templates/drawn-fx/8363183.webm",
-   "baixadoEm": "2026-10-09T02:41:26.584Z"
-  },
-  {
    "magnificId": 8442872,
    "titulo": "Chama de Fogo Estilizada de Desenho Animado Queimando em Tela Verde",
    "pagina": "https://www.magnific.com/br/video/8442872",
@@ -953,16 +803,6 @@
    "fundoOriginal": "white",
    "arquivo": "templates/drawn-fx/8754038.webm",
    "baixadoEm": "2026-10-08T18:15:08.887Z"
-  },
-  {
-   "magnificId": 8755269,
-   "titulo": "Linhas de velocidade de explosão de zoom estilo anime com tinta branca irradiando do centro em fundo preto, loop contínuo",
-   "pagina": "https://www.magnific.com/br/video/8755269",
-   "autor": null,
-   "categoria": "linhas",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/8755269.webm",
-   "baixadoEm": "2026-10-09T02:42:20.730Z"
   },
   {
    "magnificId": 8768356,
@@ -1135,16 +975,6 @@
    "baixadoEm": "2026-10-09T10:31:34.705Z"
   },
   {
-   "magnificId": 9790028,
-   "titulo": "energia",
-   "pagina": "https://www.magnific.com/br/video/9790028",
-   "autor": null,
-   "categoria": "energia",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/9790028.webm",
-   "baixadoEm": "2026-10-09T03:04:41.332Z"
-  },
-  {
    "magnificId": 9889313,
    "titulo": "Efeito de Explosão Animado de Desenho Animado em Fundo Preto",
    "pagina": "https://www.magnific.com/br/video-premium/efeito-explosao-animado-desenho-animado-fundo-preto_9889313",
@@ -1183,16 +1013,6 @@
    "fundoOriginal": "black",
    "arquivo": "templates/drawn-fx/9976325.webm",
    "baixadoEm": "2026-10-09T02:41:26.415Z"
-  },
-  {
-   "magnificId": 9976629,
-   "titulo": "energia",
-   "pagina": "https://www.magnific.com/br/video/9976629",
-   "autor": null,
-   "categoria": "energia",
-   "fundoOriginal": "black",
-   "arquivo": "templates/drawn-fx/9976629.webm",
-   "baixadoEm": "2026-10-09T03:04:37.142Z"
   }
  ]
 }
