@@ -1,5 +1,5 @@
 import React,{createElement as h} from 'react'
-import {AbsoluteFill,Loop,OffthreadVideo,Sequence,useVideoConfig} from 'remotion'
+import {AbsoluteFill,Loop,OffthreadVideo,Sequence,interpolate,useCurrentFrame,useVideoConfig} from 'remotion'
 import library from './drawn-fx-library.json'
 import {pickDrawnFxClip} from './drawn-fx-pick.mjs'
 import type {VideoRenderProps} from './model'
@@ -56,9 +56,11 @@ export function DrawnFxOffer({props,index,price,product}:{props:VideoRenderProps
  * preço/produto em posições padrão (composições sem caixas de layout por oferta).
  */
 export function DrawnFxLayer({props,offers=false}:{props:VideoRenderProps;offers?:boolean}){
-  const {width:w,height:ht,fps}=useVideoConfig(),fx=props.document.motion?.drawnFx,items:React.ReactNode[]=[],seed=seedOf(props)
+  const {width:w,height:ht,fps}=useVideoConfig(),frame=useCurrentFrame(),fx=props.document.motion?.drawnFx,items:React.ReactNode[]=[],seed=seedOf(props)
   if(!fx)return null
   const vertical=ht>w
+  // O ambiente (chamas/faíscas nos cantos de baixo) some no encerramento para não cobrir contatos e endereço.
+  const outro=props.scenes.find(s=>s.id==='outro'),ambientOpacity=outro?interpolate(frame,[outro.from,outro.from+12],[1,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):1
   if(offers)props.scenes.forEach(scene=>{
     const i=props.document.offers.findIndex(o=>o.id===scene.id)
     if(i<0)return
@@ -74,12 +76,12 @@ export function DrawnFxLayer({props,offers=false}:{props:VideoRenderProps;offers
     items.push(h(Sequence,{key:'cut-'+scene.id,from:Math.max(0,scene.from-Math.round(frames*.45)),durationInFrames:frames,layout:'none'},fxVideo(props,clip,drawnFxCover(clip,w,ht))))
   })
   const ambient=drawnFxClip(fx.ambient,seed,0,'ambient')
-  if(ambient){
+  if(ambient&&ambientOpacity>0){
     const loopFrames=clipFrames(ambient,fps)
-    if(fx.ambient==='linhas')items.push(h(Loop,{key:'ambient',durationInFrames:loopFrames,children:fxVideo(props,ambient,drawnFxCover(ambient,w,ht),.55)}))
+    if(fx.ambient==='linhas')items.push(h(Loop,{key:'ambient',durationInFrames:loopFrames,children:fxVideo(props,ambient,drawnFxCover(ambient,w,ht),.55*ambientOpacity)}))
     else for(const side of [0,1]){
       const size=w*(vertical?.62:.36),box={left:side?w-size*.8:-size*.2,top:ht-size*.75,width:size,height:size}
-      items.push(h(Loop,{key:'ambient-'+side,durationInFrames:loopFrames,children:h('div',{style:{position:'absolute',inset:0,transform:side?'scaleX(-1)':undefined}},fxVideo(props,ambient,drawnFxPlacement(ambient,box,1),.85))}))
+      items.push(h(Loop,{key:'ambient-'+side,durationInFrames:loopFrames,children:h('div',{style:{position:'absolute',inset:0,transform:side?'scaleX(-1)':undefined}},fxVideo(props,ambient,drawnFxPlacement(ambient,box,1),.85*ambientOpacity))}))
     }
   }
   return items.length?h(AbsoluteFill,{style:{pointerEvents:'none',overflow:'hidden'}},...items):null

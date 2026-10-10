@@ -2617,6 +2617,12 @@
       "bytes": 1670500,
       "contentType": "image/png"
     },
+    "templates/catalog/0581b138-dcc7-47d7-9f75-bca449903693-seal-v2.png": {
+      "key": "video-studio/catalog/40b44c986607a6ded0639de8603ac39c2054967d720cfd1cd5bc0f980c010812/templates/catalog/0581b138-dcc7-47d7-9f75-bca449903693-seal-v2.png",
+      "sha256": "40b44c986607a6ded0639de8603ac39c2054967d720cfd1cd5bc0f980c010812",
+      "bytes": 2545370,
+      "contentType": "image/png"
+    },
     "templates/catalog/07564aee-2857-4cc0-a2d5-9fb13738f71d-background.png": {
       "key": "video-studio/catalog/b88b58156b6ade3916bf2a9dee977a410d5271fc82688355486bd8f9b7336237/templates/catalog/07564aee-2857-4cc0-a2d5-9fb13738f71d-background.png",
       "sha256": "b88b58156b6ade3916bf2a9dee977a410d5271fc82688355486bd8f9b7336237",
