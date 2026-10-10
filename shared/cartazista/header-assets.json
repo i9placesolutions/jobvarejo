@@ -486,15 +486,5 @@
     "background": "/video-studio/templates/catalog/4f092cdb-138c-4cf1-b2f7-4aacc018a890-background.png",
     "seal": "/video-studio/templates/catalog/4f092cdb-138c-4cf1-b2f7-4aacc018a890-seal-title-v1.png",
     "backgroundCropY": 0
-  },
-  "f0208fcb-c899-441a-b2b6-b597af226ae8": {
-    "background": "/video-studio/templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-cartaz-header-v1.jpg",
-    "seal": "/video-studio/templates/catalog/f0208fcb-c899-441a-b2b6-b597af226ae8-seal-trimmed-v1.png",
-    "backgroundCropY": 0.5
-  },
-  "48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae": {
-    "background": "/video-studio/templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-cartaz-header-v1.jpg",
-    "seal": "/video-studio/templates/catalog/48bd75e7-8c7a-4c88-9465-4f7ef5fcdfae-seal-trimmed-v1.png",
-    "backgroundCropY": 0.5
   }
 }
