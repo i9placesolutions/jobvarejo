@@ -1163,7 +1163,9 @@ const patchCanvasRenderSafety = (c: any): (() => void) => {
             if (!checkContextsIfNeeded()) return;
             scheduleRenderWork(() => {
                 try {
-                    origRequest();
+                    // O RAF já foi agendado acima; desenhar aqui evita outro frame de espera.
+                    if (origRender) origRender();
+                    else origRequest();
                 } catch (e) {
                     // Render falhou — invalidar cache, purgar objetos inválidos e tentar novamente
                     contextsValid = false;

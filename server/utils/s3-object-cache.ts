@@ -105,14 +105,14 @@ export const getCachedS3Objects = async (opts: {
     const now = Date.now();
     const existing = s3ObjectCache.get(cacheKey);
 
-    if (!forceRefresh && existing && existing.expiresAt > now && existing.data.length > 0) {
-        return existing.data;
-    }
     if (existing?.inFlight) {
         return existing.inFlight;
     }
+    if (!forceRefresh && existing && existing.expiresAt > now) {
+        return existing.data;
+    }
 
-    const loader = (async () => {
+    const listing = (async () => {
         const lists = await Promise.all(
             normalizedPrefixes.map((prefix) =>
                 listPrefixObjects({
@@ -142,34 +142,41 @@ export const getCachedS3Objects = async (opts: {
     })();
 
     const uploaded = new Map<string, CachedS3Object>();
-    s3ObjectCache.set(cacheKey, {
+    const entry: CacheEntry = {
         bucket, prefixes: normalizedPrefixes, exclude: normalizedExclude, uploaded,
         expiresAt: now + ttlMs,
         data: existing?.data || [],
-        inFlight: loader
-    });
+        inFlight: null
+    };
+    s3ObjectCache.set(cacheKey, entry);
 
-    try {
-        const listed = await loader;
-        const merged = new Map(listed.map(item => [item.key, item]));
-        for (const item of uploaded.values()) merged.set(item.key, item);
-        const data = [...merged.values()];
-        s3ObjectCache.set(cacheKey, {
-            bucket, prefixes: normalizedPrefixes, exclude: normalizedExclude, uploaded,
-            expiresAt: Date.now() + ttlMs,
-            data,
-            inFlight: null
-        });
-        return data;
-    } catch (err) {
-        const fallback = s3ObjectCache.get(cacheKey);
-        if (fallback?.data?.length) {
-            // Serve stale cache for a short window if refresh fails.
-            fallback.expiresAt = Date.now() + Math.min(ttlMs, 15_000);
-            fallback.inFlight = null;
-            return fallback.data;
+    // Todos aguardam a mesclagem dos uploads e o mesmo tratamento de falha,
+    // não apenas a resposta bruta do S3.
+    const loader = (async () => {
+        try {
+            const listed = await listing;
+            const merged = new Map(listed.map(item => [item.key, item]));
+            for (const item of uploaded.values()) merged.set(item.key, item);
+            const data = [...merged.values()];
+            s3ObjectCache.set(cacheKey, {
+                bucket, prefixes: normalizedPrefixes, exclude: normalizedExclude, uploaded,
+                expiresAt: Date.now() + ttlMs,
+                data,
+                inFlight: null
+            });
+            return data;
+        } catch (err) {
+            const fallback = s3ObjectCache.get(cacheKey);
+            if (fallback && (existing || fallback.data.length)) {
+                // Serve stale cache for a short window if refresh fails.
+                fallback.expiresAt = Date.now() + Math.min(ttlMs, 15_000);
+                fallback.inFlight = null;
+                return fallback.data;
+            }
+            s3ObjectCache.delete(cacheKey);
+            throw err;
         }
-        s3ObjectCache.delete(cacheKey);
-        throw err;
-    }
+    })();
+    entry.inFlight = loader;
+    return loader;
 };

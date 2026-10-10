@@ -48,21 +48,16 @@ export const createRenderScheduler = (
   const executeRender = () => {
     const c = canvasRef.value
     if (!c || isCanvasDestroyed.value) return
-    const requestRender = typeof c.__origRequestRenderAll === 'function'
-      ? c.__origRequestRenderAll.bind(c)
-      : (typeof c.requestRenderAll === 'function' ? c.requestRenderAll.bind(c) : null)
-    if (!requestRender) return
+    if (typeof c.renderAll !== 'function') return
 
     try {
       if (!ensureFabricContexts(c)) return
-      requestRender()
+      // Já estamos no RAF coalescido (ou numa chamada síncrona renderNow).
+      // requestRenderAll agendaria outro frame e acrescentaria latência.
+      // Usar o wrapper público preserva a recuperação instalada pelo editor.
+      c.renderAll()
     } catch {
-      // Fallback: render sincrono
-      try {
-        if (typeof c.renderAll === 'function') c.renderAll()
-      } catch {
-        // Canvas pode estar disposed
-      }
+      // O canvas pode ter sido descartado entre o agendamento e o desenho.
     }
   }
 
